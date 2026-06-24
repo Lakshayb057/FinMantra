@@ -114,7 +114,7 @@ export default function AdminDashboard() {
           const message = JSON.parse(event.data);
           
           if (message.type === 'LEAD_ADDED') {
-            showToast(`🎉 New Lead Registered: ${message.data.full_name} (${message.data.urm})`, 'success');
+            showToast(`🎉 New Lead Registered: ${message.data.full_name} (${message.data.urn})`, 'success');
             loadAllAdminData();
           } else if (
             message.type === 'LEADS_UPDATED' || 
@@ -682,7 +682,7 @@ export default function AdminDashboard() {
     const matchesSearch = 
       (l.full_name && l.full_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (l.phone && l.phone.includes(searchTerm)) ||
-      (l.urm && l.urm.toLowerCase().includes(searchTerm.toLowerCase()));
+      (l.urn && l.urn.toLowerCase().includes(searchTerm.toLowerCase()));
     
     const matchesCard = filterCard ? l.card_id === filterCard : true;
     const matchesSource = filterSource ? l.source === filterSource : true;
@@ -850,7 +850,7 @@ export default function AdminDashboard() {
                   <Search size={18} style={{ position: 'absolute', top: '14px', left: '15px', color: 'hsl(var(--text-muted))' }} />
                   <input 
                     type="text" 
-                    placeholder="Search by name, phone, URM..." 
+                    placeholder="Search by name, phone, URN..." 
                     className="form-input" 
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
@@ -881,7 +881,7 @@ export default function AdminDashboard() {
                           style={{ accentColor: 'hsl(var(--primary))' }}
                         />
                       </th>
-                      <th>URM No.</th>
+                      <th>URN No.</th>
                       <th>Date & Time</th>
                       <th>Name</th>
                       <th>WhatsApp No.</th>
@@ -904,7 +904,7 @@ export default function AdminDashboard() {
                               style={{ accentColor: 'hsl(var(--primary))' }}
                             />
                           </td>
-                          <td><span className="badge badge-info">{l.urm}</span></td>
+                          <td><span className="badge badge-info">{l.urn}</span></td>
                           <td>{l.created_at ? l.created_at.replace('T', ' ').slice(0, 16) : ''}</td>
                           <td style={{ fontWeight: 600 }}>{l.full_name}</td>
                           <td>{l.phone}</td>
@@ -1006,13 +1006,13 @@ export default function AdminDashboard() {
                     <input 
                       type="url" 
                       className="form-input" 
-                      placeholder="https://bank.com/apply?name={name}&phone={phone}&urm={urm}"
+                      placeholder="https://bank.com/apply?name={name}&phone={phone}&urn={urn}"
                       value={editingCard ? editingCard.redirect_url_template : newCardForm.redirect_url_template}
                       onChange={(e) => editingCard ? setEditingCard({ ...editingCard, redirect_url_template: e.target.value }) : setNewCardForm({ ...newCardForm, redirect_url_template: e.target.value })}
                       required
                     />
                       <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', marginTop: '0.25rem' }}>
-                        Allowed wildcards: <code>{`{name}`}</code>, <code>{`{phone}`}</code>, <code>{`{email}`}</code>, <code>{`{urm}`}</code>, <code>{`{agent_id}`}</code>, <code>{`{utm_source}`}</code>, <code>{`{utm_info}`}</code>.
+                        Allowed wildcards: <code>{`{name}`}</code>, <code>{`{phone}`}</code>, <code>{`{email}`}</code>, <code>{`{urn}`}</code>, <code>{`{agent_id}`}</code>, <code>{`{utm_source}`}</code>, <code>{`{utm_info}`}</code>.
                       </div>
                   </div>
 
@@ -1322,13 +1322,13 @@ export default function AdminDashboard() {
                   <input 
                     type="url" 
                     className="form-input" 
-                    placeholder="https://bank.com/apply?name={name}&phone={phone}&urm={urm}"
+                    placeholder="https://bank.com/apply?name={name}&phone={phone}&urn={urn}"
                     value={settings.public_redirect_url || ''}
                     onChange={(e) => setSettings({ ...settings, public_redirect_url: e.target.value })}
                     required 
                   />
                   <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', marginTop: '0.25rem' }}>
-                    Allowed wildcards: <code>{`{name}`}</code>, <code>{`{phone}`}</code>, <code>{`{email}`}</code>, <code>{`{urm}`}</code>, <code>{`{utm_source}`}</code>, <code>{`{utm_info}`}</code>. Public users will be redirected here after OTP verification.
+                    Allowed wildcards: <code>{`{name}`}</code>, <code>{`{phone}`}</code>, <code>{`{email}`}</code>, <code>{`{urn}`}</code>, <code>{`{utm_source}`}</code>, <code>{`{utm_info}`}</code>. Public users will be redirected here after OTP verification.
                   </div>
                 </div>
 

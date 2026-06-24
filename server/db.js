@@ -30,7 +30,7 @@ function initDb() {
           bank: 'HDFC',
           category: 'Premium',
           description: 'Complimentary Club Vistara & MMT Black memberships. 4 Reward Points per ₹150 spent.',
-          redirect_url_template: 'https://www.hdfcbank.com/personal/pay/cards/credit-cards/regalia-gold-credit-card?name={name}&phone={phone}&email={email}&urm={urm}',
+          redirect_url_template: 'https://www.hdfcbank.com/personal/pay/cards/credit-cards/regalia-gold-credit-card?name={name}&phone={phone}&email={email}&urn={urn}',
           display_order: 1,
           active: true,
           thumbnail_url: ''
@@ -41,7 +41,7 @@ function initDb() {
           bank: 'HDFC',
           category: 'Rewards',
           description: 'Complimentary annual memberships of Amazon Prime, Swiggy One. 2x on weekend dining.',
-          redirect_url_template: 'https://www.hdfcbank.com/personal/pay/cards/credit-cards/diners-club-privilege?name={name}&phone={phone}&email={email}&urm={urm}',
+          redirect_url_template: 'https://www.hdfcbank.com/personal/pay/cards/credit-cards/diners-club-privilege?name={name}&phone={phone}&email={email}&urn={urn}',
           display_order: 2,
           active: true,
           thumbnail_url: ''
@@ -52,7 +52,7 @@ function initDb() {
           bank: 'HDFC',
           category: 'Travel',
           description: '1 Free Night Award annually. Silver Elite Status. 8 Marriott Bonvoy Points per ₹150 spent.',
-          redirect_url_template: 'https://www.hdfcbank.com/personal/pay/cards/credit-cards/marriott-bonvoy?name={name}&phone={phone}&email={email}&urm={urm}',
+          redirect_url_template: 'https://www.hdfcbank.com/personal/pay/cards/credit-cards/marriott-bonvoy?name={name}&phone={phone}&email={email}&urn={urn}',
           display_order: 3,
           active: true,
           thumbnail_url: ''
@@ -63,7 +63,7 @@ function initDb() {
           bank: 'HDFC',
           category: 'Cashback',
           description: '10% cashback on Swiggy application. 5% cashback on online shopping. 1% on other spends.',
-          redirect_url_template: 'https://www.hdfcbank.com/personal/pay/cards/credit-cards/swiggy-hdfc-card?name={name}&phone={phone}&email={email}&urm={urm}',
+          redirect_url_template: 'https://www.hdfcbank.com/personal/pay/cards/credit-cards/swiggy-hdfc-card?name={name}&phone={phone}&email={email}&urn={urn}',
           display_order: 4,
           active: true,
           thumbnail_url: ''
@@ -74,7 +74,7 @@ function initDb() {
           bank: 'HDFC',
           category: 'Shopping',
           description: '5% NeuCoins on Tata Neu and partner brands. 1.5% NeuCoins on non-Tata spend.',
-          redirect_url_template: 'https://www.hdfcbank.com/personal/pay/cards/credit-cards/tata-neu-infinity?name={name}&phone={phone}&email={email}&urm={urm}',
+          redirect_url_template: 'https://www.hdfcbank.com/personal/pay/cards/credit-cards/tata-neu-infinity?name={name}&phone={phone}&email={email}&urn={urn}',
           display_order: 5,
           active: true,
           thumbnail_url: ''
@@ -85,7 +85,7 @@ function initDb() {
           bank: 'HDFC',
           category: 'Digital',
           description: 'Customizable credit card. Choose your favorite merchants for 5% cashback.',
-          redirect_url_template: 'https://www.hdfcbank.com/personal/pay/cards/credit-cards/pixel-play?name={name}&phone={phone}&email={email}&urm={urm}',
+          redirect_url_template: 'https://www.hdfcbank.com/personal/pay/cards/credit-cards/pixel-play?name={name}&phone={phone}&email={email}&urn={urn}',
           display_order: 6,
           active: true,
           thumbnail_url: ''
@@ -111,7 +111,7 @@ function initDb() {
         { id: 'loc_4', name: 'Pune Kiosk', active: true, created_at: new Date().toISOString() }
       ],
       settings: {
-        public_redirect_url: 'https://applyonline.hdfcbank.com/cards/credit-cards.html?CHANNELSOURCE=TDCC&DEDUPE=N&DSACode=XFIF&LGcode=public&LCcode=public&urm={urm}',
+        public_redirect_url: 'https://applyonline.hdfcbank.com/cards/credit-cards.html?CHANNELSOURCE=TDCC&DEDUPE=N&DSACode=XFIF&LGcode=public&LCcode=public&urn={urn}',
         otp_message_template: 'Your OTP for FinMantra credit card application is: {otp}. Valid for 5 minutes.',
         consent_text: 'I authorise FinMantra and its partner banks to contact me via call, SMS, WhatsApp and email about credit card offers, even if I am registered under DND/NDNC.',
         terms_link: 'https://finmantra.org/terms',
@@ -177,7 +177,7 @@ async function initPgSchema() {
     await client.query(`
       CREATE TABLE IF NOT EXISTS leads (
         id VARCHAR(50) PRIMARY KEY,
-        urm VARCHAR(50) UNIQUE NOT NULL,
+        urn VARCHAR(50) UNIQUE NOT NULL,
         full_name VARCHAR(255) NOT NULL,
         phone VARCHAR(20) NOT NULL,
         email VARCHAR(255) NOT NULL,
@@ -216,6 +216,22 @@ async function initPgSchema() {
         attempts INT DEFAULT 0
       )
     `);
+
+    // Automated PostgreSQL Migration: Rename leads.urm to leads.urn if it exists
+    try {
+      const hasUrm = await client.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name='leads' AND column_name='urm'
+      `);
+      if (hasUrm.rows.length > 0) {
+        await client.query('ALTER TABLE leads RENAME COLUMN urm TO urn');
+        console.log('[Database] Migrated column leads.urm to leads.urn in PostgreSQL.');
+      }
+    } catch (migErr) {
+      console.error('[Database] Failed to execute PostgreSQL ALTER column urm -> urn:', migErr.message);
+    }
+
     
     // Seed locations if empty
     const locCount = await client.query('SELECT COUNT(*) FROM locations');
@@ -234,12 +250,12 @@ async function initPgSchema() {
     if (parseInt(cardCount.rows[0].count, 10) === 0) {
       await client.query(`
         INSERT INTO cards (id, name, bank, category, description, redirect_url_template, display_order, active, thumbnail_url) VALUES 
-        ('card_1', 'HDFC Regalia Gold', 'HDFC', 'Premium', 'Complimentary Club Vistara & MMT Black memberships. 4 Reward Points per ₹150 spent.', 'https://www.hdfcbank.com/personal/pay/cards/credit-cards/regalia-gold-credit-card?name={name}&phone={phone}&email={email}&urm={urm}', 1, true, ''),
-        ('card_2', 'Diners Club Privilege', 'HDFC', 'Rewards', 'Complimentary annual memberships of Amazon Prime, Swiggy One. 2x on weekend dining.', 'https://www.hdfcbank.com/personal/pay/cards/credit-cards/diners-club-privilege?name={name}&phone={phone}&email={email}&urm={urm}', 2, true, ''),
-        ('card_3', 'Marriott Bonvoy HDFC', 'HDFC', 'Travel', '1 Free Night Award annually. Silver Elite Status. 8 Marriott Bonvoy Points per ₹150 spent.', 'https://www.hdfcbank.com/personal/pay/cards/credit-cards/marriott-bonvoy?name={name}&phone={phone}&email={email}&urm={urm}', 3, true, ''),
-        ('card_4', 'Swiggy HDFC', 'HDFC', 'Cashback', '10% cashback on Swiggy application. 5% cashback on online shopping. 1% on other spends.', 'https://www.hdfcbank.com/personal/pay/cards/credit-cards/swiggy-hdfc-card?name={name}&phone={phone}&email={email}&urm={urm}', 4, true, ''),
-        ('card_5', 'Tata Neu HDFC Infinity', 'HDFC', 'Shopping', '5% NeuCoins on Tata Neu and partner brands. 1.5% NeuCoins on non-Tata spend.', 'https://www.hdfcbank.com/personal/pay/cards/credit-cards/tata-neu-infinity?name={name}&phone={phone}&email={email}&urm={urm}', 5, true, ''),
-        ('card_6', 'HDFC Pixel Play', 'HDFC', 'Digital', 'Customizable credit card. Choose your favorite merchants for 5% cashback.', 'https://www.hdfcbank.com/personal/pay/cards/credit-cards/pixel-play?name={name}&phone={phone}&email={email}&urm={urm}', 6, true, '')
+        ('card_1', 'HDFC Regalia Gold', 'HDFC', 'Premium', 'Complimentary Club Vistara & MMT Black memberships. 4 Reward Points per ₹150 spent.', 'https://www.hdfcbank.com/personal/pay/cards/credit-cards/regalia-gold-credit-card?name={name}&phone={phone}&email={email}&urn={urn}', 1, true, ''),
+        ('card_2', 'Diners Club Privilege', 'HDFC', 'Rewards', 'Complimentary annual memberships of Amazon Prime, Swiggy One. 2x on weekend dining.', 'https://www.hdfcbank.com/personal/pay/cards/credit-cards/diners-club-privilege?name={name}&phone={phone}&email={email}&urn={urn}', 2, true, ''),
+        ('card_3', 'Marriott Bonvoy HDFC', 'HDFC', 'Travel', '1 Free Night Award annually. Silver Elite Status. 8 Marriott Bonvoy Points per ₹150 spent.', 'https://www.hdfcbank.com/personal/pay/cards/credit-cards/marriott-bonvoy?name={name}&phone={phone}&email={email}&urn={urn}', 3, true, ''),
+        ('card_4', 'Swiggy HDFC', 'HDFC', 'Cashback', '10% cashback on Swiggy application. 5% cashback on online shopping. 1% on other spends.', 'https://www.hdfcbank.com/personal/pay/cards/credit-cards/swiggy-hdfc-card?name={name}&phone={phone}&email={email}&urn={urn}', 4, true, ''),
+        ('card_5', 'Tata Neu HDFC Infinity', 'HDFC', 'Shopping', '5% NeuCoins on Tata Neu and partner brands. 1.5% NeuCoins on non-Tata spend.', 'https://www.hdfcbank.com/personal/pay/cards/credit-cards/tata-neu-infinity?name={name}&phone={phone}&email={email}&urn={urn}', 5, true, ''),
+        ('card_6', 'HDFC Pixel Play', 'HDFC', 'Digital', 'Customizable credit card. Choose your favorite merchants for 5% cashback.', 'https://www.hdfcbank.com/personal/pay/cards/credit-cards/pixel-play?name={name}&phone={phone}&email={email}&urn={urn}', 6, true, '')
       `);
     }
 
@@ -257,7 +273,7 @@ async function initPgSchema() {
     if (parseInt(settingsCount.rows[0].count, 10) === 0) {
       await client.query(`
         INSERT INTO settings (key, value) VALUES 
-        ('public_redirect_url', 'https://applyonline.hdfcbank.com/cards/credit-cards.html?CHANNELSOURCE=TDCC&DEDUPE=N&DSACode=XFIF&LGcode=public&LCcode=public&urm={urm}'),
+        ('public_redirect_url', 'https://applyonline.hdfcbank.com/cards/credit-cards.html?CHANNELSOURCE=TDCC&DEDUPE=N&DSACode=XFIF&LGcode=public&LCcode=public&urn={urn}'),
         ('otp_message_template', 'Your OTP for FinMantra credit card application is: {otp}. Valid for 5 minutes.'),
         ('consent_text', 'I authorise FinMantra and its partner banks to contact me via call, SMS, WhatsApp and email about credit card offers, even if I am registered under DND/NDNC.'),
         ('terms_link', 'https://finmantra.org/terms'),
@@ -331,49 +347,49 @@ const db = {
       const todayStr = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD
       const prefix = `FM${todayStr}`;
       
-      const seqQuery = await pool.query('SELECT urm FROM leads WHERE urm LIKE $1', [`${prefix}%`]);
+      const seqQuery = await pool.query('SELECT urn FROM leads WHERE urn LIKE $1', [`${prefix}%`]);
       let sequence = 1;
       if (seqQuery.rows.length > 0) {
         const sequences = seqQuery.rows.map(row => {
-          const seqStr = row.urm.replace(prefix, '');
+          const seqStr = row.urn.replace(prefix, '');
           return parseInt(seqStr, 10) || 0;
         });
         sequence = Math.max(...sequences) + 1;
       }
-      const urm = `${prefix}${String(sequence).padStart(3, '0')}`;
+      const urn = `${prefix}${String(sequence).padStart(3, '0')}`;
       const id = 'lead_' + Math.random().toString(36).substr(2, 9);
       
       await pool.query(
-        `INSERT INTO leads (id, urm, full_name, phone, email, city, employment, income_range, card_id, card_name, card_bank, source, agent_id, agent_name, agent_location, consent, utm_source, utm_info, utm_params, redirect_url, created_at)
+        `INSERT INTO leads (id, urn, full_name, phone, email, city, employment, income_range, card_id, card_name, card_bank, source, agent_id, agent_name, agent_location, consent, utm_source, utm_info, utm_params, redirect_url, created_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, NOW())`,
         [
-          id, urm, lead.full_name, lead.phone, lead.email, lead.city, lead.employment, lead.income_range,
+          id, urn, lead.full_name, lead.phone, lead.email, lead.city, lead.employment, lead.income_range,
           lead.card_id, lead.card_name, lead.card_bank, lead.source || 'public', lead.agent_id, lead.agent_name,
           lead.agent_location, lead.consent !== undefined ? lead.consent : true, lead.utm_source, lead.utm_info,
           JSON.stringify(lead.utm_params || {}), lead.redirect_url || ''
         ]
       );
-      return { id, urm, ...lead, created_at: new Date().toISOString() };
+      return { id, urn, ...lead, created_at: new Date().toISOString() };
     }
 
     const data = readData();
     const todayStr = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD
     const prefix = `FM${todayStr}`;
     
-    const todaysLeads = data.leads.filter(l => l.urm && l.urm.startsWith(prefix));
+    const todaysLeads = data.leads.filter(l => l.urn && l.urn.startsWith(prefix));
     let sequence = 1;
     if (todaysLeads.length > 0) {
       const sequences = todaysLeads.map(l => {
-        const seqStr = l.urm.replace(prefix, '');
+        const seqStr = l.urn.replace(prefix, '');
         return parseInt(seqStr, 10) || 0;
       });
       sequence = Math.max(...sequences) + 1;
     }
-    const urm = `${prefix}${String(sequence).padStart(3, '0')}`;
+    const urn = `${prefix}${String(sequence).padStart(3, '0')}`;
     
     const newLead = {
       id: 'lead_' + Math.random().toString(36).substr(2, 9),
-      urm,
+      urn,
       ...lead,
       created_at: new Date().toISOString()
     };

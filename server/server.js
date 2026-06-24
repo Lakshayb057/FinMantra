@@ -443,7 +443,8 @@ app.post('/api/leads', async (req, res) => {
     .replace(/{name}/gi, encodeURIComponent(trimmedName))
     .replace(/{phone}/gi, encodeURIComponent(trimmedPhone))
     .replace(/{email}/gi, encodeURIComponent(trimmedEmail))
-    .replace(/{urm}/gi, encodeURIComponent(newLead.urm))
+    .replace(/{urn}/gi, encodeURIComponent(newLead.urn))
+    .replace(/{urm}/gi, encodeURIComponent(newLead.urn)) // support legacy placeholder if any
     .replace(/{agent_id}/gi, encodeURIComponent(agentCodeVal))
     .replace(/{utm_source}/gi, encodeURIComponent(utmSourceVal))
     .replace(/{utm_info}/gi, encodeURIComponent(utmInfoVal));
@@ -500,7 +501,7 @@ app.post('/api/leads', async (req, res) => {
   // Send WhatsApp Referral Notification with Tracking URL
   const agentCode = (source === 'agent' && agent_id) ? agent_id : 'public';
   const dateCode = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD
-  const referralLink = `http://localhost:5173/refer/${agentCode}/${dateCode}/${newLead.urm}`;
+  const referralLink = `http://localhost:5173/refer/${agentCode}/${dateCode}/${newLead.urn}`;
   const cardNameStr = card ? `${card.bank} ${card.name}` : 'FinMantra Partner Bank';
   const referralMsg = `Hello ${trimmedName}, thank you for choosing FinMantra. You can access your secure bank portal for the ${cardNameStr} application here: ${referralLink}`;
 
@@ -528,21 +529,21 @@ app.post('/api/leads', async (req, res) => {
 
   res.json({
     success: true,
-    urm: newLead.urm,
+    urn: newLead.urn,
     redirectUrl
   });
 });
 
-// Fetch Lead Details by URM (Public link landing page resolver)
-app.get('/api/leads/urm/:urm', async (req, res) => {
-  const { urm } = req.params;
+// Fetch Lead Details by URN (Public link landing page resolver)
+app.get('/api/leads/urn/:urn', async (req, res) => {
+  const { urn } = req.params;
   const leads = await db.getLeads();
-  const lead = leads.find(l => l.urm === urm);
+  const lead = leads.find(l => l.urn === urn);
 
   if (lead) {
     res.json({
       success: true,
-      urm: lead.urm,
+      urn: lead.urn,
       full_name: lead.full_name,
       card_name: lead.card_name,
       card_bank: lead.card_bank,
@@ -550,7 +551,28 @@ app.get('/api/leads/urm/:urm', async (req, res) => {
       created_at: lead.created_at
     });
   } else {
-    res.status(404).json({ error: 'Application URM tracking record not found' });
+    res.status(404).json({ error: 'Application URN tracking record not found' });
+  }
+});
+
+// Legacy URM resolver to support existing references
+app.get('/api/leads/urm/:urm', async (req, res) => {
+  const { urm } = req.params;
+  const leads = await db.getLeads();
+  const lead = leads.find(l => l.urn === urm);
+
+  if (lead) {
+    res.json({
+      success: true,
+      urn: lead.urn,
+      full_name: lead.full_name,
+      card_name: lead.card_name,
+      card_bank: lead.card_bank,
+      redirectUrl: lead.redirect_url,
+      created_at: lead.created_at
+    });
+  } else {
+    res.status(404).json({ error: 'Application URN tracking record not found' });
   }
 });
 
@@ -595,11 +617,11 @@ app.delete('/api/leads/:id', authenticateToken, requireAdmin, async (req, res) =
 app.get('/api/leads/export', authenticateToken, requireAdmin, async (req, res) => {
   const leads = await db.getLeads();
   
-  let csv = 'URM,Creation Date/Time,Full Name,Phone,Email,City,Employment,Monthly Income,Selected Card,Card Bank,Source,UTM Source,UTM Info,Agent Name,Agent Location,Redirect URL\n';
+  let csv = 'URN,Creation Date/Time,Full Name,Phone,Email,City,Employment,Monthly Income,Selected Card,Card Bank,Source,UTM Source,UTM Info,Agent Name,Agent Location,Redirect URL\n';
   
   leads.forEach(l => {
     const createdDateTime = l.created_at ? l.created_at.replace('T', ' ').slice(0, 16) : '';
-    csv += `"${l.urm || ''}","${createdDateTime}","${l.full_name || ''}","${l.phone || ''}","${l.email || ''}","${l.city || ''}","${l.employment || ''}","${l.income_range || ''}","${l.card_name || ''}","${l.card_bank || ''}","${l.source || ''}","${l.utm_source || ''}","${l.utm_info || ''}","${l.agent_name || ''}","${l.agent_location || ''}","${l.redirect_url || ''}"\n`;
+    csv += `"${l.urn || ''}","${createdDateTime}","${l.full_name || ''}","${l.phone || ''}","${l.email || ''}","${l.city || ''}","${l.employment || ''}","${l.income_range || ''}","${l.card_name || ''}","${l.card_bank || ''}","${l.source || ''}","${l.utm_source || ''}","${l.utm_info || ''}","${l.agent_name || ''}","${l.agent_location || ''}","${l.redirect_url || ''}"\n`;
   });
 
   res.setHeader('Content-Type', 'text/csv');

@@ -68,8 +68,8 @@ export default function App() {
   const renderView = () => {
     const pathParts = currentPath.split('/');
     if (pathParts[1] === 'refer') {
-      const urm = pathParts[4];
-      return <ReferralRedirect urm={urm} />;
+      const urn = pathParts[4];
+      return <ReferralRedirect urn={urn} />;
     }
     if (currentPath === '/agent') {
       return <AgentPortal navigateTo={navigateTo} />;
@@ -122,8 +122,8 @@ export default function App() {
   );
 }
 
-// Sub-component to resolve URM referral link and auto-redirect after splash screen
-function ReferralRedirect({ urm }) {
+// Sub-component to resolve URN referral link and auto-redirect after splash screen
+function ReferralRedirect({ urn }) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [leadDetails, setLeadDetails] = useState(null);
@@ -132,7 +132,7 @@ function ReferralRedirect({ urm }) {
     const fetchLeadAndRedirect = async () => {
       try {
         const API_URL = window.location.hostname === 'localhost' ? 'http://localhost:5000/api' : '/api';
-        const res = await fetch(`${API_URL}/leads/urm/${urm}`);
+        const res = await fetch(`${API_URL}/leads/urn/${urn}`);
         const data = await res.json();
 
         if (res.ok) {
@@ -142,7 +142,7 @@ function ReferralRedirect({ urm }) {
             window.location.href = data.redirectUrl;
           }, 1000);
         } else {
-          setError(data.error || 'The requested URM reference details do not exist.');
+          setError(data.error || 'The requested URN reference details do not exist.');
           setLoading(false);
         }
       } catch (err) {
@@ -152,7 +152,7 @@ function ReferralRedirect({ urm }) {
     };
 
     fetchLeadAndRedirect();
-  }, [urm]);
+  }, [urn]);
 
   if (error) {
     return (

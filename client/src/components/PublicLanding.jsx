@@ -339,7 +339,7 @@ export default function PublicLanding({ navigateTo, utmParams }) {
           // Cache in session storage for back button resumption
           const cacheData = {
             name: formData.fullName,
-            urm: leadData.urm,
+            urn: leadData.urn,
             redirectUrl: leadData.redirectUrl,
             cardName: 'FinMantra Card Redirect',
             bank: 'Partner Bank',
@@ -483,7 +483,7 @@ export default function PublicLanding({ navigateTo, utmParams }) {
                 We detected a previous unfinished session:
               </div>
               <div style={{ fontWeight: 700, margin: '0.15rem 0 0.35rem 0', color: 'var(--gold-deep)' }}>
-                {resumeSession.name}'s {resumeSession.cardName} ({resumeSession.urm})
+                {resumeSession.name}'s {resumeSession.cardName} ({resumeSession.urn})
               </div>
               <button onClick={handleResumeRedirect} className="btn-primary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.75rem', width: 'auto' }}>
                 Resume Application <ArrowRight size={12} />

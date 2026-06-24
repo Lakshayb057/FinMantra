@@ -293,7 +293,7 @@ export default function AgentPortal() {
       const data = await res.json();
 
       if (res.ok) {
-        setLeadSuccess(`Lead registered successfully! Generated URM: ${data.urm}. Redirecting to bank portal...`);
+        setLeadSuccess(`Lead registered successfully! Generated URN: ${data.urn}. Redirecting to bank portal...`);
         // Reset lead form
         setLeadForm({
           fullName: '',
@@ -612,7 +612,7 @@ export default function AgentPortal() {
                     </div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
-                    <span className="badge badge-success" style={{ fontSize: '0.7rem' }}>{lead.urm}</span>
+                    <span className="badge badge-success" style={{ fontSize: '0.7rem' }}>{lead.urn}</span>
                     <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', marginTop: '0.25rem' }}>
                       {lead.created_at ? lead.created_at.slice(11, 16) : ''}
                     </div>
