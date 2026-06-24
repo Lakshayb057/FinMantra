@@ -138,9 +138,14 @@ export default function AgentPortal() {
       ? `ws://${window.location.hostname}:5000` 
       : `${wsProto}//${window.location.host}/ws`;
     let socket;
+    let reconnectDelay = 5000;
 
     const connectWebSocket = () => {
       socket = new WebSocket(wsUrl);
+
+      socket.onopen = () => {
+        reconnectDelay = 5000;
+      };
 
       socket.onmessage = (event) => {
         try {
@@ -156,15 +161,16 @@ export default function AgentPortal() {
             fetchMasterData();
           }
         } catch (err) {
-          console.error('[WebSocket Client] Agent Sync error:', err);
+          // silent
         }
       };
 
       socket.onclose = () => {
-        setTimeout(connectWebSocket, 5000);
+        reconnectDelay = Math.min(reconnectDelay * 2, 60000);
+        setTimeout(connectWebSocket, reconnectDelay);
       };
 
-      socket.onerror = (err) => {
+      socket.onerror = () => {
         socket.close();
       };
     };

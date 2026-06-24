@@ -33,6 +33,21 @@ const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || 'finmantrasupersecretjwtkey';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin1234';
 
+// Health Check Endpoint - helps diagnose deployment issues
+app.get('/api/health', (req, res) => {
+  const waConfigured = !!(process.env.WA_API_KEY && process.env.WA_PHONE_NUMBER_ID);
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    whatsapp: {
+      configured: waConfigured,
+      phoneNumberId: process.env.WA_PHONE_NUMBER_ID ? '***' + process.env.WA_PHONE_NUMBER_ID.slice(-4) : 'NOT SET',
+      templateName: process.env.WA_OTP_TEMPLATE_NAME || 'NOT SET',
+      apiKeySet: !!process.env.WA_API_KEY
+    }
+  });
+});
+
 // Create HTTP server integrating with Express
 const server = http.createServer(app);
 
@@ -254,7 +269,7 @@ app.post('/api/otp/send', async (req, res) => {
   } else {
     isSimulated = true;
     if (apiKey && !phoneId) {
-      console.error('CRITICAL WARNING: WA_API_KEY is defined but WA_PHONE_NUMBER_ID is missing! Meta API calls will fail. Falling back to simulation.');
+      console.error('CRITICAL WARNING: WA_API_KEY is defined but WA_PHONE_NUMBER_ID is missing!');
     }
   }
 

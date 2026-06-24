@@ -99,12 +99,13 @@ export default function AdminDashboard() {
       ? `ws://${window.location.hostname}:5000` 
       : `${wsProto}//${window.location.host}/ws`;
     let socket;
+    let reconnectDelay = 5000;
 
     const connectWebSocket = () => {
       socket = new WebSocket(wsUrl);
 
       socket.onopen = () => {
-        console.log('[WebSocket Client] Connected to FinMantra Real-Time Sync');
+        reconnectDelay = 5000;
       };
 
       socket.onmessage = (event) => {
@@ -124,16 +125,16 @@ export default function AdminDashboard() {
             loadAllAdminData();
           }
         } catch (err) {
-          console.error('[WebSocket Client] Error processing update event:', err);
+          // silent
         }
       };
 
       socket.onclose = () => {
-        console.log('[WebSocket Client] Connection lost. Reconnecting in 5 seconds...');
-        setTimeout(connectWebSocket, 5000);
+        reconnectDelay = Math.min(reconnectDelay * 2, 60000);
+        setTimeout(connectWebSocket, reconnectDelay);
       };
 
-      socket.onerror = (err) => {
+      socket.onerror = () => {
         socket.close();
       };
     };
