@@ -120,7 +120,7 @@ export default function AgentPortal() {
 
   // Real-time synchronization via WebSocket for agent portal
   useEffect(() => {
-    if (!token) return;
+    if (!token || token === 'null' || token === 'undefined') return;
 
     const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = window.location.hostname === 'localhost' 

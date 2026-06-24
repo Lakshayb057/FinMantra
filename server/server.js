@@ -34,18 +34,27 @@ const JWT_SECRET = process.env.JWT_SECRET || 'finmantrasupersecretjwtkey';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin1234';
 
 // Health Check Endpoint - helps diagnose deployment issues
-app.get('/api/health', (req, res) => {
-  const waConfigured = !!(process.env.WA_API_KEY && process.env.WA_PHONE_NUMBER_ID);
-  res.json({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    whatsapp: {
-      configured: waConfigured,
-      phoneNumberId: process.env.WA_PHONE_NUMBER_ID ? '***' + process.env.WA_PHONE_NUMBER_ID.slice(-4) : 'NOT SET',
-      templateName: process.env.WA_OTP_TEMPLATE_NAME || 'NOT SET',
-      apiKeySet: !!process.env.WA_API_KEY
-    }
-  });
+app.get('/api/health', async (req, res) => {
+  try {
+    const settings = await db.getSettings();
+    const apiKey = settings.wa_api_key || process.env.WA_API_KEY;
+    const phoneId = settings.wa_phone_number_id || process.env.WA_PHONE_NUMBER_ID;
+    const templateName = settings.wa_otp_template_name || process.env.WA_OTP_TEMPLATE_NAME || 'auth_otp';
+    const waConfigured = !!(apiKey && phoneId);
+
+    res.json({
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      whatsapp: {
+        configured: waConfigured,
+        phoneNumberId: phoneId ? '***' + phoneId.slice(-4) : 'NOT SET',
+        templateName: templateName,
+        apiKeySet: !!apiKey
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ status: 'error', error: err.message });
+  }
 });
 
 // Create HTTP server integrating with Express
@@ -107,7 +116,7 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = []) {
     template: {
       name: templateName,
       language: {
-        code: process.env.WA_TEMPLATE_LANGUAGE || 'en'
+        code: settings.wa_template_language || process.env.WA_TEMPLATE_LANGUAGE || 'en'
       }
     }
   };

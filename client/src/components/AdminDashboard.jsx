@@ -92,7 +92,7 @@ export default function AdminDashboard() {
 
   // Real-time synchronization via WebSocket
   useEffect(() => {
-    if (!token) return;
+    if (!token || token === 'null' || token === 'undefined') return;
 
     const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = window.location.hostname === 'localhost' 
@@ -659,7 +659,8 @@ export default function AdminDashboard() {
           wa_phone_number_id: settings.wa_phone_number_id ? settings.wa_phone_number_id.trim() : '',
           wa_business_account_id: settings.wa_business_account_id ? settings.wa_business_account_id.trim() : '',
           wa_otp_template_name: settings.wa_otp_template_name ? settings.wa_otp_template_name.trim() : '',
-          wa_referral_template_name: settings.wa_referral_template_name ? settings.wa_referral_template_name.trim() : ''
+          wa_referral_template_name: settings.wa_referral_template_name ? settings.wa_referral_template_name.trim() : '',
+          wa_template_language: settings.wa_template_language ? settings.wa_template_language.trim() : ''
         })
       });
       showToast('System settings updated successfully.');
@@ -1393,7 +1394,7 @@ export default function AdminDashboard() {
                     </div>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginTop: '1rem' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem', marginTop: '1rem' }}>
                     <div className="form-group" style={{ marginBottom: 0 }}>
                       <label className="form-label">OTP Template Name</label>
                       <input 
@@ -1412,6 +1413,16 @@ export default function AdminDashboard() {
                         placeholder="transactional_link"
                         value={settings.wa_referral_template_name || ''}
                         onChange={(e) => setSettings({ ...settings, wa_referral_template_name: e.target.value })}
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label">Template Language</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        placeholder="en (or en_US)"
+                        value={settings.wa_template_language || ''}
+                        onChange={(e) => setSettings({ ...settings, wa_template_language: e.target.value })}
                       />
                     </div>
                   </div>
