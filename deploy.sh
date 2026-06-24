@@ -60,7 +60,7 @@ pm2 save
 # Step 8: Build frontend and deploy
 echo "[8/8] Building frontend..."
 cd /home/ubuntu/finmantra/client
-npm install
+npm install --legacy-peer-deps
 npm run build
 sudo mkdir -p /var/www/finmantra
 sudo cp -r dist/* /var/www/finmantra/
