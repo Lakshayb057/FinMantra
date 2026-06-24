@@ -512,7 +512,7 @@ export default function AgentPortal() {
           <form onSubmit={handleLeadSubmit}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
               <div className="form-group">
-                <label className="form-label">Full Name (Aadhaar)</label>
+                <label className="form-label">Name as per Govt. ID</label>
                 <input 
                   type="text" 
                   name="fullName" 
@@ -525,7 +525,7 @@ export default function AgentPortal() {
                 />
               </div>
               <div className="form-group">
-                <label className="form-label">WhatsApp Number</label>
+                <label className="form-label">WhatsApp number</label>
                 <input 
                   type="tel" 
                   name="phone" 
@@ -567,7 +567,7 @@ export default function AgentPortal() {
             )}
 
             <button type="submit" className="btn-primary" style={{ width: '100%' }} disabled={isSubmitting}>
-              {isSubmitting ? 'Registering Lead...' : 'Submit Lead Directly'}
+              {isSubmitting ? 'Registering Lead...' : 'Verify & Apply Now'}
             </button>
           </form>
         </div>

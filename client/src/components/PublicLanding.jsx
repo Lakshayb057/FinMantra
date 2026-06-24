@@ -543,10 +543,9 @@ export default function PublicLanding({ navigateTo, utmParams }) {
               </button>
             </div>
           )}
-
           <form onSubmit={handleFormSubmit}>
             <div className="form-group">
-              <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>Full name</label>
+              <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>Name as per Govt. ID</label>
               <input 
                 type="text" 
                 name="fullName" 
@@ -560,7 +559,7 @@ export default function PublicLanding({ navigateTo, utmParams }) {
             </div>
             
             <div className="form-group">
-              <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>Mobile number</label>
+              <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>WhatsApp number</label>
               <input 
                 type="tel" 
                 name="phone" 
@@ -609,7 +608,7 @@ export default function PublicLanding({ navigateTo, utmParams }) {
                 </span>
               ) : (
                 <>
-                  Apply Now & Verify <ArrowRight size={18} />
+                  Verify & Apply Now <ArrowRight size={18} />
                 </>
               )}
             </button>
