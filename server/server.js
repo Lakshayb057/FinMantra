@@ -374,8 +374,42 @@ app.post('/api/leads', async (req, res) => {
     }
     redirectUrlTemplate = card.redirect_url_template || '';
   } else {
-    const settings = await db.getSettings();
-    redirectUrlTemplate = settings.public_redirect_url || '';
+    // Check if public lead has utm_info matching an active card
+    let matchedCard = null;
+    if (utm_info) {
+      const activeCards = await db.getCards(false);
+      const infoLower = String(utm_info).trim().toLowerCase();
+      
+      // 1. Exact match on ID, card_ID, or ID suffix
+      matchedCard = activeCards.find(c => {
+        const idLower = String(c.id).toLowerCase();
+        return idLower === infoLower || idLower === `card_${infoLower}` || idLower.endsWith(`_${infoLower}`);
+      });
+      
+      // 2. Match if card name contains utm_info (case-insensitive)
+      if (!matchedCard) {
+        matchedCard = activeCards.find(c => {
+          const nameLower = String(c.name).toLowerCase();
+          return nameLower.includes(infoLower);
+        });
+      }
+
+      // 3. Match if utm_info contains card name (case-insensitive)
+      if (!matchedCard) {
+        matchedCard = activeCards.find(c => {
+          const nameLower = String(c.name).toLowerCase();
+          return infoLower.includes(nameLower);
+        });
+      }
+    }
+
+    if (matchedCard) {
+      card = matchedCard;
+      redirectUrlTemplate = card.redirect_url_template || '';
+    } else {
+      const settings = await db.getSettings();
+      redirectUrlTemplate = settings.public_redirect_url || '';
+    }
   }
 
   const leadData = {
@@ -385,7 +419,7 @@ app.post('/api/leads', async (req, res) => {
     city: source === 'agent' ? city : null,
     employment: source === 'agent' ? employment : null,
     income_range: source === 'agent' ? income_range : null,
-    card_id: source === 'agent' ? card_id : null,
+    card_id: card ? card.id : null,
     card_name: card ? card.name : 'Public Redirection',
     card_bank: card ? card.bank : 'N/A',
     source: source || 'public',
