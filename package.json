@@ -1,0 +1,14 @@
+{
+  "name": "finmantra-root",
+  "version": "1.0.0",
+  "description": "FinMantra Lead Generation & Agent Management Platform",
+  "scripts": {
+    "install-all": "npm install && cd server && npm install && cd ../client && npm install --legacy-peer-deps",
+    "server": "cd server && npm start",
+    "client": "cd client && npm run dev",
+    "dev": "npx concurrently \"npm run server\" \"npm run client\""
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
