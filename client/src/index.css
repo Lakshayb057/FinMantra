@@ -464,3 +464,137 @@ a:hover {
   0% { left: -50%; }
   100% { left: 100%; }
 }
+
+/* ==========================================================================
+   RESPONSIVENESS SYSTEM - Support iPhone, iPads, Android, and Desktop
+   ========================================================================== */
+
+/* Medium Devices (Tablets, smaller desktops: max-width 1024px) */
+@media (max-width: 1024px) {
+  .navbar {
+    padding: 0.8rem 5% !important;
+  }
+
+  .hero-section {
+    grid-template-columns: 1fr !important;
+    gap: 36px !important;
+    padding: 40px 5% 60px 5% !important;
+  }
+
+  #apply-form-section {
+    position: relative !important;
+    top: 0 !important;
+    max-width: 520px;
+    margin: 0 auto;
+    width: 100% !important;
+  }
+}
+
+/* Small Devices (Mobiles, tablets: max-width 768px) */
+@media (max-width: 768px) {
+  .navbar {
+    flex-direction: column !important;
+    gap: 0.75rem !important;
+    padding: 1rem 5% !important;
+  }
+
+  .nav-links {
+    width: 100%;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.4rem !important;
+  }
+
+  .nav-link {
+    font-size: 0.85rem !important;
+    padding: 0.3rem 0.6rem !important;
+  }
+
+  /* Title sizing */
+  .hero-section h1 {
+    font-size: 2.1rem !important;
+    line-height: 1.15 !important;
+  }
+
+  /* Form inner grids (e.g. city/employment columns) */
+  form div[style*="display: grid"], 
+  form div[style*="display:grid"] {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  /* Agent Portal layouts */
+  .agent-panels-grid {
+    grid-template-columns: 1fr !important;
+    gap: 1.5rem !important;
+  }
+
+  .agent-panels-grid div[style*="display: grid"],
+  .agent-panels-grid div[style*="display:grid"] {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  /* Admin Dashboard layouts */
+  .admin-split-grid {
+    grid-template-columns: 1fr !important;
+    gap: 1.5rem !important;
+  }
+
+  .admin-split-grid div[style*="display: grid"],
+  .admin-split-grid div[style*="display:grid"] {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  .filters-strip {
+    grid-template-columns: 1fr !important;
+    gap: 0.75rem !important;
+  }
+
+  /* Info Stats containers */
+  div[style*="display: flex"][style*="gap: 28px"],
+  div[style*="display:flex"][style*="gap:28px"],
+  div[style*="display: flex"][style*="gap: 24px"],
+  div[style*="display:flex"][style*="gap:24px"] {
+    gap: 16px !important;
+    justify-content: space-between;
+  }
+
+  /* Modals (OTP, Dialogs) */
+  div[style*="width: 450px"],
+  div[style*="width: 500px"],
+  div[style*="width: 600px"] {
+    width: 92% !important;
+    max-width: 95vw !important;
+    padding: 20px !important;
+  }
+}
+
+/* Extra Small Devices (Phones: max-width 480px) */
+@media (max-width: 480px) {
+  body {
+    font-size: 0.95rem;
+  }
+
+  .glass-panel {
+    padding: 20px 16px !important;
+  }
+
+  .hero-section h1 {
+    font-size: 1.85rem !important;
+  }
+
+  .btn-primary, .btn-secondary {
+    width: 100% !important;
+    font-size: 0.95rem !important;
+    padding: 0.85em 1.2em !important;
+  }
+
+  /* Adjust Card cards layout */
+  div[style*="gridTemplateColumns: repeat(auto-fit, minmax(280px, 1fr))"],
+  div[style*="gridTemplateColumns:repeat(auto-fit,minmax(280px,1fr))"] {
+    grid-template-columns: 1fr !important;
+  }
+}
+
