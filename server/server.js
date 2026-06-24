@@ -84,13 +84,14 @@ function sha256(text) {
 }
 
 // Helper to send messages via Meta WhatsApp Cloud API
-function sendWhatsAppTemplate(toPhone, templateName, parameters = []) {
-  const apiKey = process.env.WA_API_KEY;
-  const phoneId = process.env.WA_PHONE_NUMBER_ID;
+async function sendWhatsAppTemplate(toPhone, templateName, parameters = []) {
+  const settings = await db.getSettings();
+  const apiKey = settings.wa_api_key || process.env.WA_API_KEY;
+  const phoneId = settings.wa_phone_number_id || process.env.WA_PHONE_NUMBER_ID;
 
   if (!apiKey || !phoneId) {
     console.log(`[WhatsApp Simulation] Meta API credentials missing. Simulating template "${templateName}" to ${toPhone} with params:`, parameters);
-    return Promise.resolve({ simulated: true });
+    return { simulated: true };
   }
 
   // Format phone number to E.164 (Meta requires country code without + or leading zeros)
@@ -242,14 +243,15 @@ app.post('/api/otp/send', async (req, res) => {
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
   await db.saveOTP(phone, otp);
 
-  const apiKey = process.env.WA_API_KEY;
-  const phoneId = process.env.WA_PHONE_NUMBER_ID;
+  const settings = await db.getSettings();
+  const apiKey = settings.wa_api_key || process.env.WA_API_KEY;
+  const phoneId = settings.wa_phone_number_id || process.env.WA_PHONE_NUMBER_ID;
 
   let isSimulated = true;
   let apiError = null;
 
   if (apiKey && phoneId) {
-    const otpTemplateName = process.env.WA_OTP_TEMPLATE_NAME || 'auth_otp';
+    const otpTemplateName = settings.wa_otp_template_name || process.env.WA_OTP_TEMPLATE_NAME || 'auth_otp';
     try {
       let params = [otp];
       if (otpTemplateName === 'jaspers_market_order_confirmation_v1') {
@@ -459,7 +461,8 @@ app.post('/api/leads', async (req, res) => {
   const cardNameStr = card ? `${card.bank} ${card.name}` : 'FinMantra Partner Bank';
   const referralMsg = `Hello ${trimmedName}, thank you for choosing FinMantra. You can access your secure bank portal for the ${cardNameStr} application here: ${referralLink}`;
 
-  const referralTemplateName = process.env.WA_REFERRAL_TEMPLATE_NAME || 'transactional_link';
+  const settings = await db.getSettings();
+  const referralTemplateName = settings.wa_referral_template_name || process.env.WA_REFERRAL_TEMPLATE_NAME || 'transactional_link';
   try {
     let params = [trimmedName, referralLink];
     if (referralTemplateName === 'jaspers_market_order_confirmation_v1') {

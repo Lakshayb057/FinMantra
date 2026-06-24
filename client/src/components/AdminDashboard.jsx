@@ -654,7 +654,12 @@ export default function AdminDashboard() {
           ...settings,
           public_redirect_url: publicUrl,
           terms_link: settings.terms_link ? settings.terms_link.trim() : '',
-          privacy_link: settings.privacy_link ? settings.privacy_link.trim() : ''
+          privacy_link: settings.privacy_link ? settings.privacy_link.trim() : '',
+          wa_api_key: settings.wa_api_key ? settings.wa_api_key.trim() : '',
+          wa_phone_number_id: settings.wa_phone_number_id ? settings.wa_phone_number_id.trim() : '',
+          wa_business_account_id: settings.wa_business_account_id ? settings.wa_business_account_id.trim() : '',
+          wa_otp_template_name: settings.wa_otp_template_name ? settings.wa_otp_template_name.trim() : '',
+          wa_referral_template_name: settings.wa_referral_template_name ? settings.wa_referral_template_name.trim() : ''
         })
       });
       showToast('System settings updated successfully.');
@@ -1344,6 +1349,72 @@ export default function AdminDashboard() {
                     onChange={(e) => setSettings({ ...settings, consent_text: e.target.value })}
                     required 
                   />
+                </div>
+
+                <div style={{ marginTop: '2rem', marginBottom: '2rem', padding: '1.5rem', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-md)', background: 'rgba(232, 168, 56, 0.03)' }}>
+                  <h4 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '1rem', color: 'var(--gold-deep)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span>Meta WhatsApp Cloud API Configuration</span>
+                  </h4>
+                  <p style={{ fontSize: '0.8rem', color: 'hsl(var(--text-muted))', marginBottom: '1.25rem' }}>
+                    Configure your live Meta credentials here. If left blank, the system will fall back to using your server's environment variables or Simulation Mode.
+                  </p>
+
+                  <div className="form-group">
+                    <label className="form-label">System User Access Token (WA_API_KEY)</label>
+                    <input 
+                      type="text" 
+                      className="form-input" 
+                      placeholder="EAAPJ..."
+                      value={settings.wa_api_key || ''}
+                      onChange={(e) => setSettings({ ...settings, wa_api_key: e.target.value })}
+                    />
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label">Phone Number ID</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        placeholder="e.g. 102938475610293"
+                        value={settings.wa_phone_number_id || ''}
+                        onChange={(e) => setSettings({ ...settings, wa_phone_number_id: e.target.value })}
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label">Business Account ID (Optional)</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        placeholder="e.g. 928374650192837"
+                        value={settings.wa_business_account_id || ''}
+                        onChange={(e) => setSettings({ ...settings, wa_business_account_id: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginTop: '1rem' }}>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label">OTP Template Name</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        placeholder="auth_otp"
+                        value={settings.wa_otp_template_name || ''}
+                        onChange={(e) => setSettings({ ...settings, wa_otp_template_name: e.target.value })}
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label">Referral Template Name</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        placeholder="transactional_link"
+                        value={settings.wa_referral_template_name || ''}
+                        onChange={(e) => setSettings({ ...settings, wa_referral_template_name: e.target.value })}
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '2rem' }}>
