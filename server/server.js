@@ -649,7 +649,7 @@ app.get('/api/admin/cards', authenticateToken, requireAdmin, async (req, res) =>
 
 // Create Card (Admin Only)
 app.post('/api/cards', authenticateToken, requireAdmin, async (req, res) => {
-  const { name, bank, category, description, redirect_url_template, display_order, active } = req.body;
+  const { name, bank, category, description, redirect_url_template, display_order, active, card_locations } = req.body;
 
   const trimmedName = name ? String(name).trim() : '';
   const trimmedBank = bank ? String(bank).trim() : '';
@@ -671,11 +671,12 @@ app.post('/api/cards', authenticateToken, requireAdmin, async (req, res) => {
   const newCard = await db.addCard({
     name: trimmedName,
     bank: trimmedBank,
-    category: category || 'Premium',
+    category: category || 'Offline',
     description: description ? String(description).trim() : '',
     redirect_url_template: trimmedUrl,
     display_order: display_order || 1,
-    active: active !== undefined ? active : true
+    active: active !== undefined ? active : true,
+    card_locations: Array.isArray(card_locations) ? card_locations : []
   });
   
   // Broadcast cards change
@@ -686,7 +687,7 @@ app.post('/api/cards', authenticateToken, requireAdmin, async (req, res) => {
 
 // Update Card (Admin Only)
 app.put('/api/cards/:id', authenticateToken, requireAdmin, async (req, res) => {
-  const { name, bank, category, description, redirect_url_template, display_order, active } = req.body;
+  const { name, bank, category, description, redirect_url_template, display_order, active, card_locations } = req.body;
 
   const trimmedName = name ? String(name).trim() : '';
   const trimmedBank = bank ? String(bank).trim() : '';
@@ -703,11 +704,12 @@ app.put('/api/cards/:id', authenticateToken, requireAdmin, async (req, res) => {
   const updated = await db.updateCard(req.params.id, {
     name: trimmedName,
     bank: trimmedBank,
-    category: category || 'Premium',
+    category: category || 'Offline',
     description: description ? String(description).trim() : '',
     redirect_url_template: trimmedUrl,
     display_order: display_order || 1,
-    active: active !== undefined ? active : true
+    active: active !== undefined ? active : true,
+    card_locations: Array.isArray(card_locations) ? card_locations : []
   });
 
   if (updated) {

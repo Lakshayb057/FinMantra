@@ -33,7 +33,7 @@ export default function AdminDashboard() {
   const [editingAgent, setEditingAgent] = useState(null);
   const [editingLocation, setEditingLocation] = useState(null);
   
-  const [newCardForm, setNewCardForm] = useState({ name: '', bank: '', category: 'Offline', description: '', redirect_url_template: '', display_order: 1, active: true });
+  const [newCardForm, setNewCardForm] = useState({ name: '', bank: '', category: 'Offline', description: '', redirect_url_template: '', display_order: 1, active: true, card_locations: [] });
   const [newAgentForm, setNewAgentForm] = useState({ id: '', name: '', phone: '', email: '', username: '', password: '', status: 'active', locations: [] });
   const [newLocName, setNewLocName] = useState('');
 
@@ -336,7 +336,7 @@ export default function AdminDashboard() {
         })
       });
       showToast('Credit card added successfully.');
-      setNewCardForm({ name: '', bank: '', category: 'Offline', description: '', redirect_url_template: '', display_order: 1, active: true });
+      setNewCardForm({ name: '', bank: '', category: 'Offline', description: '', redirect_url_template: '', display_order: 1, active: true, card_locations: [] });
       loadAllAdminData();
     } catch (err) {
       showToast(err.message || 'Failed to add card.', 'error');
@@ -567,6 +567,22 @@ export default function AdminDashboard() {
         ? current.filter(l => l !== locName)
         : [...current, locName];
       setEditingAgent({ ...editingAgent, locations: updated });
+    }
+  };
+
+  const handleCardFormLocToggle = (locName, formType = 'new') => {
+    if (formType === 'new') {
+      const current = newCardForm.card_locations || [];
+      const updated = current.includes(locName)
+        ? current.filter(l => l !== locName)
+        : [...current, locName];
+      setNewCardForm({ ...newCardForm, card_locations: updated });
+    } else {
+      const current = editingCard.card_locations || [];
+      const updated = current.includes(locName)
+        ? current.filter(l => l !== locName)
+        : [...current, locName];
+      setEditingCard({ ...editingCard, card_locations: updated });
     }
   };
 
@@ -986,6 +1002,34 @@ export default function AdminDashboard() {
                     </div>
                   </div>
 
+                  {((editingCard && editingCard.category === 'Offline') || (!editingCard && newCardForm.category === 'Offline')) && (
+                    <div className="form-group" style={{ marginTop: '1rem' }}>
+                      <label className="form-label">Available Locations</label>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', background: 'var(--paper-2)', border: '1px solid var(--line)', padding: '0.75rem', borderRadius: 'var(--radius-sm)', maxHeight: '120px', overflowY: 'auto' }}>
+                        {locations.map(loc => {
+                          const isChecked = editingCard 
+                            ? (editingCard.card_locations || []).includes(loc.name)
+                            : (newCardForm.card_locations || []).includes(loc.name);
+                          return (
+                            <div key={loc.id} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                              <input 
+                                type="checkbox" 
+                                id={`card-loc-${loc.id}`} 
+                                checked={isChecked}
+                                onChange={() => handleCardFormLocToggle(loc.name, editingCard ? 'edit' : 'new')}
+                                style={{ accentColor: 'var(--gold)' }}
+                              />
+                              <label htmlFor={`card-loc-${loc.id}`} style={{ fontSize: '0.8rem', color: 'var(--ink)', cursor: 'pointer' }}>{loc.name}</label>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div style={{ fontSize: '0.7rem', color: 'hsl(var(--text-muted))', marginTop: '0.25rem' }}>
+                        If no locations are checked, the card will be available at ALL locations by default.
+                      </div>
+                    </div>
+                  )}
+
                   <div className="form-group">
                     <label className="form-label">Short Description</label>
                     <textarea 
@@ -1064,12 +1108,17 @@ export default function AdminDashboard() {
                         <div style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', margin: '0.25rem 0' }}>
                           {card.bank} Bank • Category: {card.category} • Order: {card.display_order}
                         </div>
+                        {card.category === 'Offline' && (
+                          <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', margin: '0.25rem 0' }}>
+                            Locations: {card.card_locations && card.card_locations.length > 0 ? card.card_locations.join(', ') : 'All Locations'}
+                          </div>
+                        )}
                         <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', maxWidth: '350px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {card.redirect_url_template}
                         </div>
                       </div>
                       <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <button onClick={() => setEditingCard(card)} className="btn-secondary" style={{ padding: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <button onClick={() => setEditingCard({ ...card, card_locations: card.card_locations || [] })} className="btn-secondary" style={{ padding: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <Edit size={14} />
                         </button>
                         <button onClick={() => handleDeleteCard(card.id)} className="btn-secondary" style={{ padding: '0.5rem', background: 'rgba(209, 67, 67, 0.1)', color: 'var(--err)', borderColor: 'rgba(209, 67, 67, 0.15)' }}>

@@ -226,6 +226,28 @@ async function initPgSchema() {
       console.error('[Database] Failed to execute PostgreSQL ALTER TABLE add column utm_creative_format:', migErr.message);
     }
 
+    // Automated PostgreSQL Migration: Update legacy card categories to 'Offline'
+    try {
+      const migResult = await client.query(`
+        UPDATE cards SET category = 'Offline' WHERE category NOT IN ('Offline', 'Digital')
+      `);
+      if (migResult.rowCount > 0) {
+        console.log(`[Database] Migrated ${migResult.rowCount} card(s) category to 'Offline' in PostgreSQL.`);
+      }
+    } catch (migErr) {
+      console.error('[Database] Failed to migrate card categories:', migErr.message);
+    }
+
+    // Automated PostgreSQL Migration: Add card_locations column if not exists
+    try {
+      await client.query(`
+        ALTER TABLE cards ADD COLUMN IF NOT EXISTS card_locations JSONB DEFAULT '[]'
+      `);
+      console.log('[Database] Checked/Added column cards.card_locations in PostgreSQL.');
+    } catch (migErr) {
+      console.error('[Database] Failed to add card_locations column:', migErr.message);
+    }
+
     
     // Seed cards if empty
     const cardCount = await client.query('SELECT COUNT(*) FROM cards');
@@ -400,11 +422,17 @@ const db = {
       const res = includeInactive
         ? await pool.query('SELECT * FROM cards ORDER BY display_order ASC')
         : await pool.query('SELECT * FROM cards WHERE active = true ORDER BY display_order ASC');
-      return res.rows;
+      return res.rows.map(row => ({
+        ...row,
+        card_locations: typeof row.card_locations === 'string' ? JSON.parse(row.card_locations) : (row.card_locations || [])
+      }));
     }
     const data = readData();
-    if (includeInactive) return data.cards;
-    return data.cards.filter(c => c.active);
+    const cards = includeInactive ? data.cards : data.cards.filter(c => c.active);
+    return cards.map(c => ({
+      ...c,
+      card_locations: c.card_locations || []
+    }));
   },
 
   async addCard(card) {
@@ -412,17 +440,19 @@ const db = {
       const id = 'card_' + Math.random().toString(36).substr(2, 9);
       const displayOrder = card.display_order || 1;
       const active = card.active !== undefined ? card.active : true;
+      const cardLocationsJson = JSON.stringify(card.card_locations || []);
       await pool.query(
-        'INSERT INTO cards (id, name, bank, category, description, redirect_url_template, display_order, active, thumbnail_url) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
-        [id, card.name, card.bank, card.category, card.description, card.redirect_url_template, displayOrder, active, card.thumbnail_url || '']
+        'INSERT INTO cards (id, name, bank, category, description, redirect_url_template, display_order, active, thumbnail_url, card_locations) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
+        [id, card.name, card.bank, card.category, card.description, card.redirect_url_template, displayOrder, active, card.thumbnail_url || '', cardLocationsJson]
       );
-      return { id, ...card, display_order: displayOrder, active };
+      return { id, ...card, display_order: displayOrder, active, card_locations: card.card_locations || [] };
     }
 
     const data = readData();
     const newCard = {
       id: 'card_' + Math.random().toString(36).substr(2, 9),
       ...card,
+      card_locations: card.card_locations || [],
       display_order: card.display_order || (data.cards.length + 1)
     };
     data.cards.push(newCard);
@@ -439,10 +469,16 @@ const db = {
         if (['name', 'bank', 'category', 'description', 'redirect_url_template', 'display_order', 'active', 'thumbnail_url'].includes(key)) {
           fields.push(`${key} = $${idx++}`);
           values.push(val);
+        } else if (key === 'card_locations') {
+          fields.push(`card_locations = $${idx++}`);
+          values.push(JSON.stringify(val || []));
         }
       }
       values.push(id);
       const res = await pool.query(`UPDATE cards SET ${fields.join(', ')} WHERE id = $${idx} RETURNING *`, values);
+      if (res.rows[0]) {
+        res.rows[0].card_locations = typeof res.rows[0].card_locations === 'string' ? JSON.parse(res.rows[0].card_locations) : (res.rows[0].card_locations || []);
+      }
       return res.rows[0] || null;
     }
 

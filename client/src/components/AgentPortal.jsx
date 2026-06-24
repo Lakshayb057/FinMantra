@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { LogIn, User, MapPin, CheckCircle, BarChart3, Plus, LogOut } from 'lucide-react';
 
 // Helper functions for cookie storage
@@ -74,6 +74,21 @@ export default function AgentPortal() {
 
   // Performance stats
   const [agentLeads, setAgentLeads] = useState([]);
+  
+  const filteredCards = useMemo(() => {
+    return cards.filter(c => {
+      // Hide 'digital' category cards from agents (already filtered, but let's be safe)
+      if (c.category?.toLowerCase() === 'digital') return false;
+      // If it's an offline card with specific locations assigned,
+      // only show it if the agent is logged in to one of those locations.
+      if (c.category?.toLowerCase() === 'offline') {
+        if (c.card_locations && c.card_locations.length > 0) {
+          return c.card_locations.includes(agentLocation);
+        }
+      }
+      return true;
+    });
+  }, [cards, agentLocation]);
   
   const API_URL = window.location.hostname === 'localhost' ? 'http://localhost:5000/api' : '/api';
 
@@ -571,7 +586,7 @@ export default function AgentPortal() {
                 disabled={isSubmitting}
               >
                 <option value="">-- Select Card to Apply --</option>
-                {cards.map(c => (
+                {filteredCards.map(c => (
                   <option key={c.id} value={c.id}>
                     {c.bank} - {c.name}
                   </option>
