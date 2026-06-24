@@ -97,7 +97,7 @@ export default function AdminDashboard() {
     const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = window.location.hostname === 'localhost' 
       ? `ws://${window.location.hostname}:5000` 
-      : `${wsProto}//${window.location.host}/ws`;
+      : `${wsProto}//${window.location.host}/api/ws`;
     let socket;
     let reconnectDelay = 5000;
 
@@ -130,7 +130,7 @@ export default function AdminDashboard() {
       };
 
       socket.onclose = () => {
-        reconnectDelay = Math.min(reconnectDelay * 2, 60000);
+        reconnectDelay = Math.min(reconnectDelay * 2, 300000); // Max 5 minutes backoff
         setTimeout(connectWebSocket, reconnectDelay);
       };
 
