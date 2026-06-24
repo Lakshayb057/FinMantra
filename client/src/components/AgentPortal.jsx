@@ -65,7 +65,8 @@ export default function AgentPortal() {
   const [leadForm, setLeadForm] = useState({
     fullName: '',
     phone: '',
-    email: ''
+    email: '',
+    cardId: ''
   });
   
   const [leadError, setLeadError] = useState('');
@@ -255,10 +256,10 @@ export default function AgentPortal() {
     setLeadError('');
     setLeadSuccess('');
 
-    const { fullName, phone, email } = leadForm;
+    const { fullName, phone, email, cardId } = leadForm;
 
-    if (!fullName || !phone || !email) {
-      setLeadError('Please fill in all details.');
+    if (!fullName || !phone || !email || !cardId) {
+      setLeadError('Please fill in all details, including card selection.');
       return;
     }
 
@@ -281,6 +282,7 @@ export default function AgentPortal() {
           full_name: fullName.trim(),
           phone: phone.trim(),
           email: email.trim(),
+          card_id: cardId,
           source: 'agent',
           agent_id: agent?.id,
           agent_name: agent?.name,
@@ -293,12 +295,12 @@ export default function AgentPortal() {
       if (res.ok) {
         setLeadSuccess(`Lead registered successfully! Generated URM: ${data.urm}. Redirecting to bank portal...`);
         // Reset lead form
-        setLeadForm(prev => ({
-          ...prev,
+        setLeadForm({
           fullName: '',
           phone: '',
           email: '',
-        }));
+          cardId: ''
+        });
         // Reload agent performance leads
         fetchMasterData();
 
@@ -556,6 +558,25 @@ export default function AgentPortal() {
                 required
                 disabled={isSubmitting}
               />
+            </div>
+
+            <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+              <label className="form-label">Select Card</label>
+              <select 
+                name="cardId" 
+                className="form-select" 
+                value={leadForm.cardId}
+                onChange={handleLeadChange} 
+                required
+                disabled={isSubmitting}
+              >
+                <option value="">-- Select Card to Apply --</option>
+                {cards.map(c => (
+                  <option key={c.id} value={c.id}>
+                    {c.bank} - {c.name}
+                  </option>
+                ))}
+              </select>
             </div>
 
             {leadError && (
