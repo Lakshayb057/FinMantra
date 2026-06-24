@@ -6,6 +6,7 @@ import {
 
 export default function AdminDashboard() {
   const [token, setToken] = useState(localStorage.getItem('finmantra_admin_token') || '');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [authError, setAuthError] = useState('');
@@ -90,9 +91,9 @@ export default function AdminDashboard() {
     }
   }, [token]);
 
-  // Real-time synchronization via WebSocket
+  // Real-time synchronization via WebSocket (only after verified auth)
   useEffect(() => {
-    if (!token || token === 'null' || token === 'undefined') return;
+    if (!isAuthenticated) return;
 
     const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = window.location.hostname === 'localhost' 
@@ -144,7 +145,7 @@ export default function AdminDashboard() {
     return () => {
       if (socket) socket.close();
     };
-  }, [token]);
+  }, [isAuthenticated]);
 
   const loadAllAdminData = async () => {
     setLoading(true);
@@ -163,6 +164,9 @@ export default function AdminDashboard() {
         handleLogout();
         return;
       }
+
+      // Token is verified — enable WebSocket sync
+      setIsAuthenticated(true);
 
       const leadsData = await leadsRes.json();
       const cardsData = await cardsRes.json();
@@ -217,6 +221,7 @@ export default function AdminDashboard() {
   const handleLogout = () => {
     localStorage.removeItem('finmantra_admin_token');
     setToken('');
+    setIsAuthenticated(false);
     setAdminPasswordInput('');
   };
 

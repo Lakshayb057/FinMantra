@@ -29,6 +29,7 @@ const deleteCookie = (name) => {
 
 export default function AgentPortal() {
   const [token, setToken] = useState(getCookie('finmantra_agent_token') || '');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [agent, setAgent] = useState(() => {
     const rawAgent = getCookie('finmantra_agent');
     try {
@@ -118,9 +119,9 @@ export default function AgentPortal() {
     }
   }, [token]);
 
-  // Real-time synchronization via WebSocket for agent portal
+  // Real-time synchronization via WebSocket for agent portal (only after verified auth)
   useEffect(() => {
-    if (!token || token === 'null' || token === 'undefined') return;
+    if (!isAuthenticated) return;
 
     const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = window.location.hostname === 'localhost' 
@@ -169,7 +170,7 @@ export default function AgentPortal() {
     return () => {
       if (socket) socket.close();
     };
-  }, [token, agent]);
+  }, [isAuthenticated]);
 
   const fetchMasterData = async () => {
     try {
@@ -192,6 +193,8 @@ export default function AgentPortal() {
         // Filter leads submitted by this agent
         const filtered = leadsData.filter(l => l.agent_id === agent?.id);
         setAgentLeads(filtered);
+        // Token is verified — enable WebSocket sync
+        setIsAuthenticated(true);
       }
     } catch (err) {
       console.error('Error fetching agent data:', err);
@@ -236,6 +239,7 @@ export default function AgentPortal() {
     deleteCookie('finmantra_agent');
     localStorage.removeItem('finmantra_agent_selected_location');
     setToken('');
+    setIsAuthenticated(false);
     setAgent(null);
     setAgentLocation('');
     setLoginForm({ username: '', password: '' });
