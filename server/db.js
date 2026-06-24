@@ -91,25 +91,8 @@ function initDb() {
           thumbnail_url: ''
         }
       ],
-      agents: [
-        {
-          id: 'agent_1',
-          name: 'Rajesh Kumar',
-          phone: '9876543210',
-          email: 'rajesh@finmantra.com',
-          username: 'rajesh123',
-          password_hash: 'f44d1ac9bf0c69b083380b86dbdf3b73797150e3cca4820ac399f7917e607647', // SHA256 of "agent123"
-          status: 'active',
-          locations: ['Mumbai Airport Kiosk', 'Delhi Kiosk'],
-          created_at: new Date().toISOString()
-        }
-      ],
-      locations: [
-        { id: 'loc_1', name: 'Mumbai Airport Kiosk', active: true, created_at: new Date().toISOString() },
-        { id: 'loc_2', name: 'Delhi Kiosk', active: true, created_at: new Date().toISOString() },
-        { id: 'loc_3', name: 'Bangalore Office', active: true, created_at: new Date().toISOString() },
-        { id: 'loc_4', name: 'Pune Kiosk', active: true, created_at: new Date().toISOString() }
-      ],
+      agents: [],
+      locations: [],
       settings: {
         public_redirect_url: 'https://applyonline.hdfcbank.com/cards/credit-cards.html?CHANNELSOURCE=TDCC&DEDUPE=N&DSACode=XFIF&LGcode=public&LCcode=public&urn={urn}',
         otp_message_template: 'Your OTP for FinMantra credit card application is: {otp}. Valid for 5 minutes.',
@@ -244,18 +227,6 @@ async function initPgSchema() {
     }
 
     
-    // Seed locations if empty
-    const locCount = await client.query('SELECT COUNT(*) FROM locations');
-    if (parseInt(locCount.rows[0].count, 10) === 0) {
-      await client.query(`
-        INSERT INTO locations (id, name, active, created_at) VALUES 
-        ('loc_1', 'Mumbai Airport Kiosk', true, NOW()),
-        ('loc_2', 'Delhi Kiosk', true, NOW()),
-        ('loc_3', 'Bangalore Office', true, NOW()),
-        ('loc_4', 'Pune Kiosk', true, NOW())
-      `);
-    }
-
     // Seed cards if empty
     const cardCount = await client.query('SELECT COUNT(*) FROM cards');
     if (parseInt(cardCount.rows[0].count, 10) === 0) {
@@ -267,15 +238,6 @@ async function initPgSchema() {
         ('card_4', 'Swiggy HDFC', 'HDFC', 'Cashback', '10% cashback on Swiggy application. 5% cashback on online shopping. 1% on other spends.', 'https://www.hdfcbank.com/personal/pay/cards/credit-cards/swiggy-hdfc-card?name={name}&phone={phone}&email={email}&urn={urn}', 4, true, ''),
         ('card_5', 'Tata Neu HDFC Infinity', 'HDFC', 'Shopping', '5% NeuCoins on Tata Neu and partner brands. 1.5% NeuCoins on non-Tata spend.', 'https://www.hdfcbank.com/personal/pay/cards/credit-cards/tata-neu-infinity?name={name}&phone={phone}&email={email}&urn={urn}', 5, true, ''),
         ('card_6', 'HDFC Pixel Play', 'HDFC', 'Digital', 'Customizable credit card. Choose your favorite merchants for 5% cashback.', 'https://www.hdfcbank.com/personal/pay/cards/credit-cards/pixel-play?name={name}&phone={phone}&email={email}&urn={urn}', 6, true, '')
-      `);
-    }
-
-    // Seed agents if empty
-    const agentCount = await client.query('SELECT COUNT(*) FROM agents');
-    if (parseInt(agentCount.rows[0].count, 10) === 0) {
-      await client.query(`
-        INSERT INTO agents (id, name, phone, email, username, password_hash, status, locations, created_at) VALUES 
-        ('agent_1', 'Rajesh Kumar', '9876543210', 'rajesh@finmantra.com', 'rajesh123', 'f44d1ac9bf0c69b083380b86dbdf3b73797150e3cca4820ac399f7917e607647', 'active', '["Mumbai Airport Kiosk", "Delhi Kiosk"]'::jsonb, NOW())
       `);
     }
 
