@@ -186,7 +186,7 @@ export default function AgentPortal() {
       const cardsData = await cardsRes.json();
       const locsData = await locsRes.json();
       
-      setCards(cardsData);
+      setCards(cardsData.filter(c => c.category?.toLowerCase() !== 'digital'));
       setLocations(locsData.filter(l => l.active));
       
       if (leadsRes.ok) {
