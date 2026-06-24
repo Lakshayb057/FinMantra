@@ -5,7 +5,7 @@ const { Pool } = require('pg');
 const DB_FILE = path.join(__dirname, 'local_database.json');
 
 // Database mode dispatching
-const usePg = !!process.env.DATABASE_URL;
+let usePg = !!process.env.DATABASE_URL;
 let pool = null;
 
 if (usePg) {
@@ -125,7 +125,15 @@ function initDb() {
 
 // Auto-Migration Schema for PostgreSQL
 async function initPgSchema() {
-  const client = await pool.connect();
+  let client;
+  try {
+    client = await pool.connect();
+  } catch (err) {
+    console.error('[Database] Failed to connect to AWS/RDS PostgreSQL Database. Falling back to local JSON database. Error:', err.message);
+    usePg = false;
+    return;
+  }
+
   try {
     await client.query('BEGIN');
     
@@ -260,10 +268,19 @@ async function initPgSchema() {
     await client.query('COMMIT');
     console.log('[Database] PostgreSQL tables checked, initialized and seeded.');
   } catch (err) {
-    await client.query('ROLLBACK');
-    console.error('[Database] Failed to execute PostgreSQL migration schema:', err);
+    try {
+      await client.query('ROLLBACK');
+    } catch (rbErr) {
+      // rollback failed if transaction not active
+    }
+    console.error('[Database] Failed to execute PostgreSQL migration schema. Falling back to local JSON database. Error:', err);
+    usePg = false;
   } finally {
-    client.release();
+    try {
+      client.release();
+    } catch (relErr) {
+      // release failed
+    }
   }
 }
 
