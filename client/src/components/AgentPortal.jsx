@@ -64,11 +64,7 @@ export default function AgentPortal() {
   const [leadForm, setLeadForm] = useState({
     fullName: '',
     phone: '',
-    email: '',
-    city: '',
-    employment: 'Salaried',
-    income: 'Below ₹25,000',
-    selectedCard: ''
+    email: ''
   });
   
   const [leadError, setLeadError] = useState('');
@@ -114,13 +110,6 @@ export default function AgentPortal() {
       setShowLocationModal(false);
     }
   }, [token, agent]);
-
-  // Sync lead form city with agentLocation
-  useEffect(() => {
-    if (agentLocation) {
-      setLeadForm(prev => ({ ...prev, city: agentLocation }));
-    }
-  }, [agentLocation]);
 
   // Fetch data if logged in
   useEffect(() => {
@@ -198,14 +187,6 @@ export default function AgentPortal() {
       setCards(cardsData);
       setLocations(locsData.filter(l => l.active));
       
-      if (cardsData.length > 0) {
-        setLeadForm(prev => ({ 
-          ...prev, 
-          selectedCard: cardsData[0].id,
-          city: agentLocation || agent?.locations?.[0] || '' 
-        }));
-      }
-
       if (leadsRes.ok) {
         const leadsData = await leadsRes.json();
         // Filter leads submitted by this agent
@@ -270,9 +251,9 @@ export default function AgentPortal() {
     setLeadError('');
     setLeadSuccess('');
 
-    const { fullName, phone, email, city, selectedCard } = leadForm;
+    const { fullName, phone, email } = leadForm;
 
-    if (!fullName || !phone || !email || !city || !selectedCard) {
+    if (!fullName || !phone || !email) {
       setLeadError('Please fill in all details.');
       return;
     }
@@ -296,10 +277,6 @@ export default function AgentPortal() {
           full_name: fullName.trim(),
           phone: phone.trim(),
           email: email.trim(),
-          city,
-          employment: leadForm.employment,
-          income_range: leadForm.income,
-          card_id: selectedCard,
           source: 'agent',
           agent_id: agent?.id,
           agent_name: agent?.name,
@@ -311,7 +288,7 @@ export default function AgentPortal() {
 
       if (res.ok) {
         setLeadSuccess(`Lead registered successfully! Generated URM: ${data.urm}. Redirecting to bank portal...`);
-        // Reset lead form but keep city & card selected
+        // Reset lead form
         setLeadForm(prev => ({
           ...prev,
           fullName: '',
@@ -563,7 +540,7 @@ export default function AgentPortal() {
               </div>
             </div>
 
-            <div className="form-group">
+            <div className="form-group" style={{ marginBottom: '1.5rem' }}>
               <label className="form-label">Email Address</label>
               <input 
                 type="email" 
@@ -575,69 +552,6 @@ export default function AgentPortal() {
                 required
                 disabled={isSubmitting}
               />
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-              <div className="form-group">
-                <label className="form-label">City/Location {agentLocation && '(Locked to Daily Kiosk)'}</label>
-                <select 
-                  name="city" 
-                  className="form-select" 
-                  value={leadForm.city} 
-                  onChange={handleLeadChange} 
-                  required
-                  disabled={isSubmitting || !!agentLocation}
-                >
-                  <option value="">Select Location</option>
-                  {agent?.locations && agent.locations.length > 0 ? (
-                    agent.locations.map((loc, idx) => (
-                      <option key={idx} value={loc}>{loc}</option>
-                    ))
-                  ) : locations.length > 0 ? (
-                    locations.map(loc => (
-                      <option key={loc.id} value={loc.name}>{loc.name}</option>
-                    ))
-                  ) : (
-                    <>
-                      <option value="Mumbai Airport Kiosk">Mumbai Airport Kiosk</option>
-                      <option value="Delhi Kiosk">Delhi Kiosk</option>
-                    </>
-                  )}
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Employment</label>
-                <select name="employment" className="form-select" value={leadForm.employment} onChange={handleLeadChange} disabled={isSubmitting}>
-                  <option value="Salaried">Salaried</option>
-                  <option value="Self-employed">Self-employed</option>
-                </select>
-              </div>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
-              <div className="form-group">
-                <label className="form-label">Monthly Income</label>
-                <select name="income" className="form-select" value={leadForm.income} onChange={handleLeadChange} disabled={isSubmitting}>
-                  <option value="Below ₹25,000">Below ₹25,000</option>
-                  <option value="₹25,000 – ₹50,000">₹25,000 – ₹50,000</option>
-                  <option value="₹50,000 – ₹1,00,000">₹50,000 – ₹1,00,000</option>
-                  <option value="Above ₹1,00,000">Above ₹1,00,000</option>
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Credit Card Option</label>
-                <select name="selectedCard" className="form-select" value={leadForm.selectedCard} onChange={handleLeadChange} required disabled={isSubmitting}>
-                  {cards.length > 0 ? (
-                    cards.map(card => (
-                      <option key={card.id} value={card.id}>{card.bank} {card.name}</option>
-                    ))
-                  ) : (
-                    <option value="">No active cards</option>
-                  )}
-                </select>
-              </div>
             </div>
 
             {leadError && (

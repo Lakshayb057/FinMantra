@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import PublicLanding from './components/PublicLanding';
 import AgentPortal from './components/AgentPortal';
 import AdminDashboard from './components/AdminDashboard';
-import { CreditCard } from 'lucide-react';
+
 
 export default function App() {
   const [currentPath, setCurrentPath] = useState(window.location.pathname);
@@ -86,7 +86,7 @@ export default function App() {
       {showSplash && (
         <div className={`splash-screen ${fadeSplash ? 'fade-out' : ''}`}>
           <div className="splash-content">
-            <CreditCard size={48} className="text-gradient-purple-cyan splash-logo" />
+            <span style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: 'var(--gold)', boxShadow: '0 0 0 16px rgba(224, 168, 46, 0.22)', display: 'block', marginBottom: '1.5rem' }}></span>
             <h1 className="splash-title">Fin<span>Mantra</span></h1>
             <div className="splash-loader"></div>
           </div>

@@ -333,7 +333,7 @@ app.post('/api/leads', async (req, res) => {
   const trimmedEmail = email ? String(email).trim() : '';
 
   if (source === 'agent') {
-    if (!trimmedName || !trimmedPhone || !trimmedEmail || !city || !card_id) {
+    if (!trimmedName || !trimmedPhone || !trimmedEmail) {
       return res.status(400).json({ error: 'Missing required lead details' });
     }
   } else {
