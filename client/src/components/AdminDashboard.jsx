@@ -570,21 +570,7 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleCardFormLocToggle = (locName, formType = 'new') => {
-    if (formType === 'new') {
-      const current = newCardForm.card_locations || [];
-      const updated = current.includes(locName)
-        ? current.filter(l => l !== locName)
-        : [...current, locName];
-      setNewCardForm({ ...newCardForm, card_locations: updated });
-    } else {
-      const current = editingCard.card_locations || [];
-      const updated = current.includes(locName)
-        ? current.filter(l => l !== locName)
-        : [...current, locName];
-      setEditingCard({ ...editingCard, card_locations: updated });
-    }
-  };
+
 
   // --- LOCATIONS MANAGEMENT ---
   const handleCreateLocation = async (e) => {
@@ -1004,29 +990,28 @@ export default function AdminDashboard() {
 
                   {((editingCard && editingCard.category === 'Offline') || (!editingCard && newCardForm.category === 'Offline')) && (
                     <div className="form-group" style={{ marginTop: '1rem' }}>
-                      <label className="form-label">Available Locations</label>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', background: 'var(--paper-2)', border: '1px solid var(--line)', padding: '0.75rem', borderRadius: 'var(--radius-sm)', maxHeight: '120px', overflowY: 'auto' }}>
-                        {locations.map(loc => {
-                          const isChecked = editingCard 
-                            ? (editingCard.card_locations || []).includes(loc.name)
-                            : (newCardForm.card_locations || []).includes(loc.name);
-                          return (
-                            <div key={loc.id} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                              <input 
-                                type="checkbox" 
-                                id={`card-loc-${loc.id}`} 
-                                checked={isChecked}
-                                onChange={() => handleCardFormLocToggle(loc.name, editingCard ? 'edit' : 'new')}
-                                style={{ accentColor: 'var(--gold)' }}
-                              />
-                              <label htmlFor={`card-loc-${loc.id}`} style={{ fontSize: '0.8rem', color: 'var(--ink)', cursor: 'pointer' }}>{loc.name}</label>
-                            </div>
-                          );
-                        })}
-                      </div>
-                      <div style={{ fontSize: '0.7rem', color: 'hsl(var(--text-muted))', marginTop: '0.25rem' }}>
-                        If no locations are checked, the card will be available at ALL locations by default.
-                      </div>
+                      <label className="form-label">Location (Kiosks and Cities)</label>
+                      <select 
+                        className="form-select"
+                        value={editingCard 
+                          ? (editingCard.card_locations && editingCard.card_locations.length > 0 ? editingCard.card_locations[0] : '')
+                          : (newCardForm.card_locations && newCardForm.card_locations.length > 0 ? newCardForm.card_locations[0] : '')
+                        }
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const locs = val ? [val] : [];
+                          if (editingCard) {
+                            setEditingCard({ ...editingCard, card_locations: locs });
+                          } else {
+                            setNewCardForm({ ...newCardForm, card_locations: locs });
+                          }
+                        }}
+                      >
+                        <option value="">All Locations</option>
+                        {locations.map(loc => (
+                          <option key={loc.id} value={loc.name}>{loc.name}</option>
+                        ))}
+                      </select>
                     </div>
                   )}
 
