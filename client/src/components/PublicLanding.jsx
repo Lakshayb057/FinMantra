@@ -92,60 +92,7 @@ export default function PublicLanding({ navigateTo, utmParams }) {
     }
   }, []);
 
-  // WebSocket sync for real-time landing page updates (cards, locations, settings)
-  useEffect(() => {
-    const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = window.location.hostname === 'localhost' 
-      ? `ws://${window.location.hostname}:5000` 
-      : `${wsProto}//${window.location.host}/api/ws`;
-    let socket;
-    let reconnectDelay = 5000;
 
-    const connectWebSocket = () => {
-      socket = new WebSocket(wsUrl);
-
-      socket.onopen = () => {
-        reconnectDelay = 5000;
-      };
-
-      socket.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data);
-          
-          if (message.type === 'CARDS_UPDATED') {
-            fetch(`${API_URL}/cards`)
-              .then(res => res.json())
-              .then(data => setCards(data));
-          } else if (message.type === 'LOCATIONS_UPDATED') {
-            fetch(`${API_URL}/locations`)
-              .then(res => res.json())
-              .then(data => setLocations(data.filter(l => l.active)));
-          } else if (message.type === 'SETTINGS_UPDATED') {
-            fetch(`${API_URL}/settings`)
-              .then(res => res.json())
-              .then(data => setSettings(data));
-          }
-        } catch (err) {
-          // silent
-        }
-      };
-
-      socket.onclose = () => {
-        reconnectDelay = Math.min(reconnectDelay * 2, 300000); // Max 5 minutes backoff
-        setTimeout(connectWebSocket, reconnectDelay);
-      };
-
-      socket.onerror = () => {
-        socket.close();
-      };
-    };
-
-    connectWebSocket();
-
-    return () => {
-      if (socket) socket.close();
-    };
-  }, []);
 
   // OTP Resend Timer
   useEffect(() => {
