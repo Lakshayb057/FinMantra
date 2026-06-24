@@ -1,20 +1,29 @@
 #!/bin/bash
 # FinMantra - One-time server setup script
-# Creates .env, applies nginx config, restarts everything
+# Creates .env (if missing), applies nginx config, restarts everything
 
-echo ">>> Creating .env file..."
-cat > /home/ubuntu/finmantra/server/.env << 'EOF'
+ENV_FILE="/home/ubuntu/finmantra/server/.env"
+
+# Only create .env if it doesn't exist (preserve user's existing config)
+if [ -f "$ENV_FILE" ]; then
+    echo ">>> .env file already exists — preserving existing configuration."
+else
+    echo ">>> Creating .env file..."
+    cat > "$ENV_FILE" << 'EOF'
 PORT=5000
-DATABASE_URL=postgresql://postgres:FinMantra123!@finmantra-db.cnm6keucqfmp.ap-south-1.rds.amazonaws.com:5432/postgres
+DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@YOUR_RDS_ENDPOINT:5432/postgres
 ADMIN_PASSWORD=admin1234
 JWT_SECRET=supersecretjwtkeyforfinmantra
-WA_API_KEY=EAAPJktfIJYsBR9SvydaPUf8lcTpj8PPZAFs1DkFI2Td66X9rVeLeKMjaGAPy3Lk0yByd24sIokhaVgq8fdIgXPPt3fSnhsHio2gCPZC1NXkwaW9oajAxBR5JA2t9InPxbSE4Tc13ZB41l9CHJoArgVekw9NVDZBoH5B6zCRHWwMhkUKePrIZA1ruNNEE6tnWCAGP2DxOIZCVKaukrbL5J6kZBNKcc9iXubH21xZBIwL5vG2TAsyPjXAfeFluhrzHLuxQpIaJ82gbZCsBxEPhcldeU
-WA_PHONE_NUMBER_ID=1211037612088239
-WA_OTP_TEMPLATE_NAME=jaspers_market_order_confirmation_v1
-WA_REFERRAL_TEMPLATE_NAME=jaspers_market_order_confirmation_v1
+# WhatsApp credentials are now configurable via Admin Dashboard > Settings
+# You can set them here as fallback, or leave blank and use the Admin UI
+WA_API_KEY=
+WA_PHONE_NUMBER_ID=
+WA_OTP_TEMPLATE_NAME=auth_otp
+WA_REFERRAL_TEMPLATE_NAME=transactional_link
 WA_TEMPLATE_LANGUAGE=en
 EOF
-echo ">>> .env file created!"
+    echo ">>> .env file created! Edit it with your actual DATABASE_URL."
+fi
 
 echo ">>> Applying Nginx configuration..."
 sudo cp /home/ubuntu/finmantra/nginx.conf /etc/nginx/sites-available/finmantra
