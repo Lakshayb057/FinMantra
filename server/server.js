@@ -336,6 +336,7 @@ app.post('/api/leads', async (req, res) => {
     consent,
     utm_source,
     utm_info,
+    utm_creative_format,
     utm_params
   } = req.body;
 
@@ -429,6 +430,7 @@ app.post('/api/leads', async (req, res) => {
     consent: !!consent,
     utm_source: source !== 'agent' ? (utm_source || null) : null,
     utm_info: source !== 'agent' ? (utm_info || null) : null,
+    utm_creative_format: source !== 'agent' ? (utm_creative_format || null) : null,
     utm_params: source !== 'agent' ? (utm_params || null) : null
   };
 
@@ -438,6 +440,7 @@ app.post('/api/leads', async (req, res) => {
   const agentCodeVal = (source === 'agent' && agent_id) ? agent_id : '';
   const utmSourceVal = utm_source || '';
   const utmInfoVal = utm_info || '';
+  const utmCreativeFormatVal = utm_creative_format || '';
   let redirectUrl = redirectUrlTemplate;
   redirectUrl = redirectUrl
     .replace(/{name}/gi, encodeURIComponent(trimmedName))
@@ -447,7 +450,8 @@ app.post('/api/leads', async (req, res) => {
     .replace(/{urm}/gi, encodeURIComponent(newLead.urn)) // support legacy placeholder if any
     .replace(/{agent_id}/gi, encodeURIComponent(agentCodeVal))
     .replace(/{utm_source}/gi, encodeURIComponent(utmSourceVal))
-    .replace(/{utm_info}/gi, encodeURIComponent(utmInfoVal));
+    .replace(/{utm_info}/gi, encodeURIComponent(utmInfoVal))
+    .replace(/{utm_creative_format}/gi, encodeURIComponent(utmCreativeFormatVal));
 
   // Propagate all initial query parameters (including UTM and other URL credentials)
   if (source !== 'agent' && utm_params && typeof utm_params === 'object') {
@@ -617,11 +621,11 @@ app.delete('/api/leads/:id', authenticateToken, requireAdmin, async (req, res) =
 app.get('/api/leads/export', authenticateToken, requireAdmin, async (req, res) => {
   const leads = await db.getLeads();
   
-  let csv = 'URN,Creation Date/Time,Full Name,Phone,Email,City,Employment,Monthly Income,Selected Card,Card Bank,Source,UTM Source,UTM Info,Agent Name,Agent Location,Redirect URL\n';
+  let csv = 'URN,Creation Date/Time,Full Name,Phone,Email,City,Employment,Monthly Income,Selected Card,Card Bank,Source,UTM Source,UTM Info,UTM Creative Format,Agent Name,Agent Location,Redirect URL\n';
   
   leads.forEach(l => {
     const createdDateTime = l.created_at ? l.created_at.replace('T', ' ').slice(0, 16) : '';
-    csv += `"${l.urn || ''}","${createdDateTime}","${l.full_name || ''}","${l.phone || ''}","${l.email || ''}","${l.city || ''}","${l.employment || ''}","${l.income_range || ''}","${l.card_name || ''}","${l.card_bank || ''}","${l.source || ''}","${l.utm_source || ''}","${l.utm_info || ''}","${l.agent_name || ''}","${l.agent_location || ''}","${l.redirect_url || ''}"\n`;
+    csv += `"${l.urn || ''}","${createdDateTime}","${l.full_name || ''}","${l.phone || ''}","${l.email || ''}","${l.city || ''}","${l.employment || ''}","${l.income_range || ''}","${l.card_name || ''}","${l.card_bank || ''}","${l.source || ''}","${l.utm_source || ''}","${l.utm_info || ''}","${l.utm_creative_format || ''}","${l.agent_name || ''}","${l.agent_location || ''}","${l.redirect_url || ''}"\n`;
   });
 
   res.setHeader('Content-Type', 'text/csv');

@@ -194,6 +194,7 @@ async function initPgSchema() {
         consent BOOLEAN DEFAULT TRUE,
         utm_source VARCHAR(255),
         utm_info VARCHAR(255),
+        utm_creative_format VARCHAR(255),
         utm_params JSONB,
         redirect_url TEXT,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -230,6 +231,16 @@ async function initPgSchema() {
       }
     } catch (migErr) {
       console.error('[Database] Failed to execute PostgreSQL ALTER column urm -> urn:', migErr.message);
+    }
+
+    // Automated PostgreSQL Migration: Add utm_creative_format column if not exists
+    try {
+      await client.query(`
+        ALTER TABLE leads ADD COLUMN IF NOT EXISTS utm_creative_format VARCHAR(255)
+      `);
+      console.log('[Database] Checked/Added column leads.utm_creative_format in PostgreSQL.');
+    } catch (migErr) {
+      console.error('[Database] Failed to execute PostgreSQL ALTER TABLE add column utm_creative_format:', migErr.message);
     }
 
     
@@ -360,13 +371,13 @@ const db = {
       const id = 'lead_' + Math.random().toString(36).substr(2, 9);
       
       await pool.query(
-        `INSERT INTO leads (id, urn, full_name, phone, email, city, employment, income_range, card_id, card_name, card_bank, source, agent_id, agent_name, agent_location, consent, utm_source, utm_info, utm_params, redirect_url, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, NOW())`,
+        `INSERT INTO leads (id, urn, full_name, phone, email, city, employment, income_range, card_id, card_name, card_bank, source, agent_id, agent_name, agent_location, consent, utm_source, utm_info, utm_creative_format, utm_params, redirect_url, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, NOW())`,
         [
           id, urn, lead.full_name, lead.phone, lead.email, lead.city, lead.employment, lead.income_range,
           lead.card_id, lead.card_name, lead.card_bank, lead.source || 'public', lead.agent_id, lead.agent_name,
           lead.agent_location, lead.consent !== undefined ? lead.consent : true, lead.utm_source, lead.utm_info,
-          JSON.stringify(lead.utm_params || {}), lead.redirect_url || ''
+          lead.utm_creative_format, JSON.stringify(lead.utm_params || {}), lead.redirect_url || ''
         ]
       );
       return { id, urn, ...lead, created_at: new Date().toISOString() };

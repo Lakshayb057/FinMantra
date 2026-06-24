@@ -980,11 +980,7 @@ export default function AdminDashboard() {
                         value={editingCard ? editingCard.category : newCardForm.category}
                         onChange={(e) => editingCard ? setEditingCard({ ...editingCard, category: e.target.value }) : setNewCardForm({ ...newCardForm, category: e.target.value })}
                       >
-                        <option value="Premium">Premium</option>
-                        <option value="Rewards">Rewards</option>
-                        <option value="Travel">Travel</option>
-                        <option value="Cashback">Cashback</option>
-                        <option value="Shopping">Shopping</option>
+                        <option value="Offline">Offline</option>
                         <option value="Digital">Digital</option>
                       </select>
                     </div>
@@ -1012,7 +1008,7 @@ export default function AdminDashboard() {
                       required
                     />
                       <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', marginTop: '0.25rem' }}>
-                        Allowed wildcards: <code>{`{name}`}</code>, <code>{`{phone}`}</code>, <code>{`{email}`}</code>, <code>{`{urn}`}</code>, <code>{`{agent_id}`}</code>, <code>{`{utm_source}`}</code>, <code>{`{utm_info}`}</code>.
+                        Allowed wildcards: <code>{`{name}`}</code>, <code>{`{phone}`}</code>, <code>{`{email}`}</code>, <code>{`{urn}`}</code>, <code>{`{agent_id}`}</code>, <code>{`{utm_source}`}</code>, <code>{`{utm_info}`}</code>, <code>{`{utm_creative_format}`}</code>.
                       </div>
                   </div>
 
@@ -1328,7 +1324,7 @@ export default function AdminDashboard() {
                     required 
                   />
                   <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', marginTop: '0.25rem' }}>
-                    Allowed wildcards: <code>{`{name}`}</code>, <code>{`{phone}`}</code>, <code>{`{email}`}</code>, <code>{`{urn}`}</code>, <code>{`{utm_source}`}</code>, <code>{`{utm_info}`}</code>. Public users will be redirected here after OTP verification.
+                    Allowed wildcards: <code>{`{name}`}</code>, <code>{`{phone}`}</code>, <code>{`{email}`}</code>, <code>{`{urn}`}</code>, <code>{`{utm_source}`}</code>, <code>{`{utm_info}`}</code>, <code>{`{utm_creative_format}`}</code>. Public users will be redirected here after OTP verification.
                   </div>
                 </div>
 

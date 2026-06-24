@@ -327,6 +327,7 @@ export default function PublicLanding({ navigateTo, utmParams }) {
             consent: true,
             utm_source: utmParams?.utm_source || null,
             utm_info: utmParams?.utm_info || null,
+            utm_creative_format: utmParams?.utm_creative_format || null,
             utm_params: utmParams || null
           })
         });
@@ -492,12 +493,12 @@ export default function PublicLanding({ navigateTo, utmParams }) {
           )}
           <form onSubmit={handleFormSubmit}>
             <div className="form-group">
-              <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>Name as per Govt. ID</label>
+              <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>Full Name</label>
               <input 
                 type="text" 
                 name="fullName" 
                 className="form-input" 
-                placeholder="As per your ID"
+                placeholder="As per PAN Card"
                 value={formData.fullName}
                 onChange={handleInputChange} 
                 required
@@ -506,12 +507,12 @@ export default function PublicLanding({ navigateTo, utmParams }) {
             </div>
             
             <div className="form-group">
-              <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>WhatsApp number</label>
+              <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>Phone</label>
               <input 
                 type="tel" 
                 name="phone" 
                 className="form-input" 
-                placeholder="10-digit mobile"
+                placeholder="WhatsApp number (10 digits)"
                 maxLength="10"
                 value={formData.phone}
                 onChange={handleInputChange} 
