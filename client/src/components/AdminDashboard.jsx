@@ -33,7 +33,7 @@ export default function AdminDashboard() {
   const [editingAgent, setEditingAgent] = useState(null);
   const [editingLocation, setEditingLocation] = useState(null);
   
-  const [newCardForm, setNewCardForm] = useState({ name: '', bank: '', category: 'Premium', description: '', redirect_url_template: '', display_order: 1, active: true });
+  const [newCardForm, setNewCardForm] = useState({ name: '', bank: '', category: 'Offline', description: '', redirect_url_template: '', display_order: 1, active: true });
   const [newAgentForm, setNewAgentForm] = useState({ id: '', name: '', phone: '', email: '', username: '', password: '', status: 'active', locations: [] });
   const [newLocName, setNewLocName] = useState('');
 
@@ -336,7 +336,7 @@ export default function AdminDashboard() {
         })
       });
       showToast('Credit card added successfully.');
-      setNewCardForm({ name: '', bank: '', category: 'Premium', description: '', redirect_url_template: '', display_order: 1, active: true });
+      setNewCardForm({ name: '', bank: '', category: 'Offline', description: '', redirect_url_template: '', display_order: 1, active: true });
       loadAllAdminData();
     } catch (err) {
       showToast(err.message || 'Failed to add card.', 'error');

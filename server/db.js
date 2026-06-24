@@ -28,7 +28,7 @@ function initDb() {
           id: 'card_1',
           name: 'HDFC Regalia Gold',
           bank: 'HDFC',
-          category: 'Premium',
+          category: 'Offline',
           description: 'Complimentary Club Vistara & MMT Black memberships. 4 Reward Points per ₹150 spent.',
           redirect_url_template: 'https://www.hdfcbank.com/personal/pay/cards/credit-cards/regalia-gold-credit-card?name={name}&phone={phone}&email={email}&urn={urn}',
           display_order: 1,
@@ -39,7 +39,7 @@ function initDb() {
           id: 'card_2',
           name: 'Diners Club Privilege',
           bank: 'HDFC',
-          category: 'Rewards',
+          category: 'Offline',
           description: 'Complimentary annual memberships of Amazon Prime, Swiggy One. 2x on weekend dining.',
           redirect_url_template: 'https://www.hdfcbank.com/personal/pay/cards/credit-cards/diners-club-privilege?name={name}&phone={phone}&email={email}&urn={urn}',
           display_order: 2,
@@ -50,7 +50,7 @@ function initDb() {
           id: 'card_3',
           name: 'Marriott Bonvoy HDFC',
           bank: 'HDFC',
-          category: 'Travel',
+          category: 'Offline',
           description: '1 Free Night Award annually. Silver Elite Status. 8 Marriott Bonvoy Points per ₹150 spent.',
           redirect_url_template: 'https://www.hdfcbank.com/personal/pay/cards/credit-cards/marriott-bonvoy?name={name}&phone={phone}&email={email}&urn={urn}',
           display_order: 3,
@@ -61,7 +61,7 @@ function initDb() {
           id: 'card_4',
           name: 'Swiggy HDFC',
           bank: 'HDFC',
-          category: 'Cashback',
+          category: 'Offline',
           description: '10% cashback on Swiggy application. 5% cashback on online shopping. 1% on other spends.',
           redirect_url_template: 'https://www.hdfcbank.com/personal/pay/cards/credit-cards/swiggy-hdfc-card?name={name}&phone={phone}&email={email}&urn={urn}',
           display_order: 4,
@@ -72,7 +72,7 @@ function initDb() {
           id: 'card_5',
           name: 'Tata Neu HDFC Infinity',
           bank: 'HDFC',
-          category: 'Shopping',
+          category: 'Offline',
           description: '5% NeuCoins on Tata Neu and partner brands. 1.5% NeuCoins on non-Tata spend.',
           redirect_url_template: 'https://www.hdfcbank.com/personal/pay/cards/credit-cards/tata-neu-infinity?name={name}&phone={phone}&email={email}&urn={urn}',
           display_order: 5,
@@ -83,7 +83,7 @@ function initDb() {
           id: 'card_6',
           name: 'HDFC Pixel Play',
           bank: 'HDFC',
-          category: 'Digital',
+          category: 'Offline',
           description: 'Customizable credit card. Choose your favorite merchants for 5% cashback.',
           redirect_url_template: 'https://www.hdfcbank.com/personal/pay/cards/credit-cards/pixel-play?name={name}&phone={phone}&email={email}&urn={urn}',
           display_order: 6,
@@ -232,12 +232,12 @@ async function initPgSchema() {
     if (parseInt(cardCount.rows[0].count, 10) === 0) {
       await client.query(`
         INSERT INTO cards (id, name, bank, category, description, redirect_url_template, display_order, active, thumbnail_url) VALUES 
-        ('card_1', 'HDFC Regalia Gold', 'HDFC', 'Premium', 'Complimentary Club Vistara & MMT Black memberships. 4 Reward Points per ₹150 spent.', 'https://www.hdfcbank.com/personal/pay/cards/credit-cards/regalia-gold-credit-card?name={name}&phone={phone}&email={email}&urn={urn}', 1, true, ''),
-        ('card_2', 'Diners Club Privilege', 'HDFC', 'Rewards', 'Complimentary annual memberships of Amazon Prime, Swiggy One. 2x on weekend dining.', 'https://www.hdfcbank.com/personal/pay/cards/credit-cards/diners-club-privilege?name={name}&phone={phone}&email={email}&urn={urn}', 2, true, ''),
-        ('card_3', 'Marriott Bonvoy HDFC', 'HDFC', 'Travel', '1 Free Night Award annually. Silver Elite Status. 8 Marriott Bonvoy Points per ₹150 spent.', 'https://www.hdfcbank.com/personal/pay/cards/credit-cards/marriott-bonvoy?name={name}&phone={phone}&email={email}&urn={urn}', 3, true, ''),
-        ('card_4', 'Swiggy HDFC', 'HDFC', 'Cashback', '10% cashback on Swiggy application. 5% cashback on online shopping. 1% on other spends.', 'https://www.hdfcbank.com/personal/pay/cards/credit-cards/swiggy-hdfc-card?name={name}&phone={phone}&email={email}&urn={urn}', 4, true, ''),
-        ('card_5', 'Tata Neu HDFC Infinity', 'HDFC', 'Shopping', '5% NeuCoins on Tata Neu and partner brands. 1.5% NeuCoins on non-Tata spend.', 'https://www.hdfcbank.com/personal/pay/cards/credit-cards/tata-neu-infinity?name={name}&phone={phone}&email={email}&urn={urn}', 5, true, ''),
-        ('card_6', 'HDFC Pixel Play', 'HDFC', 'Digital', 'Customizable credit card. Choose your favorite merchants for 5% cashback.', 'https://www.hdfcbank.com/personal/pay/cards/credit-cards/pixel-play?name={name}&phone={phone}&email={email}&urn={urn}', 6, true, '')
+        ('card_1', 'HDFC Regalia Gold', 'HDFC', 'Offline', 'Complimentary Club Vistara & MMT Black memberships. 4 Reward Points per ₹150 spent.', 'https://www.hdfcbank.com/personal/pay/cards/credit-cards/regalia-gold-credit-card?name={name}&phone={phone}&email={email}&urn={urn}', 1, true, ''),
+        ('card_2', 'Diners Club Privilege', 'HDFC', 'Offline', 'Complimentary annual memberships of Amazon Prime, Swiggy One. 2x on weekend dining.', 'https://www.hdfcbank.com/personal/pay/cards/credit-cards/diners-club-privilege?name={name}&phone={phone}&email={email}&urn={urn}', 2, true, ''),
+        ('card_3', 'Marriott Bonvoy HDFC', 'HDFC', 'Offline', '1 Free Night Award annually. Silver Elite Status. 8 Marriott Bonvoy Points per ₹150 spent.', 'https://www.hdfcbank.com/personal/pay/cards/credit-cards/marriott-bonvoy?name={name}&phone={phone}&email={email}&urn={urn}', 3, true, ''),
+        ('card_4', 'Swiggy HDFC', 'HDFC', 'Offline', '10% cashback on Swiggy application. 5% cashback on online shopping. 1% on other spends.', 'https://www.hdfcbank.com/personal/pay/cards/credit-cards/swiggy-hdfc-card?name={name}&phone={phone}&email={email}&urn={urn}', 4, true, ''),
+        ('card_5', 'Tata Neu HDFC Infinity', 'HDFC', 'Offline', '5% NeuCoins on Tata Neu and partner brands. 1.5% NeuCoins on non-Tata spend.', 'https://www.hdfcbank.com/personal/pay/cards/credit-cards/tata-neu-infinity?name={name}&phone={phone}&email={email}&urn={urn}', 5, true, ''),
+        ('card_6', 'HDFC Pixel Play', 'HDFC', 'Offline', 'Customizable credit card. Choose your favorite merchants for 5% cashback.', 'https://www.hdfcbank.com/personal/pay/cards/credit-cards/pixel-play?name={name}&phone={phone}&email={email}&urn={urn}', 6, true, '')
       `);
     }
 
