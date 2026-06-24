@@ -97,7 +97,7 @@ export default function AdminDashboard() {
     const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = window.location.hostname === 'localhost' 
       ? `ws://${window.location.hostname}:5000` 
-      : `${wsProto}//${window.location.host}`;
+      : `${wsProto}//${window.location.host}/ws`;
     let socket;
 
     const connectWebSocket = () => {
