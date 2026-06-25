@@ -110,6 +110,25 @@ function getFallbackText(isOtpAuth, parameters, settings) {
 // Helper to send messages via Meta WhatsApp Cloud API (with Baileys QR-Linked Device fallback)
 async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOtpAuth = false) {
   const settings = await db.getSettings();
+  const gateway = settings.whatsapp_gateway || 'baileys';
+
+  if (gateway === 'baileys') {
+    const baileysStatus = baileys.getBaileysStatus();
+    if (baileysStatus.status === 'CONNECTED') {
+      console.log(`[WhatsApp] Gateway is set to Baileys. Routing message to ${toPhone} directly via linked device...`);
+      try {
+        const text = getFallbackText(isOtpAuth, parameters, settings);
+        const result = await baileys.sendBaileysMessage(toPhone, text);
+        return { sentViaBaileys: true, result };
+      } catch (err) {
+        console.error('[WhatsApp] Failed to send via Baileys:', err.message);
+        throw err;
+      }
+    }
+    console.error('[WhatsApp] Gateway is set to Baileys but it is not connected.');
+    throw new Error('WhatsApp linked device is not connected.');
+  }
+
   const apiKey = settings.wa_api_key || process.env.WA_API_KEY;
   const phoneId = settings.wa_phone_number_id || process.env.WA_PHONE_NUMBER_ID;
   const apiVersion = settings.wa_api_version || process.env.WA_API_VERSION || 'v25.0';
@@ -1079,8 +1098,19 @@ app.get('/api/settings', async (req, res) => {
 
 // Update Settings (Admin Only)
 app.put('/api/settings', authenticateToken, requireAdmin, async (req, res) => {
+  const oldSettings = await db.getSettings();
   const updated = await db.updateSettings(req.body);
   
+  // Toggle Baileys session connection if gateway changed
+  if (oldSettings.whatsapp_gateway !== updated.whatsapp_gateway) {
+    console.log(`[Settings] WhatsApp gateway changed from '${oldSettings.whatsapp_gateway}' to '${updated.whatsapp_gateway}'`);
+    if (updated.whatsapp_gateway === 'meta') {
+      await baileys.stopBaileys();
+    } else if (updated.whatsapp_gateway === 'baileys') {
+      await baileys.startBaileys();
+    }
+  }
+
   // Broadcast settings change
   broadcast({ type: 'SETTINGS_UPDATED' });
   
@@ -1101,8 +1131,23 @@ app.use((err, req, res, next) => {
 });
 
 // Start Server on http node object
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
   console.log(`FinMantra backend running on port ${PORT}`);
-  // Initialize Baileys connector and bind real-time socket updates
-  baileys.initBaileys(broadcast);
+  // Initialize Baileys connector and bind real-time socket updates depending on settings gateway
+  try {
+    const settings = await db.getSettings();
+    const gateway = settings.whatsapp_gateway || 'baileys';
+    if (gateway === 'baileys') {
+      console.log('[Startup] WhatsApp gateway is set to Baileys. Initializing socket...');
+      await baileys.initBaileys(broadcast);
+    } else {
+      console.log('[Startup] WhatsApp gateway is set to Meta. Keeping Baileys socket stopped.');
+      // Initialize with broadcast to register the handler but keep socket stopped
+      await baileys.stopBaileys();
+      await baileys.initBaileys(broadcast);
+    }
+  } catch (err) {
+    console.error('Error fetching settings on startup:', err);
+    baileys.initBaileys(broadcast);
+  }
 });

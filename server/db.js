@@ -105,7 +105,8 @@ function initDb() {
         terms_link: 'https://finmantra.org/terms',
         privacy_link: 'https://finmantra.org/privacy',
         public_site_url: '',
-        wa_referral_link_type: 'body'
+        wa_referral_link_type: 'body',
+        whatsapp_gateway: 'baileys'
       },
       otp_log: {}
     };
@@ -335,7 +336,8 @@ async function initPgSchema() {
         ('terms_link', 'https://finmantra.org/terms'),
         ('privacy_link', 'https://finmantra.org/privacy'),
         ('public_site_url', ''),
-        ('wa_referral_link_type', 'body')
+        ('wa_referral_link_type', 'body'),
+        ('whatsapp_gateway', 'baileys')
       `);
     }
 
@@ -779,9 +781,15 @@ const db = {
       res.rows.forEach(row => {
         settings[row.key] = row.value;
       });
+      if (settings.whatsapp_gateway === undefined) {
+        settings.whatsapp_gateway = 'baileys';
+      }
       return settings;
     }
     const data = readData();
+    if (data.settings && data.settings.whatsapp_gateway === undefined) {
+      data.settings.whatsapp_gateway = 'baileys';
+    }
     return data.settings;
   },
 

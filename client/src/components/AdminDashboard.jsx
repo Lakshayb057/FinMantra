@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Users, CreditCard, MapPin, Settings as SettingsIcon, ShieldAlert, BarChart3, 
   Trash2, Download, Search, Plus, Edit, Check, X, RefreshCw, AlertCircle,
-  QrCode, Smartphone, CheckCircle, Wifi, WifiOff, Eye
+  QrCode, Smartphone, CheckCircle, Wifi, WifiOff, Eye, MessageSquare, Layers
 } from 'lucide-react';
 
 export default function AdminDashboard() {
@@ -819,7 +819,8 @@ export default function AdminDashboard() {
           wa_referral_template_name: settings.wa_referral_template_name ? settings.wa_referral_template_name.trim() : '',
           wa_template_language: settings.wa_template_language ? settings.wa_template_language.trim() : '',
           wa_api_version: settings.wa_api_version ? settings.wa_api_version.trim() : '',
-          wa_otp_is_auth_template: settings.wa_otp_is_auth_template !== undefined ? settings.wa_otp_is_auth_template : false
+          wa_otp_is_auth_template: settings.wa_otp_is_auth_template !== undefined ? settings.wa_otp_is_auth_template : false,
+          whatsapp_gateway: settings.whatsapp_gateway || 'baileys'
         })
       });
       showToast('System settings updated successfully.');
@@ -1578,6 +1579,73 @@ export default function AdminDashboard() {
                   />
                 </div>
 
+                <div style={{ marginTop: '2rem', padding: '1.5rem', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-md)', background: 'rgba(255, 255, 255, 0.02)' }}>
+                  <h4 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '0.5rem', color: 'var(--gold-deep)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <MessageSquare size={20} />
+                    <span>WhatsApp Gateway Selector</span>
+                  </h4>
+                  <p style={{ fontSize: '0.8rem', color: 'hsl(var(--text-muted))', marginBottom: '1.25rem' }}>
+                    Select the active gateway channel for client OTP codes and transactional links.
+                  </p>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    <button
+                      type="button"
+                      onClick={() => setSettings({ ...settings, whatsapp_gateway: 'meta' })}
+                      className="btn-secondary"
+                      style={{
+                        padding: '1.25rem 1rem',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.5rem',
+                        height: 'auto',
+                        borderWidth: '2px',
+                        borderColor: (settings.whatsapp_gateway === 'meta') ? 'var(--gold-deep)' : 'var(--border-light)',
+                        background: (settings.whatsapp_gateway === 'meta') ? 'rgba(224, 168, 46, 0.12)' : 'rgba(255, 255, 255, 0.02)',
+                        color: (settings.whatsapp_gateway === 'meta') ? 'var(--gold-deep)' : 'hsl(var(--text-secondary))',
+                        borderRadius: 'var(--radius-md)',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease'
+                      }}
+                    >
+                      <Layers size={22} style={{ color: (settings.whatsapp_gateway === 'meta') ? 'var(--gold-deep)' : 'inherit' }} />
+                      <span style={{ fontSize: '0.95rem', fontWeight: 700 }}>Meta Cloud API (Official)</span>
+                      <span style={{ fontSize: '0.72rem', fontWeight: 400, opacity: 0.75, textAlign: 'center', marginTop: '0.2rem' }}>
+                        High-throughput official templates. Recommends Meta verified business profile.
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setSettings({ ...settings, whatsapp_gateway: 'baileys' })}
+                      className="btn-secondary"
+                      style={{
+                        padding: '1.25rem 1rem',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.5rem',
+                        height: 'auto',
+                        borderWidth: '2px',
+                        borderColor: (settings.whatsapp_gateway === 'baileys' || !settings.whatsapp_gateway) ? 'var(--gold-deep)' : 'var(--border-light)',
+                        background: (settings.whatsapp_gateway === 'baileys' || !settings.whatsapp_gateway) ? 'rgba(224, 168, 46, 0.12)' : 'rgba(255, 255, 255, 0.02)',
+                        color: (settings.whatsapp_gateway === 'baileys' || !settings.whatsapp_gateway) ? 'var(--gold-deep)' : 'hsl(var(--text-secondary))',
+                        borderRadius: 'var(--radius-md)',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease'
+                      }}
+                    >
+                      <Smartphone size={22} style={{ color: (settings.whatsapp_gateway === 'baileys' || !settings.whatsapp_gateway) ? 'var(--gold-deep)' : 'inherit' }} />
+                      <span style={{ fontSize: '0.95rem', fontWeight: 700 }}>Baileys Linked Device</span>
+                      <span style={{ fontSize: '0.72rem', fontWeight: 400, opacity: 0.75, textAlign: 'center', marginTop: '0.2rem' }}>
+                        Linked phone session (QR Scan). Uses standard text fallback.
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
                 <div style={{ marginTop: '2rem', marginBottom: '2rem', padding: '1.5rem', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-md)', background: 'rgba(232, 168, 56, 0.03)' }}>
                   <h4 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '1rem', color: 'var(--gold-deep)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <span>Meta WhatsApp Cloud API Configuration</span>
@@ -1710,23 +1778,25 @@ export default function AdminDashboard() {
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        background: baileysStatus.status === 'CONNECTED' ? 'rgba(34, 197, 94, 0.15)' : baileysStatus.status === 'QR_READY' ? 'rgba(234, 179, 8, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                        color: baileysStatus.status === 'CONNECTED' ? '#22c55e' : baileysStatus.status === 'QR_READY' ? '#eab308' : '#ef4444'
+                        background: settings.whatsapp_gateway === 'meta' ? 'rgba(239, 68, 68, 0.1)' : baileysStatus.status === 'CONNECTED' ? 'rgba(34, 197, 94, 0.15)' : baileysStatus.status === 'QR_READY' ? 'rgba(234, 179, 8, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                        color: settings.whatsapp_gateway === 'meta' ? '#94a3b8' : baileysStatus.status === 'CONNECTED' ? '#22c55e' : baileysStatus.status === 'QR_READY' ? '#eab308' : '#ef4444'
                       }}>
-                        {baileysStatus.status === 'CONNECTED' ? <Wifi size={22} /> : <WifiOff size={22} />}
+                        {settings.whatsapp_gateway === 'meta' ? <WifiOff size={22} /> : baileysStatus.status === 'CONNECTED' ? <Wifi size={22} /> : <WifiOff size={22} />}
                       </div>
                       <div>
                         <div style={{ fontWeight: 600, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                           Status: 
                           <span style={{ 
-                            color: baileysStatus.status === 'CONNECTED' ? '#22c55e' : baileysStatus.status === 'QR_READY' ? '#eab308' : '#ef4444',
+                            color: settings.whatsapp_gateway === 'meta' ? 'hsl(var(--text-muted))' : baileysStatus.status === 'CONNECTED' ? '#22c55e' : baileysStatus.status === 'QR_READY' ? '#eab308' : '#ef4444',
                             fontWeight: 700 
                           }}>
-                            {baileysStatus.status === 'CONNECTED' ? 'CONNECTED' : baileysStatus.status === 'QR_READY' ? 'SCAN QR CODE' : baileysStatus.status === 'CONNECTING' ? 'INITIALIZING...' : 'DISCONNECTED'}
+                            {settings.whatsapp_gateway === 'meta' ? 'STOPPED / DEACTIVATED' : baileysStatus.status === 'CONNECTED' ? 'CONNECTED' : baileysStatus.status === 'QR_READY' ? 'SCAN QR CODE' : baileysStatus.status === 'CONNECTING' ? 'INITIALIZING...' : 'DISCONNECTED'}
                           </span>
                         </div>
                         <div style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', marginTop: '0.2rem' }}>
-                          {baileysStatus.status === 'CONNECTED' 
+                          {settings.whatsapp_gateway === 'meta'
+                            ? 'Switch gateway to "Baileys Linked Device" to start session and scan QR code.'
+                            : baileysStatus.status === 'CONNECTED' 
                             ? `Active Session Phone: +${baileysStatus.phone}` 
                             : baileysStatus.status === 'QR_READY' 
                             ? 'Open WhatsApp on your phone > Settings > Linked Devices > Link a Device.' 
@@ -1735,7 +1805,7 @@ export default function AdminDashboard() {
                         </div>
                       </div>
                     </div>
-                    {baileysStatus.status === 'CONNECTED' && (
+                    {settings.whatsapp_gateway !== 'meta' && baileysStatus.status === 'CONNECTED' && (
                       <button 
                         type="button" 
                         onClick={handleDisconnectBaileys} 

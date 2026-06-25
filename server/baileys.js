@@ -11,11 +11,17 @@ let connectionStatus = 'DISCONNECTED'; // DISCONNECTED, CONNECTING, QR_READY, CO
 let qrCodeDataUrl = '';
 let connectedPhone = '';
 let broadcastFn = null;
+let isStopped = false;
 
 // Initialize or reconnect to WhatsApp
 async function initBaileys(broadcast = null) {
   if (broadcast) {
     broadcastFn = broadcast;
+  }
+
+  if (isStopped) {
+    console.log('[Baileys] Connector is stopped. Refusing to initialize socket.');
+    return;
   }
 
   // If already connected or connecting, return
@@ -53,17 +59,17 @@ async function initBaileys(broadcast = null) {
         const statusCode = lastDisconnect?.error?.output?.statusCode;
         const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
         
-        console.log(`[Baileys] Connection closed (code: ${statusCode}). Reconnecting: ${shouldReconnect}`);
+        console.log(`[Baileys] Connection closed (code: ${statusCode}). Reconnecting: ${shouldReconnect && !isStopped}`);
         
         connectionStatus = 'DISCONNECTED';
         qrCodeDataUrl = '';
         connectedPhone = '';
         notifyStatusChange();
 
-        if (shouldReconnect) {
+        if (shouldReconnect && !isStopped) {
           // Short delay before reconnecting
           setTimeout(() => {
-            initBaileys();
+            if (!isStopped) initBaileys();
           }, 5000);
         }
       } else if (connection === 'open') {
@@ -140,10 +146,31 @@ async function disconnectBaileys() {
 
   notifyStatusChange();
   
-  // Reconnect immediately to trigger new QR code
+  // Reconnect immediately to trigger new QR code if not stopped
   setTimeout(() => {
-    initBaileys();
+    if (!isStopped) initBaileys();
   }, 2000);
+}
+
+async function stopBaileys() {
+  isStopped = true;
+  console.log('[Baileys] Stopping connector and closing socket...');
+  if (sock) {
+    try {
+      sock.end();
+    } catch (e) {}
+  }
+  sock = null;
+  connectionStatus = 'DISCONNECTED';
+  qrCodeDataUrl = '';
+  connectedPhone = '';
+  notifyStatusChange();
+}
+
+async function startBaileys() {
+  isStopped = false;
+  console.log('[Baileys] Starting/Restarting connector...');
+  await initBaileys();
 }
 
 // Send standard text message using Baileys socket
@@ -169,5 +196,7 @@ module.exports = {
   initBaileys,
   getBaileysStatus,
   disconnectBaileys,
-  sendBaileysMessage
+  sendBaileysMessage,
+  stopBaileys,
+  startBaileys
 };
