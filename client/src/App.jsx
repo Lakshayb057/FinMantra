@@ -46,7 +46,8 @@ export default function App() {
 
     // Explicitly guarantee utm_source and utm_info exist (even if empty) for standard code usage
     if (!params.utm_source) params.utm_source = searchParams.get('utm_source') || '';
-    if (!params.utm_info) params.utm_info = searchParams.get('utm_info') || searchParams.get('utm_medium') || '';
+    if (!params.utm_medium) params.utm_medium = searchParams.get('utm_medium') || searchParams.get('utm_medem') || '';
+    if (!params.utm_info) params.utm_info = searchParams.get('utm_info') || params.utm_medium || '';
 
     if (Object.keys(params).some(k => params[k])) {
       setUtmParams(params);
