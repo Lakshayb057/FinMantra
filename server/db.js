@@ -11,14 +11,19 @@ let usePg = !!rawDbUrl;
 let pool = null;
 
 if (usePg) {
+  const isAwsRds = rawDbUrl.includes('amazonaws.com');
+  const sslConfig = (process.env.DATABASE_SSL === 'true' || (isAwsRds && process.env.DATABASE_SSL !== 'false'))
+    ? { rejectUnauthorized: false }
+    : false;
+
   pool = new Pool({
     connectionString: rawDbUrl,
-    ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : false,
+    ssl: sslConfig,
     max: 20,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 10000
   });
-  console.log('[Database] Configured to connect to AWS/RDS PostgreSQL Database.');
+  console.log(`[Database] Configured to connect to AWS/RDS PostgreSQL Database (SSL: ${!!sslConfig}).`);
 } else {
   console.log('[Database] Configured to use local JSON file database.');
 }
