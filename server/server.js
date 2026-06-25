@@ -1,14 +1,14 @@
+const dotenv = require('dotenv');
+dotenv.config();
+
 const express = require('express');
 const cors = require('cors');
-const dotenv = require('dotenv');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const http = require('http');
 const WebSocket = require('ws');
 const db = require('./db');
 const baileys = require('./baileys');
-
-dotenv.config();
 
 // Automatically wrap async route handlers to propagate exceptions to global error handler
 const Layer = require('express/lib/router/layer');
