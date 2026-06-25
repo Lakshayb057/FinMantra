@@ -591,7 +591,15 @@ app.post('/api/leads', async (req, res) => {
   // Send WhatsApp Referral Notification with Tracking URL
   const agentCode = (source === 'agent' && agent_id) ? agent_id : 'public';
   const dateCode = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD
-  const referralLink = `http://localhost:5173/refer/${agentCode}/${dateCode}/${newLead.urn}`;
+  
+  // Dynamically resolve base URL based on host name
+  const host = req.get('host') || 'localhost:5000';
+  const protocol = req.protocol || 'http';
+  let baseUrl = `${protocol}://${host}`;
+  if (host.includes('localhost') || host.includes('127.0.0.1')) {
+    baseUrl = 'http://localhost:5173';
+  }
+  const referralLink = `${baseUrl}/refer/${agentCode}/${dateCode}/${newLead.urn}`;
   const cardNameStr = card ? `${card.bank} ${card.name}` : 'FinMantra Partner Bank';
   const referralMsg = `Hello ${trimmedName}, thank you for choosing FinMantra. You can access your secure bank portal for the ${cardNameStr} application here: ${referralLink}`;
 
