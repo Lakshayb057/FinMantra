@@ -634,18 +634,8 @@ app.post('/api/leads', async (req, res) => {
 
   newLead.redirect_url = redirectUrl;
   
-  // Update local file database
-  const leads = await db.getLeads();
-  const idx = leads.findIndex(l => l.id === newLead.id);
-  if (idx !== -1) {
-    leads[idx].redirect_url = redirectUrl;
-    const fs = require('fs');
-    const path = require('path');
-    const DB_FILE = path.join(__dirname, 'local_database.json');
-    const data = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
-    data.leads = leads;
-    fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf8');
-  }
+  // Save updated redirect_url to database
+  await db.updateLead(newLead.id, newLead);
 
   // Real-time broadcast notification of a new lead!
   broadcast({ type: 'LEAD_ADDED', data: newLead });

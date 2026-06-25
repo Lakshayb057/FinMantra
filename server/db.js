@@ -6,13 +6,17 @@ require('dotenv').config({ path: path.join(__dirname, '.env') });
 const DB_FILE = path.join(__dirname, 'local_database.json');
 
 // Database mode dispatching
-let usePg = !!process.env.DATABASE_URL;
+const rawDbUrl = process.env.DATABASE_URL ? process.env.DATABASE_URL.trim().replace(/^["']|["']$/g, '') : '';
+let usePg = !!rawDbUrl;
 let pool = null;
 
 if (usePg) {
   pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : false
+    connectionString: rawDbUrl,
+    ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : false,
+    max: 20,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 10000
   });
   console.log('[Database] Configured to connect to AWS/RDS PostgreSQL Database.');
 } else {
@@ -115,9 +119,12 @@ async function initPgSchema() {
   try {
     client = await pool.connect();
   } catch (err) {
-    console.error('[Database] Failed to connect to AWS/RDS PostgreSQL Database. Falling back to local JSON database. Error:', err.message);
-    usePg = false;
-    return;
+    console.error('====================================================================');
+    console.error('[DATABASE ERROR] Failed to connect to AWS/RDS PostgreSQL Database!');
+    console.error('Error details:', err.message);
+    console.error('Please verify your DATABASE_URL configuration and database server connectivity.');
+    console.error('====================================================================');
+    throw err;
   }
 
   try {
@@ -340,11 +347,14 @@ async function initPgSchema() {
     } catch (rbErr) {
       // rollback failed if transaction not active
     }
-    console.error('[Database] Failed to execute PostgreSQL migration schema. Falling back to local JSON database. Error:', err);
-    usePg = false;
+    console.error('====================================================================');
+    console.error('[DATABASE ERROR] Failed to execute PostgreSQL migration schema!');
+    console.error('Error details:', err.message);
+    console.error('====================================================================');
+    throw err;
   } finally {
     try {
-      client.release();
+      if (client) client.release();
     } catch (relErr) {
       // release failed
     }
@@ -352,7 +362,10 @@ async function initPgSchema() {
 }
 
 if (usePg) {
-  initPgSchema();
+  initPgSchema().catch(err => {
+    console.error('[Database] CRITICAL: PostgreSQL initialization failed. Server process stopped.');
+    process.exit(1);
+  });
 }
 
 // Helper to read data (local JSON fallback)
