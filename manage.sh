@@ -26,8 +26,16 @@ case "$COMMAND" in
         echo ">>> Pulling latest code from Git..."
         git pull
         
-        echo ">>> Rebuilding Frontend..."
+        echo ">>> Installing Backend Dependencies..."
+        cd server
+        npm install
+        cd ..
+        
+        echo ">>> Installing Frontend Dependencies..."
         cd client
+        npm install --legacy-peer-deps
+        
+        echo ">>> Rebuilding Frontend..."
         npm run build
         
         echo ">>> Copying static files to Nginx..."
