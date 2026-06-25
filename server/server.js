@@ -6,6 +6,7 @@ const crypto = require('crypto');
 const http = require('http');
 const WebSocket = require('ws');
 const db = require('./db');
+const baileys = require('./baileys');
 
 dotenv.config();
 
@@ -93,13 +94,40 @@ function sha256(text) {
 }
 
 // Helper to send messages via Meta WhatsApp Cloud API
-async function sendWhatsAppTemplate(toPhone, templateName, parameters = []) {
+// Helper to format fallback plain text message for Baileys
+function getFallbackText(isOtpAuth, parameters, settings) {
+  if (isOtpAuth) {
+    const otpCode = String(parameters[0] || '');
+    const otpTemplate = settings.otp_message_template || 'Your OTP for FinMantra credit card application is: {otp}. Valid for 5 minutes.';
+    return otpTemplate.replace(/{otp}/gi, otpCode);
+  } else {
+    const name = String(parameters[0] || 'Customer');
+    const link = String(parameters[1] || '');
+    return `Hello ${name}, thank you for choosing FinMantra. You can access your secure bank portal here: ${link}`;
+  }
+}
+
+// Helper to send messages via Meta WhatsApp Cloud API (with Baileys QR-Linked Device fallback)
+async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOtpAuth = false) {
   const settings = await db.getSettings();
   const apiKey = settings.wa_api_key || process.env.WA_API_KEY;
   const phoneId = settings.wa_phone_number_id || process.env.WA_PHONE_NUMBER_ID;
+  const apiVersion = settings.wa_api_version || process.env.WA_API_VERSION || 'v25.0';
 
   if (!apiKey || !phoneId) {
-    console.log(`[WhatsApp Simulation] Meta API credentials missing. Simulating template "${templateName}" to ${toPhone} with params:`, parameters);
+    const baileysStatus = baileys.getBaileysStatus();
+    if (baileysStatus.status === 'CONNECTED') {
+      console.log(`[WhatsApp Fallback] Meta API not configured. Routing message to ${toPhone} via Baileys linked device...`);
+      try {
+        const text = getFallbackText(isOtpAuth, parameters, settings);
+        const result = await baileys.sendBaileysMessage(toPhone, text);
+        return { sentViaBaileys: true, result };
+      } catch (err) {
+        console.error('[WhatsApp Fallback] Failed to send via Baileys:', err.message);
+        throw err;
+      }
+    }
+    console.log(`[WhatsApp Simulation] Meta API credentials missing & Baileys disconnected. Simulating template "${templateName}" to ${toPhone} with params:`, parameters);
     return { simulated: true };
   }
 
@@ -121,7 +149,33 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = []) {
     }
   };
 
-  if (parameters.length > 0) {
+  if (isOtpAuth) {
+    // Authentication Template requires specific structure (body parameter + button parameter)
+    // The first parameter in 'parameters' array is assumed to be the OTP code
+    const otpCode = String(parameters[0] || '');
+    payload.template.components = [
+      {
+        type: 'body',
+        parameters: [
+          {
+            type: 'text',
+            text: otpCode
+          }
+        ]
+      },
+      {
+        type: 'button',
+        sub_type: 'otp',
+        index: '0',
+        parameters: [
+          {
+            type: 'text',
+            text: otpCode
+          }
+        ]
+      }
+    ];
+  } else if (parameters.length > 0) {
     payload.template.components = [
       {
         type: 'body',
@@ -139,7 +193,7 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = []) {
     const options = {
       hostname: 'graph.facebook.com',
       port: 443,
-      path: `/${process.env.WA_API_VERSION || 'v25.0'}/${phoneId}/messages`,
+      path: `/${apiVersion}/${phoneId}/messages`,
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
@@ -166,12 +220,43 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = []) {
               errMsg = `Meta API Error: ${parsed.error.message} (Code: ${parsed.error.code}, Subcode: ${parsed.error.error_subcode})`;
             }
           } catch (e) {}
+          
+          const baileysStatus = baileys.getBaileysStatus();
+          if (baileysStatus.status === 'CONNECTED') {
+            console.warn(`[WhatsApp Fallback] Meta API failed (status ${res.statusCode}). Attempting delivery via Baileys...`);
+            try {
+              const text = getFallbackText(isOtpAuth, parameters, settings);
+              baileys.sendBaileysMessage(toPhone, text).then(result => {
+                resolve({ sentViaBaileys: true, metaError: errMsg, result });
+              }).catch(baileysErr => {
+                reject(new Error(`${errMsg}. Fallback to Baileys also failed: ${baileysErr.message}`));
+              });
+              return;
+            } catch (baileysErr) {
+              return reject(new Error(`${errMsg}. Fallback to Baileys also failed: ${baileysErr.message}`));
+            }
+          }
           reject(new Error(errMsg));
         }
       });
     });
 
-    req.on('error', (err) => {
+    req.on('error', async (err) => {
+      const baileysStatus = baileys.getBaileysStatus();
+      if (baileysStatus.status === 'CONNECTED') {
+        console.warn(`[WhatsApp Fallback] Meta connection failed (${err.message}). Attempting delivery via Baileys...`);
+        try {
+          const text = getFallbackText(isOtpAuth, parameters, settings);
+          baileys.sendBaileysMessage(toPhone, text).then(result => {
+            resolve({ sentViaBaileys: true, metaError: err.message, result });
+          }).catch(baileysErr => {
+            reject(new Error(`Meta Connection Error: ${err.message}. Fallback to Baileys also failed: ${baileysErr.message}`));
+          });
+          return;
+        } catch (baileysErr) {
+          return reject(new Error(`Meta Connection Error: ${err.message}. Fallback to Baileys also failed: ${baileysErr.message}`));
+        }
+      }
       reject(err);
     });
 
@@ -261,13 +346,14 @@ app.post('/api/otp/send', async (req, res) => {
 
   if (apiKey && phoneId) {
     const otpTemplateName = settings.wa_otp_template_name || process.env.WA_OTP_TEMPLATE_NAME || 'auth_otp';
+    const isOtpAuth = settings.wa_otp_is_auth_template === 'true' || settings.wa_otp_is_auth_template === true;
     try {
       let params = [otp];
       if (otpTemplateName === 'jaspers_market_order_confirmation_v1') {
         const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
         params = ['Customer', otp, dateStr];
       }
-      const result = await sendWhatsAppTemplate(phone, otpTemplateName, params);
+      const result = await sendWhatsAppTemplate(phone, otpTemplateName, params, isOtpAuth);
       isSimulated = false;
       console.log(`[WhatsApp API] Message sent to ${phone} via Meta API.`);
     } catch (err) {
@@ -879,6 +965,23 @@ app.delete('/api/locations/:id', authenticateToken, requireAdmin, async (req, re
   res.json({ success: true, message: 'Location deleted successfully' });
 });
 
+// --- WHATSAPP BAILEYS ROUTES (Admin Only) ---
+
+// Get WhatsApp QR and Connection status
+app.get('/api/whatsapp/status', authenticateToken, requireAdmin, (req, res) => {
+  res.json(baileys.getBaileysStatus());
+});
+
+// Disconnect WhatsApp / Log out
+app.post('/api/whatsapp/disconnect', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    await baileys.disconnectBaileys();
+    res.json({ success: true, message: 'WhatsApp session disconnected successfully.' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // --- SETTINGS MANAGEMENT ---
 
 // Get Settings
@@ -913,4 +1016,6 @@ app.use((err, req, res, next) => {
 // Start Server on http node object
 server.listen(PORT, () => {
   console.log(`FinMantra backend running on port ${PORT}`);
+  // Initialize Baileys connector and bind real-time socket updates
+  baileys.initBaileys(broadcast);
 });

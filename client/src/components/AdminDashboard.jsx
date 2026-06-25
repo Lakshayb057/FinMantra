@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Users, CreditCard, MapPin, Settings as SettingsIcon, ShieldAlert, BarChart3, 
-  Trash2, Download, Search, Plus, Edit, Check, X, RefreshCw, AlertCircle
+  Trash2, Download, Search, Plus, Edit, Check, X, RefreshCw, AlertCircle,
+  QrCode, Smartphone, CheckCircle, Wifi, WifiOff
 } from 'lucide-react';
 
 export default function AdminDashboard() {
@@ -21,6 +22,8 @@ export default function AdminDashboard() {
   const [agents, setAgents] = useState([]);
   const [locations, setLocations] = useState([]);
   const [settings, setSettings] = useState({});
+  const [baileysStatus, setBaileysStatus] = useState({ status: 'DISCONNECTED', qrCodeDataUrl: '', phone: '' });
+  const [loadingBaileys, setLoadingBaileys] = useState(false);
 
   // Filters & Search
   const [searchTerm, setSearchTerm] = useState('');
@@ -116,6 +119,8 @@ export default function AdminDashboard() {
           if (message.type === 'LEAD_ADDED') {
             showToast(`🎉 New Lead Registered: ${message.data.full_name} (${message.data.urn})`, 'success');
             loadAllAdminData();
+          } else if (message.type === 'WA_STATUS_UPDATE') {
+            setBaileysStatus(message.data);
           } else if (
             message.type === 'LEADS_UPDATED' || 
             message.type === 'CARDS_UPDATED' || 
@@ -152,12 +157,13 @@ export default function AdminDashboard() {
     try {
       const headers = { 'Authorization': `Bearer ${token}` };
       
-      const [leadsRes, cardsRes, agentsRes, locsRes, settingsRes] = await Promise.all([
+      const [leadsRes, cardsRes, agentsRes, locsRes, settingsRes, baileysRes] = await Promise.all([
         fetch(`${API_URL}/leads`, { headers }),
         fetch(`${API_URL}/admin/cards`, { headers }),
         fetch(`${API_URL}/agents`, { headers }),
         fetch(`${API_URL}/locations`),
-        fetch(`${API_URL}/settings`)
+        fetch(`${API_URL}/settings`),
+        fetch(`${API_URL}/whatsapp/status`, { headers })
       ]);
 
       if (leadsRes.status === 401 || leadsRes.status === 403) {
@@ -173,12 +179,14 @@ export default function AdminDashboard() {
       const agentsData = await agentsRes.json();
       const locsData = await locsRes.json();
       const settingsData = await settingsRes.json();
+      const baileysData = baileysRes.ok ? await baileysRes.json() : { status: 'DISCONNECTED', qrCodeDataUrl: '', phone: '' };
 
       setLeads(leadsData);
       setCards(cardsData);
       setAgents(agentsData);
       setLocations(locsData);
       setSettings(settingsData);
+      setBaileysStatus(baileysData);
     } catch (err) {
       console.error('Error fetching admin dashboard details:', err);
       showToast('Error syncing with database.', 'error');
@@ -667,7 +675,9 @@ export default function AdminDashboard() {
           wa_business_account_id: settings.wa_business_account_id ? settings.wa_business_account_id.trim() : '',
           wa_otp_template_name: settings.wa_otp_template_name ? settings.wa_otp_template_name.trim() : '',
           wa_referral_template_name: settings.wa_referral_template_name ? settings.wa_referral_template_name.trim() : '',
-          wa_template_language: settings.wa_template_language ? settings.wa_template_language.trim() : ''
+          wa_template_language: settings.wa_template_language ? settings.wa_template_language.trim() : '',
+          wa_api_version: settings.wa_api_version ? settings.wa_api_version.trim() : '',
+          wa_otp_is_auth_template: settings.wa_otp_is_auth_template !== undefined ? settings.wa_otp_is_auth_template : false
         })
       });
       showToast('System settings updated successfully.');
@@ -676,6 +686,22 @@ export default function AdminDashboard() {
       showToast(err.message || 'Failed to save settings.', 'error');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleDisconnectBaileys = async () => {
+    if (!window.confirm('Are you sure you want to disconnect this WhatsApp linked device? You will need to scan the QR code again.')) return;
+    setLoadingBaileys(true);
+    try {
+      await apiFetch(`${API_URL}/whatsapp/disconnect`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      showToast('WhatsApp session terminated successfully.');
+    } catch (err) {
+      showToast(err.message || 'Failed to disconnect WhatsApp.', 'error');
+    } finally {
+      setLoadingBaileys(false);
     }
   };
 
@@ -1461,6 +1487,101 @@ export default function AdminDashboard() {
                       />
                     </div>
                   </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginTop: '1.25rem' }}>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label">Meta API Version</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        placeholder="e.g. v20.0"
+                        value={settings.wa_api_version || ''}
+                        onChange={(e) => setSettings({ ...settings, wa_api_version: e.target.value })}
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                      <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', marginTop: '1.5rem' }}>
+                        <input 
+                          type="checkbox" 
+                          checked={settings.wa_otp_is_auth_template === 'true' || settings.wa_otp_is_auth_template === true}
+                          onChange={(e) => setSettings({ ...settings, wa_otp_is_auth_template: e.target.checked })}
+                          style={{ width: '1.2rem', height: '1.2rem', cursor: 'pointer' }}
+                        />
+                        <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-light)' }}>OTP uses Authentication Template (with Copy Code Button)</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ marginTop: '2rem', marginBottom: '2rem', padding: '1.5rem', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-md)', background: 'rgba(56, 189, 248, 0.02)' }}>
+                  <h4 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '0.5rem', color: 'var(--gold-deep)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <Smartphone size={20} />
+                    <span>WhatsApp Linked Device (QR Code Fallback)</span>
+                  </h4>
+                  <p style={{ fontSize: '0.8rem', color: 'hsl(var(--text-muted))', marginBottom: '1.25rem' }}>
+                    Link your company's actual WhatsApp account by scanning the QR code using Linked Devices in WhatsApp. If Meta Cloud API credentials are not set, all OTPs and messages will route through this session.
+                  </p>
+
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.5rem', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(0, 0, 0, 0.15)', padding: '1.25rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                      <div style={{
+                        width: '45px',
+                        height: '45px',
+                        borderRadius: '50%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: baileysStatus.status === 'CONNECTED' ? 'rgba(34, 197, 94, 0.15)' : baileysStatus.status === 'QR_READY' ? 'rgba(234, 179, 8, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                        color: baileysStatus.status === 'CONNECTED' ? '#22c55e' : baileysStatus.status === 'QR_READY' ? '#eab308' : '#ef4444'
+                      }}>
+                        {baileysStatus.status === 'CONNECTED' ? <Wifi size={22} /> : <WifiOff size={22} />}
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          Status: 
+                          <span style={{ 
+                            color: baileysStatus.status === 'CONNECTED' ? '#22c55e' : baileysStatus.status === 'QR_READY' ? '#eab308' : '#ef4444',
+                            fontWeight: 700 
+                          }}>
+                            {baileysStatus.status === 'CONNECTED' ? 'CONNECTED' : baileysStatus.status === 'QR_READY' ? 'SCAN QR CODE' : baileysStatus.status === 'CONNECTING' ? 'INITIALIZING...' : 'DISCONNECTED'}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', marginTop: '0.2rem' }}>
+                          {baileysStatus.status === 'CONNECTED' 
+                            ? `Active Session Phone: +${baileysStatus.phone}` 
+                            : baileysStatus.status === 'QR_READY' 
+                            ? 'Open WhatsApp on your phone > Settings > Linked Devices > Link a Device.' 
+                            : 'Initialize WhatsApp Web session to connect.'
+                          }
+                        </div>
+                      </div>
+                    </div>
+                    {baileysStatus.status === 'CONNECTED' && (
+                      <button 
+                        type="button" 
+                        onClick={handleDisconnectBaileys} 
+                        className="btn-secondary" 
+                        style={{ padding: '0.6rem 1.25rem', fontSize: '0.85rem', background: 'rgba(209, 67, 67, 0.1)', color: 'var(--err)', borderColor: 'rgba(209, 67, 67, 0.2)' }}
+                        disabled={loadingBaileys}
+                      >
+                        {loadingBaileys ? 'Disconnecting...' : 'Disconnect Account'}
+                      </button>
+                    )}
+                  </div>
+
+                  {baileysStatus.status === 'QR_READY' && baileysStatus.qrCodeDataUrl && (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '1.5rem', padding: '1rem', background: '#fff', borderRadius: 'var(--radius-md)', maxWidth: '280px', margin: '1.5rem auto 0 auto', border: '2px solid var(--gold)' }}>
+                      <img 
+                        src={baileysStatus.qrCodeDataUrl} 
+                        alt="WhatsApp Linked Device QR" 
+                        style={{ width: '220px', height: '220px', display: 'block' }}
+                      />
+                      <div style={{ fontSize: '0.75rem', color: '#1e293b', fontWeight: 600, marginTop: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                        <QrCode size={14} />
+                        <span>Scan QR Code to Link Device</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '2rem' }}>
