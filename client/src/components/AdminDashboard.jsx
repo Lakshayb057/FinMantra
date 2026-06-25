@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Users, CreditCard, MapPin, Settings as SettingsIcon, ShieldAlert, BarChart3, 
   Trash2, Download, Search, Plus, Edit, Check, X, RefreshCw, AlertCircle,
-  QrCode, Smartphone, CheckCircle, Wifi, WifiOff
+  QrCode, Smartphone, CheckCircle, Wifi, WifiOff, Eye
 } from 'lucide-react';
 
 export default function AdminDashboard() {
@@ -35,6 +35,10 @@ export default function AdminDashboard() {
   const [editingCard, setEditingCard] = useState(null);
   const [editingAgent, setEditingAgent] = useState(null);
   const [editingLocation, setEditingLocation] = useState(null);
+  const [selectedLeadDetails, setSelectedLeadDetails] = useState(null);
+  const [isEditingLead, setIsEditingLead] = useState(false);
+  const [editLeadForm, setEditLeadForm] = useState(null);
+  const [customParams, setCustomParams] = useState([]);
   
   const [newCardForm, setNewCardForm] = useState({ name: '', bank: '', category: 'Offline', description: '', redirect_url_template: '', display_order: 1, active: true, card_locations: [] });
   const [newAgentForm, setNewAgentForm] = useState({ id: '', name: '', phone: '', email: '', username: '', password: '', status: 'active', locations: [] });
@@ -303,7 +307,143 @@ export default function AdminDashboard() {
     .catch(err => showToast('Export failed.', 'error'));
   };
 
+  const handleViewLead = (lead) => {
+    setSelectedLeadDetails(lead);
+    setIsEditingLead(false);
+    
+    // Initialize edit form
+    setEditLeadForm({
+      id: lead.id,
+      urn: lead.urn,
+      full_name: lead.full_name || '',
+      phone: lead.phone || '',
+      email: lead.email || '',
+      city: lead.city || '',
+      employment: lead.employment || '',
+      income_range: lead.income_range || '',
+      card_name: lead.card_name || '',
+      card_bank: lead.card_bank || '',
+      source: lead.source || '',
+      agent_id: lead.agent_id || '',
+      agent_name: lead.agent_name || '',
+      agent_location: lead.agent_location || '',
+      consent: lead.consent ?? true,
+      utm_channel: lead.utm_channel || '',
+      utm_medium: lead.utm_medium || '',
+      utm_source: lead.utm_source || '',
+      utm_category: lead.utm_category || '',
+      utm_campaign: lead.utm_campaign || '',
+      utm_term: lead.utm_term || '',
+      utm_content: lead.utm_content || '',
+      utm_creative_format: lead.utm_creative_format || '',
+      utm_info: lead.utm_info || '',
+      fbclid: lead.fbclid || '',
+      gclid: lead.gclid || '',
+      gclsrc: lead.gclsrc || '',
+      dclid: lead.dclid || '',
+      msclkid: lead.msclkid || '',
+      ttclid: lead.ttclid || '',
+      twclid: lead.twclid || '',
+      li_fat_id: lead.li_fat_id || '',
+      redirect_url: lead.redirect_url || ''
+    });
+
+    const standardKeys = [
+      'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 
+      'utm_channel', 'utm_category', 'utm_info', 'utm_creative_format', 
+      'fbclid', 'gclid', 'gclsrc', 'dclid', 'msclkid', 'ttclid', 'twclid', 'li_fat_id'
+    ];
+    
+    const customList = [];
+    if (lead.utm_params && typeof lead.utm_params === 'object') {
+      Object.entries(lead.utm_params).forEach(([key, val]) => {
+        if (!standardKeys.includes(key)) {
+          customList.push({ key, value: String(val) });
+        }
+      });
+    }
+    setCustomParams(customList);
+  };
+
+  const handleEditLeadFormChange = (field, val) => {
+    setEditLeadForm(prev => ({
+      ...prev,
+      [field]: val
+    }));
+  };
+
+  const handleCustomParamChange = (index, keyOrValue, value) => {
+    const updated = [...customParams];
+    updated[index][keyOrValue] = value;
+    setCustomParams(updated);
+  };
+
+  const handleAddCustomParam = () => {
+    setCustomParams([...customParams, { key: '', value: '' }]);
+  };
+
+  const handleRemoveCustomParam = (index) => {
+    const updated = [...customParams];
+    updated.splice(index, 1);
+    setCustomParams(updated);
+  };
+
+  const handleSaveLeadChanges = async () => {
+    if (!editLeadForm.full_name.trim()) {
+      showToast('Name is required.', 'error');
+      return;
+    }
+    if (!/^\d{10}$/.test(editLeadForm.phone)) {
+      showToast('Mobile number must be exactly 10 digits.', 'error');
+      return;
+    }
+
+    try {
+      const reconstructedUtmParams = {};
+      const standardKeys = [
+        'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 
+        'utm_channel', 'utm_category', 'utm_info', 'utm_creative_format', 
+        'fbclid', 'gclid', 'gclsrc', 'dclid', 'msclkid', 'ttclid', 'twclid', 'li_fat_id'
+      ];
+      
+      standardKeys.forEach(k => {
+        if (editLeadForm[k]) {
+          reconstructedUtmParams[k] = editLeadForm[k];
+        }
+      });
+
+      customParams.forEach(p => {
+        const trimmedKey = p.key.trim();
+        if (trimmedKey) {
+          reconstructedUtmParams[trimmedKey] = p.value.trim();
+        }
+      });
+
+      const payload = {
+        ...editLeadForm,
+        utm_params: reconstructedUtmParams
+      };
+
+      const updated = await apiFetch(`${API_URL}/leads/${editLeadForm.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      setLeads(prevLeads => prevLeads.map(l => l.id === editLeadForm.id ? { ...l, ...updated } : l));
+      setSelectedLeadDetails(updated);
+      setIsEditingLead(false);
+      showToast('Lead details updated successfully!', 'success');
+    } catch (err) {
+      showToast(err.message || 'Failed to update lead.', 'error');
+    }
+  };
+
   // --- CARDS MANAGEMENT ---
+
   const handleCreateCard = async (e) => {
     e.preventDefault();
     
@@ -668,6 +808,8 @@ export default function AdminDashboard() {
         body: JSON.stringify({
           ...settings,
           public_redirect_url: publicUrl,
+          public_site_url: settings.public_site_url ? settings.public_site_url.trim() : '',
+          wa_referral_link_type: settings.wa_referral_link_type || 'body',
           terms_link: settings.terms_link ? settings.terms_link.trim() : '',
           privacy_link: settings.privacy_link ? settings.privacy_link.trim() : '',
           wa_api_key: settings.wa_api_key ? settings.wa_api_key.trim() : '',
@@ -932,15 +1074,20 @@ export default function AdminDashboard() {
                               style={{ accentColor: 'hsl(var(--primary))' }}
                             />
                           </td>
-                          <td><span className="badge badge-info">{l.urn}</span></td>
+                          <td><span className="badge badge-info" style={{ cursor: 'pointer' }} onClick={() => handleViewLead(l)}>{l.urn}</span></td>
                           <td>{l.created_at ? l.created_at.replace('T', ' ').slice(0, 16) : ''}</td>
-                          <td style={{ fontWeight: 600 }}>{l.full_name}</td>
+                          <td style={{ fontWeight: 600, cursor: 'pointer' }} onClick={() => handleViewLead(l)}>{l.full_name}</td>
                           <td>{l.phone}</td>
                           <td>{l.card_name} <span style={{ color: 'hsl(var(--text-muted))', fontSize: '0.8rem' }}>({l.card_bank})</span></td>
                           <td>{l.city}</td>
                           <td>{l.agent_location || '-'}</td>
                           <td>
-                            <span className={`badge ${l.source === 'agent' ? 'badge-warning' : 'badge-success'}`}>
+                            <span 
+                              className={`badge ${l.source === 'agent' ? 'badge-warning' : 'badge-success'}`}
+                              title={l.utm_params ? Object.entries(l.utm_params).map(([k, v]) => `${k}: ${v}`).join('\n') : ''}
+                              style={{ cursor: 'pointer' }}
+                              onClick={() => handleViewLead(l)}
+                            >
                                {l.source === 'agent' 
                                  ? (l.agent_name || 'Staff') 
                                  : (l.utm_source 
@@ -949,7 +1096,10 @@ export default function AdminDashboard() {
                             </span>
                           </td>
                           <td>
-                            <button onClick={() => handleSingleDeleteLead(l.id)} style={{ color: 'var(--err)', background: 'none', border: 'none', cursor: 'pointer' }}>
+                            <button onClick={() => handleViewLead(l)} style={{ color: 'hsl(var(--primary))', background: 'none', border: 'none', cursor: 'pointer', marginRight: '12px' }} title="View details">
+                              <Eye size={16} />
+                            </button>
+                            <button onClick={() => handleSingleDeleteLead(l.id)} style={{ color: 'var(--err)', background: 'none', border: 'none', cursor: 'pointer' }} title="Delete lead">
                               <Trash2 size={16} />
                             </button>
                           </td>
@@ -1373,18 +1523,33 @@ export default function AdminDashboard() {
               </h3>
 
               <form onSubmit={handleUpdateSettings}>
-                <div className="form-group">
-                  <label className="form-label">Global Public Redirect URL Template</label>
-                  <input 
-                    type="url" 
-                    className="form-input" 
-                    placeholder="https://bank.com/apply?name={name}&phone={phone}&urn={urn}"
-                    value={settings.public_redirect_url || ''}
-                    onChange={(e) => setSettings({ ...settings, public_redirect_url: e.target.value })}
-                    required 
-                  />
-                  <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', marginTop: '0.25rem' }}>
-                    Allowed wildcards: <code>{`{name}`}</code>, <code>{`{phone}`}</code>, <code>{`{email}`}</code>, <code>{`{urn}`}</code>, <code>{`{utm_source}`}</code>, <code>{`{utm_info}`}</code>, <code>{`{utm_creative_format}`}</code>. Public users will be redirected here after OTP verification.
+                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '1rem', marginBottom: '1.25rem' }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">Global Public Redirect URL Template</label>
+                    <input 
+                      type="url" 
+                      className="form-input" 
+                      placeholder="https://bank.com/apply?name={name}&phone={phone}&urn={urn}"
+                      value={settings.public_redirect_url || ''}
+                      onChange={(e) => setSettings({ ...settings, public_redirect_url: e.target.value })}
+                      required 
+                    />
+                    <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', marginTop: '0.25rem' }}>
+                      Allowed wildcards: <code>{`{name}`}</code>, <code>{`{phone}`}</code>, <code>{`{urn}`}</code>. Redirects here after OTP.
+                    </div>
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">Public Base Site URL (For WhatsApp Links)</label>
+                    <input 
+                      type="url" 
+                      className="form-input" 
+                      placeholder="http://13.127.33.132 or https://finmantra.org"
+                      value={settings.public_site_url || ''}
+                      onChange={(e) => setSettings({ ...settings, public_site_url: e.target.value })}
+                    />
+                    <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', marginTop: '0.25rem' }}>
+                      Domain/IP used for WhatsApp. Falls back to request host if blank.
+                    </div>
                   </div>
                 </div>
 
@@ -1488,7 +1653,18 @@ export default function AdminDashboard() {
                     </div>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginTop: '1.25rem' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '1rem', marginTop: '1.25rem' }}>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label">WhatsApp Referral Link Type</label>
+                      <select 
+                        className="form-input" 
+                        value={settings.wa_referral_link_type || 'body'}
+                        onChange={(e) => setSettings({ ...settings, wa_referral_link_type: e.target.value })}
+                      >
+                        <option value="body">Text Link (Send full URL in Message Body)</option>
+                        <option value="button">Button Link (Send path suffix to Dynamic URL Button)</option>
+                      </select>
+                    </div>
                     <div className="form-group" style={{ marginBottom: 0 }}>
                       <label className="form-label">Meta API Version</label>
                       <input 
@@ -1499,8 +1675,11 @@ export default function AdminDashboard() {
                         onChange={(e) => setSettings({ ...settings, wa_api_version: e.target.value })}
                       />
                     </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1rem', marginTop: '1.25rem' }}>
                     <div className="form-group" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                      <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', marginTop: '1.5rem' }}>
+                      <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
                         <input 
                           type="checkbox" 
                           checked={settings.wa_otp_is_auth_template === 'true' || settings.wa_otp_is_auth_template === true}
@@ -1617,6 +1796,479 @@ export default function AdminDashboard() {
         </div>
       )}
 
+      {/* Lead Details Modal */}
+      {selectedLeadDetails && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, backdropFilter: 'blur(8px)' }}>
+          <div className="glass-panel" style={{ width: '90%', maxWidth: '650px', position: 'relative', borderTop: '4px solid var(--gold)', maxHeight: '90vh', overflowY: 'auto', padding: '2rem' }}>
+            <button onClick={() => { setSelectedLeadDetails(null); setIsEditingLead(false); }} style={{ position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none', color: 'hsl(var(--text-primary))', cursor: 'pointer' }}>
+              <X size={20} />
+            </button>
+            
+            <h3 style={{ fontSize: '1.5rem', marginBottom: '0.2rem', color: 'hsl(var(--text-primary))' }}>Lead Details</h3>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: 'var(--gold-deep)', marginBottom: '1.5rem', display: 'flex', gap: '1rem' }}>
+              <span>URN: {selectedLeadDetails.urn}</span>
+              <span>•</span>
+              <span>Date: {selectedLeadDetails.created_at ? selectedLeadDetails.created_at.replace('T', ' ').slice(0, 16) : ''}</span>
+            </div>
+
+            {!isEditingLead ? (
+              <>
+                {/* VIEW MODE */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '2rem', textAlign: 'left' }} className="admin-split-grid">
+                  <div>
+                    <h4 style={{ fontSize: '1rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.5rem', marginBottom: '0.8rem', color: 'hsl(var(--primary))' }}>Customer Details</h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.9rem' }}>
+                      <div><strong>Name:</strong> {selectedLeadDetails.full_name}</div>
+                      <div><strong>Phone:</strong> +91 {selectedLeadDetails.phone}</div>
+                      <div><strong>Email:</strong> {selectedLeadDetails.email}</div>
+                      <div>
+                        <strong>Consent:</strong>{' '}
+                        <span style={{ color: selectedLeadDetails.consent ? 'var(--mint)' : 'var(--err)', fontWeight: 600 }}>
+                          {selectedLeadDetails.consent ? 'Accepted' : 'No Consent'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <h4 style={{ fontSize: '1rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.5rem', marginBottom: '0.8rem', color: 'hsl(var(--primary))' }}>Registration Info</h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.9rem' }}>
+                      <div><strong>Selected Card:</strong> {selectedLeadDetails.card_name || 'N/A'}</div>
+                      <div><strong>Bank:</strong> {selectedLeadDetails.card_bank || 'N/A'}</div>
+                      <div><strong>Source:</strong> <span className="badge badge-info">{selectedLeadDetails.source}</span></div>
+                      {selectedLeadDetails.source === 'agent' && (
+                        <>
+                          <div><strong>Agent:</strong> {selectedLeadDetails.agent_name || 'Staff'} ({selectedLeadDetails.agent_id || 'N/A'})</div>
+                          <div><strong>Kiosk Location:</strong> {selectedLeadDetails.agent_location || 'N/A'}</div>
+                        </>
+                      )}
+                      <div><strong>Redirect URL:</strong> {selectedLeadDetails.redirect_url ? <a href={selectedLeadDetails.redirect_url} target="_blank" rel="noopener noreferrer" style={{ color: 'hsl(var(--primary))', textDecoration: 'underline', wordBreak: 'break-all' }}>Open Link</a> : 'N/A'}</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ textAlign: 'left' }}>
+                  <h4 style={{ fontSize: '1rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.5rem', marginBottom: '0.8rem', color: 'hsl(var(--primary))' }}>Marketing & Tracking Parameters</h4>
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.8rem 1.5rem', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
+                    <div><strong>UTM Channel:</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_channel || 'N/A'}</span></div>
+                    <div><strong>UTM Medium:</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_medium || 'N/A'}</span></div>
+                    <div><strong>UTM Source:</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_source || 'N/A'}</span></div>
+                    <div><strong>UTM Category:</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_category || 'N/A'}</span></div>
+                    <div><strong>UTM Campaign:</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_campaign || 'N/A'}</span></div>
+                    <div><strong>UTM Term:</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_term || 'N/A'}</span></div>
+                    <div><strong>UTM Content:</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_content || 'N/A'}</span></div>
+                    <div><strong>UTM Creative Format:</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_creative_format || 'N/A'}</span></div>
+                    <div><strong>UTM Info:</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_info || 'N/A'}</span></div>
+                  </div>
+
+                  <h5 style={{ fontSize: '0.9rem', marginBottom: '0.5rem', color: 'hsl(var(--text-primary))' }}>Ad Network Click Identifiers</h5>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.8rem', background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)', marginBottom: '1.5rem' }}>
+                    <div><strong>FBCLID (Facebook):</strong> <span style={{ fontFamily: 'var(--font-mono)', wordBreak: 'break-all', color: 'var(--gold-deep)' }}>{selectedLeadDetails.fbclid || 'None'}</span></div>
+                    <div><strong>GCLID (Google):</strong> <span style={{ fontFamily: 'var(--font-mono)', wordBreak: 'break-all', color: 'var(--gold-deep)' }}>{selectedLeadDetails.gclid || 'None'}</span></div>
+                    <div><strong>GCLSRC (Google Click Source):</strong> <span style={{ fontFamily: 'var(--font-mono)', wordBreak: 'break-all', color: 'var(--gold-deep)' }}>{selectedLeadDetails.gclsrc || 'None'}</span></div>
+                    <div><strong>DCLID (Google Display):</strong> <span style={{ fontFamily: 'var(--font-mono)', wordBreak: 'break-all', color: 'var(--gold-deep)' }}>{selectedLeadDetails.dclid || 'None'}</span></div>
+                    <div><strong>MSCLKID (Bing):</strong> <span style={{ fontFamily: 'var(--font-mono)', wordBreak: 'break-all', color: 'var(--gold-deep)' }}>{selectedLeadDetails.msclkid || 'None'}</span></div>
+                    <div><strong>TTCLID (TikTok):</strong> <span style={{ fontFamily: 'var(--font-mono)', wordBreak: 'break-all', color: 'var(--gold-deep)' }}>{selectedLeadDetails.ttclid || 'None'}</span></div>
+                    <div><strong>TWCLID (Twitter):</strong> <span style={{ fontFamily: 'var(--font-mono)', wordBreak: 'break-all', color: 'var(--gold-deep)' }}>{selectedLeadDetails.twclid || 'None'}</span></div>
+                    <div><strong>LI_FAT_ID (LinkedIn):</strong> <span style={{ fontFamily: 'var(--font-mono)', wordBreak: 'break-all', color: 'var(--gold-deep)' }}>{selectedLeadDetails.li_fat_id || 'None'}</span></div>
+                  </div>
+
+                  {/* Display other custom query parameters if any */}
+                  {selectedLeadDetails.utm_params && Object.keys(selectedLeadDetails.utm_params).some(k => ![
+                    'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 
+                    'utm_channel', 'utm_category', 'utm_info', 'utm_creative_format', 
+                    'fbclid', 'gclid', 'gclsrc', 'dclid', 'msclkid', 'ttclid', 'twclid', 'li_fat_id'
+                  ].includes(k)) && (
+                    <>
+                      <h5 style={{ fontSize: '0.9rem', marginBottom: '0.5rem', color: 'hsl(var(--text-primary))' }}>Custom / Other Query Parameters</h5>
+                      <div style={{ background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)', fontSize: '0.8rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        {Object.entries(selectedLeadDetails.utm_params)
+                          .filter(([k]) => ![
+                            'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 
+                            'utm_channel', 'utm_category', 'utm_info', 'utm_creative_format', 
+                            'fbclid', 'gclid', 'gclsrc', 'dclid', 'msclkid', 'ttclid', 'twclid', 'li_fat_id'
+                          ].includes(k))
+                          .map(([k, v]) => (
+                            <div key={k}>
+                              <strong>{k}:</strong> <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--gold-deep)' }}>{String(v)}</span>
+                            </div>
+                          ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
+                  <button onClick={() => setIsEditingLead(true)} className="btn-primary" style={{ padding: '0.6rem 1.5rem' }}>
+                    Edit Details
+                  </button>
+                  <button onClick={() => { setSelectedLeadDetails(null); setIsEditingLead(false); }} className="btn-secondary" style={{ padding: '0.6rem 1.5rem' }}>
+                    Close Details
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* EDIT MODE */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '2rem', textAlign: 'left' }} className="admin-split-grid">
+                  <div>
+                    <h4 style={{ fontSize: '1rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.5rem', marginBottom: '0.8rem', color: 'hsl(var(--primary))' }}>Customer Details</h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>Name</label>
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} 
+                          value={editLeadForm.full_name} 
+                          onChange={(e) => handleEditLeadFormChange('full_name', e.target.value)} 
+                        />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>Phone</label>
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} 
+                          value={editLeadForm.phone} 
+                          onChange={(e) => handleEditLeadFormChange('phone', e.target.value)} 
+                        />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>Email</label>
+                        <input 
+                          type="email" 
+                          className="form-input" 
+                          style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} 
+                          value={editLeadForm.email} 
+                          onChange={(e) => handleEditLeadFormChange('email', e.target.value)} 
+                        />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>Consent</label>
+                        <select 
+                          className="form-select" 
+                          style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} 
+                          value={editLeadForm.consent ? 'true' : 'false'} 
+                          onChange={(e) => handleEditLeadFormChange('consent', e.target.value === 'true')}
+                        >
+                          <option value="true">Accepted</option>
+                          <option value="false">No Consent</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <h4 style={{ fontSize: '1rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.5rem', marginBottom: '0.8rem', color: 'hsl(var(--primary))' }}>Registration Info</h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>Selected Card</label>
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} 
+                          value={editLeadForm.card_name} 
+                          onChange={(e) => handleEditLeadFormChange('card_name', e.target.value)} 
+                        />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>Bank</label>
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} 
+                          value={editLeadForm.card_bank} 
+                          onChange={(e) => handleEditLeadFormChange('card_bank', e.target.value)} 
+                        />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>Source</label>
+                        <select 
+                          className="form-select" 
+                          style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} 
+                          value={editLeadForm.source} 
+                          onChange={(e) => handleEditLeadFormChange('source', e.target.value)}
+                        >
+                          <option value="public">Public</option>
+                          <option value="agent">Agent</option>
+                          <option value="kiosk">Kiosk</option>
+                        </select>
+                      </div>
+                      {editLeadForm.source === 'agent' && (
+                        <>
+                          <div className="form-group" style={{ marginBottom: 0 }}>
+                            <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>Agent Name</label>
+                            <input 
+                              type="text" 
+                              className="form-input" 
+                              style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} 
+                              value={editLeadForm.agent_name} 
+                              onChange={(e) => handleEditLeadFormChange('agent_name', e.target.value)} 
+                            />
+                          </div>
+                          <div className="form-group" style={{ marginBottom: 0 }}>
+                            <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>Kiosk Location</label>
+                            <input 
+                              type="text" 
+                              className="form-input" 
+                              style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} 
+                              value={editLeadForm.agent_location} 
+                              onChange={(e) => handleEditLeadFormChange('agent_location', e.target.value)} 
+                            />
+                          </div>
+                        </>
+                      )}
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>Redirect URL</label>
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} 
+                          value={editLeadForm.redirect_url} 
+                          onChange={(e) => handleEditLeadFormChange('redirect_url', e.target.value)} 
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ textAlign: 'left' }}>
+                  <h4 style={{ fontSize: '1rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.5rem', marginBottom: '0.8rem', color: 'hsl(var(--primary))' }}>Marketing & Tracking Parameters</h4>
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.8rem 1.5rem', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>UTM Channel</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} 
+                        value={editLeadForm.utm_channel} 
+                        onChange={(e) => handleEditLeadFormChange('utm_channel', e.target.value)} 
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>UTM Medium</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} 
+                        value={editLeadForm.utm_medium} 
+                        onChange={(e) => handleEditLeadFormChange('utm_medium', e.target.value)} 
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>UTM Source</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} 
+                        value={editLeadForm.utm_source} 
+                        onChange={(e) => handleEditLeadFormChange('utm_source', e.target.value)} 
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>UTM Category</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} 
+                        value={editLeadForm.utm_category} 
+                        onChange={(e) => handleEditLeadFormChange('utm_category', e.target.value)} 
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>UTM Campaign</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} 
+                        value={editLeadForm.utm_campaign} 
+                        onChange={(e) => handleEditLeadFormChange('utm_campaign', e.target.value)} 
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>UTM Term</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} 
+                        value={editLeadForm.utm_term} 
+                        onChange={(e) => handleEditLeadFormChange('utm_term', e.target.value)} 
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>UTM Content</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} 
+                        value={editLeadForm.utm_content} 
+                        onChange={(e) => handleEditLeadFormChange('utm_content', e.target.value)} 
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>UTM Creative Format</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} 
+                        value={editLeadForm.utm_creative_format} 
+                        onChange={(e) => handleEditLeadFormChange('utm_creative_format', e.target.value)} 
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>UTM Info</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} 
+                        value={editLeadForm.utm_info} 
+                        onChange={(e) => handleEditLeadFormChange('utm_info', e.target.value)} 
+                      />
+                    </div>
+                  </div>
+
+                  <h5 style={{ fontSize: '0.9rem', marginBottom: '0.5rem', color: 'hsl(var(--text-primary))' }}>Ad Network Click Identifiers</h5>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.8rem 1.5rem', fontSize: '0.85rem', marginBottom: '1.5rem', background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)' }}>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>FBCLID (Facebook)</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem', fontFamily: 'var(--font-mono)' }} 
+                        value={editLeadForm.fbclid} 
+                        onChange={(e) => handleEditLeadFormChange('fbclid', e.target.value)} 
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>GCLID (Google)</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem', fontFamily: 'var(--font-mono)' }} 
+                        value={editLeadForm.gclid} 
+                        onChange={(e) => handleEditLeadFormChange('gclid', e.target.value)} 
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>GCLSRC (Google Source)</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem', fontFamily: 'var(--font-mono)' }} 
+                        value={editLeadForm.gclsrc} 
+                        onChange={(e) => handleEditLeadFormChange('gclsrc', e.target.value)} 
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>DCLID (Google Display)</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem', fontFamily: 'var(--font-mono)' }} 
+                        value={editLeadForm.dclid} 
+                        onChange={(e) => handleEditLeadFormChange('dclid', e.target.value)} 
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>MSCLKID (Bing)</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem', fontFamily: 'var(--font-mono)' }} 
+                        value={editLeadForm.msclkid} 
+                        onChange={(e) => handleEditLeadFormChange('msclkid', e.target.value)} 
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>TTCLID (TikTok)</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem', fontFamily: 'var(--font-mono)' }} 
+                        value={editLeadForm.ttclid} 
+                        onChange={(e) => handleEditLeadFormChange('ttclid', e.target.value)} 
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>TWCLID (Twitter)</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem', fontFamily: 'var(--font-mono)' }} 
+                        value={editLeadForm.twclid} 
+                        onChange={(e) => handleEditLeadFormChange('twclid', e.target.value)} 
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>LI_FAT_ID (LinkedIn)</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem', fontFamily: 'var(--font-mono)' }} 
+                        value={editLeadForm.li_fat_id} 
+                        onChange={(e) => handleEditLeadFormChange('li_fat_id', e.target.value)} 
+                      />
+                    </div>
+                  </div>
+
+                  <h5 style={{ fontSize: '0.9rem', marginBottom: '0.5rem', color: 'hsl(var(--text-primary))' }}>Custom / Other Query Parameters</h5>
+                  <div style={{ background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)', fontSize: '0.8rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    {customParams.map((param, idx) => (
+                      <div key={idx} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          style={{ flex: 1, padding: '0.4rem 0.6rem', fontSize: '0.8rem' }} 
+                          placeholder="Param Name" 
+                          value={param.key} 
+                          onChange={(e) => handleCustomParamChange(idx, 'key', e.target.value)} 
+                        />
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          style={{ flex: 2, padding: '0.4rem 0.6rem', fontSize: '0.8rem' }} 
+                          placeholder="Value" 
+                          value={param.value} 
+                          onChange={(e) => handleCustomParamChange(idx, 'value', e.target.value)} 
+                        />
+                        <button 
+                          type="button" 
+                          onClick={() => handleRemoveCustomParam(idx)} 
+                          style={{ color: 'var(--err)', background: 'none', border: 'none', cursor: 'pointer', padding: '0.4rem' }}
+                          title="Remove Parameter"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    ))}
+                    <button 
+                      type="button" 
+                      className="btn-secondary" 
+                      style={{ padding: '0.4rem 1rem', fontSize: '0.8rem', alignSelf: 'flex-start', marginTop: '0.5rem' }} 
+                      onClick={handleAddCustomParam}
+                    >
+                      + Add Parameter
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
+                  <button onClick={handleSaveLeadChanges} className="btn-primary" style={{ padding: '0.6rem 1.5rem' }}>
+                    Save Changes
+                  </button>
+                  <button onClick={() => setIsEditingLead(false)} className="btn-secondary" style={{ padding: '0.6rem 1.5rem' }}>
+                    Cancel
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

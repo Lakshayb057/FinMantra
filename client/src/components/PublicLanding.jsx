@@ -325,9 +325,7 @@ export default function PublicLanding({ navigateTo, utmParams }) {
             email: formData.email,
             source: 'public',
             consent: true,
-            utm_source: utmParams?.utm_source || null,
-            utm_info: utmParams?.utm_info || null,
-            utm_creative_format: utmParams?.utm_creative_format || null,
+            ...utmParams,
             utm_params: utmParams || null
           })
         });

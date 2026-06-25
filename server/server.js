@@ -176,15 +176,64 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
       }
     ];
   } else if (parameters.length > 0) {
-    payload.template.components = [
-      {
-        type: 'body',
-        parameters: parameters.map(p => ({
-          type: 'text',
-          text: String(p)
-        }))
+    // If wa_referral_link_type is 'button', split body and button parameters
+    const waLinkType = settings.wa_referral_link_type || 'body';
+    
+    // Find if there is a URL parameter
+    const urlParamIdx = parameters.findIndex(p => typeof p === 'string' && (p.startsWith('http://') || p.startsWith('https://')));
+    
+    if (waLinkType === 'button' && urlParamIdx !== -1) {
+      const fullUrl = parameters[urlParamIdx];
+      // Extract suffix after /refer/
+      let suffix = '';
+      const referIdx = fullUrl.indexOf('/refer/');
+      if (referIdx !== -1) {
+        suffix = fullUrl.substring(referIdx + 7); // extract after "/refer/"
+      } else {
+        // Fallback: extract path after host
+        try {
+          const parsed = new URL(fullUrl);
+          suffix = parsed.pathname.substring(1) + parsed.search; // remove leading /
+        } catch (e) {
+          suffix = fullUrl;
+        }
       }
-    ];
+
+      // Filter out the URL parameter from the body parameters list
+      const bodyParams = parameters.filter((_, idx) => idx !== urlParamIdx);
+      
+      payload.template.components = [
+        {
+          type: 'body',
+          parameters: bodyParams.map(p => ({
+            type: 'text',
+            text: String(p)
+          }))
+        },
+        {
+          type: 'button',
+          sub_type: 'url',
+          index: '0',
+          parameters: [
+            {
+              type: 'text',
+              text: suffix
+            }
+          ]
+        }
+      ];
+    } else {
+      // Standard body parameters
+      payload.template.components = [
+        {
+          type: 'body',
+          parameters: parameters.map(p => ({
+            type: 'text',
+            text: String(p)
+          }))
+        }
+      ];
+    }
   }
 
   return new Promise((resolve, reject) => {
@@ -423,6 +472,20 @@ app.post('/api/leads', async (req, res) => {
     utm_source,
     utm_info,
     utm_creative_format,
+    utm_medium,
+    utm_campaign,
+    utm_term,
+    utm_content,
+    utm_channel,
+    utm_category,
+    fbclid,
+    gclid,
+    gclsrc,
+    dclid,
+    msclkid,
+    ttclid,
+    twclid,
+    li_fat_id,
     utm_params
   } = req.body;
 
@@ -499,6 +562,22 @@ app.post('/api/leads', async (req, res) => {
     }
   }
 
+  // If utm_params is not provided, dynamically build it from all req.body keys
+  let resolvedUtmParams = utm_params;
+  if (source !== 'agent' && !resolvedUtmParams) {
+    resolvedUtmParams = {};
+    const trackingKeys = [
+      'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 
+      'utm_channel', 'utm_category', 'utm_info', 'utm_creative_format', 
+      'fbclid', 'gclid', 'gclsrc', 'dclid', 'msclkid', 'ttclid', 'twclid', 'li_fat_id'
+    ];
+    for (const key of Object.keys(req.body)) {
+      if (key.startsWith('utm_') || trackingKeys.includes(key)) {
+        resolvedUtmParams[key] = req.body[key];
+      }
+    }
+  }
+
   const leadData = {
     full_name: trimmedName,
     phone: trimmedPhone,
@@ -517,7 +596,21 @@ app.post('/api/leads', async (req, res) => {
     utm_source: source !== 'agent' ? (utm_source || null) : null,
     utm_info: source !== 'agent' ? (utm_info || null) : null,
     utm_creative_format: source !== 'agent' ? (utm_creative_format || null) : null,
-    utm_params: source !== 'agent' ? (utm_params || null) : null
+    utm_medium: source !== 'agent' ? (utm_medium || null) : null,
+    utm_campaign: source !== 'agent' ? (utm_campaign || null) : null,
+    utm_term: source !== 'agent' ? (utm_term || null) : null,
+    utm_content: source !== 'agent' ? (utm_content || null) : null,
+    utm_channel: source !== 'agent' ? (utm_channel || null) : null,
+    utm_category: source !== 'agent' ? (utm_category || null) : null,
+    fbclid: source !== 'agent' ? (fbclid || null) : null,
+    gclid: source !== 'agent' ? (gclid || null) : null,
+    gclsrc: source !== 'agent' ? (gclsrc || null) : null,
+    dclid: source !== 'agent' ? (dclid || null) : null,
+    msclkid: source !== 'agent' ? (msclkid || null) : null,
+    ttclid: source !== 'agent' ? (ttclid || null) : null,
+    twclid: source !== 'agent' ? (twclid || null) : null,
+    li_fat_id: source !== 'agent' ? (li_fat_id || null) : null,
+    utm_params: source !== 'agent' ? (resolvedUtmParams || null) : null
   };
 
   const newLead = await db.addLead(leadData);
@@ -538,37 +631,6 @@ app.post('/api/leads', async (req, res) => {
     .replace(/{utm_source}/gi, encodeURIComponent(utmSourceVal))
     .replace(/{utm_info}/gi, encodeURIComponent(utmInfoVal))
     .replace(/{utm_creative_format}/gi, encodeURIComponent(utmCreativeFormatVal));
-
-  // Propagate all initial query parameters (including UTM and other URL credentials)
-  if (source !== 'agent' && utm_params && typeof utm_params === 'object') {
-    try {
-      const urlObj = new URL(redirectUrl);
-      for (const [key, value] of Object.entries(utm_params)) {
-        if (value && !urlObj.searchParams.has(key)) {
-          urlObj.searchParams.set(key, value);
-        }
-      }
-      redirectUrl = urlObj.toString();
-    } catch (e) {
-      const parts = [];
-      for (const [key, value] of Object.entries(utm_params)) {
-        if (value && !redirectUrl.includes(`${key}=`)) {
-          parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(value)}`);
-        }
-      }
-      if (parts.length > 0) {
-        let hashtag = '';
-        let urlWithoutHash = redirectUrl;
-        const hashIdx = redirectUrl.indexOf('#');
-        if (hashIdx !== -1) {
-          urlWithoutHash = redirectUrl.substring(0, hashIdx);
-          hashtag = redirectUrl.substring(hashIdx);
-        }
-        const separator = urlWithoutHash.includes('?') ? '&' : '?';
-        redirectUrl = urlWithoutHash + separator + parts.join('&') + hashtag;
-      }
-    }
-  }
 
   newLead.redirect_url = redirectUrl;
   
@@ -592,18 +654,27 @@ app.post('/api/leads', async (req, res) => {
   const agentCode = (source === 'agent' && agent_id) ? agent_id : 'public';
   const dateCode = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD
   
-  // Dynamically resolve base URL based on host name
-  const host = req.get('host') || 'localhost:5000';
-  const protocol = req.protocol || 'http';
-  let baseUrl = `${protocol}://${host}`;
-  if (host.includes('localhost') || host.includes('127.0.0.1')) {
-    baseUrl = 'http://localhost:5173';
+  const settings = await db.getSettings();
+  
+  // Resolve base URL based on settings or fallback dynamically
+  let baseUrl = settings.public_site_url ? settings.public_site_url.trim() : '';
+  if (baseUrl) {
+    // Strip trailing slash if present
+    if (baseUrl.endsWith('/')) {
+      baseUrl = baseUrl.substring(0, baseUrl.length - 1);
+    }
+  } else {
+    const host = req.get('host') || 'localhost:5000';
+    const protocol = req.protocol || 'http';
+    baseUrl = `${protocol}://${host}`;
+    if (host.includes('localhost') || host.includes('127.0.0.1')) {
+      baseUrl = 'http://localhost:5173';
+    }
   }
+  
   const referralLink = `${baseUrl}/refer/${agentCode}/${dateCode}/${newLead.urn}`;
   const cardNameStr = card ? `${card.bank} ${card.name}` : 'FinMantra Partner Bank';
   const referralMsg = `Hello ${trimmedName}, thank you for choosing FinMantra. You can access your secure bank portal for the ${cardNameStr} application here: ${referralLink}`;
-
-  const settings = await db.getSettings();
   const referralTemplateName = settings.wa_referral_template_name || process.env.WA_REFERRAL_TEMPLATE_NAME || 'transactional_link';
   try {
     let params = [trimmedName, referralLink];
@@ -711,15 +782,33 @@ app.delete('/api/leads/:id', authenticateToken, requireAdmin, async (req, res) =
   res.json({ success: true, message: 'Lead deleted successfully' });
 });
 
+// Update Lead (Admin Only)
+app.put('/api/leads/:id', authenticateToken, requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const leadData = req.body;
+  
+  try {
+    const updated = await db.updateLead(id, leadData);
+    
+    // Broadcast updates
+    broadcast({ type: 'LEADS_UPDATED' });
+    
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Failed to update lead' });
+  }
+});
+
 // Export Leads to CSV (Admin Only)
 app.get('/api/leads/export', authenticateToken, requireAdmin, async (req, res) => {
   const leads = await db.getLeads();
   
-  let csv = 'URN,Creation Date/Time,Full Name,Phone,Email,City,Employment,Monthly Income,Selected Card,Card Bank,Source,UTM Source,UTM Info,UTM Creative Format,Agent Name,Agent Location,Redirect URL\n';
+  let csv = 'URN,Creation Date/Time,Full Name,Phone,Email,City,Employment,Monthly Income,Selected Card,Card Bank,Source,UTM Source,UTM Info,UTM Creative Format,UTM Medium,UTM Campaign,UTM Term,UTM Content,UTM Channel,UTM Category,FBCLID,GCLID,GCLSRC,DCLID,MSCLKID,TTCLID,TWCLID,LI_FAT_ID,All Tracking Parameters (JSON),Agent Name,Agent Location,Redirect URL\n';
   
   leads.forEach(l => {
     const createdDateTime = l.created_at ? l.created_at.replace('T', ' ').slice(0, 16) : '';
-    csv += `"${l.urn || ''}","${createdDateTime}","${l.full_name || ''}","${l.phone || ''}","${l.email || ''}","${l.city || ''}","${l.employment || ''}","${l.income_range || ''}","${l.card_name || ''}","${l.card_bank || ''}","${l.source || ''}","${l.utm_source || ''}","${l.utm_info || ''}","${l.utm_creative_format || ''}","${l.agent_name || ''}","${l.agent_location || ''}","${l.redirect_url || ''}"\n`;
+    const rawParams = l.utm_params ? JSON.stringify(l.utm_params).replace(/"/g, '""') : '';
+    csv += `"${l.urn || ''}","${createdDateTime}","${l.full_name || ''}","${l.phone || ''}","${l.email || ''}","${l.city || ''}","${l.employment || ''}","${l.income_range || ''}","${l.card_name || ''}","${l.card_bank || ''}","${l.source || ''}","${l.utm_source || ''}","${l.utm_info || ''}","${l.utm_creative_format || ''}","${l.utm_medium || ''}","${l.utm_campaign || ''}","${l.utm_term || ''}","${l.utm_content || ''}","${l.utm_channel || ''}","${l.utm_category || ''}","${l.fbclid || ''}","${l.gclid || ''}","${l.gclsrc || ''}","${l.dclid || ''}","${l.msclkid || ''}","${l.ttclid || ''}","${l.twclid || ''}","${l.li_fat_id || ''}","${rawParams}","${l.agent_name || ''}","${l.agent_location || ''}","${l.redirect_url || ''}"\n`;
   });
 
   res.setHeader('Content-Type', 'text/csv');

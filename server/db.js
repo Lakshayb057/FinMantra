@@ -99,7 +99,9 @@ function initDb() {
         otp_message_template: 'Your OTP for FinMantra credit card application is: {otp}. Valid for 5 minutes.',
         consent_text: 'I authorise FinMantra and its partner banks to contact me via call, SMS, WhatsApp and email about credit card offers, even if I am registered under DND/NDNC.',
         terms_link: 'https://finmantra.org/terms',
-        privacy_link: 'https://finmantra.org/privacy'
+        privacy_link: 'https://finmantra.org/privacy',
+        public_site_url: '',
+        wa_referral_link_type: 'body'
       },
       otp_log: {}
     };
@@ -179,6 +181,20 @@ async function initPgSchema() {
         utm_source VARCHAR(255),
         utm_info VARCHAR(255),
         utm_creative_format VARCHAR(255),
+        utm_medium TEXT,
+        utm_campaign TEXT,
+        utm_term TEXT,
+        utm_content TEXT,
+        utm_channel TEXT,
+        utm_category TEXT,
+        fbclid TEXT,
+        gclid TEXT,
+        gclsrc TEXT,
+        dclid TEXT,
+        msclkid TEXT,
+        ttclid TEXT,
+        twclid TEXT,
+        li_fat_id TEXT,
         utm_params JSONB,
         redirect_url TEXT,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -227,6 +243,43 @@ async function initPgSchema() {
       console.error('[Database] Failed to execute PostgreSQL ALTER TABLE add column utm_creative_format:', migErr.message);
     }
 
+    // Automated PostgreSQL Migration: Add new UTM and tracking columns if not exist
+    const newColumns = [
+      'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'utm_channel', 'utm_category', 
+      'fbclid', 'gclid', 'gclsrc', 'dclid', 'msclkid', 'ttclid', 'twclid', 'li_fat_id'
+    ];
+    for (const col of newColumns) {
+      try {
+        await client.query(`
+          ALTER TABLE leads ADD COLUMN IF NOT EXISTS ${col} TEXT
+        `);
+        console.log(`[Database] Checked/Added column leads.${col} in PostgreSQL.`);
+      } catch (migErr) {
+        console.error(`[Database] Failed to add column leads.${col}:`, migErr.message);
+      }
+    }
+
+    // Automated PostgreSQL Migration: Add utm_params JSONB column if not exists
+    try {
+      await client.query(`
+        ALTER TABLE leads ADD COLUMN IF NOT EXISTS utm_params JSONB DEFAULT '{}'::jsonb
+      `);
+      console.log('[Database] Checked/Added column leads.utm_params in PostgreSQL.');
+    } catch (migErr) {
+      console.error('[Database] Failed to add utm_params column:', migErr.message);
+    }
+
+    // Automated PostgreSQL Migration: Add redirect_url TEXT column if not exists
+    try {
+      await client.query(`
+        ALTER TABLE leads ADD COLUMN IF NOT EXISTS redirect_url TEXT DEFAULT ''
+      `);
+      console.log('[Database] Checked/Added column leads.redirect_url in PostgreSQL.');
+    } catch (migErr) {
+      console.error('[Database] Failed to add redirect_url column:', migErr.message);
+    }
+
+
     // Automated PostgreSQL Migration: Update legacy card categories to 'Offline'
     try {
       const migResult = await client.query(`
@@ -273,7 +326,9 @@ async function initPgSchema() {
         ('otp_message_template', 'Your OTP for FinMantra credit card application is: {otp}. Valid for 5 minutes.'),
         ('consent_text', 'I authorise FinMantra and its partner banks to contact me via call, SMS, WhatsApp and email about credit card offers, even if I am registered under DND/NDNC.'),
         ('terms_link', 'https://finmantra.org/terms'),
-        ('privacy_link', 'https://finmantra.org/privacy')
+        ('privacy_link', 'https://finmantra.org/privacy'),
+        ('public_site_url', ''),
+        ('wa_referral_link_type', 'body')
       `);
     }
 
@@ -356,13 +411,21 @@ const db = {
       const id = 'lead_' + Math.random().toString(36).substr(2, 9);
       
       await pool.query(
-        `INSERT INTO leads (id, urn, full_name, phone, email, city, employment, income_range, card_id, card_name, card_bank, source, agent_id, agent_name, agent_location, consent, utm_source, utm_info, utm_creative_format, utm_params, redirect_url, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, NOW())`,
+        `INSERT INTO leads (
+          id, urn, full_name, phone, email, city, employment, income_range, card_id, card_name, card_bank, 
+          source, agent_id, agent_name, agent_location, consent, 
+          utm_source, utm_info, utm_creative_format, utm_medium, utm_campaign, utm_term, utm_content, utm_channel, utm_category, fbclid,
+          gclid, gclsrc, dclid, msclkid, ttclid, twclid, li_fat_id,
+          utm_params, redirect_url, created_at
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, NOW())`,
         [
           id, urn, lead.full_name, lead.phone, lead.email, lead.city, lead.employment, lead.income_range,
           lead.card_id, lead.card_name, lead.card_bank, lead.source || 'public', lead.agent_id, lead.agent_name,
-          lead.agent_location, lead.consent !== undefined ? lead.consent : true, lead.utm_source, lead.utm_info,
-          lead.utm_creative_format, JSON.stringify(lead.utm_params || {}), lead.redirect_url || ''
+          lead.agent_location, lead.consent !== undefined ? lead.consent : true,
+          lead.utm_source, lead.utm_info, lead.utm_creative_format, lead.utm_medium, lead.utm_campaign, lead.utm_term, lead.utm_content, lead.utm_channel, lead.utm_category, lead.fbclid,
+          lead.gclid, lead.gclsrc, lead.dclid, lead.msclkid, lead.ttclid, lead.twclid, lead.li_fat_id,
+          JSON.stringify(lead.utm_params || {}), lead.redirect_url || ''
         ]
       );
       return { id, urn, ...lead, created_at: new Date().toISOString() };
@@ -393,6 +456,41 @@ const db = {
     data.leads.push(newLead);
     if (!writeData(data)) throw new Error('Database write operation failed');
     return newLead;
+  },
+
+  async updateLead(id, lead) {
+    if (usePg) {
+      await pool.query(
+        `UPDATE leads SET 
+          full_name = $1, phone = $2, email = $3, city = $4, employment = $5, income_range = $6,
+          card_id = $7, card_name = $8, card_bank = $9, source = $10, agent_id = $11, agent_name = $12, agent_location = $13, consent = $14,
+          utm_source = $15, utm_info = $16, utm_creative_format = $17, utm_medium = $18, utm_campaign = $19, utm_term = $20, utm_content = $21, utm_channel = $22, utm_category = $23, fbclid = $24,
+          gclid = $25, gclsrc = $26, dclid = $27, msclkid = $28, ttclid = $29, twclid = $30, li_fat_id = $31,
+          utm_params = $32, redirect_url = $33
+         WHERE id = $34`,
+        [
+          lead.full_name, lead.phone, lead.email, lead.city, lead.employment, lead.income_range,
+          lead.card_id, lead.card_name, lead.card_bank, lead.source, lead.agent_id, lead.agent_name, lead.agent_location, lead.consent,
+          lead.utm_source, lead.utm_info, lead.utm_creative_format, lead.utm_medium, lead.utm_campaign, lead.utm_term, lead.utm_content, lead.utm_channel, lead.utm_category, lead.fbclid,
+          lead.gclid, lead.gclsrc, lead.dclid, lead.msclkid, lead.ttclid, lead.twclid, lead.li_fat_id,
+          JSON.stringify(lead.utm_params || {}), lead.redirect_url || '', id
+        ]
+      );
+      return { id, ...lead };
+    }
+
+    const data = readData();
+    const idx = data.leads.findIndex(l => l.id === id);
+    if (idx !== -1) {
+      data.leads[idx] = {
+        ...data.leads[idx],
+        ...lead,
+        utm_params: lead.utm_params || {}
+      };
+      if (!writeData(data)) throw new Error('Database write operation failed');
+      return data.leads[idx];
+    }
+    throw new Error('Lead not found');
   },
 
   async deleteLead(id) {
