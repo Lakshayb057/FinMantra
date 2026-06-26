@@ -5,6 +5,55 @@ require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const DB_FILE = path.join(__dirname, 'local_database.json');
 
+const DEFAULT_CSV_TEMPLATE = JSON.stringify([
+  { id: "urn", header: "URN", source: "urn" },
+  { id: "created_at", header: "Creation Date/Time", source: "created_at" },
+  { id: "full_name", header: "Full Name", source: "full_name" },
+  { id: "phone", header: "Phone", source: "phone" },
+  { id: "email", header: "Email", source: "email" },
+  { id: "city", header: "City", source: "city" },
+  { id: "employment", header: "Employment", source: "employment" },
+  { id: "income_range", header: "Monthly Income", source: "income_range" },
+  { id: "card_name", header: "Selected Card", source: "card_name" },
+  { id: "card_bank", header: "Card Bank", source: "card_bank" },
+  { id: "source", header: "Source", source: "source" },
+  { id: "utm_source", header: "UTM Source", source: "utm_source" },
+  { id: "utm_info", header: "UTM Info", source: "utm_info" },
+  { id: "utm_creative_format", header: "UTM Creative Format", source: "utm_creative_format" },
+  { id: "utm_medium", header: "UTM Medium", source: "utm_medium" },
+  { id: "utm_campaign", header: "UTM Campaign", source: "utm_campaign" },
+  { id: "utm_term", header: "UTM Term", source: "utm_term" },
+  { id: "utm_content", header: "UTM Content", source: "utm_content" },
+  { id: "utm_channel", header: "UTM Channel", source: "utm_channel" },
+  { id: "utm_category", header: "UTM Category", source: "utm_category" },
+  { id: "utm_id", header: "UTM Campaign ID (utm_id)", source: "utm_id" },
+  { id: "utm_creative", header: "UTM Ad ID (utm_creative)", source: "utm_creative" },
+  { id: "ad_id", header: "Ad ID (ad_id)", source: "ad_id" },
+  { id: "utm_keyword", header: "UTM Keyword (utm_keyword)", source: "utm_keyword" },
+  { id: "utm_matchtype", header: "UTM Matchtype (utm_matchtype)", source: "utm_matchtype" },
+  { id: "utm_network", header: "UTM Network (utm_network)", source: "utm_network" },
+  { id: "utm_placement", header: "UTM Placement (utm_placement)", source: "utm_placement" },
+  { id: "utm_device", header: "UTM Device (utm_device)", source: "utm_device" },
+  { id: "utm_location", header: "UTM Location (utm_location)", source: "utm_location" },
+  { id: "gbraid", header: "GBRAID (gbraid)", source: "gbraid" },
+  { id: "wbraid", header: "WBRAID (wbraid)", source: "wbraid" },
+  { id: "landing_page", header: "Landing Page (landing_page)", source: "landing_page" },
+  { id: "first_landing_page", header: "First Landing Page (first_landing_page)", source: "first_landing_page" },
+  { id: "referrer", header: "Referrer (referrer)", source: "referrer" },
+  { id: "fbclid", header: "FBCLID", source: "fbclid" },
+  { id: "gclid", header: "GCLID", source: "gclid" },
+  { id: "gclsrc", header: "GCLSRC", source: "gclsrc" },
+  { id: "dclid", header: "DCLID", source: "dclid" },
+  { id: "msclkid", header: "MSCLKID", source: "msclkid" },
+  { id: "ttclid", header: "TTCLID", source: "ttclid" },
+  { id: "twclid", header: "TWCLID", source: "twclid" },
+  { id: "li_fat_id", header: "LI_FAT_ID", source: "li_fat_id" },
+  { id: "utm_params", header: "All Tracking Parameters (JSON)", source: "utm_params" },
+  { id: "agent_name", header: "Agent Name", source: "agent_name" },
+  { id: "agent_location", header: "Agent Location", source: "agent_location" },
+  { id: "redirect_url", header: "Redirect URL", source: "redirect_url" }
+]);
+
 // Database mode dispatching
 const rawDbUrl = process.env.DATABASE_URL ? process.env.DATABASE_URL.trim().replace(/^["']|["']$/g, '') : '';
 let usePg = !!rawDbUrl;
@@ -377,6 +426,16 @@ async function initPgSchema() {
       console.error('[Database] Failed to add attribution test parameters to leads table:', migErr.message);
     }
 
+    // Automated PostgreSQL Migration: Add ad_id column to leads table
+    try {
+      await client.query(`
+        ALTER TABLE leads ADD COLUMN IF NOT EXISTS ad_id TEXT
+      `);
+      console.log('[Database] Checked/Added column leads.ad_id in PostgreSQL.');
+    } catch (migErr) {
+      console.error('[Database] Failed to add column leads.ad_id:', migErr.message);
+    }
+
     
     // Seed cards if empty
     const cardCount = await client.query('SELECT COUNT(*) FROM cards');
@@ -406,6 +465,17 @@ async function initPgSchema() {
         ('wa_referral_link_type', 'body'),
         ('whatsapp_gateway', 'baileys')
       `);
+    }
+
+    // Check and seed default CSV template key in settings
+    try {
+      const csvTemplateCheck = await client.query("SELECT COUNT(*) FROM settings WHERE key = 'csv_export_template'");
+      if (parseInt(csvTemplateCheck.rows[0].count, 10) === 0) {
+        await client.query("INSERT INTO settings (key, value) VALUES ('csv_export_template', $1)", [DEFAULT_CSV_TEMPLATE]);
+        console.log('[Database] Seeded default csv_export_template in settings.');
+      }
+    } catch (err) {
+      console.error('[Database] Failed to seed csv_export_template setting:', err.message);
     }
 
     await client.query('COMMIT');
@@ -500,10 +570,10 @@ const db = {
           utm_source, utm_info, utm_creative_format, utm_medium, utm_campaign, utm_term, utm_content, utm_channel, utm_category, fbclid,
           gclid, gclsrc, dclid, msclkid, ttclid, twclid, li_fat_id,
           utm_id, utm_creative, utm_keyword, utm_matchtype, utm_network, utm_placement,
-          utm_device, utm_location, gbraid, wbraid, landing_page, first_landing_page, referrer,
+          utm_device, utm_location, gbraid, wbraid, landing_page, first_landing_page, referrer, ad_id,
           utm_params, redirect_url, created_at
          )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, NOW())`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, NOW())`,
         [
           id, urn, lead.full_name, lead.phone, lead.email, lead.city, lead.employment, lead.income_range,
           lead.card_id, lead.card_name, lead.card_bank, lead.source || 'public', lead.agent_id, lead.agent_name,
@@ -511,7 +581,7 @@ const db = {
           lead.utm_source, lead.utm_info, lead.utm_creative_format, lead.utm_medium, lead.utm_campaign, lead.utm_term, lead.utm_content, lead.utm_channel, lead.utm_category, lead.fbclid,
           lead.gclid, lead.gclsrc, lead.dclid, lead.msclkid, lead.ttclid, lead.twclid, lead.li_fat_id,
           lead.utm_id, lead.utm_creative, lead.utm_keyword, lead.utm_matchtype, lead.utm_network, lead.utm_placement,
-          lead.utm_device, lead.utm_location, lead.gbraid, lead.wbraid, lead.landing_page, lead.first_landing_page, lead.referrer,
+          lead.utm_device, lead.utm_location, lead.gbraid, lead.wbraid, lead.landing_page, lead.first_landing_page, lead.referrer, lead.ad_id,
           JSON.stringify(lead.utm_params || {}), lead.redirect_url || ''
         ]
       );
@@ -554,16 +624,16 @@ const db = {
           utm_source = $15, utm_info = $16, utm_creative_format = $17, utm_medium = $18, utm_campaign = $19, utm_term = $20, utm_content = $21, utm_channel = $22, utm_category = $23, fbclid = $24,
           gclid = $25, gclsrc = $26, dclid = $27, msclkid = $28, ttclid = $29, twclid = $30, li_fat_id = $31,
           utm_id = $32, utm_creative = $33, utm_keyword = $34, utm_matchtype = $35, utm_network = $36, utm_placement = $37,
-          utm_device = $38, utm_location = $39, gbraid = $40, wbraid = $41, landing_page = $42, first_landing_page = $43, referrer = $44,
-          utm_params = $45, redirect_url = $46
-         WHERE id = $47`,
+          utm_device = $38, utm_location = $39, gbraid = $40, wbraid = $41, landing_page = $42, first_landing_page = $43, referrer = $44, ad_id = $45,
+          utm_params = $46, redirect_url = $47
+         WHERE id = $48`,
         [
           lead.full_name, lead.phone, lead.email, lead.city, lead.employment, lead.income_range,
           lead.card_id, lead.card_name, lead.card_bank, lead.source, lead.agent_id, lead.agent_name, lead.agent_location, lead.consent,
           lead.utm_source, lead.utm_info, lead.utm_creative_format, lead.utm_medium, lead.utm_campaign, lead.utm_term, lead.utm_content, lead.utm_channel, lead.utm_category, lead.fbclid,
           lead.gclid, lead.gclsrc, lead.dclid, lead.msclkid, lead.ttclid, lead.twclid, lead.li_fat_id,
           lead.utm_id, lead.utm_creative, lead.utm_keyword, lead.utm_matchtype, lead.utm_network, lead.utm_placement,
-          lead.utm_device, lead.utm_location, lead.gbraid, lead.wbraid, lead.landing_page, lead.first_landing_page, lead.referrer,
+          lead.utm_device, lead.utm_location, lead.gbraid, lead.wbraid, lead.landing_page, lead.first_landing_page, lead.referrer, lead.ad_id,
           JSON.stringify(lead.utm_params || {}), lead.redirect_url || '', id
         ]
       );
@@ -860,11 +930,20 @@ const db = {
       if (settings.whatsapp_gateway === undefined) {
         settings.whatsapp_gateway = 'baileys';
       }
+      if (settings.csv_export_template === undefined) {
+        settings.csv_export_template = DEFAULT_CSV_TEMPLATE;
+      }
       return settings;
     }
     const data = readData();
-    if (data.settings && data.settings.whatsapp_gateway === undefined) {
-      data.settings.whatsapp_gateway = 'baileys';
+    if (data.settings) {
+      if (data.settings.whatsapp_gateway === undefined) {
+        data.settings.whatsapp_gateway = 'baileys';
+      }
+      if (data.settings.csv_export_template === undefined) {
+        data.settings.csv_export_template = DEFAULT_CSV_TEMPLATE;
+        writeData(data);
+      }
     }
     return data.settings;
   },

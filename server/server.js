@@ -521,7 +521,8 @@ app.post('/api/leads', async (req, res) => {
     referrer,
     device,
     location,
-    utm_params
+    utm_params,
+    ad_id
   } = req.body;
 
   const trimmedName = full_name ? String(full_name).trim() : '';
@@ -561,8 +562,8 @@ app.post('/api/leads', async (req, res) => {
   } else {
     let matchedCard = null;
     
-    // First, check if there is an active card matching by ad_id (utm_creative, utm_content, or utm_id)
-    const adIdToCheck = utm_creative || utm_content || utm_id;
+    // First, check if there is an active card matching by ad_id (ad_id, utm_creative, utm_content, or utm_id)
+    const adIdToCheck = ad_id || utm_creative || utm_content || utm_id;
     if (adIdToCheck) {
       const activeCards = await db.getCards(false);
       const adIdStr = String(adIdToCheck).trim();
@@ -670,7 +671,8 @@ app.post('/api/leads', async (req, res) => {
     landing_page: source !== 'agent' ? (landing_page || null) : null,
     first_landing_page: source !== 'agent' ? (first_landing_page || null) : null,
     referrer: source !== 'agent' ? (referrer || null) : null,
-    utm_params: source !== 'agent' ? (resolvedUtmParams || null) : null
+    utm_params: source !== 'agent' ? (resolvedUtmParams || null) : null,
+    ad_id: ad_id || utm_creative || utm_content || utm_id || (card ? card.ad_id : null) || null
   };
 
   const newLead = await db.addLead(leadData);
@@ -691,6 +693,7 @@ app.post('/api/leads', async (req, res) => {
     .replace(/{utm_id}/gi, encodeURIComponent(utm_id || ''))
     .replace(/{utm_term}/gi, encodeURIComponent(utm_term || ''))
     .replace(/{utm_creative}/gi, encodeURIComponent(utm_creative || ''))
+    .replace(/{ad_id}/gi, encodeURIComponent(leadData.ad_id || ''))
     .replace(/{utm_content}/gi, encodeURIComponent(utm_content || ''))
     .replace(/{utm_keyword}/gi, encodeURIComponent(utm_keyword || ''))
     .replace(/{utm_matchtype}/gi, encodeURIComponent(utm_matchtype || ''))
@@ -880,12 +883,87 @@ app.get('/api/leads/export', authenticateToken, requireAdmin, async (req, res) =
     });
   }
   
-  let csv = 'URN,Creation Date/Time,Full Name,Phone,Email,City,Employment,Monthly Income,Selected Card,Card Bank,Source,UTM Source,UTM Info,UTM Creative Format,UTM Medium,UTM Campaign,UTM Term,UTM Content,UTM Channel,UTM Category,UTM Campaign ID (utm_id),UTM Ad ID (utm_creative),UTM Keyword (utm_keyword),UTM Matchtype (utm_matchtype),UTM Network (utm_network),UTM Placement (utm_placement),UTM Device (utm_device),UTM Location (utm_location),GBRAID (gbraid),WBRAID (wbraid),Landing Page (landing_page),First Landing Page (first_landing_page),Referrer (referrer),FBCLID,GCLID,GCLSRC,DCLID,MSCLKID,TTCLID,TWCLID,LI_FAT_ID,All Tracking Parameters (JSON),Agent Name,Agent Location,Redirect URL\n';
-  
+  const settings = await db.getSettings();
+  let columns = [];
+  try {
+    columns = typeof settings.csv_export_template === 'string'
+      ? JSON.parse(settings.csv_export_template)
+      : (settings.csv_export_template || []);
+  } catch (err) {
+    console.error('[Export] Failed to parse csv_export_template settings key:', err);
+  }
+
+  if (!Array.isArray(columns) || columns.length === 0) {
+    columns = [
+      { id: "urn", header: "URN", source: "urn" },
+      { id: "created_at", header: "Creation Date/Time", source: "created_at" },
+      { id: "full_name", header: "Full Name", source: "full_name" },
+      { id: "phone", header: "Phone", source: "phone" },
+      { id: "email", header: "Email", source: "email" },
+      { id: "city", header: "City", source: "city" },
+      { id: "employment", header: "Employment", source: "employment" },
+      { id: "income_range", header: "Monthly Income", source: "income_range" },
+      { id: "card_name", header: "Selected Card", source: "card_name" },
+      { id: "card_bank", header: "Card Bank", source: "card_bank" },
+      { id: "source", header: "Source", source: "source" },
+      { id: "utm_source", header: "UTM Source", source: "utm_source" },
+      { id: "utm_info", header: "UTM Info", source: "utm_info" },
+      { id: "utm_creative_format", header: "UTM Creative Format", source: "utm_creative_format" },
+      { id: "utm_medium", header: "UTM Medium", source: "utm_medium" },
+      { id: "utm_campaign", header: "UTM Campaign", source: "utm_campaign" },
+      { id: "utm_term", header: "UTM Term", source: "utm_term" },
+      { id: "utm_content", header: "UTM Content", source: "utm_content" },
+      { id: "utm_channel", header: "UTM Channel", source: "utm_channel" },
+      { id: "utm_category", header: "UTM Category", source: "utm_category" },
+      { id: "utm_id", header: "UTM Campaign ID (utm_id)", source: "utm_id" },
+      { id: "utm_creative", header: "UTM Ad ID (utm_creative)", source: "utm_creative" },
+      { id: "ad_id", header: "Ad ID (ad_id)", source: "ad_id" },
+      { id: "utm_keyword", header: "UTM Keyword (utm_keyword)", source: "utm_keyword" },
+      { id: "utm_matchtype", header: "UTM Matchtype (utm_matchtype)", source: "utm_matchtype" },
+      { id: "utm_network", header: "UTM Network (utm_network)", source: "utm_network" },
+      { id: "utm_placement", header: "UTM Placement (utm_placement)", source: "utm_placement" },
+      { id: "utm_device", header: "UTM Device (utm_device)", source: "utm_device" },
+      { id: "utm_location", header: "UTM Location (utm_location)", source: "utm_location" },
+      { id: "gbraid", header: "GBRAID (gbraid)", source: "gbraid" },
+      { id: "wbraid", header: "WBRAID (wbraid)", source: "wbraid" },
+      { id: "landing_page", header: "Landing Page (landing_page)", source: "landing_page" },
+      { id: "first_landing_page", header: "First Landing Page (first_landing_page)", source: "first_landing_page" },
+      { id: "referrer", header: "Referrer (referrer)", source: "referrer" },
+      { id: "fbclid", header: "FBCLID", source: "fbclid" },
+      { id: "gclid", header: "GCLID", source: "gclid" },
+      { id: "gclsrc", header: "GCLSRC", source: "gclsrc" },
+      { id: "dclid", header: "DCLID", source: "dclid" },
+      { id: "msclkid", header: "MSCLKID", source: "msclkid" },
+      { id: "ttclid", header: "TTCLID", source: "ttclid" },
+      { id: "twclid", header: "TWCLID", source: "twclid" },
+      { id: "li_fat_id", header: "LI_FAT_ID", source: "li_fat_id" },
+      { id: "utm_params", header: "All Tracking Parameters (JSON)", source: "utm_params" },
+      { id: "agent_name", header: "Agent Name", source: "agent_name" },
+      { id: "agent_location", header: "Agent Location", source: "agent_location" },
+      { id: "redirect_url", header: "Redirect URL", source: "redirect_url" }
+    ];
+  }
+
+  // Generate headers
+  let csv = columns.map(c => `"${(c.header || '').replace(/"/g, '""')}"`).join(',') + '\n';
+
+  // Generate rows
   leads.forEach(l => {
-    const createdDateTime = l.created_at ? (typeof l.created_at === 'string' ? l.created_at : new Date(l.created_at).toISOString()).replace('T', ' ').slice(0, 16) : '';
-    const rawParams = l.utm_params ? JSON.stringify(l.utm_params).replace(/"/g, '""') : '';
-    csv += `"${l.urn || ''}","${createdDateTime}","${l.full_name || ''}","${l.phone || ''}","${l.email || ''}","${l.city || ''}","${l.employment || ''}","${l.income_range || ''}","${l.card_name || ''}","${l.card_bank || ''}","${l.source || ''}","${l.utm_source || ''}","${l.utm_info || ''}","${l.utm_creative_format || ''}","${l.utm_medium || ''}","${l.utm_campaign || ''}","${l.utm_term || ''}","${l.utm_content || ''}","${l.utm_channel || ''}","${l.utm_category || ''}","${l.utm_id || ''}","${l.utm_creative || ''}","${l.utm_keyword || ''}","${l.utm_matchtype || ''}","${l.utm_network || ''}","${l.utm_placement || ''}","${l.utm_device || ''}","${l.utm_location || ''}","${l.gbraid || ''}","${l.wbraid || ''}","${l.landing_page || ''}","${l.first_landing_page || ''}","${l.referrer || ''}","${l.fbclid || ''}","${l.gclid || ''}","${l.gclsrc || ''}","${l.dclid || ''}","${l.msclkid || ''}","${l.ttclid || ''}","${l.twclid || ''}","${l.li_fat_id || ''}","${rawParams}","${l.agent_name || ''}","${l.agent_location || ''}","${l.redirect_url || ''}"\n`;
+    const rowValues = columns.map(col => {
+      let val = '';
+      const source = col.source;
+      if (source === 'created_at') {
+        val = l.created_at ? (typeof l.created_at === 'string' ? l.created_at : new Date(l.created_at).toISOString()).replace('T', ' ').slice(0, 16) : '';
+      } else if (source === 'utm_params') {
+        val = l.utm_params ? JSON.stringify(l.utm_params) : '{}';
+      } else if (l[source] !== undefined && l[source] !== null) {
+        val = String(l[source]);
+      } else if (l.utm_params && l.utm_params[source] !== undefined && l.utm_params[source] !== null) {
+        val = String(l.utm_params[source]);
+      }
+      return val.replace(/"/g, '""');
+    });
+    csv += rowValues.map(v => `"${v}"`).join(',') + '\n';
   });
 
   res.setHeader('Content-Type', 'text/csv');

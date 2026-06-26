@@ -130,6 +130,7 @@ export default function App() {
     if (!params.utm_info) params.utm_info = searchParams.get('utm_info') || params.utm_medium || '';
     if (!params.utm_device) params.utm_device = searchParams.get('utm_device') || searchParams.get('device') || '';
     if (!params.utm_location) params.utm_location = searchParams.get('utm_location') || searchParams.get('location') || '';
+    if (!params.ad_id) params.ad_id = searchParams.get('ad_id') || searchParams.get('gad_creative') || searchParams.get('utm_creative') || searchParams.get('utm_content') || searchParams.get('utm_id') || '';
 
     // Merge URL params with cached params if any, prioritizing URL parameters
     const cachedStr = sessionStorage.getItem('finmantra_utm');

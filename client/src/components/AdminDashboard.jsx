@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Users, CreditCard, MapPin, Settings as SettingsIcon, ShieldAlert, BarChart3, 
   Trash2, Download, Search, Plus, Edit, Check, X, RefreshCw, AlertCircle,
-  QrCode, Smartphone, CheckCircle, Wifi, WifiOff, Eye, MessageSquare, Layers
+  QrCode, Smartphone, CheckCircle, Wifi, WifiOff, Eye, MessageSquare, Layers,
+  ArrowUp, ArrowDown
 } from 'lucide-react';
 
 export default function AdminDashboard() {
@@ -22,6 +23,7 @@ export default function AdminDashboard() {
   const [agents, setAgents] = useState([]);
   const [locations, setLocations] = useState([]);
   const [settings, setSettings] = useState({});
+  const [csvColumns, setCsvColumns] = useState([]);
   const [baileysStatus, setBaileysStatus] = useState({ status: 'DISCONNECTED', qrCodeDataUrl: '', phone: '' });
   const [loadingBaileys, setLoadingBaileys] = useState(false);
 
@@ -157,6 +159,21 @@ export default function AdminDashboard() {
       if (socket) socket.close();
     };
   }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (settings.csv_export_template) {
+      try {
+        const parsed = typeof settings.csv_export_template === 'string'
+          ? JSON.parse(settings.csv_export_template)
+          : settings.csv_export_template;
+        if (Array.isArray(parsed)) {
+          setCsvColumns(parsed);
+        }
+      } catch (err) {
+        console.error('Failed to parse csv_export_template:', err);
+      }
+    }
+  }, [settings.csv_export_template]);
 
   const loadAllAdminData = async () => {
     setLoading(true);
@@ -365,13 +382,14 @@ export default function AdminDashboard() {
       ttclid: lead.ttclid || '',
       twclid: lead.twclid || '',
       li_fat_id: lead.li_fat_id || '',
+      ad_id: lead.ad_id || '',
       redirect_url: lead.redirect_url || ''
     });
 
     const standardKeys = [
       'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 
       'utm_channel', 'utm_category', 'utm_info', 'utm_creative_format', 
-      'utm_id', 'utm_creative', 'utm_keyword', 'utm_matchtype', 'utm_network', 'utm_placement',
+      'utm_id', 'utm_creative', 'ad_id', 'utm_keyword', 'utm_matchtype', 'utm_network', 'utm_placement',
       'utm_device', 'utm_location', 'gbraid', 'wbraid', 'landing_page', 'first_landing_page', 'referrer',
       'fbclid', 'gclid', 'gclsrc', 'dclid', 'msclkid', 'ttclid', 'twclid', 'li_fat_id'
     ];
@@ -425,7 +443,7 @@ export default function AdminDashboard() {
       const standardKeys = [
         'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 
         'utm_channel', 'utm_category', 'utm_info', 'utm_creative_format', 
-        'utm_id', 'utm_creative', 'utm_keyword', 'utm_matchtype', 'utm_network', 'utm_placement',
+        'utm_id', 'utm_creative', 'ad_id', 'utm_keyword', 'utm_matchtype', 'utm_network', 'utm_placement',
         'utm_device', 'utm_location', 'gbraid', 'wbraid', 'landing_page', 'first_landing_page', 'referrer',
         'fbclid', 'gclid', 'gclsrc', 'dclid', 'msclkid', 'ttclid', 'twclid', 'li_fat_id'
       ];
@@ -807,6 +825,172 @@ export default function AdminDashboard() {
       loadAllAdminData();
     } catch (err) {
       showToast(err.message || 'Failed to delete.', 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const STANDARD_FIELD_OPTIONS = [
+    { value: 'urn', label: 'URN' },
+    { value: 'created_at', label: 'Creation Date/Time' },
+    { value: 'full_name', label: 'Full Name' },
+    { value: 'phone', label: 'Phone Number' },
+    { value: 'email', label: 'Email' },
+    { value: 'city', label: 'City' },
+    { value: 'employment', label: 'Employment Status' },
+    { value: 'income_range', label: 'Monthly Income' },
+    { value: 'card_name', label: 'Selected Card Name' },
+    { value: 'card_bank', label: 'Card Bank' },
+    { value: 'source', label: 'Lead Source (e.g. public/agent)' },
+    { value: 'agent_name', label: 'Agent Name' },
+    { value: 'agent_location', label: 'Agent Location/Kiosk' },
+    { value: 'redirect_url', label: 'Redirect URL' },
+    { value: 'utm_source', label: 'UTM Source' },
+    { value: 'utm_medium', label: 'UTM Medium' },
+    { value: 'utm_campaign', label: 'UTM Campaign' },
+    { value: 'utm_term', label: 'UTM Term' },
+    { value: 'utm_content', label: 'UTM Content' },
+    { value: 'utm_channel', label: 'UTM Channel' },
+    { value: 'utm_category', label: 'UTM Category' },
+    { value: 'utm_id', label: 'UTM Campaign ID (utm_id)' },
+    { value: 'utm_creative', label: 'UTM Ad ID (utm_creative)' },
+    { value: 'ad_id', label: 'Ad ID (ad_id)' },
+    { value: 'utm_keyword', label: 'UTM Keyword (utm_keyword)' },
+    { value: 'utm_matchtype', label: 'UTM Matchtype' },
+    { value: 'utm_network', label: 'UTM Network' },
+    { value: 'utm_placement', label: 'UTM Placement' },
+    { value: 'utm_device', label: 'UTM Device' },
+    { value: 'utm_location', label: 'UTM Location' },
+    { value: 'gbraid', label: 'GBRAID' },
+    { value: 'wbraid', label: 'WBRAID' },
+    { value: 'landing_page', label: 'Landing Page URL' },
+    { value: 'first_landing_page', label: 'First Landing Page URL' },
+    { value: 'referrer', label: 'Referrer' },
+    { value: 'fbclid', label: 'FBCLID (Facebook)' },
+    { value: 'gclid', label: 'GCLID (Google)' },
+    { value: 'gclsrc', label: 'GCLSRC (Google Click Source)' },
+    { value: 'dclid', label: 'DCLID' },
+    { value: 'msclkid', label: 'MSCLKID' },
+    { value: 'ttclid', label: 'TTCLID' },
+    { value: 'twclid', label: 'TWCLID' },
+    { value: 'li_fat_id', label: 'LI_FAT_ID' },
+    { value: 'utm_params', label: 'All Tracking Parameters (JSON)' }
+  ];
+
+  const handleMoveColumnUp = (index) => {
+    if (index === 0) return;
+    const updated = [...csvColumns];
+    const temp = updated[index];
+    updated[index] = updated[index - 1];
+    updated[index - 1] = temp;
+    setCsvColumns(updated);
+  };
+
+  const handleMoveColumnDown = (index) => {
+    if (index === csvColumns.length - 1) return;
+    const updated = [...csvColumns];
+    const temp = updated[index];
+    updated[index] = updated[index + 1];
+    updated[index + 1] = temp;
+    setCsvColumns(updated);
+  };
+
+  const handleAddColumn = () => {
+    const newCol = {
+      id: 'col_' + Math.random().toString(36).substr(2, 9),
+      header: 'New Column',
+      source: 'urn'
+    };
+    setCsvColumns([...csvColumns, newCol]);
+  };
+
+  const handleDeleteColumn = (index) => {
+    const updated = csvColumns.filter((_, idx) => idx !== index);
+    setCsvColumns(updated);
+  };
+
+  const handleResetCsvTemplate = () => {
+    if (!window.confirm('Are you sure you want to reset the CSV template to the default layout with all 46 tracking parameters?')) return;
+    const defaultCols = [
+      { id: "urn", header: "URN", source: "urn" },
+      { id: "created_at", header: "Creation Date/Time", source: "created_at" },
+      { id: "full_name", header: "Full Name", source: "full_name" },
+      { id: "phone", header: "Phone", source: "phone" },
+      { id: "email", header: "Email", source: "email" },
+      { id: "city", header: "City", source: "city" },
+      { id: "employment", header: "Employment", source: "employment" },
+      { id: "income_range", header: "Monthly Income", source: "income_range" },
+      { id: "card_name", header: "Selected Card", source: "card_name" },
+      { id: "card_bank", header: "Card Bank", source: "card_bank" },
+      { id: "source", header: "Source", source: "source" },
+      { id: "utm_source", header: "UTM Source", source: "utm_source" },
+      { id: "utm_info", header: "UTM Info", source: "utm_info" },
+      { id: "utm_creative_format", header: "UTM Creative Format", source: "utm_creative_format" },
+      { id: "utm_medium", header: "UTM Medium", source: "utm_medium" },
+      { id: "utm_campaign", header: "UTM Campaign", source: "utm_campaign" },
+      { id: "utm_term", header: "UTM Term", source: "utm_term" },
+      { id: "utm_content", header: "UTM Content", source: "utm_content" },
+      { id: "utm_channel", header: "UTM Channel", source: "utm_channel" },
+      { id: "utm_category", header: "UTM Category", source: "utm_category" },
+      { id: "utm_id", header: "UTM Campaign ID (utm_id)", source: "utm_id" },
+      { id: "utm_creative", header: "UTM Ad ID (utm_creative)", source: "utm_creative" },
+      { id: "ad_id", header: "Ad ID (ad_id)", source: "ad_id" },
+      { id: "utm_keyword", header: "UTM Keyword (utm_keyword)", source: "utm_keyword" },
+      { id: "utm_matchtype", header: "UTM Matchtype (utm_matchtype)", source: "utm_matchtype" },
+      { id: "utm_network", header: "UTM Network (utm_network)", source: "utm_network" },
+      { id: "utm_placement", header: "UTM Placement (utm_placement)", source: "utm_placement" },
+      { id: "utm_device", header: "UTM Device (utm_device)", source: "utm_device" },
+      { id: "utm_location", header: "UTM Location (utm_location)", source: "utm_location" },
+      { id: "gbraid", header: "GBRAID (gbraid)", source: "gbraid" },
+      { id: "wbraid", header: "WBRAID (wbraid)", source: "wbraid" },
+      { id: "landing_page", header: "Landing Page (landing_page)", source: "landing_page" },
+      { id: "first_landing_page", header: "First Landing Page (first_landing_page)", source: "first_landing_page" },
+      { id: "referrer", header: "Referrer (referrer)", source: "referrer" },
+      { id: "fbclid", header: "FBCLID", source: "fbclid" },
+      { id: "gclid", header: "GCLID", source: "gclid" },
+      { id: "gclsrc", header: "GCLSRC", source: "gclsrc" },
+      { id: "dclid", header: "DCLID", source: "dclid" },
+      { id: "msclkid", header: "MSCLKID", source: "msclkid" },
+      { id: "ttclid", header: "TTCLID", source: "ttclid" },
+      { id: "twclid", header: "TWCLID", source: "twclid" },
+      { id: "li_fat_id", header: "LI_FAT_ID", source: "li_fat_id" },
+      { id: "utm_params", header: "All Tracking Parameters (JSON)", source: "utm_params" },
+      { id: "agent_name", header: "Agent Name", source: "agent_name" },
+      { id: "agent_location", header: "Agent Location", source: "agent_location" },
+      { id: "redirect_url", header: "Redirect URL", source: "redirect_url" }
+    ];
+    setCsvColumns(defaultCols);
+  };
+
+  const handleSaveCsvTemplate = async () => {
+    for (const col of csvColumns) {
+      if (!col.header.trim()) {
+        showToast('All columns must have a Header Label.', 'error');
+        return;
+      }
+      if (!col.source.trim()) {
+        showToast('All columns must have a Mapped Source Field.', 'error');
+        return;
+      }
+    }
+
+    setIsSubmitting(true);
+    try {
+      await apiFetch(`${API_URL}/settings`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          ...settings,
+          csv_export_template: JSON.stringify(csvColumns)
+        })
+      });
+      showToast('CSV export template saved successfully!', 'success');
+      loadAllAdminData();
+    } catch (err) {
+      showToast(err.message || 'Failed to save CSV template.', 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -1936,6 +2120,154 @@ export default function AdminDashboard() {
                   {isSubmitting ? 'Saving...' : 'Save Global System Configurations'}
                 </button>
               </form>
+
+              {/* CSV EXPORT TEMPLATE MANAGER */}
+              <div style={{ marginTop: '3rem', padding: '1.5rem', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-md)', background: 'rgba(255, 255, 255, 0.02)', textAlign: 'left' }}>
+                <h4 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '0.5rem', color: 'var(--gold-deep)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Download size={20} />
+                  <span>CSV Export Template Manager</span>
+                </h4>
+                <p style={{ fontSize: '0.8rem', color: 'hsl(var(--text-muted))', marginBottom: '1.25rem' }}>
+                  Configure, reorder, delete, or add new columns to the export CSV dynamically. Select a standard field or map a custom URL query parameter.
+                </p>
+
+                <div style={{ 
+                  maxHeight: '400px', 
+                  overflowY: 'auto', 
+                  border: '1px solid var(--border-light)', 
+                  borderRadius: 'var(--radius-sm)', 
+                  background: 'rgba(0,0,0,0.2)',
+                  marginBottom: '1.25rem',
+                  padding: '0.5rem'
+                }}>
+                  {csvColumns.map((col, index) => {
+                    const isCustom = !STANDARD_FIELD_OPTIONS.some(opt => opt.value === col.source);
+                    return (
+                      <div key={col.id || index} style={{ 
+                        display: 'flex', 
+                        gap: '0.5rem', 
+                        alignItems: 'center', 
+                        padding: '0.5rem', 
+                        borderBottom: index === csvColumns.length - 1 ? 'none' : '1px solid var(--border-light)',
+                        minWidth: '600px'
+                      }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                          <button 
+                            type="button" 
+                            onClick={() => handleMoveColumnUp(index)} 
+                            disabled={index === 0}
+                            style={{ background: 'none', border: 'none', color: 'hsl(var(--text-primary))', cursor: index === 0 ? 'not-allowed' : 'pointer', opacity: index === 0 ? 0.3 : 1, padding: 0 }}
+                            title="Move Up"
+                          >
+                            <ArrowUp size={16} />
+                          </button>
+                          <button 
+                            type="button" 
+                            onClick={() => handleMoveColumnDown(index)} 
+                            disabled={index === csvColumns.length - 1}
+                            style={{ background: 'none', border: 'none', color: 'hsl(var(--text-primary))', cursor: index === csvColumns.length - 1 ? 'not-allowed' : 'pointer', opacity: index === csvColumns.length - 1 ? 0.3 : 1, padding: 0 }}
+                            title="Move Down"
+                          >
+                            <ArrowDown size={16} />
+                          </button>
+                        </div>
+
+                        <span style={{ fontSize: '0.8rem', color: 'hsl(var(--text-muted))', minWidth: '25px', textAlign: 'center' }}>
+                          {index + 1}
+                        </span>
+
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          style={{ flex: 2, padding: '0.4rem 0.6rem', fontSize: '0.85rem', margin: 0 }} 
+                          placeholder="Header Label" 
+                          value={col.header} 
+                          onChange={(e) => {
+                            const updated = [...csvColumns];
+                            updated[index].header = e.target.value;
+                            setCsvColumns(updated);
+                          }}
+                        />
+
+                        <select
+                          className="form-input"
+                          style={{ flex: 2, padding: '0.4rem 0.6rem', fontSize: '0.85rem', margin: 0, height: 'auto' }}
+                          value={isCustom ? '__custom__' : col.source}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const updated = [...csvColumns];
+                            if (val === '__custom__') {
+                              updated[index].source = '';
+                            } else {
+                              updated[index].source = val;
+                            }
+                            setCsvColumns(updated);
+                          }}
+                        >
+                          {STANDARD_FIELD_OPTIONS.map(opt => (
+                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                          ))}
+                          <option value="__custom__">Custom Parameter / Key...</option>
+                        </select>
+
+                        {isCustom && (
+                          <input 
+                            type="text" 
+                            className="form-input" 
+                            style={{ flex: 1.5, padding: '0.4rem 0.6rem', fontSize: '0.85rem', margin: 0, fontFamily: 'var(--font-mono)' }} 
+                            placeholder="custom_param_key" 
+                            value={col.source} 
+                            onChange={(e) => {
+                              const updated = [...csvColumns];
+                              updated[index].source = e.target.value.trim();
+                              setCsvColumns(updated);
+                            }}
+                          />
+                        )}
+
+                        <button 
+                          type="button" 
+                          onClick={() => handleDeleteColumn(index)} 
+                          style={{ color: 'var(--err)', background: 'none', border: 'none', cursor: 'pointer', padding: '0.5rem' }}
+                          title="Delete Column"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div style={{ display: 'flex', gap: '1rem', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button 
+                      type="button" 
+                      onClick={handleAddColumn} 
+                      className="btn-secondary" 
+                      style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}
+                    >
+                      + Add Column
+                    </button>
+                    <button 
+                      type="button" 
+                      onClick={handleResetCsvTemplate} 
+                      className="btn-secondary" 
+                      style={{ padding: '0.5rem 1rem', fontSize: '0.85rem', borderColor: 'rgba(224, 168, 46, 0.2)' }}
+                    >
+                      Reset to Default
+                    </button>
+                  </div>
+                  <button 
+                    type="button" 
+                    onClick={handleSaveCsvTemplate} 
+                    className="btn-primary" 
+                    style={{ padding: '0.5rem 1.5rem', fontSize: '0.85rem' }}
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? 'Saving Template...' : 'Save CSV Export Template'}
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 
@@ -2008,6 +2340,7 @@ export default function AdminDashboard() {
                     <div><strong>UTM Info:</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_info || 'N/A'}</span></div>
                     <div><strong>UTM Campaign ID (utm_id):</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_id || 'N/A'}</span></div>
                     <div><strong>UTM Ad ID (utm_creative):</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_creative || 'N/A'}</span></div>
+                    <div><strong>Ad ID (ad_id):</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.ad_id || 'N/A'}</span></div>
                     <div><strong>UTM Keyword (utm_keyword):</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_keyword || 'N/A'}</span></div>
                     <div><strong>UTM Matchtype (utm_matchtype):</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_matchtype || 'N/A'}</span></div>
                     <div><strong>UTM Network (utm_network):</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_network || 'N/A'}</span></div>
@@ -2309,6 +2642,16 @@ export default function AdminDashboard() {
                         style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} 
                         value={editLeadForm.utm_creative} 
                         onChange={(e) => handleEditLeadFormChange('utm_creative', e.target.value)} 
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>Ad ID (ad_id)</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} 
+                        value={editLeadForm.ad_id || ''} 
+                        onChange={(e) => handleEditLeadFormChange('ad_id', e.target.value)} 
                       />
                     </div>
                     <div className="form-group" style={{ marginBottom: 0 }}>
