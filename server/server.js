@@ -30,6 +30,59 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+class MemoryRateLimiter {
+  constructor(windowMs, maxRequests) {
+    this.windowMs = windowMs;
+    this.maxRequests = maxRequests;
+    this.requests = new Map();
+    
+    // Clean up expired entries periodically to prevent memory leaks
+    setInterval(() => {
+      const now = Date.now();
+      for (const [key, timestamps] of this.requests.entries()) {
+        const active = timestamps.filter(t => now - t < this.windowMs);
+        if (active.length === 0) {
+          this.requests.delete(key);
+        } else {
+          this.requests.set(key, active);
+        }
+      }
+    }, 60000).unref();
+  }
+
+  limit(key) {
+    const now = Date.now();
+    let timestamps = this.requests.get(key) || [];
+    timestamps = timestamps.filter(t => now - t < this.windowMs);
+    if (timestamps.length >= this.maxRequests) {
+      return false;
+    }
+    timestamps.push(now);
+    this.requests.set(key, timestamps);
+    return true;
+  }
+
+  middleware() {
+    return (req, res, next) => {
+      const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
+      const key = `${req.path}:${ip}`;
+      const allowed = this.limit(key);
+      if (!allowed) {
+        return res.status(429).json({
+          success: false,
+          error: 'Too many requests. Please try again later.'
+        });
+      }
+      next();
+    };
+  }
+}
+
+// Instantiate specific limiters
+const otpRateLimiter = new MemoryRateLimiter(60000, 5);
+const loginRateLimiter = new MemoryRateLimiter(60000, 10);
+const leadSubmitRateLimiter = new MemoryRateLimiter(60000, 30);
+
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || 'finmantrasupersecretjwtkey';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin1234';
@@ -358,7 +411,7 @@ function requireAdmin(req, res, next) {
 // --- AUTHENTICATION ROUTES ---
 
 // Admin Login
-app.post('/api/admin/login', (req, res) => {
+app.post('/api/admin/login', loginRateLimiter.middleware(), (req, res) => {
   const { password } = req.body;
   if (password === ADMIN_PASSWORD) {
     const token = jwt.sign({ role: 'admin' }, JWT_SECRET, { expiresIn: '1d' });
@@ -368,14 +421,13 @@ app.post('/api/admin/login', (req, res) => {
 });
 
 // Agent Login
-app.post('/api/agents/login', async (req, res) => {
+app.post('/api/agents/login', loginRateLimiter.middleware(), async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password required' });
   }
 
-  const agents = await db.getAgents();
-  const agent = agents.find(a => a.username === username && a.status === 'active');
+  const agent = await db.getAgentByUsername(username);
 
   if (agent && agent.password_hash === sha256(password)) {
     const token = jwt.sign({ id: agent.id, name: agent.name, role: 'agent' }, JWT_SECRET, { expiresIn: '8h' });
@@ -396,7 +448,7 @@ app.get('/api/auth/me', authenticateToken, (req, res) => {
 // --- OTP / WHATSAPP ROUTES ---
 
 // Send WhatsApp OTP
-app.post('/api/otp/send', async (req, res) => {
+app.post('/api/otp/send', otpRateLimiter.middleware(), async (req, res) => {
   const { phone } = req.body;
   if (!phone || phone.length < 10) {
     return res.status(400).json({ error: 'Valid WhatsApp number is required' });
@@ -474,7 +526,7 @@ app.post('/api/otp/verify', async (req, res) => {
 // --- LEADS MANAGEMENT ---
 
 // Submit Lead
-app.post('/api/leads', async (req, res) => {
+app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
   const {
     full_name,
     phone,
@@ -773,8 +825,7 @@ app.post('/api/leads', async (req, res) => {
 // Fetch Lead Details by URN (Public link landing page resolver)
 app.get('/api/leads/urn/:urn', async (req, res) => {
   const { urn } = req.params;
-  const leads = await db.getLeads();
-  const lead = leads.find(l => l.urn === urn);
+  const lead = await db.getLeadByUrn(urn);
 
   if (lead) {
     res.json({
@@ -794,8 +845,7 @@ app.get('/api/leads/urn/:urn', async (req, res) => {
 // Legacy URM resolver to support existing references
 app.get('/api/leads/urm/:urm', async (req, res) => {
   const { urm } = req.params;
-  const leads = await db.getLeads();
-  const lead = leads.find(l => l.urn === urm);
+  const lead = await db.getLeadByUrn(urm);
 
   if (lead) {
     res.json({
@@ -814,12 +864,11 @@ app.get('/api/leads/urm/:urm', async (req, res) => {
 
 // Fetch Leads (Admin or Agent)
 app.get('/api/leads', authenticateToken, async (req, res) => {
-  const leads = await db.getLeads();
-  if (req.user.role === 'admin') {
+  const role = req.user.role;
+  if (role === 'admin' || role === 'agent') {
+    const agentId = role === 'agent' ? req.user.id : null;
+    const leads = await db.getLeadsFiltered({ agentId });
     res.json(leads);
-  } else if (req.user.role === 'agent') {
-    const agentLeads = leads.filter(l => l.agent_id === req.user.id);
-    res.json(agentLeads);
   } else {
     res.status(403).json({ error: 'Access denied' });
   }
@@ -869,19 +918,7 @@ app.put('/api/leads/:id', authenticateToken, requireAdmin, async (req, res) => {
 // Export Leads to CSV (Admin Only)
 app.get('/api/leads/export', authenticateToken, requireAdmin, async (req, res) => {
   const { startDate, endDate } = req.query;
-  let leads = await db.getLeads();
-  
-  if (startDate || endDate) {
-    leads = leads.filter(l => {
-      if (!l.created_at) return false;
-      const leadDate = typeof l.created_at === 'string' 
-        ? l.created_at.slice(0, 10) 
-        : new Date(l.created_at).toISOString().slice(0, 10);
-      if (startDate && leadDate < startDate) return false;
-      if (endDate && leadDate > endDate) return false;
-      return true;
-    });
-  }
+  const leads = await db.getLeadsForExport({ startDate, endDate });
   
   const settings = await db.getSettings();
   let columns = [];

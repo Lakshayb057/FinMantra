@@ -260,6 +260,12 @@ async function initPgSchema() {
       await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS ad_id VARCHAR(100)");
     } catch (migErr) {}
 
+    try {
+      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_agent_id ON leads(agent_id)");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_created_at ON leads(created_at DESC)");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_phone ON leads(phone)");
+    } catch (migErr) {}
+
     const cardCount = await client.query('SELECT COUNT(*) FROM cards');
     if (parseInt(cardCount.rows[0].count, 10) === 0) {
       await client.query(`
@@ -315,6 +321,70 @@ const db = {
   // --- Leads ---
   async getLeads() {
     const res = await pool.query('SELECT * FROM leads ORDER BY created_at DESC');
+    return res.rows.map(row => ({
+      ...row,
+      utm_params: typeof row.utm_params === 'string' ? JSON.parse(row.utm_params) : (row.utm_params || {})
+    }));
+  },
+
+  async getLeadByUrn(urn) {
+    const res = await pool.query('SELECT * FROM leads WHERE urn = $1 LIMIT 1', [urn]);
+    if (res.rows.length === 0) return null;
+    const row = res.rows[0];
+    return {
+      ...row,
+      utm_params: typeof row.utm_params === 'string' ? JSON.parse(row.utm_params) : (row.utm_params || {})
+    };
+  },
+
+  async getAgentByUsername(username) {
+    const res = await pool.query('SELECT * FROM agents WHERE username = $1 AND status = \'active\' LIMIT 1', [username]);
+    if (res.rows.length === 0) return null;
+    const row = res.rows[0];
+    return {
+      ...row,
+      locations: typeof row.locations === 'string' ? JSON.parse(row.locations) : (row.locations || [])
+    };
+  },
+
+  async getLeadsFiltered({ agentId, limit = 2000 }) {
+    let query = 'SELECT * FROM leads';
+    const params = [];
+    if (agentId) {
+      query += ' WHERE agent_id = $1';
+      params.push(agentId);
+    }
+    query += ' ORDER BY created_at DESC LIMIT $' + (params.length + 1);
+    params.push(limit);
+
+    const res = await pool.query(query, params);
+    return res.rows.map(row => ({
+      ...row,
+      utm_params: typeof row.utm_params === 'string' ? JSON.parse(row.utm_params) : (row.utm_params || {})
+    }));
+  },
+
+  async getLeadsForExport({ startDate, endDate }) {
+    let query = 'SELECT * FROM leads';
+    const params = [];
+    const clauses = [];
+    
+    if (startDate) {
+      params.push(startDate);
+      clauses.push(`created_at >= $${params.length}::timestamp`);
+    }
+    if (endDate) {
+      params.push(endDate + ' 23:59:59');
+      clauses.push(`created_at <= $${params.length}::timestamp`);
+    }
+    
+    if (clauses.length > 0) {
+      query += ' WHERE ' + clauses.join(' AND ');
+    }
+    
+    query += ' ORDER BY created_at DESC';
+    
+    const res = await pool.query(query, params);
     return res.rows.map(row => ({
       ...row,
       utm_params: typeof row.utm_params === 'string' ? JSON.parse(row.utm_params) : (row.utm_params || {})
