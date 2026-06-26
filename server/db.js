@@ -11,8 +11,8 @@ let usePg = !!rawDbUrl;
 let pool = null;
 
 if (usePg) {
-  const isAwsRds = rawDbUrl.includes('amazonaws.com');
-  const sslConfig = (process.env.DATABASE_SSL === 'true' || (isAwsRds && process.env.DATABASE_SSL !== 'false'))
+  const isLocalhost = rawDbUrl.includes('localhost') || rawDbUrl.includes('127.0.0.1');
+  const sslConfig = (process.env.DATABASE_SSL === 'true' || (!isLocalhost && process.env.DATABASE_SSL !== 'false'))
     ? { rejectUnauthorized: false }
     : false;
 
@@ -22,6 +22,9 @@ if (usePg) {
     max: 20,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 10000
+  });
+  pool.on('error', (err) => {
+    console.error('[Database] Unexpected error on idle PostgreSQL client:', err.message || err);
   });
   console.log(`[Database] Configured to connect to AWS/RDS PostgreSQL Database (SSL: ${!!sslConfig}).`);
 } else {
