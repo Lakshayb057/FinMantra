@@ -1129,7 +1129,7 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div style={{ padding: '2.5rem 5%', position: 'relative', zIndex: 1 }}>
+    <div className="admin-container">
       
       {/* Toast Notifications */}
       {message.text && (
@@ -1155,7 +1155,7 @@ export default function AdminDashboard() {
       )}
 
       {/* Sticky Premium Top Navigation Bar */}
-      <div className="glass-panel" style={{ 
+      <div className="admin-navbar glass-panel" style={{ 
         position: 'sticky', 
         top: '1rem', 
         zIndex: 1000, 
@@ -1171,7 +1171,7 @@ export default function AdminDashboard() {
         boxShadow: '0 8px 32px 0 rgba(17, 19, 43, 0.06)'
       }}>
         {/* Brand/Title */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <div className="admin-nav-brand" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <div style={{ 
             width: '32px', 
             height: '32px', 
@@ -1192,7 +1192,7 @@ export default function AdminDashboard() {
         </div>
 
         {/* Central Navigation Tabs */}
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+        <div className="admin-nav-tabs" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
           <button 
             className={`nav-link ${activeTab === 'leads' ? 'active' : ''}`} 
             onClick={() => setActiveTab('leads')}
@@ -1291,7 +1291,7 @@ export default function AdminDashboard() {
         </div>
 
         {/* Right side controls */}
-        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+        <div className="admin-nav-actions" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
           <button 
             onClick={loadAllAdminData} 
             className="btn-secondary" 
@@ -1906,7 +1906,7 @@ export default function AdminDashboard() {
 
           {/* SETTINGS TAB */}
           {activeTab === 'settings' && (
-            <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: '2rem', alignItems: 'start', minHeight: '600px' }}>
+            <div className="settings-split-grid" style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: '2rem', alignItems: 'start', minHeight: '600px' }}>
               {/* Sidebar Menu */}
               <div className="glass-panel" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-md)' }}>
                 <div style={{ padding: '0.5rem 0.75rem', marginBottom: '0.75rem' }}>
@@ -2042,7 +2042,7 @@ export default function AdminDashboard() {
                       <span>General & Legal Settings</span>
                     </h3>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
+                    <div className="settings-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
                       <div className="form-group" style={{ marginBottom: 0 }}>
                         <label className="form-label">Global Public Redirect URL Template</label>
                         <input 
@@ -2102,7 +2102,7 @@ export default function AdminDashboard() {
                       </div>
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '2rem' }}>
+                    <div className="settings-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '2rem' }}>
                       <div className="form-group" style={{ marginBottom: 0 }}>
                         <label className="form-label">Terms & Conditions URL Link</label>
                         <input 
@@ -2144,7 +2144,7 @@ export default function AdminDashboard() {
                       Select the primary active channel for routing client OTP codes, transactional referral messages, and notifications.
                     </p>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '2.5rem' }}>
+                    <div className="settings-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '2.5rem' }}>
                       <div
                         onClick={() => setSettings({ ...settings, whatsapp_gateway: 'meta' })}
                         style={{
@@ -2260,7 +2260,7 @@ export default function AdminDashboard() {
                       />
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
+                    <div className="settings-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
                       <div className="form-group" style={{ marginBottom: 0 }}>
                         <label className="form-label">Phone Number ID</label>
                         <input 
@@ -2283,7 +2283,7 @@ export default function AdminDashboard() {
                       </div>
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
+                    <div className="settings-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
                       <div className="form-group" style={{ marginBottom: 0 }}>
                         <label className="form-label">OTP Template Name</label>
                         <input 
@@ -2316,7 +2316,7 @@ export default function AdminDashboard() {
                       </div>
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
+                    <div className="settings-form-grid" style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
                       <div className="form-group" style={{ marginBottom: 0 }}>
                         <label className="form-label">WhatsApp Referral Link Type</label>
                         <select 
@@ -2605,7 +2605,7 @@ export default function AdminDashboard() {
       {/* Lead Details Modal */}
       {selectedLeadDetails && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, backdropFilter: 'blur(8px)' }}>
-          <div className="glass-panel" style={{ width: '90%', maxWidth: '650px', position: 'relative', borderTop: '4px solid var(--gold)', maxHeight: '90vh', overflowY: 'auto', padding: '2rem' }}>
+          <div className="glass-panel admin-dialog-panel" style={{ width: '90%', maxWidth: '650px', position: 'relative', borderTop: '4px solid var(--gold)', maxHeight: '90vh', overflowY: 'auto', padding: '2rem' }}>
             <button onClick={() => { setSelectedLeadDetails(null); setIsEditingLead(false); }} style={{ position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none', color: 'hsl(var(--text-primary))', cursor: 'pointer' }}>
               <X size={20} />
             </button>
@@ -2656,7 +2656,7 @@ export default function AdminDashboard() {
                 <div style={{ textAlign: 'left' }}>
                   <h4 style={{ fontSize: '1rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.5rem', marginBottom: '0.8rem', color: 'hsl(var(--primary))' }}>Marketing & Tracking Parameters</h4>
                   
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.8rem 1.5rem', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
+                  <div className="settings-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.8rem 1.5rem', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
                     <div><strong>UTM Channel:</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_channel || 'N/A'}</span></div>
                     <div><strong>UTM Medium:</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_medium || 'N/A'}</span></div>
                     <div><strong>UTM Source:</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_source || 'N/A'}</span></div>
@@ -2861,7 +2861,7 @@ export default function AdminDashboard() {
                 <div style={{ textAlign: 'left' }}>
                   <h4 style={{ fontSize: '1rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.5rem', marginBottom: '0.8rem', color: 'hsl(var(--primary))' }}>Marketing & Tracking Parameters</h4>
                   
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.8rem 1.5rem', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
+                  <div className="settings-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.8rem 1.5rem', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
                     <div className="form-group" style={{ marginBottom: 0 }}>
                       <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>UTM Channel</label>
                       <input 
@@ -3045,7 +3045,7 @@ export default function AdminDashboard() {
                   </div>
 
                   <h5 style={{ fontSize: '0.9rem', marginBottom: '0.5rem', color: 'hsl(var(--text-primary))' }}>Ad Network Click Identifiers</h5>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.8rem 1.5rem', fontSize: '0.85rem', marginBottom: '1.5rem', background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)' }}>
+                  <div className="settings-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.8rem 1.5rem', fontSize: '0.85rem', marginBottom: '1.5rem', background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)' }}>
                     <div className="form-group" style={{ marginBottom: 0 }}>
                       <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>FBCLID (Facebook)</label>
                       <input 

@@ -396,7 +396,7 @@ export default function AgentPortal() {
   }
 
   return (
-    <div style={{ padding: '3rem 8%', position: 'relative', zIndex: 1 }}>
+    <div className="agent-container">
       
       {/* Daily Location Selector Modal */}
       {showLocationModal && (
