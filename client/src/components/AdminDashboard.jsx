@@ -1165,10 +1165,10 @@ export default function AdminDashboard() {
         padding: '0.75rem 1.5rem', 
         marginBottom: '2rem',
         backdropFilter: 'blur(12px)',
-        background: 'rgba(18, 18, 18, 0.7)',
-        border: '1px solid var(--border-light)',
+        background: 'rgba(255, 255, 255, 0.85)',
+        border: '1px solid var(--line)',
         borderRadius: 'var(--radius-md)',
-        boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.2)'
+        boxShadow: '0 8px 32px 0 rgba(17, 19, 43, 0.06)'
       }}>
         {/* Brand/Title */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -1181,13 +1181,13 @@ export default function AdminDashboard() {
             alignItems: 'center',
             justifyContent: 'center',
             fontWeight: 800,
-            color: '#000',
+            color: '#fff',
             fontSize: '1rem'
           }}>
             F
           </div>
-          <span style={{ fontWeight: 800, fontSize: '1.2rem', letterSpacing: '0.5px', color: 'var(--text-light)' }}>
-            FinMantra <span style={{ color: 'var(--gold)', fontWeight: 400, fontSize: '0.9rem' }}>Admin</span>
+          <span style={{ fontWeight: 800, fontSize: '1.2rem', letterSpacing: '0.5px', color: 'var(--ink)' }}>
+            FinMantra <span style={{ color: 'var(--gold-deep)', fontWeight: 400, fontSize: '0.9rem' }}>Admin</span>
           </span>
         </div>
 
@@ -1196,35 +1196,95 @@ export default function AdminDashboard() {
           <button 
             className={`nav-link ${activeTab === 'leads' ? 'active' : ''}`} 
             onClick={() => setActiveTab('leads')}
-            style={{ padding: '0.5rem 0.85rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem', border: 'none', background: activeTab === 'leads' ? 'rgba(224, 168, 46, 0.12)' : 'transparent', color: activeTab === 'leads' ? 'var(--gold)' : 'hsl(var(--text-secondary))', cursor: 'pointer', transition: 'all 0.2s', borderRadius: 'var(--radius-sm)' }}
+            style={{ 
+              padding: '0.5rem 0.85rem', 
+              fontSize: '0.85rem', 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '0.4rem', 
+              border: activeTab === 'leads' ? '1px solid var(--line)' : '1px solid transparent', 
+              background: activeTab === 'leads' ? 'var(--paper-2)' : 'transparent', 
+              color: activeTab === 'leads' ? 'var(--ink)' : 'var(--muted)', 
+              cursor: 'pointer', 
+              transition: 'all 0.2s', 
+              borderRadius: 'var(--radius-sm)' 
+            }}
           >
             <BarChart3 size={14} /> Leads Repository
           </button>
           <button 
             className={`nav-link ${activeTab === 'cards' ? 'active' : ''}`} 
             onClick={() => setActiveTab('cards')}
-            style={{ padding: '0.5rem 0.85rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem', border: 'none', background: activeTab === 'cards' ? 'rgba(224, 168, 46, 0.12)' : 'transparent', color: activeTab === 'cards' ? 'var(--gold)' : 'hsl(var(--text-secondary))', cursor: 'pointer', transition: 'all 0.2s', borderRadius: 'var(--radius-sm)' }}
+            style={{ 
+              padding: '0.5rem 0.85rem', 
+              fontSize: '0.85rem', 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '0.4rem', 
+              border: activeTab === 'cards' ? '1px solid var(--line)' : '1px solid transparent', 
+              background: activeTab === 'cards' ? 'var(--paper-2)' : 'transparent', 
+              color: activeTab === 'cards' ? 'var(--ink)' : 'var(--muted)', 
+              cursor: 'pointer', 
+              transition: 'all 0.2s', 
+              borderRadius: 'var(--radius-sm)' 
+            }}
           >
             <CreditCard size={14} /> Cards Manager
           </button>
           <button 
             className={`nav-link ${activeTab === 'agents' ? 'active' : ''}`} 
             onClick={() => setActiveTab('agents')}
-            style={{ padding: '0.5rem 0.85rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem', border: 'none', background: activeTab === 'agents' ? 'rgba(224, 168, 46, 0.12)' : 'transparent', color: activeTab === 'agents' ? 'var(--gold)' : 'hsl(var(--text-secondary))', cursor: 'pointer', transition: 'all 0.2s', borderRadius: 'var(--radius-sm)' }}
+            style={{ 
+              padding: '0.5rem 0.85rem', 
+              fontSize: '0.85rem', 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '0.4rem', 
+              border: activeTab === 'agents' ? '1px solid var(--line)' : '1px solid transparent', 
+              background: activeTab === 'agents' ? 'var(--paper-2)' : 'transparent', 
+              color: activeTab === 'agents' ? 'var(--ink)' : 'var(--muted)', 
+              cursor: 'pointer', 
+              transition: 'all 0.2s', 
+              borderRadius: 'var(--radius-sm)' 
+            }}
           >
             <Users size={14} /> Agents Controller
           </button>
           <button 
             className={`nav-link ${activeTab === 'locations' ? 'active' : ''}`} 
             onClick={() => setActiveTab('locations')}
-            style={{ padding: '0.5rem 0.85rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem', border: 'none', background: activeTab === 'locations' ? 'rgba(224, 168, 46, 0.12)' : 'transparent', color: activeTab === 'locations' ? 'var(--gold)' : 'hsl(var(--text-secondary))', cursor: 'pointer', transition: 'all 0.2s', borderRadius: 'var(--radius-sm)' }}
+            style={{ 
+              padding: '0.5rem 0.85rem', 
+              fontSize: '0.85rem', 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '0.4rem', 
+              border: activeTab === 'locations' ? '1px solid var(--line)' : '1px solid transparent', 
+              background: activeTab === 'locations' ? 'var(--paper-2)' : 'transparent', 
+              color: activeTab === 'locations' ? 'var(--ink)' : 'var(--muted)', 
+              cursor: 'pointer', 
+              transition: 'all 0.2s', 
+              borderRadius: 'var(--radius-sm)' 
+            }}
           >
             <MapPin size={14} /> Kiosks & Cities
           </button>
           <button 
             className={`nav-link ${activeTab === 'settings' ? 'active' : ''}`} 
             onClick={() => setActiveTab('settings')}
-            style={{ padding: '0.5rem 0.85rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem', border: 'none', background: activeTab === 'settings' ? 'rgba(224, 168, 46, 0.12)' : 'transparent', color: activeTab === 'settings' ? 'var(--gold)' : 'hsl(var(--text-secondary))', cursor: 'pointer', transition: 'all 0.2s', borderRadius: 'var(--radius-sm)' }}
+            style={{ 
+              padding: '0.5rem 0.85rem', 
+              fontSize: '0.85rem', 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '0.4rem', 
+              border: activeTab === 'settings' ? '1px solid var(--line)' : '1px solid transparent', 
+              background: activeTab === 'settings' ? 'var(--paper-2)' : 'transparent', 
+              color: activeTab === 'settings' ? 'var(--ink)' : 'var(--muted)', 
+              cursor: 'pointer', 
+              transition: 'all 0.2s', 
+              borderRadius: 'var(--radius-sm)' 
+            }}
           >
             <SettingsIcon size={14} /> Settings & API
           </button>
