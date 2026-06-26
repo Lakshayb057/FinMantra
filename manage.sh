@@ -46,6 +46,18 @@ case "$COMMAND" in
         sudo cp nginx.conf /etc/nginx/sites-available/finmantra
         sudo nginx -t && sudo systemctl restart nginx
         
+        echo ">>> Ensuring Meta CAPI credentials in .env..."
+        ENV_FILE="server/.env"
+        if ! grep -q "META_PIXEL_ID" "$ENV_FILE" 2>/dev/null; then
+            echo "" >> "$ENV_FILE"
+            echo "# Meta Conversions API (CAPI) Configuration" >> "$ENV_FILE"
+            echo "META_PIXEL_ID=1015546961540665" >> "$ENV_FILE"
+            echo "META_ACCESS_TOKEN=EAAdY08snSiUBR0ZBDzFtRBYZCTIQZC9n46lHVRkRZCzkKpS2aBRZBRNo3t2nlzrud0wyZB2AXdCRTx7RAtyzUxJ0xSPW4LhneTZCd4V2p6c3jEH6HrM8ILVaZBGWnNWVprE8n7AseOEZBLSusKQMWwg5NdZByEoA9EqZCTXkp2uz4Ag2n6D4RVevlFaUZAEHOZAmfyVyRLwZDZD" >> "$ENV_FILE"
+            echo "    Meta CAPI credentials added to .env."
+        else
+            echo "    Meta CAPI credentials already present in .env — skipped."
+        fi
+
         echo ">>> Restarting PM2 Backend..."
         pm2 restart finmantra-backend
         
