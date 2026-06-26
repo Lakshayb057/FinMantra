@@ -313,9 +313,23 @@ async function initPgSchema() {
 }
 
 const db = {
-  // Initialize Database Schema (PG only)
+  // Initialize Database Schema (PG only) with connection retry safety
   async init() {
-    await initPgSchema();
+    let retries = 5;
+    while (retries > 0) {
+      try {
+        await initPgSchema();
+        return;
+      } catch (err) {
+        retries--;
+        console.error(`[Database] Connection/initialization failed (retries left: ${retries}):`, err.message);
+        if (retries === 0) {
+          throw new Error('All database connection retry attempts exhausted. Continuing server execution with offline database status.');
+        }
+        // Wait 3 seconds before retrying
+        await new Promise(resolve => setTimeout(resolve, 3000));
+      }
+    }
   },
 
   // --- Leads ---

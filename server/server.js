@@ -1337,9 +1337,9 @@ server.listen(PORT, async () => {
     }
   } catch (err) {
     console.error('====================================================================');
-    console.error('[Database] CRITICAL: Server startup failed due to database connectivity/initialization error!');
-    console.error('Error stack:', err.stack || err.message || err);
+    console.error('[Database] WARNING: Server startup failed to initialize database connectivity.');
+    console.error('Error message:', err.message);
+    console.error('[Startup] Server process is kept alive to prevent 502 Bad Gateway errors.');
     console.error('====================================================================');
-    process.exit(1);
   }
 });
