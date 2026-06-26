@@ -16,6 +16,7 @@ export default function AdminDashboard() {
   
   // Navigation Tabs: 'leads' | 'cards' | 'agents' | 'locations' | 'settings'
   const [activeTab, setActiveTab] = useState('leads');
+  const [activeSettingsSubTab, setActiveSettingsSubTab] = useState('general');
 
   // Master Data States
   const [leads, setLeads] = useState([]);
@@ -1778,495 +1779,695 @@ export default function AdminDashboard() {
 
           {/* SETTINGS TAB */}
           {activeTab === 'settings' && (
-            <div className="glass-panel" style={{ maxWidth: '720px', margin: '0 auto' }}>
-              <h3 style={{ fontSize: '1.25rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.75rem' }}>
-                System Configurations
-              </h3>
-
-              <form onSubmit={handleUpdateSettings}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '1rem', marginBottom: '1.25rem' }}>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label">Global Public Redirect URL Template</label>
-                    <input 
-                      type="url" 
-                      className="form-input" 
-                      placeholder="https://bank.com/apply?name={name}&phone={phone}&urn={urn}"
-                      value={settings.public_redirect_url || ''}
-                      onChange={(e) => setSettings({ ...settings, public_redirect_url: e.target.value })}
-                      required 
-                    />
-                    <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', marginTop: '0.25rem' }}>
-                      Allowed wildcards: <code>{`{name}`}</code>, <code>{`{phone}`}</code>, <code>{`{urn}`}</code>. Redirects here after OTP.
-                    </div>
-                  </div>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label">Public Base Site URL (For WhatsApp Links)</label>
-                    <input 
-                      type="url" 
-                      className="form-input" 
-                      placeholder="http://13.127.33.132 or https://finmantra.org"
-                      value={settings.public_site_url || ''}
-                      onChange={(e) => setSettings({ ...settings, public_site_url: e.target.value })}
-                    />
-                    <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', marginTop: '0.25rem' }}>
-                      Domain/IP used for WhatsApp. Falls back to request host if blank.
-                    </div>
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">WhatsApp OTP Template Text</label>
-                  <textarea 
-                    className="form-input" 
-                    rows="3" 
-                    value={settings.otp_message_template || ''}
-                    onChange={(e) => setSettings({ ...settings, otp_message_template: e.target.value })}
-                    required 
-                  />
-                  <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', marginTop: '0.25rem' }}>
-                    Must include <code>{`{otp}`}</code>. This is sent to customers on OTP request trigger.
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Aadhaar Legal Consent Text</label>
-                  <textarea 
-                    className="form-input" 
-                    rows="3" 
-                    value={settings.consent_text || ''}
-                    onChange={(e) => setSettings({ ...settings, consent_text: e.target.value })}
-                    required 
-                  />
-                </div>
-
-                <div style={{ marginTop: '2rem', padding: '1.5rem', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-md)', background: 'rgba(255, 255, 255, 0.02)' }}>
-                  <h4 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '0.5rem', color: 'var(--gold-deep)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <MessageSquare size={20} />
-                    <span>WhatsApp Gateway Selector</span>
+            <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: '2rem', alignItems: 'start', minHeight: '600px' }}>
+              {/* Sidebar Menu */}
+              <div className="glass-panel" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-md)' }}>
+                <div style={{ padding: '0.5rem 0.75rem', marginBottom: '0.75rem' }}>
+                  <h4 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--gold-deep)', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <SettingsIcon size={18} />
+                    <span>Settings & API</span>
                   </h4>
-                  <p style={{ fontSize: '0.8rem', color: 'hsl(var(--text-muted))', marginBottom: '1.25rem' }}>
-                    Select the active gateway channel for client OTP codes and transactional links.
-                  </p>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                    <button
-                      type="button"
-                      onClick={() => setSettings({ ...settings, whatsapp_gateway: 'meta' })}
-                      className="btn-secondary"
-                      style={{
-                        padding: '1.25rem 1rem',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '0.5rem',
-                        height: 'auto',
-                        borderWidth: '2px',
-                        borderColor: (settings.whatsapp_gateway === 'meta') ? 'var(--gold-deep)' : 'var(--border-light)',
-                        background: (settings.whatsapp_gateway === 'meta') ? 'rgba(224, 168, 46, 0.12)' : 'rgba(255, 255, 255, 0.02)',
-                        color: (settings.whatsapp_gateway === 'meta') ? 'var(--gold-deep)' : 'hsl(var(--text-secondary))',
-                        borderRadius: 'var(--radius-md)',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease'
-                      }}
-                    >
-                      <Layers size={22} style={{ color: (settings.whatsapp_gateway === 'meta') ? 'var(--gold-deep)' : 'inherit' }} />
-                      <span style={{ fontSize: '0.95rem', fontWeight: 700 }}>Meta Cloud API (Official)</span>
-                      <span style={{ fontSize: '0.72rem', fontWeight: 400, opacity: 0.75, textAlign: 'center', marginTop: '0.2rem' }}>
-                        High-throughput official templates. Recommends Meta verified business profile.
-                      </span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setSettings({ ...settings, whatsapp_gateway: 'baileys' })}
-                      className="btn-secondary"
-                      style={{
-                        padding: '1.25rem 1rem',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '0.5rem',
-                        height: 'auto',
-                        borderWidth: '2px',
-                        borderColor: (settings.whatsapp_gateway === 'baileys' || !settings.whatsapp_gateway) ? 'var(--gold-deep)' : 'var(--border-light)',
-                        background: (settings.whatsapp_gateway === 'baileys' || !settings.whatsapp_gateway) ? 'rgba(224, 168, 46, 0.12)' : 'rgba(255, 255, 255, 0.02)',
-                        color: (settings.whatsapp_gateway === 'baileys' || !settings.whatsapp_gateway) ? 'var(--gold-deep)' : 'hsl(var(--text-secondary))',
-                        borderRadius: 'var(--radius-md)',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease'
-                      }}
-                    >
-                      <Smartphone size={22} style={{ color: (settings.whatsapp_gateway === 'baileys' || !settings.whatsapp_gateway) ? 'var(--gold-deep)' : 'inherit' }} />
-                      <span style={{ fontSize: '0.95rem', fontWeight: 700 }}>Baileys Linked Device</span>
-                      <span style={{ fontSize: '0.72rem', fontWeight: 400, opacity: 0.75, textAlign: 'center', marginTop: '0.2rem' }}>
-                        Linked phone session (QR Scan). Uses standard text fallback.
-                      </span>
-                    </button>
-                  </div>
+                  <span style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>Configure your system</span>
                 </div>
 
-                <div style={{ marginTop: '2rem', marginBottom: '2rem', padding: '1.5rem', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-md)', background: 'rgba(232, 168, 56, 0.03)' }}>
-                  <h4 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '1rem', color: 'var(--gold-deep)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <span>Meta WhatsApp Cloud API Configuration</span>
-                  </h4>
-                  <p style={{ fontSize: '0.8rem', color: 'hsl(var(--text-muted))', marginBottom: '1.25rem' }}>
-                    Configure your live Meta credentials here. If left blank, the system will fall back to using your server's environment variables or Simulation Mode.
-                  </p>
+                <button
+                  type="button"
+                  onClick={() => setActiveSettingsSubTab('general')}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.75rem',
+                    padding: '0.75rem 1rem',
+                    borderRadius: 'var(--radius-md)',
+                    border: 'none',
+                    background: activeSettingsSubTab === 'general' ? 'rgba(224, 168, 46, 0.15)' : 'transparent',
+                    color: activeSettingsSubTab === 'general' ? 'var(--gold)' : 'hsl(var(--text-secondary))',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    textAlign: 'left',
+                    fontWeight: activeSettingsSubTab === 'general' ? 600 : 400
+                  }}
+                  className="settings-menu-item"
+                >
+                  <SettingsIcon size={16} />
+                  <span>General & Legal</span>
+                </button>
 
-                  <div className="form-group">
-                    <label className="form-label">System User Access Token (WA_API_KEY)</label>
-                    <input 
-                      type="text" 
-                      className="form-input" 
-                      placeholder="EAAPJ..."
-                      value={settings.wa_api_key || ''}
-                      onChange={(e) => setSettings({ ...settings, wa_api_key: e.target.value })}
-                    />
-                  </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveSettingsSubTab('whatsapp_gateway')}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.75rem',
+                    padding: '0.75rem 1rem',
+                    borderRadius: 'var(--radius-md)',
+                    border: 'none',
+                    background: activeSettingsSubTab === 'whatsapp_gateway' ? 'rgba(224, 168, 46, 0.15)' : 'transparent',
+                    color: activeSettingsSubTab === 'whatsapp_gateway' ? 'var(--gold)' : 'hsl(var(--text-secondary))',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    textAlign: 'left',
+                    fontWeight: activeSettingsSubTab === 'whatsapp_gateway' ? 600 : 400
+                  }}
+                  className="settings-menu-item"
+                >
+                  <Layers size={16} />
+                  <span>WhatsApp Gateway</span>
+                </button>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label">Phone Number ID</label>
-                      <input 
-                        type="text" 
-                        className="form-input" 
-                        placeholder="e.g. 102938475610293"
-                        value={settings.wa_phone_number_id || ''}
-                        onChange={(e) => setSettings({ ...settings, wa_phone_number_id: e.target.value })}
-                      />
-                    </div>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label">Business Account ID (Optional)</label>
-                      <input 
-                        type="text" 
-                        className="form-input" 
-                        placeholder="e.g. 928374650192837"
-                        value={settings.wa_business_account_id || ''}
-                        onChange={(e) => setSettings({ ...settings, wa_business_account_id: e.target.value })}
-                      />
-                    </div>
-                  </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveSettingsSubTab('meta_api')}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.75rem',
+                    padding: '0.75rem 1rem',
+                    borderRadius: 'var(--radius-md)',
+                    border: 'none',
+                    background: activeSettingsSubTab === 'meta_api' ? 'rgba(224, 168, 46, 0.15)' : 'transparent',
+                    color: activeSettingsSubTab === 'meta_api' ? 'var(--gold)' : 'hsl(var(--text-secondary))',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    textAlign: 'left',
+                    fontWeight: activeSettingsSubTab === 'meta_api' ? 600 : 400
+                  }}
+                  className="settings-menu-item"
+                >
+                  <MessageSquare size={16} />
+                  <span>Meta Cloud API</span>
+                </button>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem', marginTop: '1rem' }}>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label">OTP Template Name</label>
-                      <input 
-                        type="text" 
-                        className="form-input" 
-                        placeholder="auth_otp"
-                        value={settings.wa_otp_template_name || ''}
-                        onChange={(e) => setSettings({ ...settings, wa_otp_template_name: e.target.value })}
-                      />
-                    </div>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label">Referral Template Name</label>
-                      <input 
-                        type="text" 
-                        className="form-input" 
-                        placeholder="transactional_link"
-                        value={settings.wa_referral_template_name || ''}
-                        onChange={(e) => setSettings({ ...settings, wa_referral_template_name: e.target.value })}
-                      />
-                    </div>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label">Template Language</label>
-                      <input 
-                        type="text" 
-                        className="form-input" 
-                        placeholder="en (or en_US)"
-                        value={settings.wa_template_language || ''}
-                        onChange={(e) => setSettings({ ...settings, wa_template_language: e.target.value })}
-                      />
-                    </div>
-                  </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveSettingsSubTab('baileys')}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.75rem',
+                    padding: '0.75rem 1rem',
+                    borderRadius: 'var(--radius-md)',
+                    border: 'none',
+                    background: activeSettingsSubTab === 'baileys' ? 'rgba(224, 168, 46, 0.15)' : 'transparent',
+                    color: activeSettingsSubTab === 'baileys' ? 'var(--gold)' : 'hsl(var(--text-secondary))',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    textAlign: 'left',
+                    fontWeight: activeSettingsSubTab === 'baileys' ? 600 : 400
+                  }}
+                  className="settings-menu-item"
+                >
+                  <Smartphone size={16} />
+                  <span>Baileys Device</span>
+                </button>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '1rem', marginTop: '1.25rem' }}>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label">WhatsApp Referral Link Type</label>
-                      <select 
+                <button
+                  type="button"
+                  onClick={() => setActiveSettingsSubTab('csv_export')}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.75rem',
+                    padding: '0.75rem 1rem',
+                    borderRadius: 'var(--radius-md)',
+                    border: 'none',
+                    background: activeSettingsSubTab === 'csv_export' ? 'rgba(224, 168, 46, 0.15)' : 'transparent',
+                    color: activeSettingsSubTab === 'csv_export' ? 'var(--gold)' : 'hsl(var(--text-secondary))',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    textAlign: 'left',
+                    fontWeight: activeSettingsSubTab === 'csv_export' ? 600 : 400
+                  }}
+                  className="settings-menu-item"
+                >
+                  <Download size={16} />
+                  <span>CSV Export Mapper</span>
+                </button>
+              </div>
+
+              {/* Settings Sub-Tab Contents */}
+              <div className="glass-panel" style={{ flex: 1, padding: '2rem', minWidth: 0 }}>
+                {activeSettingsSubTab === 'general' && (
+                  <form onSubmit={handleUpdateSettings}>
+                    <h3 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.75rem', color: 'var(--gold-deep)' }}>
+                      <SettingsIcon size={20} />
+                      <span>General & Legal Settings</span>
+                    </h3>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">Global Public Redirect URL Template</label>
+                        <input 
+                          type="url" 
+                          className="form-input" 
+                          placeholder="https://bank.com/apply?name={name}&phone={phone}&urn={urn}"
+                          value={settings.public_redirect_url || ''}
+                          onChange={(e) => setSettings({ ...settings, public_redirect_url: e.target.value })}
+                          required 
+                        />
+                        <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', marginTop: '0.5rem', lineHeight: '1.3' }}>
+                          Allowed wildcards: <code>{`{name}`}</code>, <code>{`{phone}`}</code>, <code>{`{urn}`}</code>. Redirects here after OTP verification.
+                        </div>
+                      </div>
+                      
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">Public Base Site URL (For WhatsApp Links)</label>
+                        <input 
+                          type="url" 
+                          className="form-input" 
+                          placeholder="https://finmantra.org"
+                          value={settings.public_site_url || ''}
+                          onChange={(e) => setSettings({ ...settings, public_site_url: e.target.value })}
+                        />
+                        <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', marginTop: '0.5rem', lineHeight: '1.3' }}>
+                          Domain/IP used for generated WhatsApp redirection links. Falls back to current host if left blank.
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+                      <label className="form-label">WhatsApp OTP Template Text</label>
+                      <textarea 
                         className="form-input" 
-                        value={settings.wa_referral_link_type || 'body'}
-                        onChange={(e) => setSettings({ ...settings, wa_referral_link_type: e.target.value })}
+                        rows="3" 
+                        value={settings.otp_message_template || ''}
+                        onChange={(e) => setSettings({ ...settings, otp_message_template: e.target.value })}
+                        required 
+                        style={{ fontFamily: 'var(--font-mono)', fontSize: '0.85rem' }}
+                      />
+                      <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', marginTop: '0.5rem' }}>
+                        Must include <code>{`{otp}`}</code>. Sent to customers on OTP verification requests.
+                      </div>
+                    </div>
+
+                    <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+                      <label className="form-label">Aadhaar Legal Consent Text</label>
+                      <textarea 
+                        className="form-input" 
+                        rows="3" 
+                        value={settings.consent_text || ''}
+                        onChange={(e) => setSettings({ ...settings, consent_text: e.target.value })}
+                        required 
+                      />
+                      <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', marginTop: '0.5rem' }}>
+                        The official disclaimer shown to clients when confirming their Aadhaar consent.
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '2rem' }}>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">Terms & Conditions URL Link</label>
+                        <input 
+                          type="url" 
+                          className="form-input" 
+                          value={settings.terms_link || ''}
+                          onChange={(e) => setSettings({ ...settings, terms_link: e.target.value })}
+                          required 
+                        />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">Privacy Policy URL Link</label>
+                        <input 
+                          type="url" 
+                          className="form-input" 
+                          value={settings.privacy_link || ''}
+                          onChange={(e) => setSettings({ ...settings, privacy_link: e.target.value })}
+                          required 
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                      <button type="submit" className="btn-primary" style={{ padding: '0.75rem 2rem' }} disabled={isSubmitting}>
+                        {isSubmitting ? 'Saving...' : 'Save General & Legal Settings'}
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {activeSettingsSubTab === 'whatsapp_gateway' && (
+                  <form onSubmit={handleUpdateSettings}>
+                    <h3 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.75rem', color: 'var(--gold-deep)' }}>
+                      <Layers size={20} />
+                      <span>WhatsApp Gateway Selector</span>
+                    </h3>
+
+                    <p style={{ fontSize: '0.9rem', color: 'hsl(var(--text-secondary))', marginBottom: '2rem', lineHeight: '1.5' }}>
+                      Select the primary active channel for routing client OTP codes, transactional referral messages, and notifications.
+                    </p>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '2.5rem' }}>
+                      <div
+                        onClick={() => setSettings({ ...settings, whatsapp_gateway: 'meta' })}
+                        style={{
+                          padding: '2rem 1.5rem',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '1rem',
+                          height: 'auto',
+                          borderWidth: '2px',
+                          borderStyle: 'solid',
+                          borderColor: (settings.whatsapp_gateway === 'meta') ? 'var(--gold-deep)' : 'var(--border-light)',
+                          background: (settings.whatsapp_gateway === 'meta') ? 'rgba(224, 168, 46, 0.08)' : 'rgba(255, 255, 255, 0.01)',
+                          borderRadius: 'var(--radius-md)',
+                          cursor: 'pointer',
+                          transition: 'all 0.3s ease',
+                          textAlign: 'center',
+                          boxShadow: (settings.whatsapp_gateway === 'meta') ? '0 8px 32px 0 rgba(224, 168, 46, 0.1)' : 'none'
+                        }}
+                        className="gateway-select-card"
                       >
-                        <option value="body">Text Link (Send full URL in Message Body)</option>
-                        <option value="button">Button Link (Send path suffix to Dynamic URL Button)</option>
-                      </select>
+                        <div style={{
+                          width: '50px',
+                          height: '50px',
+                          borderRadius: '50%',
+                          background: (settings.whatsapp_gateway === 'meta') ? 'rgba(224, 168, 46, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: (settings.whatsapp_gateway === 'meta') ? 'var(--gold)' : 'hsl(var(--text-muted))'
+                        }}>
+                          <Layers size={26} />
+                        </div>
+                        <div>
+                          <span style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-light)', display: 'block', marginBottom: '0.25rem' }}>Meta Cloud API (Official)</span>
+                          <span style={{ fontSize: '0.78rem', color: 'hsl(var(--text-muted))', lineHeight: '1.4', display: 'block' }}>
+                            Uses official pre-approved Meta message templates. Highly stable, scalable, and recommended for high-volume production delivery.
+                          </span>
+                        </div>
+                      </div>
+
+                      <div
+                        onClick={() => setSettings({ ...settings, whatsapp_gateway: 'baileys' })}
+                        style={{
+                          padding: '2rem 1.5rem',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '1rem',
+                          height: 'auto',
+                          borderWidth: '2px',
+                          borderStyle: 'solid',
+                          borderColor: (settings.whatsapp_gateway === 'baileys' || !settings.whatsapp_gateway) ? 'var(--gold-deep)' : 'var(--border-light)',
+                          background: (settings.whatsapp_gateway === 'baileys' || !settings.whatsapp_gateway) ? 'rgba(224, 168, 46, 0.08)' : 'rgba(255, 255, 255, 0.01)',
+                          borderRadius: 'var(--radius-md)',
+                          cursor: 'pointer',
+                          transition: 'all 0.3s ease',
+                          textAlign: 'center',
+                          boxShadow: (settings.whatsapp_gateway === 'baileys' || !settings.whatsapp_gateway) ? '0 8px 32px 0 rgba(224, 168, 46, 0.1)' : 'none'
+                        }}
+                        className="gateway-select-card"
+                      >
+                        <div style={{
+                          width: '50px',
+                          height: '50px',
+                          borderRadius: '50%',
+                          background: (settings.whatsapp_gateway === 'baileys' || !settings.whatsapp_gateway) ? 'rgba(224, 168, 46, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: (settings.whatsapp_gateway === 'baileys' || !settings.whatsapp_gateway) ? 'var(--gold)' : 'hsl(var(--text-muted))'
+                        }}>
+                          <Smartphone size={26} />
+                        </div>
+                        <div>
+                          <span style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-light)', display: 'block', marginBottom: '0.25rem' }}>Baileys Linked Device</span>
+                          <span style={{ fontSize: '0.78rem', color: 'hsl(var(--text-muted))', lineHeight: '1.4', display: 'block' }}>
+                            Routes messages through an active WhatsApp Web session linked to your phone. Zero setup fees or template approvals required.
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label">Meta API Version</label>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                      <button type="submit" className="btn-primary" style={{ padding: '0.75rem 2rem' }} disabled={isSubmitting}>
+                        {isSubmitting ? 'Saving Gateway Selector...' : 'Save Gateway Selection'}
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {activeSettingsSubTab === 'meta_api' && (
+                  <form onSubmit={handleUpdateSettings}>
+                    <h3 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.75rem', color: 'var(--gold-deep)' }}>
+                      <MessageSquare size={20} />
+                      <span>Meta WhatsApp Cloud API Configuration</span>
+                    </h3>
+                    <p style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', marginBottom: '1.5rem', lineHeight: '1.4' }}>
+                      Input your official Meta credentials to authorize access. If left empty, system runs on local configuration or mock simulation mode.
+                    </p>
+
+                    <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+                      <label className="form-label">System User Access Token (WA_API_KEY)</label>
                       <input 
                         type="text" 
                         className="form-input" 
-                        placeholder="e.g. v20.0"
-                        value={settings.wa_api_version || ''}
-                        onChange={(e) => setSettings({ ...settings, wa_api_version: e.target.value })}
+                        placeholder="EAAPJ..."
+                        value={settings.wa_api_key || ''}
+                        onChange={(e) => setSettings({ ...settings, wa_api_key: e.target.value })}
+                        style={{ fontFamily: 'var(--font-mono)', fontSize: '0.85rem' }}
                       />
                     </div>
-                  </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1rem', marginTop: '1.25rem' }}>
-                    <div className="form-group" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                      <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">Phone Number ID</label>
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          placeholder="e.g. 102938475610293"
+                          value={settings.wa_phone_number_id || ''}
+                          onChange={(e) => setSettings({ ...settings, wa_phone_number_id: e.target.value })}
+                        />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">Business Account ID (Optional)</label>
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          placeholder="e.g. 928374650192837"
+                          value={settings.wa_business_account_id || ''}
+                          onChange={(e) => setSettings({ ...settings, wa_business_account_id: e.target.value })}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">OTP Template Name</label>
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          placeholder="auth_otp"
+                          value={settings.wa_otp_template_name || ''}
+                          onChange={(e) => setSettings({ ...settings, wa_otp_template_name: e.target.value })}
+                        />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">Referral Template Name</label>
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          placeholder="transactional_link"
+                          value={settings.wa_referral_template_name || ''}
+                          onChange={(e) => setSettings({ ...settings, wa_referral_template_name: e.target.value })}
+                        />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">Template Language</label>
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          placeholder="en"
+                          value={settings.wa_template_language || ''}
+                          onChange={(e) => setSettings({ ...settings, wa_template_language: e.target.value })}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">WhatsApp Referral Link Type</label>
+                        <select 
+                          className="form-input" 
+                          value={settings.wa_referral_link_type || 'body'}
+                          onChange={(e) => setSettings({ ...settings, wa_referral_link_type: e.target.value })}
+                          style={{ height: 'auto', padding: '0.6rem 0.8rem' }}
+                        >
+                          <option value="body">Text Link (Send URL in Message Body)</option>
+                          <option value="button">Button Link (Dynamic Link Button)</option>
+                        </select>
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">Meta API Version</label>
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          placeholder="e.g. v20.0"
+                          value={settings.wa_api_version || ''}
+                          onChange={(e) => setSettings({ ...settings, wa_api_version: e.target.value })}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="form-group" style={{ marginBottom: '2rem' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}>
                         <input 
                           type="checkbox" 
                           checked={settings.wa_otp_is_auth_template === 'true' || settings.wa_otp_is_auth_template === true}
                           onChange={(e) => setSettings({ ...settings, wa_otp_is_auth_template: e.target.checked })}
-                          style={{ width: '1.2rem', height: '1.2rem', cursor: 'pointer' }}
+                          style={{ width: '1.2rem', height: '1.2rem', cursor: 'pointer', accentColor: 'var(--gold)' }}
                         />
-                        <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-light)' }}>OTP uses Authentication Template (with Copy Code Button)</span>
+                        <span style={{ fontSize: '0.9rem', fontWeight: 500, color: 'var(--text-light)' }}>
+                          OTP uses Authentication Template (with Copy Code Button format)
+                        </span>
                       </label>
                     </div>
-                  </div>
-                </div>
 
-                <div style={{ marginTop: '2rem', marginBottom: '2rem', padding: '1.5rem', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-md)', background: 'rgba(56, 189, 248, 0.02)' }}>
-                  <h4 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '0.5rem', color: 'var(--gold-deep)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <Smartphone size={20} />
-                    <span>WhatsApp Linked Device (QR Code Fallback)</span>
-                  </h4>
-                  <p style={{ fontSize: '0.8rem', color: 'hsl(var(--text-muted))', marginBottom: '1.25rem' }}>
-                    Link your company's actual WhatsApp account by scanning the QR code using Linked Devices in WhatsApp. If Meta Cloud API credentials are not set, all OTPs and messages will route through this session.
-                  </p>
-
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.5rem', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(0, 0, 0, 0.15)', padding: '1.25rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                      <div style={{
-                        width: '45px',
-                        height: '45px',
-                        borderRadius: '50%',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        background: settings.whatsapp_gateway === 'meta' ? 'rgba(239, 68, 68, 0.1)' : baileysStatus.status === 'CONNECTED' ? 'rgba(34, 197, 94, 0.15)' : baileysStatus.status === 'QR_READY' ? 'rgba(234, 179, 8, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                        color: settings.whatsapp_gateway === 'meta' ? '#94a3b8' : baileysStatus.status === 'CONNECTED' ? '#22c55e' : baileysStatus.status === 'QR_READY' ? '#eab308' : '#ef4444'
-                      }}>
-                        {settings.whatsapp_gateway === 'meta' ? <WifiOff size={22} /> : baileysStatus.status === 'CONNECTED' ? <Wifi size={22} /> : <WifiOff size={22} />}
-                      </div>
-                      <div>
-                        <div style={{ fontWeight: 600, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          Status: 
-                          <span style={{ 
-                            color: settings.whatsapp_gateway === 'meta' ? 'hsl(var(--text-muted))' : baileysStatus.status === 'CONNECTED' ? '#22c55e' : baileysStatus.status === 'QR_READY' ? '#eab308' : '#ef4444',
-                            fontWeight: 700 
-                          }}>
-                            {settings.whatsapp_gateway === 'meta' ? 'STOPPED / DEACTIVATED' : baileysStatus.status === 'CONNECTED' ? 'CONNECTED' : baileysStatus.status === 'QR_READY' ? 'SCAN QR CODE' : baileysStatus.status === 'CONNECTING' ? 'INITIALIZING...' : 'DISCONNECTED'}
-                          </span>
-                        </div>
-                        <div style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', marginTop: '0.2rem' }}>
-                          {settings.whatsapp_gateway === 'meta'
-                            ? 'Switch gateway to "Baileys Linked Device" to start session and scan QR code.'
-                            : baileysStatus.status === 'CONNECTED' 
-                            ? `Active Session Phone: +${baileysStatus.phone}` 
-                            : baileysStatus.status === 'QR_READY' 
-                            ? 'Open WhatsApp on your phone > Settings > Linked Devices > Link a Device.' 
-                            : 'Initialize WhatsApp Web session to connect.'
-                          }
-                        </div>
-                      </div>
-                    </div>
-                    {settings.whatsapp_gateway !== 'meta' && baileysStatus.status === 'CONNECTED' && (
-                      <button 
-                        type="button" 
-                        onClick={handleDisconnectBaileys} 
-                        className="btn-secondary" 
-                        style={{ padding: '0.6rem 1.25rem', fontSize: '0.85rem', background: 'rgba(209, 67, 67, 0.1)', color: 'var(--err)', borderColor: 'rgba(209, 67, 67, 0.2)' }}
-                        disabled={loadingBaileys}
-                      >
-                        {loadingBaileys ? 'Disconnecting...' : 'Disconnect Account'}
+                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                      <button type="submit" className="btn-primary" style={{ padding: '0.75rem 2rem' }} disabled={isSubmitting}>
+                        {isSubmitting ? 'Saving API Credentials...' : 'Save Meta Credentials'}
                       </button>
+                    </div>
+                  </form>
+                )}
+
+                {activeSettingsSubTab === 'baileys' && (
+                  <div>
+                    <h3 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.75rem', color: 'var(--gold-deep)' }}>
+                      <Smartphone size={20} />
+                      <span>WhatsApp Linked Device (Baileys Session)</span>
+                    </h3>
+                    <p style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', marginBottom: '1.5rem', lineHeight: '1.4' }}>
+                      Scan the QR code below using your phone's WhatsApp application (Linked Devices) to authorize this portal to send notifications using your active number.
+                    </p>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', background: 'rgba(0, 0, 0, 0.2)', padding: '1.5rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)', marginBottom: '1.5rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
+                        <div style={{
+                          width: '50px',
+                          height: '50px',
+                          borderRadius: '50%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          background: settings.whatsapp_gateway === 'meta' ? 'rgba(255, 255, 255, 0.05)' : baileysStatus.status === 'CONNECTED' ? 'rgba(34, 197, 94, 0.15)' : baileysStatus.status === 'QR_READY' ? 'rgba(234, 179, 8, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                          color: settings.whatsapp_gateway === 'meta' ? 'hsl(var(--text-muted))' : baileysStatus.status === 'CONNECTED' ? '#22c55e' : baileysStatus.status === 'QR_READY' ? '#eab308' : '#ef4444'
+                        }}>
+                          {settings.whatsapp_gateway === 'meta' ? <WifiOff size={24} /> : baileysStatus.status === 'CONNECTED' ? <Wifi size={24} /> : <WifiOff size={24} />}
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 600, fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span>Connection Status:</span>
+                            <span style={{ 
+                              color: settings.whatsapp_gateway === 'meta' ? 'hsl(var(--text-muted))' : baileysStatus.status === 'CONNECTED' ? '#22c55e' : baileysStatus.status === 'QR_READY' ? '#eab308' : '#ef4444',
+                              fontWeight: 700 
+                            }}>
+                              {settings.whatsapp_gateway === 'meta' ? 'INACTIVE (GATEWAY SET TO META)' : baileysStatus.status === 'CONNECTED' ? 'CONNECTED' : baileysStatus.status === 'QR_READY' ? 'SCAN QR CODE' : baileysStatus.status === 'CONNECTING' ? 'INITIALIZING...' : 'DISCONNECTED'}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '0.85rem', color: 'hsl(var(--text-secondary))', marginTop: '0.25rem' }}>
+                            {settings.whatsapp_gateway === 'meta'
+                              ? 'Switch your active gateway to "Baileys Linked Device" to scan and link your phone session.'
+                              : baileysStatus.status === 'CONNECTED' 
+                              ? `Active Session Number: +${baileysStatus.phone}` 
+                              : baileysStatus.status === 'QR_READY' 
+                              ? 'Open WhatsApp on your mobile phone > Settings > Linked Devices > Link a Device.' 
+                              : 'Please wait, checking or starting the browser web session...'
+                            }
+                          </div>
+                        </div>
+                      </div>
+
+                      {settings.whatsapp_gateway !== 'meta' && baileysStatus.status === 'CONNECTED' && (
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid var(--border-light)', paddingTop: '1rem' }}>
+                          <button 
+                            type="button" 
+                            onClick={handleDisconnectBaileys} 
+                            className="btn-secondary" 
+                            style={{ padding: '0.6rem 1.5rem', fontSize: '0.85rem', background: 'rgba(239, 68, 68, 0.1)', color: '#f87171', borderColor: 'rgba(239, 68, 68, 0.2)', cursor: 'pointer' }}
+                            disabled={loadingBaileys}
+                          >
+                            {loadingBaileys ? 'Disconnecting...' : 'Disconnect WhatsApp Account'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {settings.whatsapp_gateway !== 'meta' && baileysStatus.status === 'QR_READY' && baileysStatus.qrCodeDataUrl && (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '2rem', padding: '1.5rem', background: '#fff', borderRadius: 'var(--radius-md)', maxWidth: '280px', margin: '2rem auto 0 auto', border: '2px solid var(--gold-deep)', boxShadow: '0 8px 32px 0 rgba(0,0,0,0.5)' }}>
+                        <img 
+                          src={baileysStatus.qrCodeDataUrl} 
+                          alt="WhatsApp Linked Device QR" 
+                          style={{ width: '220px', height: '220px', display: 'block' }}
+                        />
+                        <div style={{ fontSize: '0.8rem', color: '#1e293b', fontWeight: 700, marginTop: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <QrCode size={16} style={{ color: 'var(--gold-deep)' }} />
+                          <span>Scan QR Code to Link</span>
+                        </div>
+                      </div>
                     )}
                   </div>
+                )}
 
-                  {baileysStatus.status === 'QR_READY' && baileysStatus.qrCodeDataUrl && (
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '1.5rem', padding: '1rem', background: '#fff', borderRadius: 'var(--radius-md)', maxWidth: '280px', margin: '1.5rem auto 0 auto', border: '2px solid var(--gold)' }}>
-                      <img 
-                        src={baileysStatus.qrCodeDataUrl} 
-                        alt="WhatsApp Linked Device QR" 
-                        style={{ width: '220px', height: '220px', display: 'block' }}
-                      />
-                      <div style={{ fontSize: '0.75rem', color: '#1e293b', fontWeight: 600, marginTop: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                        <QrCode size={14} />
-                        <span>Scan QR Code to Link Device</span>
-                      </div>
+                {activeSettingsSubTab === 'csv_export' && (
+                  <div>
+                    <h3 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.75rem', color: 'var(--gold-deep)' }}>
+                      <Download size={20} />
+                      <span>CSV Export Column Mapper</span>
+                    </h3>
+                    <p style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', marginBottom: '1.5rem' }}>
+                      Reorder, rename, delete, or create columns dynamically. Map to standard model properties or bind to custom query parameter keys.
+                    </p>
+
+                    <div style={{ 
+                      maxHeight: '420px', 
+                      overflowY: 'auto', 
+                      border: '1px solid var(--border-light)', 
+                      borderRadius: 'var(--radius-md)', 
+                      background: 'rgba(0,0,0,0.2)',
+                      marginBottom: '1.5rem',
+                      padding: '0.75rem',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '0.5rem'
+                    }}>
+                      {csvColumns.map((col, index) => {
+                        const isCustom = !STANDARD_FIELD_OPTIONS.some(opt => opt.value === col.source);
+                        return (
+                          <div key={col.id || index} style={{ 
+                            display: 'flex', 
+                            gap: '0.75rem', 
+                            alignItems: 'center', 
+                            padding: '0.75rem', 
+                            borderRadius: 'var(--radius-sm)',
+                            background: 'rgba(255, 255, 255, 0.02)',
+                            border: '1px solid var(--border-light)',
+                            minWidth: '600px'
+                          }}>
+                            {/* Reordering Controls */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              <button 
+                                type="button" 
+                                onClick={() => handleMoveColumnUp(index)} 
+                                disabled={index === 0}
+                                style={{ background: 'none', border: 'none', color: 'hsl(var(--text-primary))', cursor: index === 0 ? 'not-allowed' : 'pointer', opacity: index === 0 ? 0.3 : 1, padding: 0 }}
+                                title="Move Up"
+                              >
+                                <ArrowUp size={16} />
+                              </button>
+                              <button 
+                                type="button" 
+                                onClick={() => handleMoveColumnDown(index)} 
+                                disabled={index === csvColumns.length - 1}
+                                style={{ background: 'none', border: 'none', color: 'hsl(var(--text-primary))', cursor: index === csvColumns.length - 1 ? 'not-allowed' : 'pointer', opacity: index === csvColumns.length - 1 ? 0.3 : 1, padding: 0 }}
+                                title="Move Down"
+                              >
+                                <ArrowDown size={16} />
+                              </button>
+                            </div>
+
+                            <span style={{ fontSize: '0.85rem', color: 'hsl(var(--text-muted))', minWidth: '24px', fontWeight: 600, textAlign: 'center' }}>
+                              #{index + 1}
+                            </span>
+
+                            <input 
+                              type="text" 
+                              className="form-input" 
+                              style={{ flex: 2, padding: '0.5rem 0.75rem', fontSize: '0.85rem', margin: 0 }} 
+                              placeholder="CSV Column Header Label" 
+                              value={col.header} 
+                              onChange={(e) => {
+                                const updated = [...csvColumns];
+                                updated[index].header = e.target.value;
+                                setCsvColumns(updated);
+                              }}
+                            />
+
+                            <select
+                              className="form-input"
+                              style={{ flex: 2, padding: '0.5rem 0.75rem', fontSize: '0.85rem', margin: 0, height: 'auto' }}
+                              value={isCustom ? '__custom__' : col.source}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                const updated = [...csvColumns];
+                                if (val === '__custom__') {
+                                  updated[index].source = '';
+                                } else {
+                                  updated[index].source = val;
+                                }
+                                setCsvColumns(updated);
+                              }}
+                            >
+                              {STANDARD_FIELD_OPTIONS.map(opt => (
+                                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                              ))}
+                              <option value="__custom__">Custom Parameter / Key...</option>
+                            </select>
+
+                            {isCustom && (
+                              <input 
+                                type="text" 
+                                className="form-input" 
+                                style={{ flex: 1.5, padding: '0.5rem 0.75rem', fontSize: '0.85rem', margin: 0, fontFamily: 'var(--font-mono)', borderColor: 'var(--gold-deep)' }} 
+                                placeholder="custom_param_key" 
+                                value={col.source} 
+                                onChange={(e) => {
+                                  const updated = [...csvColumns];
+                                  updated[index].source = e.target.value.trim();
+                                  setCsvColumns(updated);
+                                }}
+                              />
+                            )}
+
+                            <button 
+                              type="button" 
+                              onClick={() => handleDeleteColumn(index)} 
+                              style={{ color: 'var(--err)', background: 'none', border: 'none', cursor: 'pointer', padding: '0.25rem', display: 'flex', alignItems: 'center' }}
+                              title="Delete Column"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          </div>
+                        );
+                      })}
                     </div>
-                  )}
-                </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '2rem' }}>
-                  <div className="form-group">
-                    <label className="form-label">Terms & Conditions URL Link</label>
-                    <input 
-                      type="url" 
-                      className="form-input" 
-                      value={settings.terms_link || ''}
-                      onChange={(e) => setSettings({ ...settings, terms_link: e.target.value })}
-                      required 
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Privacy Policy URL Link</label>
-                    <input 
-                      type="url" 
-                      className="form-input" 
-                      value={settings.privacy_link || ''}
-                      onChange={(e) => setSettings({ ...settings, privacy_link: e.target.value })}
-                      required 
-                    />
-                  </div>
-                </div>
-
-                <button type="submit" className="btn-primary" style={{ width: '100%', padding: '1rem' }} disabled={isSubmitting}>
-                  {isSubmitting ? 'Saving...' : 'Save Global System Configurations'}
-                </button>
-              </form>
-
-              {/* CSV EXPORT TEMPLATE MANAGER */}
-              <div style={{ marginTop: '3rem', padding: '1.5rem', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-md)', background: 'rgba(255, 255, 255, 0.02)', textAlign: 'left' }}>
-                <h4 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '0.5rem', color: 'var(--gold-deep)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <Download size={20} />
-                  <span>CSV Export Template Manager</span>
-                </h4>
-                <p style={{ fontSize: '0.8rem', color: 'hsl(var(--text-muted))', marginBottom: '1.25rem' }}>
-                  Configure, reorder, delete, or add new columns to the export CSV dynamically. Select a standard field or map a custom URL query parameter.
-                </p>
-
-                <div style={{ 
-                  maxHeight: '400px', 
-                  overflowY: 'auto', 
-                  border: '1px solid var(--border-light)', 
-                  borderRadius: 'var(--radius-sm)', 
-                  background: 'rgba(0,0,0,0.2)',
-                  marginBottom: '1.25rem',
-                  padding: '0.5rem'
-                }}>
-                  {csvColumns.map((col, index) => {
-                    const isCustom = !STANDARD_FIELD_OPTIONS.some(opt => opt.value === col.source);
-                    return (
-                      <div key={col.id || index} style={{ 
-                        display: 'flex', 
-                        gap: '0.5rem', 
-                        alignItems: 'center', 
-                        padding: '0.5rem', 
-                        borderBottom: index === csvColumns.length - 1 ? 'none' : '1px solid var(--border-light)',
-                        minWidth: '600px'
-                      }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                          <button 
-                            type="button" 
-                            onClick={() => handleMoveColumnUp(index)} 
-                            disabled={index === 0}
-                            style={{ background: 'none', border: 'none', color: 'hsl(var(--text-primary))', cursor: index === 0 ? 'not-allowed' : 'pointer', opacity: index === 0 ? 0.3 : 1, padding: 0 }}
-                            title="Move Up"
-                          >
-                            <ArrowUp size={16} />
-                          </button>
-                          <button 
-                            type="button" 
-                            onClick={() => handleMoveColumnDown(index)} 
-                            disabled={index === csvColumns.length - 1}
-                            style={{ background: 'none', border: 'none', color: 'hsl(var(--text-primary))', cursor: index === csvColumns.length - 1 ? 'not-allowed' : 'pointer', opacity: index === csvColumns.length - 1 ? 0.3 : 1, padding: 0 }}
-                            title="Move Down"
-                          >
-                            <ArrowDown size={16} />
-                          </button>
-                        </div>
-
-                        <span style={{ fontSize: '0.8rem', color: 'hsl(var(--text-muted))', minWidth: '25px', textAlign: 'center' }}>
-                          {index + 1}
-                        </span>
-
-                        <input 
-                          type="text" 
-                          className="form-input" 
-                          style={{ flex: 2, padding: '0.4rem 0.6rem', fontSize: '0.85rem', margin: 0 }} 
-                          placeholder="Header Label" 
-                          value={col.header} 
-                          onChange={(e) => {
-                            const updated = [...csvColumns];
-                            updated[index].header = e.target.value;
-                            setCsvColumns(updated);
-                          }}
-                        />
-
-                        <select
-                          className="form-input"
-                          style={{ flex: 2, padding: '0.4rem 0.6rem', fontSize: '0.85rem', margin: 0, height: 'auto' }}
-                          value={isCustom ? '__custom__' : col.source}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            const updated = [...csvColumns];
-                            if (val === '__custom__') {
-                              updated[index].source = '';
-                            } else {
-                              updated[index].source = val;
-                            }
-                            setCsvColumns(updated);
-                          }}
-                        >
-                          {STANDARD_FIELD_OPTIONS.map(opt => (
-                            <option key={opt.value} value={opt.value}>{opt.label}</option>
-                          ))}
-                          <option value="__custom__">Custom Parameter / Key...</option>
-                        </select>
-
-                        {isCustom && (
-                          <input 
-                            type="text" 
-                            className="form-input" 
-                            style={{ flex: 1.5, padding: '0.4rem 0.6rem', fontSize: '0.85rem', margin: 0, fontFamily: 'var(--font-mono)' }} 
-                            placeholder="custom_param_key" 
-                            value={col.source} 
-                            onChange={(e) => {
-                              const updated = [...csvColumns];
-                              updated[index].source = e.target.value.trim();
-                              setCsvColumns(updated);
-                            }}
-                          />
-                        )}
-
+                    <div style={{ display: 'flex', gap: '1rem', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', gap: '0.75rem' }}>
                         <button 
                           type="button" 
-                          onClick={() => handleDeleteColumn(index)} 
-                          style={{ color: 'var(--err)', background: 'none', border: 'none', cursor: 'pointer', padding: '0.5rem' }}
-                          title="Delete Column"
+                          onClick={handleAddColumn} 
+                          className="btn-secondary" 
+                          style={{ padding: '0.6rem 1.25rem', fontSize: '0.85rem', cursor: 'pointer' }}
                         >
-                          <Trash2 size={18} />
+                          + Add New Column
+                        </button>
+                        <button 
+                          type="button" 
+                          onClick={handleResetCsvTemplate} 
+                          className="btn-secondary" 
+                          style={{ padding: '0.6rem 1.25rem', fontSize: '0.85rem', borderColor: 'rgba(224, 168, 46, 0.2)', cursor: 'pointer' }}
+                        >
+                          Reset to Defaults
                         </button>
                       </div>
-                    );
-                  })}
-                </div>
-
-                <div style={{ display: 'flex', gap: '1rem', justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <button 
-                      type="button" 
-                      onClick={handleAddColumn} 
-                      className="btn-secondary" 
-                      style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}
-                    >
-                      + Add Column
-                    </button>
-                    <button 
-                      type="button" 
-                      onClick={handleResetCsvTemplate} 
-                      className="btn-secondary" 
-                      style={{ padding: '0.5rem 1rem', fontSize: '0.85rem', borderColor: 'rgba(224, 168, 46, 0.2)' }}
-                    >
-                      Reset to Default
-                    </button>
+                      <button 
+                        type="button" 
+                        onClick={handleSaveCsvTemplate} 
+                        className="btn-primary" 
+                        style={{ padding: '0.6rem 1.5rem', fontSize: '0.85rem', cursor: 'pointer' }}
+                        disabled={isSubmitting}
+                      >
+                        {isSubmitting ? 'Saving Template...' : 'Save Export Layout'}
+                      </button>
+                    </div>
                   </div>
-                  <button 
-                    type="button" 
-                    onClick={handleSaveCsvTemplate} 
-                    className="btn-primary" 
-                    style={{ padding: '0.5rem 1.5rem', fontSize: '0.85rem' }}
-                    disabled={isSubmitting}
-                  >
-                    {isSubmitting ? 'Saving Template...' : 'Save CSV Export Template'}
-                  </button>
-                </div>
+                )}
               </div>
             </div>
           )}
