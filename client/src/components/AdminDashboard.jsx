@@ -29,6 +29,8 @@ export default function AdminDashboard() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCard, setFilterCard] = useState('');
   const [filterSource, setFilterSource] = useState('');
+  const [filterStartDate, setFilterStartDate] = useState('');
+  const [filterEndDate, setFilterEndDate] = useState('');
   const [selectedLeads, setSelectedLeads] = useState([]);
 
   // CRUD Editing Modals/States
@@ -40,7 +42,7 @@ export default function AdminDashboard() {
   const [editLeadForm, setEditLeadForm] = useState(null);
   const [customParams, setCustomParams] = useState([]);
   
-  const [newCardForm, setNewCardForm] = useState({ name: '', bank: '', category: 'Offline', description: '', redirect_url_template: '', display_order: 1, active: true, card_locations: [] });
+  const [newCardForm, setNewCardForm] = useState({ name: '', bank: '', category: 'Offline', ad_id: '', description: '', redirect_url_template: '', display_order: 1, active: true, card_locations: [] });
   const [newAgentForm, setNewAgentForm] = useState({ id: '', name: '', phone: '', email: '', username: '', password: '', status: 'active', locations: [] });
   const [newLocName, setNewLocName] = useState('');
 
@@ -290,8 +292,13 @@ export default function AdminDashboard() {
   };
 
   const handleCsvExport = () => {
+    let queryParams = [];
+    if (filterStartDate) queryParams.push(`startDate=${filterStartDate}`);
+    if (filterEndDate) queryParams.push(`endDate=${filterEndDate}`);
+    const queryString = queryParams.length > 0 ? `?${queryParams.join('&')}` : '';
+
     // Since direct window.open can't pass auth header, we fetch it, create a Blob, and download:
-    fetch(`${API_URL}/leads/export`, {
+    fetch(`${API_URL}/leads/export${queryString}`, {
       headers: { 'Authorization': `Bearer ${token}` }
     })
     .then(res => res.blob())
@@ -299,7 +306,7 @@ export default function AdminDashboard() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'finmantra_leads.csv';
+      a.download = `finmantra_leads${filterStartDate || filterEndDate ? '_filtered' : ''}.csv`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -337,6 +344,12 @@ export default function AdminDashboard() {
       utm_content: lead.utm_content || '',
       utm_creative_format: lead.utm_creative_format || '',
       utm_info: lead.utm_info || '',
+      utm_id: lead.utm_id || '',
+      utm_creative: lead.utm_creative || '',
+      utm_keyword: lead.utm_keyword || '',
+      utm_matchtype: lead.utm_matchtype || '',
+      utm_network: lead.utm_network || '',
+      utm_placement: lead.utm_placement || '',
       fbclid: lead.fbclid || '',
       gclid: lead.gclid || '',
       gclsrc: lead.gclsrc || '',
@@ -351,6 +364,7 @@ export default function AdminDashboard() {
     const standardKeys = [
       'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 
       'utm_channel', 'utm_category', 'utm_info', 'utm_creative_format', 
+      'utm_id', 'utm_creative', 'utm_keyword', 'utm_matchtype', 'utm_network', 'utm_placement',
       'fbclid', 'gclid', 'gclsrc', 'dclid', 'msclkid', 'ttclid', 'twclid', 'li_fat_id'
     ];
     
@@ -403,6 +417,7 @@ export default function AdminDashboard() {
       const standardKeys = [
         'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 
         'utm_channel', 'utm_category', 'utm_info', 'utm_creative_format', 
+        'utm_id', 'utm_creative', 'utm_keyword', 'utm_matchtype', 'utm_network', 'utm_placement',
         'fbclid', 'gclid', 'gclsrc', 'dclid', 'msclkid', 'ttclid', 'twclid', 'li_fat_id'
       ];
       
@@ -858,7 +873,19 @@ export default function AdminDashboard() {
     const matchesCard = filterCard ? l.card_id === filterCard : true;
     const matchesSource = filterSource ? l.source === filterSource : true;
 
-    return matchesSearch && matchesCard && matchesSource;
+    // Date range filter
+    let matchesDate = true;
+    if (l.created_at) {
+      const leadDate = typeof l.created_at === 'string' 
+        ? l.created_at.slice(0, 10) 
+        : new Date(l.created_at).toISOString().slice(0, 10);
+      if (filterStartDate && leadDate < filterStartDate) matchesDate = false;
+      if (filterEndDate && leadDate > filterEndDate) matchesDate = false;
+    } else if (filterStartDate || filterEndDate) {
+      matchesDate = false;
+    }
+
+    return matchesSearch && matchesCard && matchesSource && matchesDate;
   });
 
   // Calculate Metrics
@@ -1016,7 +1043,7 @@ export default function AdminDashboard() {
               </div>
 
               {/* Filters */}
-              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }} className="filters-strip">
+              <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1.2fr 1.2fr', gap: '1rem', marginBottom: '1.5rem', alignItems: 'center' }} className="filters-strip">
                 <div style={{ position: 'relative' }}>
                   <Search size={18} style={{ position: 'absolute', top: '14px', left: '15px', color: 'hsl(var(--text-muted))' }} />
                   <input 
@@ -1037,6 +1064,26 @@ export default function AdminDashboard() {
                   <option value="public">Public Website</option>
                   <option value="agent">Agent Walk-in</option>
                 </select>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', width: '100%' }}>
+                  <span style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', whiteSpace: 'nowrap' }}>From:</span>
+                  <input 
+                    type="date" 
+                    className="form-input" 
+                    value={filterStartDate}
+                    onChange={(e) => setFilterStartDate(e.target.value)}
+                    style={{ fontSize: '0.8rem', padding: '0.5rem' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', width: '100%' }}>
+                  <span style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', whiteSpace: 'nowrap' }}>To:</span>
+                  <input 
+                    type="date" 
+                    className="form-input" 
+                    value={filterEndDate}
+                    onChange={(e) => setFilterEndDate(e.target.value)}
+                    style={{ fontSize: '0.8rem', padding: '0.5rem' }}
+                  />
+                </div>
               </div>
 
               {/* Data Table */}
@@ -1192,6 +1239,21 @@ export default function AdminDashboard() {
                     </div>
                   )}
 
+                  {((editingCard && editingCard.category === 'Digital') || (!editingCard && newCardForm.category === 'Digital')) && (
+                    <div className="form-group" style={{ marginTop: '1rem' }}>
+                      <label className="form-label">Ad ID (For Campaign Ad ID Redirect Mapping)</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        placeholder="e.g. 120246782319720736" 
+                        value={editingCard ? (editingCard.ad_id || '') : (newCardForm.ad_id || '')}
+                        onChange={(e) => editingCard 
+                          ? setEditingCard({ ...editingCard, ad_id: e.target.value }) 
+                          : setNewCardForm({ ...newCardForm, ad_id: e.target.value })}
+                      />
+                    </div>
+                  )}
+
                   <div className="form-group">
                     <label className="form-label">Short Description</label>
                     <textarea 
@@ -1273,6 +1335,11 @@ export default function AdminDashboard() {
                         {card.category === 'Offline' && (
                           <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', margin: '0.25rem 0' }}>
                             Locations: {card.card_locations && card.card_locations.length > 0 ? card.card_locations.join(', ') : 'All Locations'}
+                          </div>
+                        )}
+                        {card.category === 'Digital' && card.ad_id && (
+                          <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', margin: '0.25rem 0' }}>
+                            Campaign Ad ID: <span style={{ color: 'var(--gold-deep)', fontWeight: 600 }}>{card.ad_id}</span>
                           </div>
                         )}
                         <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', maxWidth: '350px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -1930,6 +1997,12 @@ export default function AdminDashboard() {
                     <div><strong>UTM Content:</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_content || 'N/A'}</span></div>
                     <div><strong>UTM Creative Format:</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_creative_format || 'N/A'}</span></div>
                     <div><strong>UTM Info:</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_info || 'N/A'}</span></div>
+                    <div><strong>UTM Campaign ID (utm_id):</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_id || 'N/A'}</span></div>
+                    <div><strong>UTM Ad ID (utm_creative):</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_creative || 'N/A'}</span></div>
+                    <div><strong>UTM Keyword (utm_keyword):</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_keyword || 'N/A'}</span></div>
+                    <div><strong>UTM Matchtype (utm_matchtype):</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_matchtype || 'N/A'}</span></div>
+                    <div><strong>UTM Network (utm_network):</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_network || 'N/A'}</span></div>
+                    <div><strong>UTM Placement (utm_placement):</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_placement || 'N/A'}</span></div>
                   </div>
 
                   <h5 style={{ fontSize: '0.9rem', marginBottom: '0.5rem', color: 'hsl(var(--text-primary))' }}>Ad Network Click Identifiers</h5>
@@ -2196,6 +2269,66 @@ export default function AdminDashboard() {
                         style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} 
                         value={editLeadForm.utm_info} 
                         onChange={(e) => handleEditLeadFormChange('utm_info', e.target.value)} 
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>UTM Campaign ID (utm_id)</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} 
+                        value={editLeadForm.utm_id} 
+                        onChange={(e) => handleEditLeadFormChange('utm_id', e.target.value)} 
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>UTM Ad ID (utm_creative)</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} 
+                        value={editLeadForm.utm_creative} 
+                        onChange={(e) => handleEditLeadFormChange('utm_creative', e.target.value)} 
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>UTM Keyword (utm_keyword)</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} 
+                        value={editLeadForm.utm_keyword} 
+                        onChange={(e) => handleEditLeadFormChange('utm_keyword', e.target.value)} 
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>UTM Matchtype (utm_matchtype)</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} 
+                        value={editLeadForm.utm_matchtype} 
+                        onChange={(e) => handleEditLeadFormChange('utm_matchtype', e.target.value)} 
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>UTM Network (utm_network)</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} 
+                        value={editLeadForm.utm_network} 
+                        onChange={(e) => handleEditLeadFormChange('utm_network', e.target.value)} 
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>UTM Placement (utm_placement)</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} 
+                        value={editLeadForm.utm_placement} 
+                        onChange={(e) => handleEditLeadFormChange('utm_placement', e.target.value)} 
                       />
                     </div>
                   </div>

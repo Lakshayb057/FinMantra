@@ -494,8 +494,14 @@ app.post('/api/leads', async (req, res) => {
     utm_medium,
     utm_medem,
     utm_campaign,
+    utm_id,
     utm_term,
+    utm_creative,
     utm_content,
+    utm_keyword,
+    utm_matchtype,
+    utm_network,
+    utm_placement,
     utm_channel,
     utm_category,
     fbclid,
@@ -544,9 +550,21 @@ app.post('/api/leads', async (req, res) => {
     }
     redirectUrlTemplate = card.redirect_url_template || '';
   } else {
-    // Check if public lead has utm_info matching an active card
     let matchedCard = null;
-    if (utm_info) {
+    
+    // First, check if there is an active card matching by ad_id (utm_creative, utm_content, or utm_id)
+    const adIdToCheck = utm_creative || utm_content || utm_id;
+    if (adIdToCheck) {
+      const activeCards = await db.getCards(false);
+      const adIdStr = String(adIdToCheck).trim();
+      matchedCard = activeCards.find(c => c.ad_id && String(c.ad_id).trim() === adIdStr);
+      if (matchedCard) {
+        console.log(`[Card Matching] Matched card ${matchedCard.name} (${matchedCard.id}) via ad_id: ${adIdStr}`);
+      }
+    }
+
+    // If not matched by ad_id, check if public lead has utm_info matching an active card
+    if (!matchedCard && utm_info) {
       const activeCards = await db.getCards(false);
       const infoLower = String(utm_info).trim().toLowerCase();
       
@@ -618,8 +636,14 @@ app.post('/api/leads', async (req, res) => {
     utm_creative_format: source !== 'agent' ? (utm_creative_format || null) : null,
     utm_medium: source !== 'agent' ? (utm_medium || utm_medem || null) : null,
     utm_campaign: source !== 'agent' ? (utm_campaign || null) : null,
+    utm_id: source !== 'agent' ? (utm_id || null) : null,
     utm_term: source !== 'agent' ? (utm_term || null) : null,
+    utm_creative: source !== 'agent' ? (utm_creative || null) : null,
     utm_content: source !== 'agent' ? (utm_content || null) : null,
+    utm_keyword: source !== 'agent' ? (utm_keyword || null) : null,
+    utm_matchtype: source !== 'agent' ? (utm_matchtype || null) : null,
+    utm_network: source !== 'agent' ? (utm_network || null) : null,
+    utm_placement: source !== 'agent' ? (utm_placement || null) : null,
     utm_channel: source !== 'agent' ? (utm_channel || null) : null,
     utm_category: source !== 'agent' ? (utm_category || null) : null,
     fbclid: source !== 'agent' ? (fbclid || null) : null,
@@ -637,9 +661,6 @@ app.post('/api/leads', async (req, res) => {
 
   // Compute redirect URL using template placeholders (case-insensitive)
   const agentCodeVal = (source === 'agent' && agent_id) ? agent_id : '';
-  const utmSourceVal = utm_source || '';
-  const utmInfoVal = utm_info || '';
-  const utmCreativeFormatVal = utm_creative_format || '';
   let redirectUrl = redirectUrlTemplate;
   redirectUrl = redirectUrl
     .replace(/{name}/gi, encodeURIComponent(trimmedName))
@@ -648,9 +669,19 @@ app.post('/api/leads', async (req, res) => {
     .replace(/{urn}/gi, encodeURIComponent(newLead.urn))
     .replace(/{urm}/gi, encodeURIComponent(newLead.urn)) // support legacy placeholder if any
     .replace(/{agent_id}/gi, encodeURIComponent(agentCodeVal))
-    .replace(/{utm_source}/gi, encodeURIComponent(utmSourceVal))
-    .replace(/{utm_info}/gi, encodeURIComponent(utmInfoVal))
-    .replace(/{utm_creative_format}/gi, encodeURIComponent(utmCreativeFormatVal));
+    .replace(/{utm_source}/gi, encodeURIComponent(utm_source || ''))
+    .replace(/{utm_medium}/gi, encodeURIComponent(utm_medium || ''))
+    .replace(/{utm_campaign}/gi, encodeURIComponent(utm_campaign || ''))
+    .replace(/{utm_id}/gi, encodeURIComponent(utm_id || ''))
+    .replace(/{utm_term}/gi, encodeURIComponent(utm_term || ''))
+    .replace(/{utm_creative}/gi, encodeURIComponent(utm_creative || ''))
+    .replace(/{utm_content}/gi, encodeURIComponent(utm_content || ''))
+    .replace(/{utm_keyword}/gi, encodeURIComponent(utm_keyword || ''))
+    .replace(/{utm_matchtype}/gi, encodeURIComponent(utm_matchtype || ''))
+    .replace(/{utm_network}/gi, encodeURIComponent(utm_network || ''))
+    .replace(/{utm_placement}/gi, encodeURIComponent(utm_placement || ''))
+    .replace(/{utm_info}/gi, encodeURIComponent(utm_info || ''))
+    .replace(/{utm_creative_format}/gi, encodeURIComponent(utm_creative_format || ''));
 
   newLead.redirect_url = redirectUrl;
   
@@ -811,14 +842,27 @@ app.put('/api/leads/:id', authenticateToken, requireAdmin, async (req, res) => {
 
 // Export Leads to CSV (Admin Only)
 app.get('/api/leads/export', authenticateToken, requireAdmin, async (req, res) => {
-  const leads = await db.getLeads();
+  const { startDate, endDate } = req.query;
+  let leads = await db.getLeads();
   
-  let csv = 'URN,Creation Date/Time,Full Name,Phone,Email,City,Employment,Monthly Income,Selected Card,Card Bank,Source,UTM Source,UTM Info,UTM Creative Format,UTM Medium,UTM Campaign,UTM Term,UTM Content,UTM Channel,UTM Category,FBCLID,GCLID,GCLSRC,DCLID,MSCLKID,TTCLID,TWCLID,LI_FAT_ID,All Tracking Parameters (JSON),Agent Name,Agent Location,Redirect URL\n';
+  if (startDate || endDate) {
+    leads = leads.filter(l => {
+      if (!l.created_at) return false;
+      const leadDate = typeof l.created_at === 'string' 
+        ? l.created_at.slice(0, 10) 
+        : new Date(l.created_at).toISOString().slice(0, 10);
+      if (startDate && leadDate < startDate) return false;
+      if (endDate && leadDate > endDate) return false;
+      return true;
+    });
+  }
+  
+  let csv = 'URN,Creation Date/Time,Full Name,Phone,Email,City,Employment,Monthly Income,Selected Card,Card Bank,Source,UTM Source,UTM Info,UTM Creative Format,UTM Medium,UTM Campaign,UTM Term,UTM Content,UTM Channel,UTM Category,UTM Campaign ID (utm_id),UTM Ad ID (utm_creative),UTM Keyword (utm_keyword),UTM Matchtype (utm_matchtype),UTM Network (utm_network),UTM Placement (utm_placement),FBCLID,GCLID,GCLSRC,DCLID,MSCLKID,TTCLID,TWCLID,LI_FAT_ID,All Tracking Parameters (JSON),Agent Name,Agent Location,Redirect URL\n';
   
   leads.forEach(l => {
-    const createdDateTime = l.created_at ? l.created_at.replace('T', ' ').slice(0, 16) : '';
+    const createdDateTime = l.created_at ? (typeof l.created_at === 'string' ? l.created_at : new Date(l.created_at).toISOString()).replace('T', ' ').slice(0, 16) : '';
     const rawParams = l.utm_params ? JSON.stringify(l.utm_params).replace(/"/g, '""') : '';
-    csv += `"${l.urn || ''}","${createdDateTime}","${l.full_name || ''}","${l.phone || ''}","${l.email || ''}","${l.city || ''}","${l.employment || ''}","${l.income_range || ''}","${l.card_name || ''}","${l.card_bank || ''}","${l.source || ''}","${l.utm_source || ''}","${l.utm_info || ''}","${l.utm_creative_format || ''}","${l.utm_medium || ''}","${l.utm_campaign || ''}","${l.utm_term || ''}","${l.utm_content || ''}","${l.utm_channel || ''}","${l.utm_category || ''}","${l.fbclid || ''}","${l.gclid || ''}","${l.gclsrc || ''}","${l.dclid || ''}","${l.msclkid || ''}","${l.ttclid || ''}","${l.twclid || ''}","${l.li_fat_id || ''}","${rawParams}","${l.agent_name || ''}","${l.agent_location || ''}","${l.redirect_url || ''}"\n`;
+    csv += `"${l.urn || ''}","${createdDateTime}","${l.full_name || ''}","${l.phone || ''}","${l.email || ''}","${l.city || ''}","${l.employment || ''}","${l.income_range || ''}","${l.card_name || ''}","${l.card_bank || ''}","${l.source || ''}","${l.utm_source || ''}","${l.utm_info || ''}","${l.utm_creative_format || ''}","${l.utm_medium || ''}","${l.utm_campaign || ''}","${l.utm_term || ''}","${l.utm_content || ''}","${l.utm_channel || ''}","${l.utm_category || ''}","${l.utm_id || ''}","${l.utm_creative || ''}","${l.utm_keyword || ''}","${l.utm_matchtype || ''}","${l.utm_network || ''}","${l.utm_placement || ''}","${l.fbclid || ''}","${l.gclid || ''}","${l.gclsrc || ''}","${l.dclid || ''}","${l.msclkid || ''}","${l.ttclid || ''}","${l.twclid || ''}","${l.li_fat_id || ''}","${rawParams}","${l.agent_name || ''}","${l.agent_location || ''}","${l.redirect_url || ''}"\n`;
   });
 
   res.setHeader('Content-Type', 'text/csv');
@@ -842,7 +886,7 @@ app.get('/api/admin/cards', authenticateToken, requireAdmin, async (req, res) =>
 
 // Create Card (Admin Only)
 app.post('/api/cards', authenticateToken, requireAdmin, async (req, res) => {
-  const { name, bank, category, description, redirect_url_template, display_order, active, card_locations } = req.body;
+  const { name, bank, category, ad_id, description, redirect_url_template, display_order, active, card_locations } = req.body;
 
   const trimmedName = name ? String(name).trim() : '';
   const trimmedBank = bank ? String(bank).trim() : '';
@@ -865,6 +909,7 @@ app.post('/api/cards', authenticateToken, requireAdmin, async (req, res) => {
     name: trimmedName,
     bank: trimmedBank,
     category: category || 'Offline',
+    ad_id: ad_id || '',
     description: description ? String(description).trim() : '',
     redirect_url_template: trimmedUrl,
     display_order: display_order || 1,
@@ -880,7 +925,7 @@ app.post('/api/cards', authenticateToken, requireAdmin, async (req, res) => {
 
 // Update Card (Admin Only)
 app.put('/api/cards/:id', authenticateToken, requireAdmin, async (req, res) => {
-  const { name, bank, category, description, redirect_url_template, display_order, active, card_locations } = req.body;
+  const { name, bank, category, ad_id, description, redirect_url_template, display_order, active, card_locations } = req.body;
 
   const trimmedName = name ? String(name).trim() : '';
   const trimmedBank = bank ? String(bank).trim() : '';
@@ -898,6 +943,7 @@ app.put('/api/cards/:id', authenticateToken, requireAdmin, async (req, res) => {
     name: trimmedName,
     bank: trimmedBank,
     category: category || 'Offline',
+    ad_id: ad_id || '',
     description: description ? String(description).trim() : '',
     redirect_url_template: trimmedUrl,
     display_order: display_order || 1,
