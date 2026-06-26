@@ -350,6 +350,13 @@ export default function AdminDashboard() {
       utm_matchtype: lead.utm_matchtype || '',
       utm_network: lead.utm_network || '',
       utm_placement: lead.utm_placement || '',
+      utm_device: lead.utm_device || '',
+      utm_location: lead.utm_location || '',
+      gbraid: lead.gbraid || '',
+      wbraid: lead.wbraid || '',
+      landing_page: lead.landing_page || '',
+      first_landing_page: lead.first_landing_page || '',
+      referrer: lead.referrer || '',
       fbclid: lead.fbclid || '',
       gclid: lead.gclid || '',
       gclsrc: lead.gclsrc || '',
@@ -365,6 +372,7 @@ export default function AdminDashboard() {
       'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 
       'utm_channel', 'utm_category', 'utm_info', 'utm_creative_format', 
       'utm_id', 'utm_creative', 'utm_keyword', 'utm_matchtype', 'utm_network', 'utm_placement',
+      'utm_device', 'utm_location', 'gbraid', 'wbraid', 'landing_page', 'first_landing_page', 'referrer',
       'fbclid', 'gclid', 'gclsrc', 'dclid', 'msclkid', 'ttclid', 'twclid', 'li_fat_id'
     ];
     
@@ -418,6 +426,7 @@ export default function AdminDashboard() {
         'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 
         'utm_channel', 'utm_category', 'utm_info', 'utm_creative_format', 
         'utm_id', 'utm_creative', 'utm_keyword', 'utm_matchtype', 'utm_network', 'utm_placement',
+        'utm_device', 'utm_location', 'gbraid', 'wbraid', 'landing_page', 'first_landing_page', 'referrer',
         'fbclid', 'gclid', 'gclsrc', 'dclid', 'msclkid', 'ttclid', 'twclid', 'li_fat_id'
       ];
       
@@ -2003,12 +2012,23 @@ export default function AdminDashboard() {
                     <div><strong>UTM Matchtype (utm_matchtype):</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_matchtype || 'N/A'}</span></div>
                     <div><strong>UTM Network (utm_network):</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_network || 'N/A'}</span></div>
                     <div><strong>UTM Placement (utm_placement):</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_placement || 'N/A'}</span></div>
+                    <div><strong>UTM Device (utm_device):</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_device || 'N/A'}</span></div>
+                    <div><strong>UTM Location (utm_location):</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_location || 'N/A'}</span></div>
+                  </div>
+
+                  <h5 style={{ fontSize: '0.9rem', marginBottom: '0.5rem', color: 'hsl(var(--text-primary))', marginTop: '1rem' }}>Session & Entry Attribution</h5>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.8rem', background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)', marginBottom: '1.5rem' }}>
+                    <div><strong>Landing Page URL:</strong> <span style={{ color: 'var(--gold-deep)', wordBreak: 'break-all' }}>{selectedLeadDetails.landing_page || 'N/A'}</span></div>
+                    <div><strong>First Landing Page:</strong> <span style={{ color: 'var(--gold-deep)', wordBreak: 'break-all' }}>{selectedLeadDetails.first_landing_page || 'N/A'}</span></div>
+                    <div><strong>Referrer Source:</strong> <span style={{ color: 'var(--gold-deep)', wordBreak: 'break-all' }}>{selectedLeadDetails.referrer || 'N/A'}</span></div>
                   </div>
 
                   <h5 style={{ fontSize: '0.9rem', marginBottom: '0.5rem', color: 'hsl(var(--text-primary))' }}>Ad Network Click Identifiers</h5>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.8rem', background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)', marginBottom: '1.5rem' }}>
                     <div><strong>FBCLID (Facebook):</strong> <span style={{ fontFamily: 'var(--font-mono)', wordBreak: 'break-all', color: 'var(--gold-deep)' }}>{selectedLeadDetails.fbclid || 'None'}</span></div>
                     <div><strong>GCLID (Google):</strong> <span style={{ fontFamily: 'var(--font-mono)', wordBreak: 'break-all', color: 'var(--gold-deep)' }}>{selectedLeadDetails.gclid || 'None'}</span></div>
+                    <div><strong>GBRAID (Google App iOS):</strong> <span style={{ fontFamily: 'var(--font-mono)', wordBreak: 'break-all', color: 'var(--gold-deep)' }}>{selectedLeadDetails.gbraid || 'None'}</span></div>
+                    <div><strong>WBRAID (Google App Web):</strong> <span style={{ fontFamily: 'var(--font-mono)', wordBreak: 'break-all', color: 'var(--gold-deep)' }}>{selectedLeadDetails.wbraid || 'None'}</span></div>
                     <div><strong>GCLSRC (Google Click Source):</strong> <span style={{ fontFamily: 'var(--font-mono)', wordBreak: 'break-all', color: 'var(--gold-deep)' }}>{selectedLeadDetails.gclsrc || 'None'}</span></div>
                     <div><strong>DCLID (Google Display):</strong> <span style={{ fontFamily: 'var(--font-mono)', wordBreak: 'break-all', color: 'var(--gold-deep)' }}>{selectedLeadDetails.dclid || 'None'}</span></div>
                     <div><strong>MSCLKID (Bing):</strong> <span style={{ fontFamily: 'var(--font-mono)', wordBreak: 'break-all', color: 'var(--gold-deep)' }}>{selectedLeadDetails.msclkid || 'None'}</span></div>
@@ -2331,6 +2351,26 @@ export default function AdminDashboard() {
                         onChange={(e) => handleEditLeadFormChange('utm_placement', e.target.value)} 
                       />
                     </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>UTM Device (utm_device)</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} 
+                        value={editLeadForm.utm_device} 
+                        onChange={(e) => handleEditLeadFormChange('utm_device', e.target.value)} 
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>UTM Location (utm_location)</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} 
+                        value={editLeadForm.utm_location} 
+                        onChange={(e) => handleEditLeadFormChange('utm_location', e.target.value)} 
+                      />
+                    </div>
                   </div>
 
                   <h5 style={{ fontSize: '0.9rem', marginBottom: '0.5rem', color: 'hsl(var(--text-primary))' }}>Ad Network Click Identifiers</h5>
@@ -2353,6 +2393,26 @@ export default function AdminDashboard() {
                         style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem', fontFamily: 'var(--font-mono)' }} 
                         value={editLeadForm.gclid} 
                         onChange={(e) => handleEditLeadFormChange('gclid', e.target.value)} 
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>GBRAID (Google App iOS)</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem', fontFamily: 'var(--font-mono)' }} 
+                        value={editLeadForm.gbraid} 
+                        onChange={(e) => handleEditLeadFormChange('gbraid', e.target.value)} 
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>WBRAID (Google App Web)</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem', fontFamily: 'var(--font-mono)' }} 
+                        value={editLeadForm.wbraid} 
+                        onChange={(e) => handleEditLeadFormChange('wbraid', e.target.value)} 
                       />
                     </div>
                     <div className="form-group" style={{ marginBottom: 0 }}>
@@ -2413,6 +2473,40 @@ export default function AdminDashboard() {
                         style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem', fontFamily: 'var(--font-mono)' }} 
                         value={editLeadForm.li_fat_id} 
                         onChange={(e) => handleEditLeadFormChange('li_fat_id', e.target.value)} 
+                      />
+                    </div>
+                  </div>
+
+                  <h5 style={{ fontSize: '0.9rem', marginBottom: '0.5rem', color: 'hsl(var(--text-primary))', marginTop: '1.2rem' }}>Session & Entry Attribution</h5>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.8rem', fontSize: '0.85rem', marginBottom: '1.5rem', background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)' }}>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>Landing Page URL</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} 
+                        value={editLeadForm.landing_page} 
+                        onChange={(e) => handleEditLeadFormChange('landing_page', e.target.value)} 
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>First Landing Page</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} 
+                        value={editLeadForm.first_landing_page} 
+                        onChange={(e) => handleEditLeadFormChange('first_landing_page', e.target.value)} 
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>Referrer Source</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} 
+                        value={editLeadForm.referrer} 
+                        onChange={(e) => handleEditLeadFormChange('referrer', e.target.value)} 
                       />
                     </div>
                   </div>

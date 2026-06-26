@@ -105,20 +105,43 @@ export default function App() {
       params._fbc = getCookie('_fbc') || `fb.1.${Date.now()}.${params.fbclid}`;
     }
 
-    // Explicitly guarantee utm_source and utm_info exist (even if empty) for standard code usage
+    // Capture landing page, first landing page, and referrer
+    params.landing_page = window.location.href;
+    
+    let firstLanding = sessionStorage.getItem('finmantra_first_landing_page') || localStorage.getItem('finmantra_first_landing_page');
+    if (!firstLanding) {
+      firstLanding = window.location.href;
+      sessionStorage.setItem('finmantra_first_landing_page', firstLanding);
+      localStorage.setItem('finmantra_first_landing_page', firstLanding);
+    }
+    params.first_landing_page = firstLanding;
+
+    let referrerVal = sessionStorage.getItem('finmantra_referrer') || localStorage.getItem('finmantra_referrer');
+    if (!referrerVal) {
+      referrerVal = document.referrer || 'Direct';
+      sessionStorage.setItem('finmantra_referrer', referrerVal);
+      localStorage.setItem('finmantra_referrer', referrerVal);
+    }
+    params.referrer = referrerVal;
+
+    // Explicitly guarantee utm_source and standard code usage fields exist
     if (!params.utm_source) params.utm_source = searchParams.get('utm_source') || '';
     if (!params.utm_medium) params.utm_medium = searchParams.get('utm_medium') || searchParams.get('utm_medem') || '';
     if (!params.utm_info) params.utm_info = searchParams.get('utm_info') || params.utm_medium || '';
+    if (!params.utm_device) params.utm_device = searchParams.get('utm_device') || searchParams.get('device') || '';
+    if (!params.utm_location) params.utm_location = searchParams.get('utm_location') || searchParams.get('location') || '';
 
-    if (Object.keys(params).some(k => params[k])) {
-      setUtmParams(params);
-      sessionStorage.setItem('finmantra_utm', JSON.stringify(params));
-    } else {
-      const cached = sessionStorage.getItem('finmantra_utm');
-      if (cached) {
-        setUtmParams(JSON.parse(cached));
-      }
-    }
+    // Merge URL params with cached params if any, prioritizing URL parameters
+    const cachedStr = sessionStorage.getItem('finmantra_utm');
+    const cachedParams = cachedStr ? JSON.parse(cachedStr) : {};
+    
+    const mergedParams = {
+      ...cachedParams,
+      ...params
+    };
+
+    setUtmParams(mergedParams);
+    sessionStorage.setItem('finmantra_utm', JSON.stringify(mergedParams));
   }, []);
 
   const navigateTo = (path) => {

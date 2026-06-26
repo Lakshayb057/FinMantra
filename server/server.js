@@ -512,6 +512,15 @@ app.post('/api/leads', async (req, res) => {
     ttclid,
     twclid,
     li_fat_id,
+    utm_device,
+    utm_location,
+    gbraid,
+    wbraid,
+    landing_page,
+    first_landing_page,
+    referrer,
+    device,
+    location,
     utm_params
   } = req.body;
 
@@ -654,6 +663,13 @@ app.post('/api/leads', async (req, res) => {
     ttclid: source !== 'agent' ? (ttclid || null) : null,
     twclid: source !== 'agent' ? (twclid || null) : null,
     li_fat_id: source !== 'agent' ? (li_fat_id || null) : null,
+    utm_device: source !== 'agent' ? (utm_device || device || null) : null,
+    utm_location: source !== 'agent' ? (utm_location || location || null) : null,
+    gbraid: source !== 'agent' ? (gbraid || null) : null,
+    wbraid: source !== 'agent' ? (wbraid || null) : null,
+    landing_page: source !== 'agent' ? (landing_page || null) : null,
+    first_landing_page: source !== 'agent' ? (first_landing_page || null) : null,
+    referrer: source !== 'agent' ? (referrer || null) : null,
     utm_params: source !== 'agent' ? (resolvedUtmParams || null) : null
   };
 
@@ -680,6 +696,13 @@ app.post('/api/leads', async (req, res) => {
     .replace(/{utm_matchtype}/gi, encodeURIComponent(utm_matchtype || ''))
     .replace(/{utm_network}/gi, encodeURIComponent(utm_network || ''))
     .replace(/{utm_placement}/gi, encodeURIComponent(utm_placement || ''))
+    .replace(/{utm_device}/gi, encodeURIComponent(utm_device || device || ''))
+    .replace(/{utm_location}/gi, encodeURIComponent(utm_location || location || ''))
+    .replace(/{gbraid}/gi, encodeURIComponent(gbraid || ''))
+    .replace(/{wbraid}/gi, encodeURIComponent(wbraid || ''))
+    .replace(/{landing_page}/gi, encodeURIComponent(landing_page || ''))
+    .replace(/{first_landing_page}/gi, encodeURIComponent(first_landing_page || ''))
+    .replace(/{referrer}/gi, encodeURIComponent(referrer || ''))
     .replace(/{utm_info}/gi, encodeURIComponent(utm_info || ''))
     .replace(/{utm_creative_format}/gi, encodeURIComponent(utm_creative_format || ''));
 
@@ -857,12 +880,12 @@ app.get('/api/leads/export', authenticateToken, requireAdmin, async (req, res) =
     });
   }
   
-  let csv = 'URN,Creation Date/Time,Full Name,Phone,Email,City,Employment,Monthly Income,Selected Card,Card Bank,Source,UTM Source,UTM Info,UTM Creative Format,UTM Medium,UTM Campaign,UTM Term,UTM Content,UTM Channel,UTM Category,UTM Campaign ID (utm_id),UTM Ad ID (utm_creative),UTM Keyword (utm_keyword),UTM Matchtype (utm_matchtype),UTM Network (utm_network),UTM Placement (utm_placement),FBCLID,GCLID,GCLSRC,DCLID,MSCLKID,TTCLID,TWCLID,LI_FAT_ID,All Tracking Parameters (JSON),Agent Name,Agent Location,Redirect URL\n';
+  let csv = 'URN,Creation Date/Time,Full Name,Phone,Email,City,Employment,Monthly Income,Selected Card,Card Bank,Source,UTM Source,UTM Info,UTM Creative Format,UTM Medium,UTM Campaign,UTM Term,UTM Content,UTM Channel,UTM Category,UTM Campaign ID (utm_id),UTM Ad ID (utm_creative),UTM Keyword (utm_keyword),UTM Matchtype (utm_matchtype),UTM Network (utm_network),UTM Placement (utm_placement),UTM Device (utm_device),UTM Location (utm_location),GBRAID (gbraid),WBRAID (wbraid),Landing Page (landing_page),First Landing Page (first_landing_page),Referrer (referrer),FBCLID,GCLID,GCLSRC,DCLID,MSCLKID,TTCLID,TWCLID,LI_FAT_ID,All Tracking Parameters (JSON),Agent Name,Agent Location,Redirect URL\n';
   
   leads.forEach(l => {
     const createdDateTime = l.created_at ? (typeof l.created_at === 'string' ? l.created_at : new Date(l.created_at).toISOString()).replace('T', ' ').slice(0, 16) : '';
     const rawParams = l.utm_params ? JSON.stringify(l.utm_params).replace(/"/g, '""') : '';
-    csv += `"${l.urn || ''}","${createdDateTime}","${l.full_name || ''}","${l.phone || ''}","${l.email || ''}","${l.city || ''}","${l.employment || ''}","${l.income_range || ''}","${l.card_name || ''}","${l.card_bank || ''}","${l.source || ''}","${l.utm_source || ''}","${l.utm_info || ''}","${l.utm_creative_format || ''}","${l.utm_medium || ''}","${l.utm_campaign || ''}","${l.utm_term || ''}","${l.utm_content || ''}","${l.utm_channel || ''}","${l.utm_category || ''}","${l.utm_id || ''}","${l.utm_creative || ''}","${l.utm_keyword || ''}","${l.utm_matchtype || ''}","${l.utm_network || ''}","${l.utm_placement || ''}","${l.fbclid || ''}","${l.gclid || ''}","${l.gclsrc || ''}","${l.dclid || ''}","${l.msclkid || ''}","${l.ttclid || ''}","${l.twclid || ''}","${l.li_fat_id || ''}","${rawParams}","${l.agent_name || ''}","${l.agent_location || ''}","${l.redirect_url || ''}"\n`;
+    csv += `"${l.urn || ''}","${createdDateTime}","${l.full_name || ''}","${l.phone || ''}","${l.email || ''}","${l.city || ''}","${l.employment || ''}","${l.income_range || ''}","${l.card_name || ''}","${l.card_bank || ''}","${l.source || ''}","${l.utm_source || ''}","${l.utm_info || ''}","${l.utm_creative_format || ''}","${l.utm_medium || ''}","${l.utm_campaign || ''}","${l.utm_term || ''}","${l.utm_content || ''}","${l.utm_channel || ''}","${l.utm_category || ''}","${l.utm_id || ''}","${l.utm_creative || ''}","${l.utm_keyword || ''}","${l.utm_matchtype || ''}","${l.utm_network || ''}","${l.utm_placement || ''}","${l.utm_device || ''}","${l.utm_location || ''}","${l.gbraid || ''}","${l.wbraid || ''}","${l.landing_page || ''}","${l.first_landing_page || ''}","${l.referrer || ''}","${l.fbclid || ''}","${l.gclid || ''}","${l.gclsrc || ''}","${l.dclid || ''}","${l.msclkid || ''}","${l.ttclid || ''}","${l.twclid || ''}","${l.li_fat_id || ''}","${rawParams}","${l.agent_name || ''}","${l.agent_location || ''}","${l.redirect_url || ''}"\n`;
   });
 
   res.setHeader('Content-Type', 'text/csv');

@@ -344,6 +344,23 @@ async function initPgSchema() {
       console.error('[Database] Failed to add new UTM parameters to leads table:', migErr.message);
     }
 
+    // Automated PostgreSQL Migration: Add attribution test parameters to leads table
+    try {
+      await client.query(`
+        ALTER TABLE leads 
+        ADD COLUMN IF NOT EXISTS utm_device TEXT,
+        ADD COLUMN IF NOT EXISTS utm_location TEXT,
+        ADD COLUMN IF NOT EXISTS gbraid TEXT,
+        ADD COLUMN IF NOT EXISTS wbraid TEXT,
+        ADD COLUMN IF NOT EXISTS landing_page TEXT,
+        ADD COLUMN IF NOT EXISTS first_landing_page TEXT,
+        ADD COLUMN IF NOT EXISTS referrer TEXT
+      `);
+      console.log('[Database] Checked/Added attribution test parameters to leads table in PostgreSQL.');
+    } catch (migErr) {
+      console.error('[Database] Failed to add attribution test parameters to leads table:', migErr.message);
+    }
+
     
     // Seed cards if empty
     const cardCount = await client.query('SELECT COUNT(*) FROM cards');
@@ -466,9 +483,10 @@ const db = {
           utm_source, utm_info, utm_creative_format, utm_medium, utm_campaign, utm_term, utm_content, utm_channel, utm_category, fbclid,
           gclid, gclsrc, dclid, msclkid, ttclid, twclid, li_fat_id,
           utm_id, utm_creative, utm_keyword, utm_matchtype, utm_network, utm_placement,
+          utm_device, utm_location, gbraid, wbraid, landing_page, first_landing_page, referrer,
           utm_params, redirect_url, created_at
          )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, NOW())`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, NOW())`,
         [
           id, urn, lead.full_name, lead.phone, lead.email, lead.city, lead.employment, lead.income_range,
           lead.card_id, lead.card_name, lead.card_bank, lead.source || 'public', lead.agent_id, lead.agent_name,
@@ -476,6 +494,7 @@ const db = {
           lead.utm_source, lead.utm_info, lead.utm_creative_format, lead.utm_medium, lead.utm_campaign, lead.utm_term, lead.utm_content, lead.utm_channel, lead.utm_category, lead.fbclid,
           lead.gclid, lead.gclsrc, lead.dclid, lead.msclkid, lead.ttclid, lead.twclid, lead.li_fat_id,
           lead.utm_id, lead.utm_creative, lead.utm_keyword, lead.utm_matchtype, lead.utm_network, lead.utm_placement,
+          lead.utm_device, lead.utm_location, lead.gbraid, lead.wbraid, lead.landing_page, lead.first_landing_page, lead.referrer,
           JSON.stringify(lead.utm_params || {}), lead.redirect_url || ''
         ]
       );
@@ -518,14 +537,16 @@ const db = {
           utm_source = $15, utm_info = $16, utm_creative_format = $17, utm_medium = $18, utm_campaign = $19, utm_term = $20, utm_content = $21, utm_channel = $22, utm_category = $23, fbclid = $24,
           gclid = $25, gclsrc = $26, dclid = $27, msclkid = $28, ttclid = $29, twclid = $30, li_fat_id = $31,
           utm_id = $32, utm_creative = $33, utm_keyword = $34, utm_matchtype = $35, utm_network = $36, utm_placement = $37,
-          utm_params = $38, redirect_url = $39
-         WHERE id = $40`,
+          utm_device = $38, utm_location = $39, gbraid = $40, wbraid = $41, landing_page = $42, first_landing_page = $43, referrer = $44,
+          utm_params = $45, redirect_url = $46
+         WHERE id = $47`,
         [
           lead.full_name, lead.phone, lead.email, lead.city, lead.employment, lead.income_range,
           lead.card_id, lead.card_name, lead.card_bank, lead.source, lead.agent_id, lead.agent_name, lead.agent_location, lead.consent,
           lead.utm_source, lead.utm_info, lead.utm_creative_format, lead.utm_medium, lead.utm_campaign, lead.utm_term, lead.utm_content, lead.utm_channel, lead.utm_category, lead.fbclid,
           lead.gclid, lead.gclsrc, lead.dclid, lead.msclkid, lead.ttclid, lead.twclid, lead.li_fat_id,
           lead.utm_id, lead.utm_creative, lead.utm_keyword, lead.utm_matchtype, lead.utm_network, lead.utm_placement,
+          lead.utm_device, lead.utm_location, lead.gbraid, lead.wbraid, lead.landing_page, lead.first_landing_page, lead.referrer,
           JSON.stringify(lead.utm_params || {}), lead.redirect_url || '', id
         ]
       );
