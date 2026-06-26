@@ -2,7 +2,27 @@ import React, { useState, useEffect } from 'react';
 import PublicLanding from './components/PublicLanding';
 import AgentPortal from './components/AgentPortal';
 import AdminDashboard from './components/AdminDashboard';
+// Cookie helper functions
+function setCookie(name, value, days) {
+  let expires = "";
+  if (days) {
+    const date = new Date();
+    date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+    expires = "; expires=" + date.toUTCString();
+  }
+  document.cookie = name + "=" + encodeURIComponent(value || "") + expires + "; path=/; SameSite=Lax";
+}
 
+function getCookie(name) {
+  const nameEQ = name + "=";
+  const ca = document.cookie.split(';');
+  for (let i = 0; i < ca.length; i++) {
+    let c = ca[i];
+    while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+    if (c.indexOf(nameEQ) === 0) return decodeURIComponent(c.substring(nameEQ.length, c.length));
+  }
+  return null;
+}
 
 export default function App() {
   const [currentPath, setCurrentPath] = useState(window.location.pathname);
@@ -42,6 +62,47 @@ export default function App() {
     const params = {};
     for (const [key, value] of searchParams.entries()) {
       params[key] = value;
+    }
+
+    // 1. Process Google Click ID (gclid) persistence
+    const urlGclid = searchParams.get('gclid');
+    if (urlGclid) {
+      setCookie('gclid', urlGclid, 90);
+      params.gclid = urlGclid;
+    } else {
+      const cookieGclid = getCookie('gclid');
+      if (cookieGclid) {
+        params.gclid = cookieGclid;
+      }
+    }
+
+    // 2. Process Facebook Click ID (_fbc)
+    const urlFbclid = searchParams.get('fbclid');
+    if (urlFbclid) {
+      const fbcVal = `fb.1.${Date.now()}.${urlFbclid}`;
+      setCookie('_fbc', fbcVal, 90);
+      params.fbclid = urlFbclid;
+    } else {
+      const cookieFbc = getCookie('_fbc');
+      if (cookieFbc) {
+        const parts = cookieFbc.split('.');
+        const cookieFbclid = parts[parts.length - 1];
+        if (cookieFbclid) {
+          params.fbclid = cookieFbclid;
+        }
+      }
+    }
+
+    // 3. Process Facebook Browser ID (_fbp)
+    let fbpVal = getCookie('_fbp');
+    if (!fbpVal) {
+      fbpVal = `fb.1.${Date.now()}.${Math.floor(Math.random() * 2000000000)}`;
+      setCookie('_fbp', fbpVal, 730); // 2 years
+    }
+    // Expose _fbp to tracking params if needed
+    params._fbp = fbpVal;
+    if (params.fbclid) {
+      params._fbc = getCookie('_fbc') || `fb.1.${Date.now()}.${params.fbclid}`;
     }
 
     // Explicitly guarantee utm_source and utm_info exist (even if empty) for standard code usage
