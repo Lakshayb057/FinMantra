@@ -1203,8 +1203,12 @@ app.use((err, req, res, next) => {
 // Start Server on http node object
 server.listen(PORT, async () => {
   console.log(`FinMantra backend running on port ${PORT}`);
-  // Initialize Baileys connector and bind real-time socket updates depending on settings gateway
+  
   try {
+    // Ensure database is fully connected and initialized before serving requests
+    await db.init();
+    console.log('[Startup] Database initialization completed successfully.');
+
     const settings = await db.getSettings();
     const gateway = settings.whatsapp_gateway || 'baileys';
     if (gateway === 'baileys') {
@@ -1217,7 +1221,10 @@ server.listen(PORT, async () => {
       await baileys.initBaileys(broadcast);
     }
   } catch (err) {
-    console.error('Error fetching settings on startup:', err);
-    baileys.initBaileys(broadcast);
+    console.error('====================================================================');
+    console.error('[Database] CRITICAL: Server startup failed due to database connectivity/initialization error!');
+    console.error('Error stack:', err.stack || err.message || err);
+    console.error('====================================================================');
+    process.exit(1);
   }
 });

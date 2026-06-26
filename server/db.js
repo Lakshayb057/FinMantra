@@ -131,6 +131,22 @@ async function initPgSchema() {
     console.error('====================================================================');
     console.error('[DATABASE ERROR] Failed to connect to AWS/RDS PostgreSQL Database!');
     console.error('Error details:', err.message);
+    
+    // Detailed error diagnostics helper
+    const errMsg = err.message || '';
+    if (errMsg.includes('no pg_hba.conf entry') && errMsg.includes('no encryption')) {
+      console.error('[DIAGNOSIS] The PostgreSQL server rejected the connection because it was not encrypted (SSL).');
+      console.error('[SOLUTION] Please add DATABASE_SSL=true to your server/.env file or append sslmode=require to your DATABASE_URL.');
+    } else if (errMsg.includes('password authentication failed')) {
+      console.error('[DIAGNOSIS] Password authentication failed. The password in your DATABASE_URL is incorrect.');
+      console.error('[SOLUTION] Please verify the user credentials in your DATABASE_URL connection string.');
+    } else if (errMsg.includes('ENOTFOUND') || errMsg.includes('EAI_AGAIN')) {
+      console.error('[DIAGNOSIS] Database host not found. Unable to resolve host name.');
+      console.error('[SOLUTION] Please check the host name in your DATABASE_URL connection string.');
+    } else if (errMsg.includes('ETIMEDOUT') || errMsg.includes('ECONNREFUSED')) {
+      console.error('[DIAGNOSIS] Database connection timed out or was refused.');
+      console.error('[SOLUTION] Please verify that your PostgreSQL server is running and that your AWS Security Groups allow traffic on port 5432 from this client.');
+    }
     console.error('Please verify your DATABASE_URL configuration and database server connectivity.');
     console.error('====================================================================');
     throw err;
@@ -414,13 +430,6 @@ async function initPgSchema() {
   }
 }
 
-if (usePg) {
-  initPgSchema().catch(err => {
-    console.error('[Database] CRITICAL: PostgreSQL initialization failed. Server process stopped.');
-    process.exit(1);
-  });
-}
-
 // Helper to read data (local JSON fallback)
 function readData() {
   initDb();
@@ -445,6 +454,14 @@ function writeData(data) {
 }
 
 const db = {
+  // Initialize Database Schema (PG or JSON)
+  async init() {
+    if (usePg) {
+      await initPgSchema();
+    } else {
+      initDb();
+    }
+  },
   // --- Leads ---
   async getLeads() {
     if (usePg) {
