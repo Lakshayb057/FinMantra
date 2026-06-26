@@ -1154,20 +1154,106 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* Admin header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '2rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '1.5rem' }}>
-        <div>
-          <h1 style={{ fontSize: '2.2rem', marginBottom: '0.25rem' }}>Admin Control Center</h1>
-          <p style={{ color: 'hsl(var(--text-secondary))', fontSize: '0.9rem' }}>Manage cards, dynamic redirection URLs, agents, and track generated leads.</p>
+      {/* Sticky Premium Top Navigation Bar */}
+      <div className="glass-panel" style={{ 
+        position: 'sticky', 
+        top: '1rem', 
+        zIndex: 1000, 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        padding: '0.75rem 1.5rem', 
+        marginBottom: '2rem',
+        backdropFilter: 'blur(12px)',
+        background: 'rgba(18, 18, 18, 0.7)',
+        border: '1px solid var(--border-light)',
+        borderRadius: 'var(--radius-md)',
+        boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.2)'
+      }}>
+        {/* Brand/Title */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <div style={{ 
+            width: '32px', 
+            height: '32px', 
+            borderRadius: 'var(--radius-sm)', 
+            background: 'linear-gradient(135deg, var(--gold), var(--gold-deep))',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontWeight: 800,
+            color: '#000',
+            fontSize: '1rem'
+          }}>
+            F
+          </div>
+          <span style={{ fontWeight: 800, fontSize: '1.2rem', letterSpacing: '0.5px', color: 'var(--text-light)' }}>
+            FinMantra <span style={{ color: 'var(--gold)', fontWeight: 400, fontSize: '0.9rem' }}>Admin</span>
+          </span>
         </div>
-        <div style={{ display: 'flex', gap: '1rem' }}>
-          <button onClick={loadAllAdminData} className="btn-secondary" style={{ padding: '0.6rem 1rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-            <RefreshCw size={16} /> Refresh
+
+        {/* Central Navigation Tabs */}
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <button 
+            className={`nav-link ${activeTab === 'leads' ? 'active' : ''}`} 
+            onClick={() => setActiveTab('leads')}
+            style={{ padding: '0.5rem 0.85rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem', border: 'none', background: activeTab === 'leads' ? 'rgba(224, 168, 46, 0.12)' : 'transparent', color: activeTab === 'leads' ? 'var(--gold)' : 'hsl(var(--text-secondary))', cursor: 'pointer', transition: 'all 0.2s', borderRadius: 'var(--radius-sm)' }}
+          >
+            <BarChart3 size={14} /> Leads Repository
           </button>
-          <button onClick={handleLogout} className="btn-secondary" style={{ padding: '0.6rem 1rem', background: 'rgba(209, 67, 67, 0.1)', color: 'var(--err)', borderColor: 'rgba(209, 67, 67, 0.2)' }}>
+          <button 
+            className={`nav-link ${activeTab === 'cards' ? 'active' : ''}`} 
+            onClick={() => setActiveTab('cards')}
+            style={{ padding: '0.5rem 0.85rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem', border: 'none', background: activeTab === 'cards' ? 'rgba(224, 168, 46, 0.12)' : 'transparent', color: activeTab === 'cards' ? 'var(--gold)' : 'hsl(var(--text-secondary))', cursor: 'pointer', transition: 'all 0.2s', borderRadius: 'var(--radius-sm)' }}
+          >
+            <CreditCard size={14} /> Cards Manager
+          </button>
+          <button 
+            className={`nav-link ${activeTab === 'agents' ? 'active' : ''}`} 
+            onClick={() => setActiveTab('agents')}
+            style={{ padding: '0.5rem 0.85rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem', border: 'none', background: activeTab === 'agents' ? 'rgba(224, 168, 46, 0.12)' : 'transparent', color: activeTab === 'agents' ? 'var(--gold)' : 'hsl(var(--text-secondary))', cursor: 'pointer', transition: 'all 0.2s', borderRadius: 'var(--radius-sm)' }}
+          >
+            <Users size={14} /> Agents Controller
+          </button>
+          <button 
+            className={`nav-link ${activeTab === 'locations' ? 'active' : ''}`} 
+            onClick={() => setActiveTab('locations')}
+            style={{ padding: '0.5rem 0.85rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem', border: 'none', background: activeTab === 'locations' ? 'rgba(224, 168, 46, 0.12)' : 'transparent', color: activeTab === 'locations' ? 'var(--gold)' : 'hsl(var(--text-secondary))', cursor: 'pointer', transition: 'all 0.2s', borderRadius: 'var(--radius-sm)' }}
+          >
+            <MapPin size={14} /> Kiosks & Cities
+          </button>
+          <button 
+            className={`nav-link ${activeTab === 'settings' ? 'active' : ''}`} 
+            onClick={() => setActiveTab('settings')}
+            style={{ padding: '0.5rem 0.85rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem', border: 'none', background: activeTab === 'settings' ? 'rgba(224, 168, 46, 0.12)' : 'transparent', color: activeTab === 'settings' ? 'var(--gold)' : 'hsl(var(--text-secondary))', cursor: 'pointer', transition: 'all 0.2s', borderRadius: 'var(--radius-sm)' }}
+          >
+            <SettingsIcon size={14} /> Settings & API
+          </button>
+        </div>
+
+        {/* Right side controls */}
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+          <button 
+            onClick={loadAllAdminData} 
+            className="btn-secondary" 
+            style={{ padding: '0.5rem 0.85rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.25rem', height: '34px', cursor: 'pointer' }}
+            title="Refresh Data"
+          >
+            <RefreshCw size={14} /> Sync
+          </button>
+          <button 
+            onClick={handleLogout} 
+            className="btn-secondary" 
+            style={{ padding: '0.5rem 0.85rem', fontSize: '0.85rem', height: '34px', background: 'rgba(209, 67, 67, 0.1)', color: 'var(--err)', borderColor: 'rgba(209, 67, 67, 0.2)', cursor: 'pointer' }}
+          >
             Exit
           </button>
         </div>
+      </div>
+
+      {/* Welcome Title Block */}
+      <div style={{ marginBottom: '2.5rem' }}>
+        <h2 style={{ fontSize: '1.75rem', marginBottom: '0.25rem', color: 'var(--text-light)' }}>Admin Control Room</h2>
+        <p style={{ color: 'hsl(var(--text-secondary))', fontSize: '0.9rem' }}>Configure credit cards catalog, dynamic destination links, agents, kiosks and monitor client logs.</p>
       </div>
 
       {/* Metrics Strips */}
@@ -1192,25 +1278,6 @@ export default function AdminDashboard() {
           <div style={{ fontSize: '2.2rem', fontWeight: 800, margin: '0.25rem 0', color: 'hsl(var(--accent-gold))' }}>{activeCards.length}</div>
           <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>Active redirect options</div>
         </div>
-      </div>
-
-      {/* Admin Panel Nav tabs */}
-      <div style={{ display: 'flex', gap: '0.75rem', borderBottom: '1px solid var(--border-light)', marginBottom: '2rem', paddingBottom: '0.5rem', flexWrap: 'wrap' }}>
-        <button className={`nav-link ${activeTab === 'leads' ? 'active' : ''}`} onClick={() => setActiveTab('leads')}>
-          <BarChart3 size={16} /> Leads Repository
-        </button>
-        <button className={`nav-link ${activeTab === 'cards' ? 'active' : ''}`} onClick={() => setActiveTab('cards')}>
-          <CreditCard size={16} /> Cards Manager
-        </button>
-        <button className={`nav-link ${activeTab === 'agents' ? 'active' : ''}`} onClick={() => setActiveTab('agents')}>
-          <Users size={16} /> Agents Controller
-        </button>
-        <button className={`nav-link ${activeTab === 'locations' ? 'active' : ''}`} onClick={() => setActiveTab('locations')}>
-          <MapPin size={16} /> Kiosks & Cities
-        </button>
-        <button className={`nav-link ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => setActiveTab('settings')}>
-          <SettingsIcon size={16} /> Settings & API
-        </button>
       </div>
 
       {/* TAB CONTENT */}
