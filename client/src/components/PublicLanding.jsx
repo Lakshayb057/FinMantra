@@ -69,12 +69,15 @@ export default function PublicLanding({ navigateTo, utmParams }) {
         const locsData = await locsRes.json();
         const settingsData = await settingsRes.json();
 
-        setCards(cardsData);
-        setLocations(locsData.filter(l => l.active));
+        const cardsList = Array.isArray(cardsData) ? cardsData : [];
+        const locsList = Array.isArray(locsData) ? locsData : [];
+
+        setCards(cardsList);
+        setLocations(locsList.filter(l => l.active));
         setSettings(settingsData);
         
-        if (cardsData.length > 0) {
-          setFormData(prev => ({ ...prev, selectedCard: cardsData[0].id }));
+        if (cardsList.length > 0) {
+          setFormData(prev => ({ ...prev, selectedCard: cardsList[0].id }));
         }
       } catch (err) {
         console.error('Error fetching landing page data:', err);

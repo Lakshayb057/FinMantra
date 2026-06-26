@@ -205,10 +205,10 @@ export default function AdminDashboard() {
       const settingsData = await settingsRes.json();
       const baileysData = baileysRes.ok ? await baileysRes.json() : { status: 'DISCONNECTED', qrCodeDataUrl: '', phone: '' };
 
-      setLeads(leadsData);
-      setCards(cardsData);
-      setAgents(agentsData);
-      setLocations(locsData);
+      setLeads(Array.isArray(leadsData) ? leadsData : []);
+      setCards(Array.isArray(cardsData) ? cardsData : []);
+      setAgents(Array.isArray(agentsData) ? agentsData : []);
+      setLocations(Array.isArray(locsData) ? locsData : []);
       setSettings(settingsData);
       setBaileysStatus(baileysData);
     } catch (err) {

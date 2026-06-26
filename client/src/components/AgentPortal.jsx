@@ -201,13 +201,17 @@ export default function AgentPortal() {
       const cardsData = await cardsRes.json();
       const locsData = await locsRes.json();
       
-      setCards(cardsData.filter(c => c.category?.toLowerCase() !== 'digital'));
-      setLocations(locsData.filter(l => l.active));
+      const cardsList = Array.isArray(cardsData) ? cardsData : [];
+      const locsList = Array.isArray(locsData) ? locsData : [];
+
+      setCards(cardsList.filter(c => c.category?.toLowerCase() !== 'digital'));
+      setLocations(locsList.filter(l => l.active));
       
       if (leadsRes.ok) {
         const leadsData = await leadsRes.json();
+        const leadsList = Array.isArray(leadsData) ? leadsData : [];
         // Filter leads submitted by this agent
-        const filtered = leadsData.filter(l => l.agent_id === agent?.id);
+        const filtered = leadsList.filter(l => l.agent_id === agent?.id);
         setAgentLeads(filtered);
         // Token is verified — enable WebSocket sync
         setIsAuthenticated(true);

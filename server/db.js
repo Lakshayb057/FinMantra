@@ -72,13 +72,14 @@ if (!isLocalhost && !connectionUrl.includes('sslmode=')) {
   connectionUrl += connectionUrl.includes('?') ? '&sslmode=require' : '?sslmode=require';
 }
 
-const pool = new Pool({
-  connectionString: connectionUrl,
-  ssl: sslConfig,
-  max: 20,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 10000
-});
+const pgConnectionString = require('pg-connection-string');
+const pgConfig = pgConnectionString.parse(connectionUrl);
+pgConfig.ssl = sslConfig;
+pgConfig.max = 20;
+pgConfig.idleTimeoutMillis = 30000;
+pgConfig.connectionTimeoutMillis = 10000;
+
+const pool = new Pool(pgConfig);
 
 pool.on('error', (err) => {
   console.error('[Database] Unexpected error on idle PostgreSQL client:', err.message || err);
