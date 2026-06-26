@@ -615,7 +615,7 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
     let matchedCard = null;
     
     // First, check if there is an active card matching by ad_id (ad_id, utm_creative, utm_content, or utm_id)
-    const adIdToCheck = ad_id || utm_creative || utm_content || utm_id;
+    const adIdToCheck = utm_creative || ad_id;
     if (adIdToCheck) {
       const activeCards = await db.getCards(false);
       const adIdStr = String(adIdToCheck).trim();
@@ -724,7 +724,7 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
     first_landing_page: source !== 'agent' ? (first_landing_page || null) : null,
     referrer: source !== 'agent' ? (referrer || null) : null,
     utm_params: source !== 'agent' ? (resolvedUtmParams || null) : null,
-    ad_id: ad_id || utm_creative || utm_content || utm_id || (card ? card.ad_id : null) || null
+    ad_id: utm_creative || ad_id || (card ? card.ad_id : null) || null
   };
 
   const newLead = await db.addLead(leadData);
