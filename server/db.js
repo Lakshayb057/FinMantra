@@ -207,6 +207,10 @@ async function initPgSchema() {
         ad_id VARCHAR(100),
         utm_params JSONB DEFAULT '{}',
         redirect_url TEXT,
+        ip_address VARCHAR(100),
+        user_agent TEXT,
+        capi_status VARCHAR(50),
+        capi_response JSONB,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -259,6 +263,13 @@ async function initPgSchema() {
 
     try {
       await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS ad_id VARCHAR(100)");
+    } catch (migErr) {}
+
+    try {
+      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS ip_address VARCHAR(100)");
+      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS user_agent TEXT");
+      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS capi_status VARCHAR(50)");
+      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS capi_response JSONB");
     } catch (migErr) {}
 
     try {
@@ -430,9 +441,9 @@ const db = {
         gclid, gclsrc, dclid, msclkid, ttclid, twclid, li_fat_id,
         utm_id, utm_creative, utm_keyword, utm_matchtype, utm_network, utm_placement,
         utm_device, utm_location, gbraid, wbraid, landing_page, first_landing_page, referrer, ad_id,
-        utm_params, redirect_url, created_at
+        utm_params, redirect_url, ip_address, user_agent, capi_status, capi_response, created_at
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, NOW())`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, NOW())`,
       [
         id, urn, lead.full_name, lead.phone, lead.email, lead.city, lead.employment, lead.income_range,
         lead.card_id, lead.card_name, lead.card_bank, lead.source || 'public', lead.agent_id, lead.agent_name,
@@ -441,7 +452,9 @@ const db = {
         lead.gclid, lead.gclsrc, lead.dclid, lead.msclkid, lead.ttclid, lead.twclid, lead.li_fat_id,
         lead.utm_id, lead.utm_creative, lead.utm_keyword, lead.utm_matchtype, lead.utm_network, lead.utm_placement,
         lead.utm_device, lead.utm_location, lead.gbraid, lead.wbraid, lead.landing_page, lead.first_landing_page, lead.referrer, lead.ad_id,
-        JSON.stringify(lead.utm_params || {}), lead.redirect_url || ''
+        JSON.stringify(lead.utm_params || {}), lead.redirect_url || '',
+        lead.ip_address || null, lead.user_agent || null, lead.capi_status || null,
+        lead.capi_response ? JSON.stringify(lead.capi_response) : null
       ]
     );
     return { id, urn, ...lead, created_at: new Date().toISOString() };
@@ -456,8 +469,8 @@ const db = {
         gclid = $25, gclsrc = $26, dclid = $27, msclkid = $28, ttclid = $29, twclid = $30, li_fat_id = $31,
         utm_id = $32, utm_creative = $33, utm_keyword = $34, utm_matchtype = $35, utm_network = $36, utm_placement = $37,
         utm_device = $38, utm_location = $39, gbraid = $40, wbraid = $41, landing_page = $42, first_landing_page = $43, referrer = $44, ad_id = $45,
-        utm_params = $46, redirect_url = $47
-       WHERE id = $48`,
+        utm_params = $46, redirect_url = $47, ip_address = $48, user_agent = $49, capi_status = $50, capi_response = $51
+       WHERE id = $52`,
       [
         lead.full_name, lead.phone, lead.email, lead.city, lead.employment, lead.income_range,
         lead.card_id, lead.card_name, lead.card_bank, lead.source, lead.agent_id, lead.agent_name, lead.agent_location, lead.consent,
@@ -465,7 +478,10 @@ const db = {
         lead.gclid, lead.gclsrc, lead.dclid, lead.msclkid, lead.ttclid, lead.twclid, lead.li_fat_id,
         lead.utm_id, lead.utm_creative, lead.utm_keyword, lead.utm_matchtype, lead.utm_network, lead.utm_placement,
         lead.utm_device, lead.utm_location, lead.gbraid, lead.wbraid, lead.landing_page, lead.first_landing_page, lead.referrer, lead.ad_id,
-        JSON.stringify(lead.utm_params || {}), lead.redirect_url || '', id
+        JSON.stringify(lead.utm_params || {}), lead.redirect_url || '',
+        lead.ip_address, lead.user_agent, lead.capi_status,
+        lead.capi_response ? JSON.stringify(lead.capi_response) : null,
+        id
       ]
     );
     return { id, ...lead };

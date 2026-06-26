@@ -525,6 +525,98 @@ app.post('/api/otp/verify', async (req, res) => {
 
 // --- LEADS MANAGEMENT ---
 
+// Helper to hash fields for Meta Conversions API (SHA-256)
+function sha256Hash(text) {
+  if (!text) return null;
+  return crypto.createHash('sha256').update(String(text).trim().toLowerCase()).digest('hex');
+}
+
+// Send server-side event to Meta Conversions API (CAPI)
+async function sendMetaCapiEvent(lead, eventName = 'Lead', testEventCode = null) {
+  try {
+    const settings = await db.getSettings().catch(() => ({}));
+    const pixelId = settings.meta_pixel_id || process.env.META_PIXEL_ID;
+    const accessToken = settings.meta_access_token || process.env.META_ACCESS_TOKEN;
+    
+    if (!pixelId || !accessToken) {
+      console.log('[Meta CAPI] Skipped: META_PIXEL_ID or META_ACCESS_TOKEN not set.');
+      return { status: 'skipped', error: 'Missing API credentials' };
+    }
+    
+    // Format phone number to E.164 if possible
+    let rawPhone = lead.phone || '';
+    rawPhone = rawPhone.replace(/\D/g, '');
+    if (rawPhone.length === 10) {
+      rawPhone = '91' + rawPhone; // Default country code for India
+    }
+
+    const userData = {
+      ph: [sha256Hash(rawPhone)],
+      em: [sha256Hash(lead.email)],
+      client_ip_address: lead.ip_address || null,
+      client_user_agent: lead.user_agent || null,
+    };
+
+    // Add fbc if present
+    if (lead.fbclid) {
+      userData.fbc = `fb.1.${Date.now()}.${lead.fbclid}`;
+    } else if (lead.utm_params && lead.utm_params.fbclid) {
+      userData.fbc = `fb.1.${Date.now()}.${lead.utm_params.fbclid}`;
+    }
+
+    // Add fbp if present
+    if (lead.utm_params && lead.utm_params._fbp) {
+      userData.fbp = lead.utm_params._fbp;
+    }
+
+    const payload = {
+      data: [
+        {
+          event_name: eventName,
+          event_time: Math.floor(Date.now() / 1000),
+          event_id: lead.urn || lead.id,
+          event_source_url: lead.landing_page || 'https://finmantra.org/',
+          action_source: 'website',
+          user_data: userData,
+          custom_data: {
+            currency: 'INR',
+            value: lead.income_range ? parseFloat(lead.income_range.replace(/[^\d.]/g, '')) || 0 : 0,
+            content_name: lead.card_name || 'Credit Card Lead',
+            content_category: lead.card_bank || 'Financial Services'
+          }
+        }
+      ]
+    };
+
+    // Support for Meta CAPI real-time testing console
+    const activeTestCode = testEventCode || settings.meta_test_event_code || process.env.META_TEST_EVENT_CODE;
+    if (activeTestCode) {
+      payload.test_event_code = activeTestCode;
+    }
+
+    const url = `https://graph.facebook.com/v20.0/${pixelId}/events?access_token=${accessToken}`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+    
+    const data = await response.json();
+    if (response.ok) {
+      console.log(`[Meta CAPI] Event '${eventName}' sent successfully. FB Trace ID: ${data.fb_trace_id}`);
+      return { status: 'success', response: data };
+    } else {
+      console.error(`[Meta CAPI] Failed:`, data);
+      return { status: 'failed', response: data };
+    }
+  } catch (err) {
+    console.error(`[Meta CAPI] Network error:`, err);
+    return { status: 'failed', error: err.message };
+  }
+}
+
 // Submit Lead
 app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
   const {
@@ -724,7 +816,15 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
     first_landing_page: source !== 'agent' ? (first_landing_page || null) : null,
     referrer: source !== 'agent' ? (referrer || null) : null,
     utm_params: source !== 'agent' ? (resolvedUtmParams || null) : null,
-    ad_id: utm_creative || ad_id || (card ? card.ad_id : null) || null
+    ad_id: utm_creative || ad_id || (card ? card.ad_id : null) || null,
+    ip_address: (() => {
+      let clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
+      if (clientIp.includes(',')) {
+        clientIp = clientIp.split(',')[0].trim();
+      }
+      return clientIp || null;
+    })(),
+    user_agent: req.headers['user-agent'] || null
   };
 
   const newLead = await db.addLead(leadData);
@@ -765,6 +865,15 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
   
   // Save updated redirect_url to database
   await db.updateLead(newLead.id, newLead);
+
+  // Trigger Meta Conversions API (CAPI) Event asynchronously in background
+  sendMetaCapiEvent(newLead, 'Lead').then(async (capiResult) => {
+    if (capiResult && capiResult.status !== 'skipped') {
+      newLead.capi_status = capiResult.status;
+      newLead.capi_response = capiResult.response || { error: capiResult.error };
+      await db.updateLead(newLead.id, newLead).catch(err => console.error('Failed to update lead with CAPI status:', err));
+    }
+  }).catch(err => console.error('Error in sendMetaCapiEvent process:', err));
 
   // Real-time broadcast notification of a new lead!
   broadcast({ type: 'LEAD_ADDED', data: newLead });
