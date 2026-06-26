@@ -179,26 +179,28 @@ export default function App() {
         </div>
       )}
 
-      {/* Header / Navbar */}
-      <header className="navbar">
-        <div className="nav-logo" onClick={() => navigateTo('/')} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <span style={{ width: '11px', height: '11px', borderRadius: '50%', backgroundColor: 'var(--gold)', boxShadow: '0 0 0 4px rgba(224, 168, 46, 0.22)' }}></span>
-          <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: '1.3rem', letterSpacing: '-0.03em' }}>FinMantra</span>
-        </div>
-        <nav className="nav-links">
-          {currentPath === '/' && (
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', letterSpacing: '0.05em', color: 'var(--mint)', border: '1.5px solid rgba(22,163,123,0.35)', padding: '0.4em 0.85em', borderRadius: '999px', fontWeight: 700 }}>
-              100% FREE • NO CHARGES
-            </div>
-          )}
-          {currentPath === '/agent' && (
-            <span className="nav-link active">Agent Terminal</span>
-          )}
-          {currentPath === '/admin' && (
-            <span className="nav-link active">Admin Dashboard</span>
-          )}
-        </nav>
-      </header>
+      {/* Header / Navbar - Hide on admin and agent portals to avoid duplicates */}
+      {currentPath !== '/admin' && currentPath !== '/agent' && (
+        <header className="navbar">
+          <div className="nav-logo" onClick={() => navigateTo('/')} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span style={{ width: '11px', height: '11px', borderRadius: '50%', backgroundColor: 'var(--gold)', boxShadow: '0 0 0 4px rgba(224, 168, 46, 0.22)' }}></span>
+            <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: '1.3rem', letterSpacing: '-0.03em' }}>FinMantra</span>
+          </div>
+          <nav className="nav-links">
+            {currentPath === '/' && (
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', letterSpacing: '0.05em', color: 'var(--mint)', border: '1.5px solid rgba(22,163,123,0.35)', padding: '0.4em 0.85em', borderRadius: '999px', fontWeight: 700 }}>
+                100% FREE • NO CHARGES
+              </div>
+            )}
+            {currentPath === '/agent' && (
+              <span className="nav-link active">Agent Terminal</span>
+            )}
+            {currentPath === '/admin' && (
+              <span className="nav-link active">Admin Dashboard</span>
+            )}
+          </nav>
+        </header>
+      )}
 
       {/* Main Content */}
       <main>

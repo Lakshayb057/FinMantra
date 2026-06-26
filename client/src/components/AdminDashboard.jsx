@@ -3,7 +3,7 @@ import {
   Users, CreditCard, MapPin, Settings as SettingsIcon, ShieldAlert, BarChart3, 
   Trash2, Download, Search, Plus, Edit, Check, X, RefreshCw, AlertCircle,
   QrCode, Smartphone, CheckCircle, Wifi, WifiOff, Eye, MessageSquare, Layers,
-  ArrowUp, ArrowDown
+  ArrowUp, ArrowDown, MoreVertical, LogOut
 } from 'lucide-react';
 
 export default function AdminDashboard() {
@@ -16,6 +16,7 @@ export default function AdminDashboard() {
   
   // Navigation Tabs: 'leads' | 'cards' | 'agents' | 'locations' | 'settings'
   const [activeTab, setActiveTab] = useState('leads');
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [activeSettingsSubTab, setActiveSettingsSubTab] = useState('general');
 
   // Master Data States
@@ -1123,6 +1124,9 @@ export default function AdminDashboard() {
               {loading ? 'Validating credentials...' : 'Enter Admin Room'}
             </button>
           </form>
+          <div style={{ textAlign: 'center', marginTop: '1.5rem' }}>
+            <a href="/" style={{ fontSize: '0.85rem', color: 'var(--gold-deep)', textDecoration: 'none', fontWeight: 600 }}>← Back to home</a>
+          </div>
         </div>
       </section>
     );
@@ -1172,27 +1176,14 @@ export default function AdminDashboard() {
       }}>
         {/* Brand/Title */}
         <div className="admin-nav-brand" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <div style={{ 
-            width: '32px', 
-            height: '32px', 
-            borderRadius: 'var(--radius-sm)', 
-            background: 'linear-gradient(135deg, var(--gold), var(--gold-deep))',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontWeight: 800,
-            color: '#fff',
-            fontSize: '1rem'
-          }}>
-            F
-          </div>
-          <span style={{ fontWeight: 800, fontSize: '1.2rem', letterSpacing: '0.5px', color: 'var(--ink)' }}>
-            FinMantra <span style={{ color: 'var(--gold-deep)', fontWeight: 400, fontSize: '0.9rem' }}>Admin</span>
+          <span style={{ width: '11px', height: '11px', borderRadius: '50%', backgroundColor: 'var(--gold)', boxShadow: '0 0 0 4px rgba(224, 168, 46, 0.22)' }}></span>
+          <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: '1.25rem', letterSpacing: '-0.03em', color: 'var(--ink)' }}>
+            FinMantra <span style={{ color: 'var(--gold-deep)', fontWeight: 400, fontSize: '0.85rem' }}>Admin</span>
           </span>
         </div>
 
-        {/* Central Navigation Tabs */}
-        <div className="admin-nav-tabs" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+        {/* Central Navigation Tabs (Desktop Only) */}
+        <div className="admin-nav-tabs desktop-only" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
           <button 
             className={`nav-link ${activeTab === 'leads' ? 'active' : ''}`} 
             onClick={() => setActiveTab('leads')}
@@ -1290,8 +1281,8 @@ export default function AdminDashboard() {
           </button>
         </div>
 
-        {/* Right side controls */}
-        <div className="admin-nav-actions" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+        {/* Right side controls (Desktop Only) */}
+        <div className="admin-nav-actions desktop-only" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
           <button 
             onClick={loadAllAdminData} 
             className="btn-secondary" 
@@ -1308,6 +1299,74 @@ export default function AdminDashboard() {
             Exit
           </button>
         </div>
+
+        {/* Mobile Menu Toggle Button (3-Dot Icon) */}
+        <button 
+          className="mobile-only-btn" 
+          onClick={() => setShowMobileMenu(!showMobileMenu)}
+          style={{
+            background: 'none',
+            border: '1.5px solid var(--line)',
+            borderRadius: 'var(--radius-sm)',
+            padding: '0.45rem',
+            cursor: 'pointer',
+            color: 'var(--muted)',
+            display: 'none' /* Toggle visiblity using media queries */
+          }}
+        >
+          <MoreVertical size={20} />
+        </button>
+
+        {/* Mobile Dropdown Overlay Menu */}
+        {showMobileMenu && (
+          <div className="mobile-dropdown-menu">
+            <button 
+              className={`nav-link ${activeTab === 'leads' ? 'active' : ''}`} 
+              onClick={() => { setActiveTab('leads'); setShowMobileMenu(false); }}
+            >
+              <BarChart3 size={14} /> Leads Repository
+            </button>
+            <button 
+              className={`nav-link ${activeTab === 'cards' ? 'active' : ''}`} 
+              onClick={() => { setActiveTab('cards'); setShowMobileMenu(false); }}
+            >
+              <CreditCard size={14} /> Cards Manager
+            </button>
+            <button 
+              className={`nav-link ${activeTab === 'agents' ? 'active' : ''}`} 
+              onClick={() => { setActiveTab('agents'); setShowMobileMenu(false); }}
+            >
+              <Users size={14} /> Agents Controller
+            </button>
+            <button 
+              className={`nav-link ${activeTab === 'locations' ? 'active' : ''}`} 
+              onClick={() => { setActiveTab('locations'); setShowMobileMenu(false); }}
+            >
+              <MapPin size={14} /> Kiosks & Cities
+            </button>
+            <button 
+              className={`nav-link ${activeTab === 'settings' ? 'active' : ''}`} 
+              onClick={() => { setActiveTab('settings'); setShowMobileMenu(false); }}
+            >
+              <SettingsIcon size={14} /> Settings & API
+            </button>
+            <div style={{ height: '1px', background: 'var(--line)', margin: '0.4rem 0' }} />
+            <button 
+              onClick={() => { loadAllAdminData(); setShowMobileMenu(false); }} 
+              className="btn-secondary" 
+              style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', width: '100%', padding: '0.5rem 0.85rem' }}
+            >
+              <RefreshCw size={14} /> Sync Data
+            </button>
+            <button 
+              onClick={() => { handleLogout(); setShowMobileMenu(false); }} 
+              className="btn-secondary" 
+              style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', width: '100%', padding: '0.5rem 0.85rem', background: 'rgba(209, 67, 67, 0.1)', color: 'var(--err)', borderColor: 'rgba(209, 67, 67, 0.2)' }}
+            >
+              <LogOut size={14} /> Exit
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Welcome Title Block */}

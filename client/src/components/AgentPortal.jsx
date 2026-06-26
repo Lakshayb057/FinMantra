@@ -390,6 +390,9 @@ export default function AgentPortal() {
               {loading ? 'Authenticating...' : 'Access Terminal'} <LogIn size={18} />
             </button>
           </form>
+          <div style={{ textAlign: 'center', marginTop: '1.5rem' }}>
+            <a href="/" style={{ fontSize: '0.85rem', color: 'var(--gold-deep)', textDecoration: 'none', fontWeight: 600 }}>← Back to home</a>
+          </div>
         </div>
       </section>
     );
@@ -474,33 +477,64 @@ export default function AgentPortal() {
         </div>
       )}
 
-      {/* Dashboard Top Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '2.5rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '1.5rem' }}>
-        <div>
-          <h1 style={{ fontSize: '2.2rem', marginBottom: '0.25rem' }}>Welcome, {agent?.name}</h1>
-          <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', color: 'hsl(var(--text-secondary))', fontSize: '0.9rem' }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-              <User size={16} /> ID: Agent-{agent?.id || 'Active'}
-            </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-              <MapPin size={16} /> Assigned Locations: {agent?.locations?.join(', ') || 'General'}
-            </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: 'hsl(var(--secondary))', fontWeight: 600 }}>
-              <CheckCircle size={16} /> Working Today At: {agentLocation || 'General'}
-              {agent?.locations && agent.locations.length > 1 && (
-                <button 
-                  onClick={() => setShowLocationModal(true)} 
-                  style={{ background: 'none', border: 'none', color: 'hsl(var(--primary))', textDecoration: 'underline', cursor: 'pointer', fontSize: '0.8rem', marginLeft: '0.5rem', padding: 0 }}
-                >
-                  Change
-                </button>
-              )}
-            </span>
-          </div>
+      {/* Sticky Premium Top Navigation Bar */}
+      <div className="admin-navbar glass-panel" style={{ 
+        position: 'sticky', 
+        top: '1rem', 
+        zIndex: 1000, 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        padding: '0.75rem 1.5rem', 
+        marginBottom: '2rem',
+        backdropFilter: 'blur(12px)',
+        background: 'rgba(255, 255, 255, 0.85)',
+        border: '1px solid var(--line)',
+        borderRadius: 'var(--radius-md)',
+        boxShadow: '0 8px 32px 0 rgba(17, 19, 43, 0.06)'
+      }}>
+        {/* Brand/Logo */}
+        <div className="admin-nav-brand" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <span style={{ width: '11px', height: '11px', borderRadius: '50%', backgroundColor: 'var(--gold)', boxShadow: '0 0 0 4px rgba(224, 168, 46, 0.22)' }}></span>
+          <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: '1.25rem', letterSpacing: '-0.03em', color: 'var(--ink)' }}>
+            FinMantra <span style={{ color: 'var(--gold-deep)', fontWeight: 400, fontSize: '0.85rem' }}>Agent</span>
+          </span>
         </div>
-        <button onClick={handleLogout} className="btn-secondary" style={{ padding: '0.6rem 1.2rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem' }}>
-          <LogOut size={16} /> Logout
-        </button>
+
+        {/* Right side controls */}
+        <div className="admin-nav-actions" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+          <button 
+            onClick={handleLogout} 
+            className="btn-secondary" 
+            style={{ padding: '0.5rem 0.85rem', fontSize: '0.85rem', height: '34px', background: 'rgba(209, 67, 67, 0.1)', color: 'var(--err)', borderColor: 'rgba(209, 67, 67, 0.2)', cursor: 'pointer' }}
+          >
+            <LogOut size={14} /> Exit
+          </button>
+        </div>
+      </div>
+
+      {/* Dashboard Top Header */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '2.5rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '1.5rem' }}>
+        <h1 style={{ fontSize: '1.75rem', marginBottom: '0.25rem' }}>Welcome, {agent?.name}</h1>
+        <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', color: 'hsl(var(--text-secondary))', fontSize: '0.9rem' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+            <User size={16} /> ID: Agent-{agent?.id || 'Active'}
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+            <MapPin size={16} /> Assigned Locations: {agent?.locations?.join(', ') || 'General'}
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: 'hsl(var(--secondary))', fontWeight: 600 }}>
+            <CheckCircle size={16} /> Working Today At: {agentLocation || 'General'}
+            {agent?.locations && agent.locations.length > 1 && (
+              <button 
+                onClick={() => setShowLocationModal(true)} 
+                style={{ background: 'none', border: 'none', color: 'hsl(var(--primary))', textDecoration: 'underline', cursor: 'pointer', fontSize: '0.8rem', marginLeft: '0.5rem', padding: 0 }}
+              >
+                Change
+              </button>
+            )}
+          </span>
+        </div>
       </div>
 
       {/* Performance Summary Cards */}
