@@ -932,8 +932,8 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
   const referralLink = `${baseUrl}/refer/${agentCode}/${dateCode}/${newLead.urn}`;
   const cardNameStr = card ? `${card.bank} ${card.name}` : 'FinMantra Partner Bank';
   const referralMsg = `Hello ${trimmedName}, thank you for choosing FinMantra. You can access your secure bank portal for the ${cardNameStr} application here: ${referralLink}`;
-  const referralTemplateName = settings.wa_referral_template_name || process.env.WA_REFERRAL_TEMPLATE_NAME || 'transactional_link';
-  const candidateRefTemplates = [referralTemplateName, 'transactional_link', 'jaspers_market_order_confirmation_v1'].filter((v, i, a) => v && a.indexOf(v) === i);
+  const referralTemplateName = settings.wa_referral_template_name || process.env.WA_REFERRAL_TEMPLATE_NAME || 'finmantra_portal';
+  const candidateRefTemplates = [referralTemplateName, 'finmantra_portal', 'finmantra_welcome', 'transactional_link', 'jaspers_market_order_confirmation_v1'].filter((v, i, a) => v && a.indexOf(v) === i);
   
   for (const refTName of candidateRefTemplates) {
     try {
