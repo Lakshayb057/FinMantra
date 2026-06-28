@@ -237,7 +237,7 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
       },
       {
         type: 'button',
-        sub_type: 'otp',
+        sub_type: 'url',
         index: '0',
         parameters: [
           {
