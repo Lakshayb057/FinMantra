@@ -1426,6 +1426,28 @@ app.post('/api/whatsapp/disconnect', authenticateToken, requireAdmin, async (req
   }
 });
 
+// Test Live WhatsApp Meta API Message Delivery (OTP or Referral URL)
+app.post('/api/whatsapp/test', async (req, res) => {
+  const { phone = '8295886832', type = 'otp' } = req.body;
+  const settings = await db.getSettings();
+  
+  try {
+    if (type === 'otp') {
+      const sampleOtp = Math.floor(100000 + Math.random() * 900000).toString();
+      const configuredTemplate = settings.wa_otp_template_name || process.env.WA_OTP_TEMPLATE_NAME || 'finmantra_otp';
+      const result = await sendWhatsAppTemplate(phone, configuredTemplate, [sampleOtp], true);
+      return res.json({ success: true, message: `Sample OTP (${sampleOtp}) dispatched to ${phone} via Meta API template "${configuredTemplate}".`, result });
+    } else {
+      const sampleUrl = 'https://finmantra.org/refer/public/20260628/FMTEST999';
+      const referralTemplateName = settings.wa_referral_template_name || process.env.WA_REFERRAL_TEMPLATE_NAME || 'transactional_link';
+      const result = await sendWhatsAppTemplate(phone, referralTemplateName, ['Customer', sampleUrl]);
+      return res.json({ success: true, message: `Sample Bank Portal URL dispatched to ${phone} via Meta API template "${referralTemplateName}".`, result });
+    }
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // --- SETTINGS MANAGEMENT ---
 
 // Get Settings
