@@ -302,7 +302,7 @@ async function initPgSchema() {
         ('privacy_link', 'https://finmantra.org/privacy'),
         ('public_site_url', ''),
         ('wa_referral_link_type', 'body'),
-        ('whatsapp_gateway', 'baileys'),
+        ('whatsapp_gateway', 'meta'),
         ('csv_export_template', $1)
       `, [DEFAULT_CSV_TEMPLATE]);
     }
@@ -640,7 +640,7 @@ const db = {
       settings[row.key] = row.value;
     });
     if (settings.whatsapp_gateway === undefined) {
-      settings.whatsapp_gateway = 'baileys';
+      settings.whatsapp_gateway = 'meta';
     }
     if (settings.csv_export_template === undefined) {
       settings.csv_export_template = DEFAULT_CSV_TEMPLATE;

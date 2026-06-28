@@ -163,7 +163,7 @@ function getFallbackText(isOtpAuth, parameters, settings) {
 // Helper to send messages via Meta WhatsApp Cloud API (with Baileys QR-Linked Device fallback)
 async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOtpAuth = false) {
   const settings = await db.getSettings();
-  const gateway = settings.whatsapp_gateway || 'baileys';
+  const gateway = settings.whatsapp_gateway || 'meta';
 
   if (gateway === 'baileys') {
     const baileysStatus = baileys.getBaileysStatus();
@@ -178,8 +178,7 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
         throw err;
       }
     }
-    console.error('[WhatsApp] Gateway is set to Baileys but it is not connected.');
-    throw new Error('WhatsApp linked device is not connected.');
+    console.warn('[WhatsApp Warning] Gateway is set to Baileys but linked device is not connected. Attempting Meta Cloud API fallback...');
   }
 
   const apiKey = settings.wa_api_key || process.env.WA_API_KEY;
@@ -210,31 +209,50 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
   }
 
   const baseLang = settings.wa_template_language || process.env.WA_TEMPLATE_LANGUAGE || 'en';
-  const langCandidates = [baseLang, 'en', 'en_US', 'en_GB'].filter((v, i, a) => a.indexOf(v) === i);
+  const langCandidates = [baseLang, 'en', 'en_US', 'en_GB'].filter((v, i, a) => v && a.indexOf(v) === i);
 
   // Build list of candidate component payloads to guarantee delivery across all template variations
   const componentStrategies = [];
 
-  if (isOtpAuth) {
+  if (isOtpAuth && parameters.length === 1) {
     const otpCode = String(parameters[0] || '');
-    // Strategy 1: Body + URL button parameter
+
+    // Strategy 1: Auth template with Copy Code button (coupon_code format as mandated by Meta Cloud API) + Body param
+    componentStrategies.push([
+      { type: 'body', parameters: [{ type: 'text', text: otpCode }] },
+      { type: 'button', sub_type: 'copy_code', index: '0', parameters: [{ type: 'coupon_code', coupon_code: otpCode }] }
+    ]);
+
+    // Strategy 2: Auth template with Copy Code button only (0 Body params)
+    componentStrategies.push([
+      { type: 'button', sub_type: 'copy_code', index: '0', parameters: [{ type: 'coupon_code', coupon_code: otpCode }] }
+    ]);
+
+    // Strategy 3: Auth template with URL button + Body param
     componentStrategies.push([
       { type: 'body', parameters: [{ type: 'text', text: otpCode }] },
       { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: otpCode }] }
     ]);
-    // Strategy 2: Body + Copy Code button parameter
+
+    // Strategy 4: Auth template with URL button only (0 Body params)
+    componentStrategies.push([
+      { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: otpCode }] }
+    ]);
+
+    // Strategy 5: Body parameter only
+    componentStrategies.push([
+      { type: 'body', parameters: [{ type: 'text', text: otpCode }] }
+    ]);
+
+    // Strategy 6: Copy Code button with text type fallback
     componentStrategies.push([
       { type: 'body', parameters: [{ type: 'text', text: otpCode }] },
       { type: 'button', sub_type: 'copy_code', index: '0', parameters: [{ type: 'text', text: otpCode }] }
     ]);
-    // Strategy 3: Body only (if button is static or not parameterized)
-    componentStrategies.push([
-      { type: 'body', parameters: [{ type: 'text', text: otpCode }] }
-    ]);
   } else {
-    // Standard / Referral templates
+    // Standard / Referral / Multi-parameter templates
     const urlParamIdx = parameters.findIndex(p => typeof p === 'string' && (p.startsWith('http://') || p.startsWith('https://')));
-    
+
     // Strategy 1: All parameters in body
     componentStrategies.push([
       {
@@ -245,26 +263,49 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
 
     if (urlParamIdx !== -1) {
       const fullUrl = parameters[urlParamIdx];
-      let suffix = '';
+      let suffix1 = ''; // e.g. public/20260628/FM12345
+      let suffix2 = ''; // e.g. FM12345 (last component)
+      
       const referIdx = fullUrl.indexOf('/refer/');
       if (referIdx !== -1) {
-        suffix = fullUrl.substring(referIdx + 7);
+        suffix1 = fullUrl.substring(referIdx + 7);
       } else {
         try {
           const parsed = new URL(fullUrl);
-          suffix = parsed.pathname.substring(1) + parsed.search;
+          suffix1 = parsed.pathname.substring(1) + parsed.search;
         } catch (e) {
-          suffix = fullUrl;
+          suffix1 = fullUrl;
         }
       }
+
+      const parts = fullUrl.split('/');
+      suffix2 = parts[parts.length - 1] || suffix1;
+
       const bodyParams = parameters.filter((_, idx) => idx !== urlParamIdx);
-      
-      // Strategy 2: Split body + URL button parameter
+
+      // Strategy 2: Body params + URL button (referral path suffix)
       componentStrategies.push([
         { type: 'body', parameters: bodyParams.map(p => ({ type: 'text', text: String(p) })) },
-        { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: suffix }] }
+        { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: suffix1 }] }
+      ]);
+
+      // Strategy 3: Body params + URL button (last segment / URN)
+      if (suffix2 !== suffix1) {
+        componentStrategies.push([
+          { type: 'body', parameters: bodyParams.map(p => ({ type: 'text', text: String(p) })) },
+          { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: suffix2 }] }
+        ]);
+      }
+
+      // Strategy 4: Body params + URL button (full URL)
+      componentStrategies.push([
+        { type: 'body', parameters: bodyParams.map(p => ({ type: 'text', text: String(p) })) },
+        { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: fullUrl }] }
       ]);
     }
+
+    // Strategy 5: Static template or empty components
+    componentStrategies.push([]);
   }
 
   const https = require('https');
@@ -320,10 +361,12 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
         type: 'template',
         template: {
           name: templateName,
-          language: { code: lang },
-          components: componentStrategies[sIdx]
+          language: { code: lang }
         }
       };
+      if (componentStrategies[sIdx].length > 0) {
+        payloadObj.template.components = componentStrategies[sIdx];
+      }
 
       try {
         const result = await executeMetaRequest(payloadObj);
@@ -432,17 +475,30 @@ app.post('/api/otp/send', otpRateLimiter.middleware(), async (req, res) => {
 
   if (apiKey && phoneId) {
     const configuredTemplate = settings.wa_otp_template_name || process.env.WA_OTP_TEMPLATE_NAME || 'finmantra_otp';
-    const candidateTemplates = [configuredTemplate, 'finmantra_otp', 'auth_otp'].filter((v, i, a) => a.indexOf(v) === i);
-    const isOtpAuth = settings.wa_otp_is_auth_template === 'true' || settings.wa_otp_is_auth_template === true;
+    const candidateTemplates = [
+      configuredTemplate,
+      'finmantra_otp',
+      'auth_otp',
+      'otp',
+      'verification_code',
+      'jaspers_market_order_confirmation_v1'
+    ].filter((v, i, a) => v && a.indexOf(v) === i);
+    
+    const isOtpAuthSetting = settings.wa_otp_is_auth_template;
+    const isOtpAuth = isOtpAuthSetting === undefined || isOtpAuthSetting === null
+      ? true 
+      : (isOtpAuthSetting === 'true' || isOtpAuthSetting === true);
 
     for (const tName of candidateTemplates) {
       try {
         let params = [otp];
+        let currentIsOtpAuth = isOtpAuth;
         if (tName === 'jaspers_market_order_confirmation_v1') {
           const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
           params = ['Customer', otp, dateStr];
+          currentIsOtpAuth = false;
         }
-        const result = await sendWhatsAppTemplate(phone, tName, params, isOtpAuth);
+        const result = await sendWhatsAppTemplate(phone, tName, params, currentIsOtpAuth);
         isSimulated = false;
         apiError = null;
         console.log(`[WhatsApp API] OTP sent successfully to ${phone} via Meta API (template: ${tName}).`);
@@ -876,18 +932,23 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
   const cardNameStr = card ? `${card.bank} ${card.name}` : 'FinMantra Partner Bank';
   const referralMsg = `Hello ${trimmedName}, thank you for choosing FinMantra. You can access your secure bank portal for the ${cardNameStr} application here: ${referralLink}`;
   const referralTemplateName = settings.wa_referral_template_name || process.env.WA_REFERRAL_TEMPLATE_NAME || 'transactional_link';
-  try {
-    let params = [trimmedName, referralLink];
-    if (referralTemplateName === 'jaspers_market_order_confirmation_v1') {
-      const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-      params = [trimmedName, referralLink, dateStr];
+  const candidateRefTemplates = [referralTemplateName, 'transactional_link', 'jaspers_market_order_confirmation_v1'].filter((v, i, a) => v && a.indexOf(v) === i);
+  
+  for (const refTName of candidateRefTemplates) {
+    try {
+      let params = [trimmedName, referralLink];
+      if (refTName === 'jaspers_market_order_confirmation_v1') {
+        const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        params = [trimmedName, referralLink, dateStr];
+      }
+      const result = await sendWhatsAppTemplate(trimmedPhone, refTName, params);
+      if (!result.simulated) {
+        console.log(`[WhatsApp API] Referral template "${refTName}" sent to ${trimmedPhone} via Meta API.`);
+      }
+      break;
+    } catch (err) {
+      console.warn(`[WhatsApp API Warning] Referral template "${refTName}" failed for ${trimmedPhone}: ${err.message}. Trying next candidate...`);
     }
-    const result = await sendWhatsAppTemplate(trimmedPhone, referralTemplateName, params);
-    if (!result.simulated) {
-      console.log(`[WhatsApp API] Referral template sent to ${trimmedPhone} via Meta API.`);
-    }
-  } catch (err) {
-    console.error('Failed to send WhatsApp referral link via Meta API:', err.message);
   }
 
   // Print simulation output to console in all cases for local testing visibility
