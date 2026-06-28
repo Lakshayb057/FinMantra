@@ -3,8 +3,9 @@ import {
   Users, CreditCard, MapPin, Settings as SettingsIcon, ShieldAlert, BarChart3, 
   Trash2, Download, Search, Plus, Edit, Check, X, RefreshCw, AlertCircle,
   QrCode, Smartphone, CheckCircle, Wifi, WifiOff, Eye, MessageSquare, Layers,
-  ArrowUp, ArrowDown, MoreVertical, LogOut
+  ArrowUp, ArrowDown, MoreVertical, LogOut, Activity
 } from 'lucide-react';
+
 
 export default function AdminDashboard() {
   const [token, setToken] = useState(localStorage.getItem('finmantra_admin_token') || '');
@@ -2110,7 +2111,31 @@ export default function AdminDashboard() {
                   <Download size={16} />
                   <span>CSV Export Mapper</span>
                 </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveSettingsSubTab('tracking_api')}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.75rem',
+                    padding: '0.75rem 1rem',
+                    borderRadius: 'var(--radius-md)',
+                    border: 'none',
+                    background: activeSettingsSubTab === 'tracking_api' ? 'rgba(224, 168, 46, 0.15)' : 'transparent',
+                    color: activeSettingsSubTab === 'tracking_api' ? 'var(--gold)' : 'hsl(var(--text-secondary))',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    textAlign: 'left',
+                    fontWeight: activeSettingsSubTab === 'tracking_api' ? 600 : 400
+                  }}
+                  className="settings-menu-item"
+                >
+                  <Activity size={16} />
+                  <span>Meta CAPI & GTM</span>
+                </button>
               </div>
+
 
               {/* Settings Sub-Tab Contents */}
               <div className="glass-panel" style={{ flex: 1, padding: '2rem', minWidth: 0 }}>
@@ -2692,9 +2717,87 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                 )}
+
+                {activeSettingsSubTab === 'tracking_api' && (
+                  <form onSubmit={handleUpdateSettings}>
+                    <h3 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.75rem', color: 'var(--gold-deep)' }}>
+                      <Activity size={20} />
+                      <span>Meta Conversions API (CAPI) & GTM Settings</span>
+                    </h3>
+                    <p style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', marginBottom: '1.5rem' }}>
+                      Configure your Meta Pixel ID, CAPI Access Token, and Google Tag Manager Container ID to enable real-time hybrid conversion tracking & analytics.
+                    </p>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', marginBottom: '1.5rem' }}>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontWeight: 600 }}>Google Tag Manager (GTM) Container ID</label>
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          placeholder="GTM-XXXXXXX"
+                          value={settings.gtm_container_id || settings.gtm_id || ''}
+                          onChange={(e) => setSettings({ ...settings, gtm_container_id: e.target.value.trim(), gtm_id: e.target.value.trim() })}
+                        />
+                        <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', marginTop: '0.35rem' }}>
+                          Example: <code>GTM-5N9Z4LX7</code>. Automatically injects the container script and pushes <code>lead_submitted</code> events to <code>window.dataLayer</code>.
+                        </div>
+                      </div>
+
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontWeight: 600 }}>Meta Pixel ID</label>
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          placeholder="1015546961540665"
+                          value={settings.meta_pixel_id || ''}
+                          onChange={(e) => setSettings({ ...settings, meta_pixel_id: e.target.value.trim() })}
+                        />
+                        <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', marginTop: '0.35rem' }}>
+                          Your Meta Pixel ID used for client-side browser tracking (<code>fbq</code>) and server-side CAPI events.
+                        </div>
+                      </div>
+
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontWeight: 600 }}>Meta CAPI Access Token</label>
+                        <textarea 
+                          className="form-input" 
+                          rows="3"
+                          placeholder="EAAdY08snSiUB..."
+                          value={settings.meta_access_token || ''}
+                          onChange={(e) => setSettings({ ...settings, meta_access_token: e.target.value.trim() })}
+                          style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}
+                        />
+                        <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', marginTop: '0.35rem' }}>
+                          System user access token for Graph API v20.0 server-to-server event dispatching.
+                        </div>
+                      </div>
+
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontWeight: 600 }}>Meta Test Event Code (Optional)</label>
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          placeholder="TEST12345"
+                          value={settings.meta_test_event_code || ''}
+                          onChange={(e) => setSettings({ ...settings, meta_test_event_code: e.target.value.trim() })}
+                        />
+                        <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', marginTop: '0.35rem' }}>
+                          Use this code to test real-time server events directly inside Meta Events Manager Test Console.
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                      <button type="submit" className="btn-primary" disabled={isSubmitting}>
+                        {isSubmitting ? 'Saving Settings...' : 'Save Analytics & CAPI Configuration'}
+                      </button>
+                    </div>
+                  </form>
+                )}
               </div>
             </div>
           )}
+
 
         </div>
       )}

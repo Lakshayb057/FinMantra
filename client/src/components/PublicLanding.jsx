@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ShieldCheck, Zap, HelpCircle, ArrowRight, X, Clock, RefreshCw, Layers } from 'lucide-react';
+import { trackLeadSubmission, initAnalytics } from '../utils/analytics';
 
 export default function PublicLanding({ navigateTo, utmParams }) {
   const getCategoryColor = (cat) => {
@@ -75,6 +76,7 @@ export default function PublicLanding({ navigateTo, utmParams }) {
         setCards(cardsList);
         setLocations(locsList.filter(l => l.active));
         setSettings(settingsData);
+        initAnalytics(settingsData);
         
         if (cardsList.length > 0) {
           setFormData(prev => ({ ...prev, selectedCard: cardsList[0].id }));
@@ -275,6 +277,15 @@ export default function PublicLanding({ navigateTo, utmParams }) {
 
     setIsSubmitting(true);
     try {
+      // Trigger browser events (Meta Pixel & GTM) immediately upon clicking Verify & Apply Now button
+      trackLeadSubmission({
+        fullName,
+        email,
+        phone,
+        contentName: 'Lead Submitted',
+        status: 'submitted'
+      });
+
       // Trigger WhatsApp OTP
       const res = await fetch(`${API_URL}/otp/send`, {
         method: 'POST',
@@ -337,6 +348,16 @@ export default function PublicLanding({ navigateTo, utmParams }) {
         
         if (leadRes.ok) {
           setOtpStatus('Success! Redirecting to secure bank portal...');
+
+          // Fire deduplicated browser event with generated URN
+          trackLeadSubmission({
+            fullName: formData.fullName,
+            email: formData.email,
+            phone: formData.phone,
+            eventId: leadData.urn || leadData.id,
+            contentName: 'Lead Verified & Registered',
+            status: 'registered'
+          });
           
           // Cache in session storage for back button resumption
           const cacheData = {
@@ -347,6 +368,7 @@ export default function PublicLanding({ navigateTo, utmParams }) {
             bank: 'Partner Bank',
             timestamp: new Date().getTime()
           };
+
           
           sessionStorage.setItem('finmantra_applied_lead', JSON.stringify(cacheData));
           

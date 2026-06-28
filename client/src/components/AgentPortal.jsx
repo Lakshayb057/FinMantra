@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { LogIn, User, MapPin, CheckCircle, BarChart3, Plus, LogOut } from 'lucide-react';
+import { trackLeadSubmission } from '../utils/analytics';
 
 // Helper functions for cookie storage
 const setCookie = (name, value, days = 1) => {
@@ -313,6 +314,17 @@ export default function AgentPortal() {
 
       if (res.ok) {
         setLeadSuccess(`Lead registered successfully! Generated URN: ${data.urn}. Redirecting to bank portal...`);
+        
+        // Trigger browser events (Meta Pixel & GTM)
+        trackLeadSubmission({
+          fullName: fullName.trim(),
+          email: email.trim(),
+          phone: phone.trim(),
+          eventId: data.urn || data.id,
+          contentName: 'Agent Lead Submitted',
+          status: 'submitted'
+        });
+
         // Reset lead form
         setLeadForm({
           fullName: '',
@@ -320,6 +332,7 @@ export default function AgentPortal() {
           email: '',
           cardId: ''
         });
+
         // Reload agent performance leads
         fetchMasterData();
 
