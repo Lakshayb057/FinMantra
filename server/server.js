@@ -204,21 +204,21 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
   if (isOtpAuth && parameters.length === 1) {
     const otpCode = String(parameters[0] || '');
 
-    // Strategy 1: Auth template with Copy Code button (coupon_code format as mandated by Meta Cloud API) + Body param
-    componentStrategies.push([
-      { type: 'body', parameters: [{ type: 'text', text: otpCode }] },
-      { type: 'button', sub_type: 'copy_code', index: '0', parameters: [{ type: 'coupon_code', coupon_code: otpCode }] }
-    ]);
-
-    // Strategy 2: Auth template with Copy Code button only (0 Body params)
-    componentStrategies.push([
-      { type: 'button', sub_type: 'copy_code', index: '0', parameters: [{ type: 'coupon_code', coupon_code: otpCode }] }
-    ]);
-
-    // Strategy 3: Auth template with URL button + Body param
+    // Strategy 1: Body param + URL button (matches finmantra_otp dynamic button format)
     componentStrategies.push([
       { type: 'body', parameters: [{ type: 'text', text: otpCode }] },
       { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: otpCode }] }
+    ]);
+
+    // Strategy 2: Body parameter only
+    componentStrategies.push([
+      { type: 'body', parameters: [{ type: 'text', text: otpCode }] }
+    ]);
+
+    // Strategy 3: Auth template with Copy Code button (coupon_code format) + Body param
+    componentStrategies.push([
+      { type: 'body', parameters: [{ type: 'text', text: otpCode }] },
+      { type: 'button', sub_type: 'copy_code', index: '0', parameters: [{ type: 'coupon_code', coupon_code: otpCode }] }
     ]);
 
     // Strategy 4: Auth template with URL button only (0 Body params)
@@ -226,15 +226,9 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
       { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: otpCode }] }
     ]);
 
-    // Strategy 5: Body parameter only
+    // Strategy 5: Auth template with Copy Code button only (0 Body params)
     componentStrategies.push([
-      { type: 'body', parameters: [{ type: 'text', text: otpCode }] }
-    ]);
-
-    // Strategy 6: Copy Code button with text type fallback
-    componentStrategies.push([
-      { type: 'body', parameters: [{ type: 'text', text: otpCode }] },
-      { type: 'button', sub_type: 'copy_code', index: '0', parameters: [{ type: 'text', text: otpCode }] }
+      { type: 'button', sub_type: 'copy_code', index: '0', parameters: [{ type: 'coupon_code', coupon_code: otpCode }] }
     ]);
   } else {
     // Standard / Referral / Multi-parameter templates
