@@ -1030,7 +1030,7 @@ export default function AdminDashboard() {
           wa_template_language: settings.wa_template_language ? settings.wa_template_language.trim() : '',
           wa_api_version: settings.wa_api_version ? settings.wa_api_version.trim() : '',
           wa_otp_is_auth_template: settings.wa_otp_is_auth_template !== undefined ? settings.wa_otp_is_auth_template : false,
-          whatsapp_gateway: settings.whatsapp_gateway || 'baileys'
+          whatsapp_gateway: settings.whatsapp_gateway || 'meta'
         })
       });
       showToast('System settings updated successfully.');
@@ -1039,6 +1039,25 @@ export default function AdminDashboard() {
       showToast(err.message || 'Failed to save settings.', 'error');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleTestWhatsAppMeta = async (testType, targetPhone) => {
+    try {
+      showToast(`Sending test ${testType.toUpperCase()} to ${targetPhone} via Meta API...`, 'info');
+      const res = await fetch(`${API_URL}/whatsapp/test`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: targetPhone, type: testType })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast(data.message, 'success');
+      } else {
+        showToast(`Meta API Test Failed: ${data.error || data.details || 'Unknown Error'}`, 'error');
+      }
+    } catch (err) {
+      showToast(`Network error testing Meta API: ${err.message}`, 'error');
     }
   };
 
@@ -2415,7 +2434,25 @@ export default function AdminDashboard() {
                       </label>
                     </div>
 
-                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', marginTop: '2rem', paddingTop: '1rem', borderTop: '1px solid var(--border-light)' }}>
+                      <div style={{ display: 'flex', gap: '0.75rem' }}>
+                        <button 
+                          type="button" 
+                          className="btn-secondary" 
+                          onClick={() => handleTestWhatsAppMeta('otp', '8295886832')}
+                          style={{ padding: '0.6rem 1.25rem', fontSize: '0.85rem' }}
+                        >
+                          Send Test OTP (8295886832)
+                        </button>
+                        <button 
+                          type="button" 
+                          className="btn-secondary" 
+                          onClick={() => handleTestWhatsAppMeta('url', '8295886832')}
+                          style={{ padding: '0.6rem 1.25rem', fontSize: '0.85rem' }}
+                        >
+                          Send Test URL (8295886832)
+                        </button>
+                      </div>
                       <button type="submit" className="btn-primary" style={{ padding: '0.75rem 2rem' }} disabled={isSubmitting}>
                         {isSubmitting ? 'Saving API Credentials...' : 'Save Meta Credentials'}
                       </button>
