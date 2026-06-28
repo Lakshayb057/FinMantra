@@ -2,6 +2,10 @@ import React, { useState, useEffect } from 'react';
 import PublicLanding from './components/PublicLanding';
 import AgentPortal from './components/AgentPortal';
 import AdminDashboard from './components/AdminDashboard';
+import AboutPage from './components/AboutPage';
+import ContactPage from './components/ContactPage';
+import PrivacyPolicyPage from './components/PrivacyPolicyPage';
+import TermsPage from './components/TermsPage';
 // Cookie helper functions
 function setCookie(name, value, days) {
   let expires = "";
@@ -162,6 +166,18 @@ export default function App() {
     }
     if (currentPath === '/admin') {
       return <AdminDashboard navigateTo={navigateTo} />;
+    }
+    if (currentPath === '/about') {
+      return <AboutPage navigateTo={navigateTo} />;
+    }
+    if (currentPath === '/contact') {
+      return <ContactPage navigateTo={navigateTo} />;
+    }
+    if (currentPath === '/privacy-policy') {
+      return <PrivacyPolicyPage navigateTo={navigateTo} />;
+    }
+    if (currentPath === '/terms') {
+      return <TermsPage navigateTo={navigateTo} />;
     }
     return <PublicLanding navigateTo={navigateTo} utmParams={utmParams} />;
   };
