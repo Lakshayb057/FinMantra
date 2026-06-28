@@ -445,7 +445,7 @@ app.post('/api/otp/send', otpRateLimiter.middleware(), async (req, res) => {
         const result = await sendWhatsAppTemplate(phone, tName, params, isOtpAuth);
         isSimulated = false;
         apiError = null;
-        console.log(`[WhatsApp API] OTP sent to ${phone} via Meta API (template: ${tName}).`);
+        console.log(`[WhatsApp API] OTP sent successfully to ${phone} via Meta API (template: ${tName}).`);
         break;
       } catch (err) {
         apiError = err.message;
@@ -459,13 +459,14 @@ app.post('/api/otp/send', otpRateLimiter.middleware(), async (req, res) => {
     }
   }
 
-  // If Meta API failed on all candidate templates, handle fallback gracefully
   if (apiError) {
     console.error('-----------------------------------------');
     console.error(`[WhatsApp API Error for ${phone}]: ${apiError}`);
-    console.error('Switching to fallback delivery mode so user is not blocked.');
     console.error('-----------------------------------------');
-    isSimulated = true;
+    return res.status(502).json({
+      error: 'Failed to send WhatsApp verification code',
+      details: apiError
+    });
   }
 
   console.log(`=========================================`);
@@ -474,9 +475,8 @@ app.post('/api/otp/send', otpRateLimiter.middleware(), async (req, res) => {
 
   res.json({
     success: true,
-    message: isSimulated ? 'OTP sent successfully (Fallback/Simulation Mode)' : 'OTP sent successfully',
-    simulatedOtp: isSimulated ? otp : null,
-    metaError: apiError || null
+    message: isSimulated ? 'OTP sent successfully (Simulation Mode)' : 'OTP sent successfully',
+    simulatedOtp: isSimulated ? otp : null
   });
 });
 
