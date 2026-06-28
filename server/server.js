@@ -234,14 +234,6 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
     // Standard / Referral / Multi-parameter templates
     const urlParamIdx = parameters.findIndex(p => typeof p === 'string' && (p.startsWith('http://') || p.startsWith('https://')));
 
-    // Strategy 1: All parameters in body
-    componentStrategies.push([
-      {
-        type: 'body',
-        parameters: parameters.map(p => ({ type: 'text', text: String(p) }))
-      }
-    ]);
-
     if (urlParamIdx !== -1) {
       const fullUrl = parameters[urlParamIdx];
       let suffix1 = ''; // e.g. public/20260628/FM12345
@@ -264,13 +256,13 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
 
       const bodyParams = parameters.filter((_, idx) => idx !== urlParamIdx);
 
-      // Strategy 2: Body params + URL button (referral path suffix)
+      // Strategy 1: Body params (e.g. Name) + Dynamic URL button (referral path suffix)
       componentStrategies.push([
         { type: 'body', parameters: bodyParams.map(p => ({ type: 'text', text: String(p) })) },
         { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: suffix1 }] }
       ]);
 
-      // Strategy 3: Body params + URL button (last segment / URN)
+      // Strategy 2: Body params + Dynamic URL button (last segment / URN)
       if (suffix2 !== suffix1) {
         componentStrategies.push([
           { type: 'body', parameters: bodyParams.map(p => ({ type: 'text', text: String(p) })) },
@@ -278,12 +270,20 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
         ]);
       }
 
-      // Strategy 4: Body params + URL button (full URL)
+      // Strategy 3: Body params + Dynamic URL button (full URL)
       componentStrategies.push([
         { type: 'body', parameters: bodyParams.map(p => ({ type: 'text', text: String(p) })) },
         { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: fullUrl }] }
       ]);
     }
+
+    // Strategy 4: Fallback - All parameters in body (for templates with link variable in body text)
+    componentStrategies.push([
+      {
+        type: 'body',
+        parameters: parameters.map(p => ({ type: 'text', text: String(p) }))
+      }
+    ]);
 
     // Strategy 5: Static template or empty components
     componentStrategies.push([]);
