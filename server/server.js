@@ -209,181 +209,147 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
     formattedPhone = '91' + formattedPhone; // Default to India country code if 10 digits
   }
 
-  const payload = {
-    messaging_product: 'whatsapp',
-    to: formattedPhone,
-    type: 'template',
-    template: {
-      name: templateName,
-      language: {
-        code: settings.wa_template_language || process.env.WA_TEMPLATE_LANGUAGE || 'en'
-      }
-    }
-  };
+  const baseLang = settings.wa_template_language || process.env.WA_TEMPLATE_LANGUAGE || 'en';
+  const langCandidates = [baseLang, 'en', 'en_US', 'en_GB'].filter((v, i, a) => a.indexOf(v) === i);
+
+  // Build list of candidate component payloads to guarantee delivery across all template variations
+  const componentStrategies = [];
 
   if (isOtpAuth) {
-    // Authentication Template requires specific structure (body parameter + button parameter)
-    // The first parameter in 'parameters' array is assumed to be the OTP code
     const otpCode = String(parameters[0] || '');
-    payload.template.components = [
-      {
-        type: 'body',
-        parameters: [
-          {
-            type: 'text',
-            text: otpCode
-          }
-        ]
-      },
-      {
-        type: 'button',
-        sub_type: 'url',
-        index: '0',
-        parameters: [
-          {
-            type: 'text',
-            text: otpCode
-          }
-        ]
-      }
-    ];
-  } else if (parameters.length > 0) {
-    // If wa_referral_link_type is 'button', split body and button parameters
-    const waLinkType = settings.wa_referral_link_type || 'body';
-    
-    // Find if there is a URL parameter
+    // Strategy 1: Body + URL button parameter
+    componentStrategies.push([
+      { type: 'body', parameters: [{ type: 'text', text: otpCode }] },
+      { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: otpCode }] }
+    ]);
+    // Strategy 2: Body + Copy Code button parameter
+    componentStrategies.push([
+      { type: 'body', parameters: [{ type: 'text', text: otpCode }] },
+      { type: 'button', sub_type: 'copy_code', index: '0', parameters: [{ type: 'text', text: otpCode }] }
+    ]);
+    // Strategy 3: Body only (if button is static or not parameterized)
+    componentStrategies.push([
+      { type: 'body', parameters: [{ type: 'text', text: otpCode }] }
+    ]);
+  } else {
+    // Standard / Referral templates
     const urlParamIdx = parameters.findIndex(p => typeof p === 'string' && (p.startsWith('http://') || p.startsWith('https://')));
     
-    if (waLinkType === 'button' && urlParamIdx !== -1) {
+    // Strategy 1: All parameters in body
+    componentStrategies.push([
+      {
+        type: 'body',
+        parameters: parameters.map(p => ({ type: 'text', text: String(p) }))
+      }
+    ]);
+
+    if (urlParamIdx !== -1) {
       const fullUrl = parameters[urlParamIdx];
-      // Extract suffix after /refer/
       let suffix = '';
       const referIdx = fullUrl.indexOf('/refer/');
       if (referIdx !== -1) {
-        suffix = fullUrl.substring(referIdx + 7); // extract after "/refer/"
+        suffix = fullUrl.substring(referIdx + 7);
       } else {
-        // Fallback: extract path after host
         try {
           const parsed = new URL(fullUrl);
-          suffix = parsed.pathname.substring(1) + parsed.search; // remove leading /
+          suffix = parsed.pathname.substring(1) + parsed.search;
         } catch (e) {
           suffix = fullUrl;
         }
       }
-
-      // Filter out the URL parameter from the body parameters list
       const bodyParams = parameters.filter((_, idx) => idx !== urlParamIdx);
       
-      payload.template.components = [
-        {
-          type: 'body',
-          parameters: bodyParams.map(p => ({
-            type: 'text',
-            text: String(p)
-          }))
-        },
-        {
-          type: 'button',
-          sub_type: 'url',
-          index: '0',
-          parameters: [
-            {
-              type: 'text',
-              text: suffix
-            }
-          ]
-        }
-      ];
-    } else {
-      // Standard body parameters
-      payload.template.components = [
-        {
-          type: 'body',
-          parameters: parameters.map(p => ({
-            type: 'text',
-            text: String(p)
-          }))
-        }
-      ];
+      // Strategy 2: Split body + URL button parameter
+      componentStrategies.push([
+        { type: 'body', parameters: bodyParams.map(p => ({ type: 'text', text: String(p) })) },
+        { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: suffix }] }
+      ]);
     }
   }
 
-  return new Promise((resolve, reject) => {
-    const postData = JSON.stringify(payload);
-    const https = require('https');
-    const options = {
-      hostname: 'graph.facebook.com',
-      port: 443,
-      path: `/${apiVersion}/${phoneId}/messages`,
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(postData)
-      }
-    };
+  const https = require('https');
 
-    const req = https.request(options, (res) => {
-      let responseBody = '';
-      res.on('data', (chunk) => responseBody += chunk);
-      res.on('end', () => {
-        if (res.statusCode >= 200 && res.statusCode < 300) {
-          try {
-            resolve(JSON.parse(responseBody));
-          } catch (e) {
-            resolve(responseBody);
-          }
-        } else {
-          let errMsg = `Meta API error (status ${res.statusCode}): ${responseBody}`;
-          try {
-            const parsed = JSON.parse(responseBody);
-            if (parsed && parsed.error && parsed.error.message) {
-              errMsg = `Meta API Error: ${parsed.error.message} (Code: ${parsed.error.code}, Subcode: ${parsed.error.error_subcode})`;
-            }
-          } catch (e) {}
-          
-          const baileysStatus = baileys.getBaileysStatus();
-          if (baileysStatus.status === 'CONNECTED') {
-            console.warn(`[WhatsApp Fallback] Meta API failed (status ${res.statusCode}). Attempting delivery via Baileys...`);
+  const executeMetaRequest = (payloadObj) => {
+    return new Promise((resolve, reject) => {
+      const postData = JSON.stringify(payloadObj);
+      const options = {
+        hostname: 'graph.facebook.com',
+        port: 443,
+        path: `/${apiVersion}/${phoneId}/messages`,
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(postData)
+        }
+      };
+
+      const req = https.request(options, (res) => {
+        let responseBody = '';
+        res.on('data', (chunk) => responseBody += chunk);
+        res.on('end', () => {
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            try { resolve(JSON.parse(responseBody)); } catch (e) { resolve(responseBody); }
+          } else {
+            let errMsg = `Meta API error (status ${res.statusCode}): ${responseBody}`;
             try {
-              const text = getFallbackText(isOtpAuth, parameters, settings);
-              baileys.sendBaileysMessage(toPhone, text).then(result => {
-                resolve({ sentViaBaileys: true, metaError: errMsg, result });
-              }).catch(baileysErr => {
-                reject(new Error(`${errMsg}. Fallback to Baileys also failed: ${baileysErr.message}`));
-              });
-              return;
-            } catch (baileysErr) {
-              return reject(new Error(`${errMsg}. Fallback to Baileys also failed: ${baileysErr.message}`));
-            }
+              const parsed = JSON.parse(responseBody);
+              if (parsed && parsed.error && parsed.error.message) {
+                errMsg = `Meta API Error: ${parsed.error.message} (Code: ${parsed.error.code})`;
+              }
+            } catch (e) {}
+            reject({ statusCode: res.statusCode, body: responseBody, message: errMsg });
           }
-          reject(new Error(errMsg));
-        }
+        });
       });
-    });
 
-    req.on('error', async (err) => {
-      const baileysStatus = baileys.getBaileysStatus();
-      if (baileysStatus.status === 'CONNECTED') {
-        console.warn(`[WhatsApp Fallback] Meta connection failed (${err.message}). Attempting delivery via Baileys...`);
-        try {
-          const text = getFallbackText(isOtpAuth, parameters, settings);
-          baileys.sendBaileysMessage(toPhone, text).then(result => {
-            resolve({ sentViaBaileys: true, metaError: err.message, result });
-          }).catch(baileysErr => {
-            reject(new Error(`Meta Connection Error: ${err.message}. Fallback to Baileys also failed: ${baileysErr.message}`));
-          });
-          return;
-        } catch (baileysErr) {
-          return reject(new Error(`Meta Connection Error: ${err.message}. Fallback to Baileys also failed: ${baileysErr.message}`));
+      req.on('error', (err) => reject({ statusCode: 500, message: err.message }));
+      req.write(postData);
+      req.end();
+    });
+  };
+
+  let lastError = null;
+
+  // Try strategies and language codes sequentially
+  for (const lang of langCandidates) {
+    for (let sIdx = 0; sIdx < componentStrategies.length; sIdx++) {
+      const payloadObj = {
+        messaging_product: 'whatsapp',
+        to: formattedPhone,
+        type: 'template',
+        template: {
+          name: templateName,
+          language: { code: lang },
+          components: componentStrategies[sIdx]
         }
-      }
-      reject(err);
-    });
+      };
 
-    req.write(postData);
-    req.end();
-  });
+      try {
+        const result = await executeMetaRequest(payloadObj);
+        console.log(`[WhatsApp API] Message sent successfully to ${formattedPhone} using template "${templateName}" (lang: ${lang}, strategy: ${sIdx + 1}).`);
+        return result;
+      } catch (err) {
+        lastError = err.message || `Meta API Error (status ${err.statusCode})`;
+        console.warn(`[WhatsApp API Warning] Strategy ${sIdx + 1} with lang ${lang} failed for "${templateName}": ${lastError}. Trying next candidate...`);
+      }
+    }
+  }
+
+  // If all Meta API strategies failed, check Baileys fallback
+  const baileysStatus = baileys.getBaileysStatus();
+  if (baileysStatus.status === 'CONNECTED') {
+    console.warn(`[WhatsApp Fallback] All Meta API strategies failed for ${toPhone}. Attempting delivery via Baileys linked device...`);
+    try {
+      const text = getFallbackText(isOtpAuth, parameters, settings);
+      const result = await baileys.sendBaileysMessage(toPhone, text);
+      return { sentViaBaileys: true, metaError: lastError, result };
+    } catch (baileysErr) {
+      throw new Error(`${lastError}. Fallback to Baileys also failed: ${baileysErr.message}`);
+    }
+  }
+
+  throw new Error(lastError || 'Failed to send WhatsApp message via Meta Cloud API.');
 }
 
 // Authentication Middleware
