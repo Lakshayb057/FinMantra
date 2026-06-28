@@ -146,7 +146,19 @@ function sha256(text) {
   return crypto.createHash('sha256').update(text).digest('hex');
 }
 
-// Helper to send messages via Meta WhatsApp Cloud API
+// Helper to safely resolve setting value from DB or process.env
+function getSettingVal(settings, key, envKey, defaultVal = null) {
+  const dbVal = settings && settings[key] ? String(settings[key]).trim() : '';
+  if (dbVal && dbVal !== 'undefined' && dbVal !== 'null') {
+    return dbVal;
+  }
+  const envVal = envKey && process.env[envKey] ? String(process.env[envKey]).trim() : '';
+  if (envVal && envVal !== 'undefined' && envVal !== 'null') {
+    return envVal;
+  }
+  return defaultVal;
+}
+
 // Helper to format fallback plain text message for Baileys
 function getFallbackText(isOtpAuth, parameters, settings) {
   if (isOtpAuth) {
@@ -181,9 +193,9 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
     console.warn('[WhatsApp Warning] Gateway is set to Baileys but linked device is not connected. Attempting Meta Cloud API fallback...');
   }
 
-  const apiKey = settings.wa_api_key || process.env.WA_API_KEY;
-  const phoneId = settings.wa_phone_number_id || process.env.WA_PHONE_NUMBER_ID;
-  const apiVersion = settings.wa_api_version || process.env.WA_API_VERSION || 'v25.0';
+  const apiKey = getSettingVal(settings, 'wa_api_key', 'WA_API_KEY');
+  const phoneId = getSettingVal(settings, 'wa_phone_number_id', 'WA_PHONE_NUMBER_ID');
+  const apiVersion = getSettingVal(settings, 'wa_api_version', 'WA_API_VERSION', 'v25.0');
 
   if (!apiKey || !phoneId) {
     throw new Error('Meta WhatsApp API credentials missing. Please configure WA_API_KEY and WA_PHONE_NUMBER_ID in settings or .env file.');
@@ -195,7 +207,8 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
     formattedPhone = '91' + formattedPhone; // Default to India country code if 10 digits
   }
 
-  const baseLang = settings.wa_template_language || process.env.WA_TEMPLATE_LANGUAGE || 'en';
+  const baseLang = getSettingVal(settings, 'wa_template_language', 'WA_TEMPLATE_LANGUAGE', 'en');
+
   const langCandidates = [baseLang, 'en', 'en_US', 'en_GB'].filter((v, i, a) => v && a.indexOf(v) === i);
 
   // Build list of candidate component payloads to guarantee delivery across all template variations
@@ -456,14 +469,15 @@ app.post('/api/otp/send', otpRateLimiter.middleware(), async (req, res) => {
   await db.saveOTP(phone, otp);
 
   const settings = await db.getSettings();
-  const apiKey = settings.wa_api_key || process.env.WA_API_KEY;
-  const phoneId = settings.wa_phone_number_id || process.env.WA_PHONE_NUMBER_ID;
+  const apiKey = getSettingVal(settings, 'wa_api_key', 'WA_API_KEY');
+  const phoneId = getSettingVal(settings, 'wa_phone_number_id', 'WA_PHONE_NUMBER_ID');
 
   let sentViaMeta = false;
   let apiError = null;
 
   if (apiKey && phoneId) {
-    const configuredTemplate = settings.wa_otp_template_name || process.env.WA_OTP_TEMPLATE_NAME || 'finmantra_otp';
+    const configuredTemplate = getSettingVal(settings, 'wa_otp_template_name', 'WA_OTP_TEMPLATE_NAME', 'finmantra_otp');
+
     const candidateTemplates = [
       configuredTemplate,
       'finmantra_otp',
@@ -553,8 +567,9 @@ function sha256Hash(text) {
 async function sendMetaCapiEvent(lead, eventName = 'Lead', testEventCode = null) {
   try {
     const settings = await db.getSettings().catch(() => ({}));
-    const pixelId = settings.meta_pixel_id || process.env.META_PIXEL_ID;
-    const accessToken = settings.meta_access_token || process.env.META_ACCESS_TOKEN;
+    const pixelId = getSettingVal(settings, 'meta_pixel_id', 'META_PIXEL_ID');
+    const accessToken = getSettingVal(settings, 'meta_access_token', 'META_ACCESS_TOKEN');
+
     
     if (!pixelId || !accessToken) {
       console.log('[Meta CAPI] Skipped: META_PIXEL_ID or META_ACCESS_TOKEN not set.');

@@ -637,7 +637,10 @@ const db = {
     const res = await pool.query('SELECT * FROM settings');
     const settings = {};
     res.rows.forEach(row => {
-      settings[row.key] = row.value;
+      const val = row.value ? String(row.value).trim() : '';
+      if (val && val !== 'undefined' && val !== 'null') {
+        settings[row.key] = val;
+      }
     });
     if (settings.whatsapp_gateway === undefined) {
       settings.whatsapp_gateway = 'meta';
@@ -647,6 +650,7 @@ const db = {
     }
     return settings;
   },
+
 
   async updateSettings(settingsData) {
     for (const [key, value] of Object.entries(settingsData)) {
