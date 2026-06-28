@@ -67,9 +67,9 @@ const sslConfig = (isRDS || (!isLocalhost && process.env.DATABASE_SSL !== 'false
   ? { rejectUnauthorized: false }
   : false;
 
-let connectionUrl = rawDbUrl;
+let connectionUrl = rawDbUrl.replace(/sslmode=(require|prefer|verify-ca)/gi, 'sslmode=verify-full');
 if (!isLocalhost && !connectionUrl.includes('sslmode=')) {
-  connectionUrl += connectionUrl.includes('?') ? '&sslmode=require' : '?sslmode=require';
+  connectionUrl += connectionUrl.includes('?') ? '&sslmode=verify-full' : '?sslmode=verify-full';
 }
 
 const pgConnectionString = require('pg-connection-string');
