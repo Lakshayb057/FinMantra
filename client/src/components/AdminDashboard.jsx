@@ -1016,25 +1016,28 @@ export default function AdminDashboard() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({
-          ...settings,
-          public_redirect_url: publicUrl,
-          public_site_url: settings.public_site_url ? settings.public_site_url.trim() : '',
-          wa_referral_link_type: settings.wa_referral_link_type || 'body',
-          terms_link: settings.terms_link ? settings.terms_link.trim() : '',
-          privacy_link: settings.privacy_link ? settings.privacy_link.trim() : '',
-          wa_api_key: settings.wa_api_key ? settings.wa_api_key.trim() : '',
-          wa_phone_number_id: settings.wa_phone_number_id ? settings.wa_phone_number_id.trim() : '',
-          wa_business_account_id: settings.wa_business_account_id ? settings.wa_business_account_id.trim() : '',
-          wa_otp_template_name: settings.wa_otp_template_name ? settings.wa_otp_template_name.trim() : '',
-          wa_referral_template_name: settings.wa_referral_template_name ? settings.wa_referral_template_name.trim() : '',
-          wa_template_language: settings.wa_template_language ? settings.wa_template_language.trim() : '',
-          wa_api_version: settings.wa_api_version ? settings.wa_api_version.trim() : '',
-          wa_otp_is_auth_template: settings.wa_otp_is_auth_template !== undefined ? settings.wa_otp_is_auth_template : false,
-          whatsapp_gateway: settings.whatsapp_gateway || 'meta'
-        })
+        body: JSON.stringify(Object.fromEntries(
+          Object.entries({
+            ...settings,
+            public_redirect_url: publicUrl,
+            public_site_url: settings.public_site_url ? settings.public_site_url.trim() : undefined,
+            wa_referral_link_type: settings.wa_referral_link_type || undefined,
+            terms_link: settings.terms_link ? settings.terms_link.trim() : undefined,
+            privacy_link: settings.privacy_link ? settings.privacy_link.trim() : undefined,
+            wa_api_key: settings.wa_api_key ? settings.wa_api_key.trim() : undefined,
+            wa_phone_number_id: settings.wa_phone_number_id ? settings.wa_phone_number_id.trim() : undefined,
+            wa_business_account_id: settings.wa_business_account_id ? settings.wa_business_account_id.trim() : undefined,
+            wa_otp_template_name: settings.wa_otp_template_name ? settings.wa_otp_template_name.trim() : undefined,
+            wa_referral_template_name: settings.wa_referral_template_name ? settings.wa_referral_template_name.trim() : undefined,
+            wa_template_language: settings.wa_template_language ? settings.wa_template_language.trim() : undefined,
+            wa_api_version: settings.wa_api_version ? settings.wa_api_version.trim() : undefined,
+            wa_otp_is_auth_template: settings.wa_otp_is_auth_template !== undefined ? settings.wa_otp_is_auth_template : undefined,
+            whatsapp_gateway: settings.whatsapp_gateway || undefined
+          }).filter(([_, v]) => v !== undefined && v !== null && String(v).trim() !== '')
+        ))
       });
       showToast('System settings updated successfully.');
+
       loadAllAdminData();
     } catch (err) {
       showToast(err.message || 'Failed to save settings.', 'error');

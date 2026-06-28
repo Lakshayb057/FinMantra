@@ -650,13 +650,16 @@ const db = {
 
   async updateSettings(settingsData) {
     for (const [key, value] of Object.entries(settingsData)) {
-      await pool.query(`
-        INSERT INTO settings (key, value) VALUES ($1, $2)
-        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
-      `, [key, String(value)]);
+      if (value !== undefined && value !== null && String(value).trim() !== '') {
+        await pool.query(`
+          INSERT INTO settings (key, value) VALUES ($1, $2)
+          ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+        `, [key, String(value).trim()]);
+      }
     }
-    return settingsData;
+    return this.getSettings();
   },
+
 
   // --- OTP Logging & Verification ---
   async saveOTP(phone, otp) {
