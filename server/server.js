@@ -236,48 +236,37 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
 
     if (urlParamIdx !== -1) {
       const fullUrl = parameters[urlParamIdx];
-      let suffix1 = ''; // e.g. public/20260628/FM12345
-      let suffix2 = ''; // e.g. FM12345 (last component)
+      let noProtocol = fullUrl.replace(/^https?:\/\//i, '');
+      let pathOnly = '';
+      try {
+        pathOnly = new URL(fullUrl).pathname.substring(1);
+      } catch (e) {
+        pathOnly = noProtocol;
+      }
       
+      let referSuffix = '';
       const referIdx = fullUrl.indexOf('/refer/');
       if (referIdx !== -1) {
-        suffix1 = fullUrl.substring(referIdx + 7);
+        referSuffix = fullUrl.substring(referIdx + 7);
       } else {
-        try {
-          const parsed = new URL(fullUrl);
-          suffix1 = parsed.pathname.substring(1) + parsed.search;
-        } catch (e) {
-          suffix1 = fullUrl;
-        }
+        referSuffix = pathOnly;
       }
-
+      
       const parts = fullUrl.split('/');
-      suffix2 = parts[parts.length - 1] || suffix1;
+      let urnOnly = parts[parts.length - 1] || referSuffix;
 
       const bodyParams = parameters.filter((_, idx) => idx !== urlParamIdx);
+      const urlCandidates = [referSuffix, pathOnly, urnOnly, noProtocol, fullUrl].filter((v, i, a) => v && a.indexOf(v) === i);
 
-      // Strategy 1: Body params (e.g. Name) + Dynamic URL button (referral path suffix)
-      componentStrategies.push([
-        { type: 'body', parameters: bodyParams.map(p => ({ type: 'text', text: String(p) })) },
-        { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: suffix1 }] }
-      ]);
-
-      // Strategy 2: Body params + Dynamic URL button (last segment / URN)
-      if (suffix2 !== suffix1) {
+      for (const urlVal of urlCandidates) {
         componentStrategies.push([
           { type: 'body', parameters: bodyParams.map(p => ({ type: 'text', text: String(p) })) },
-          { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: suffix2 }] }
+          { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: urlVal }] }
         ]);
       }
-
-      // Strategy 3: Body params + Dynamic URL button (full URL)
-      componentStrategies.push([
-        { type: 'body', parameters: bodyParams.map(p => ({ type: 'text', text: String(p) })) },
-        { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: fullUrl }] }
-      ]);
     }
 
-    // Strategy 4: Fallback - All parameters in body (for templates with link variable in body text)
+    // Strategy Fallback: All parameters in body (for templates with link variable in body text)
     componentStrategies.push([
       {
         type: 'body',
