@@ -186,20 +186,7 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
   const apiVersion = settings.wa_api_version || process.env.WA_API_VERSION || 'v25.0';
 
   if (!apiKey || !phoneId) {
-    const baileysStatus = baileys.getBaileysStatus();
-    if (baileysStatus.status === 'CONNECTED') {
-      console.log(`[WhatsApp Fallback] Meta API not configured. Routing message to ${toPhone} via Baileys linked device...`);
-      try {
-        const text = getFallbackText(isOtpAuth, parameters, settings);
-        const result = await baileys.sendBaileysMessage(toPhone, text);
-        return { sentViaBaileys: true, result };
-      } catch (err) {
-        console.error('[WhatsApp Fallback] Failed to send via Baileys:', err.message);
-        throw err;
-      }
-    }
-    console.log(`[WhatsApp Simulation] Meta API credentials missing & Baileys disconnected. Simulating template "${templateName}" to ${toPhone} with params:`, parameters);
-    return { simulated: true };
+    throw new Error('Meta WhatsApp API credentials missing. Please configure WA_API_KEY and WA_PHONE_NUMBER_ID in settings or .env file.');
   }
 
   // Format phone number to E.164 (Meta requires country code without + or leading zeros)
@@ -489,7 +476,7 @@ app.post('/api/otp/send', otpRateLimiter.middleware(), async (req, res) => {
   const apiKey = settings.wa_api_key || process.env.WA_API_KEY;
   const phoneId = settings.wa_phone_number_id || process.env.WA_PHONE_NUMBER_ID;
 
-  let isSimulated = true;
+  let sentViaMeta = false;
   let apiError = null;
 
   if (apiKey && phoneId) {
@@ -518,7 +505,7 @@ app.post('/api/otp/send', otpRateLimiter.middleware(), async (req, res) => {
           currentIsOtpAuth = false;
         }
         const result = await sendWhatsAppTemplate(phone, tName, params, currentIsOtpAuth);
-        isSimulated = false;
+        sentViaMeta = true;
         apiError = null;
         console.log(`[WhatsApp API] OTP sent successfully to ${phone} via Meta API (template: ${tName}).`);
         break;
@@ -526,35 +513,33 @@ app.post('/api/otp/send', otpRateLimiter.middleware(), async (req, res) => {
         apiError = err.message;
         console.warn(`[WhatsApp API Warning] OTP send via template "${tName}" failed: ${err.message}.`);
         if (err.isAuthError || err.message.includes('Authentication Error') || err.message.includes('Code: 190')) {
-          console.error(`[WhatsApp API CRITICAL] Stopping template trials: Meta Access Token is invalid/expired (Code 190).`);
+          console.error(`[WhatsApp API CRITICAL] Stopping template trials: Meta Access Token is invalid or expired (Code 190).`);
           break;
         }
       }
     }
   } else {
-    isSimulated = true;
-    if (apiKey && !phoneId) {
-      console.error('CRITICAL WARNING: WA_API_KEY is defined but WA_PHONE_NUMBER_ID is missing!');
-    }
+    apiError = 'Meta WhatsApp API credentials missing. Please set WA_API_KEY and WA_PHONE_NUMBER_ID in settings or .env file.';
+    console.error(`[WhatsApp API Error]: ${apiError}`);
   }
 
-  if (apiError) {
+  if (apiError || !sentViaMeta) {
     console.error('-----------------------------------------');
-    console.error(`[WhatsApp API Error for ${phone}]: ${apiError}`);
+    console.error(`[WhatsApp Meta API Failure for ${phone}]: ${apiError}`);
     console.error('-----------------------------------------');
-    // Intelligent fallback: Fallback to simulation mode so customers on the website are never blocked by 502 errors due to expired developer API keys!
-    console.warn(`[WhatsApp Fallback] Meta API error encountered (${apiError}). Switching to Simulation Mode for phone ${phone} so customer verification succeeds.`);
-    isSimulated = true;
+    return res.status(502).json({
+      error: 'Failed to deliver WhatsApp verification code via Meta API.',
+      details: apiError
+    });
   }
 
   console.log(`=========================================`);
-  console.log(`[OTP Verification Code for ${phone}]: ${otp}`);
+  console.log(`[Meta API OTP Sent to ${phone}]: ${otp}`);
   console.log(`=========================================`);
 
   res.json({
     success: true,
-    message: isSimulated ? 'OTP sent successfully (Simulation Mode)' : 'OTP sent successfully',
-    simulatedOtp: isSimulated ? otp : null
+    message: 'OTP verification code sent successfully via Meta WhatsApp API.'
   });
 });
 
