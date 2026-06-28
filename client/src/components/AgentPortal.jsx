@@ -494,8 +494,8 @@ export default function AgentPortal() {
         boxShadow: '0 8px 32px 0 rgba(17, 19, 43, 0.06)'
       }}>
         {/* Brand/Logo */}
-        <div className="admin-nav-brand" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <span style={{ width: '11px', height: '11px', borderRadius: '50%', backgroundColor: 'var(--gold)', boxShadow: '0 0 0 4px rgba(224, 168, 46, 0.22)' }}></span>
+        <div className="admin-nav-brand" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+          <img src="/logo.jpg" alt="FinMantra Logo" style={{ height: '30px', width: '30px', borderRadius: '7px', objectFit: 'cover', boxShadow: '0 2px 8px rgba(224, 168, 46, 0.25)' }} />
           <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: '1.25rem', letterSpacing: '-0.03em', color: 'var(--ink)' }}>
             FinMantra <span style={{ color: 'var(--gold-deep)', fontWeight: 400, fontSize: '0.85rem' }}>Agent</span>
           </span>
