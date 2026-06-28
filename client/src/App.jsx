@@ -198,9 +198,9 @@ export default function App() {
       {/* Header / Navbar - Hide on admin and agent portals to avoid duplicates */}
       {currentPath !== '/admin' && currentPath !== '/agent' && (
         <header className="navbar">
-          <div className="nav-logo" onClick={() => navigateTo('/')} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer' }}>
-            <img src="/logo.jpg" alt="FinMantra Logo" style={{ height: '32px', width: '32px', borderRadius: '8px', objectFit: 'cover', boxShadow: '0 2px 8px rgba(224, 168, 46, 0.25)' }} />
-            <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: '1.3rem', letterSpacing: '-0.03em' }}>FinMantra</span>
+          <div className="nav-logo" onClick={() => navigateTo('/')} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}>
+            <img src="/logo.jpg" alt="FinMantra Logo" style={{ height: '44px', width: '44px', borderRadius: '10px', objectFit: 'cover', boxShadow: '0 3px 10px rgba(224, 168, 46, 0.3)' }} />
+            <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: '1.45rem', letterSpacing: '-0.03em' }}>FinMantra</span>
           </div>
           <nav className="nav-links">
             {currentPath === '/' && (

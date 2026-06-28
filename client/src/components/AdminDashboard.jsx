@@ -1161,24 +1161,25 @@ export default function AdminDashboard() {
       {/* Sticky Premium Top Navigation Bar */}
       <div className="admin-navbar glass-panel" style={{ 
         position: 'sticky', 
-        top: '1rem', 
+        top: '0.75rem', 
         zIndex: 1000, 
         display: 'flex', 
         justifyContent: 'space-between', 
         alignItems: 'center', 
-        padding: '0.75rem 1.5rem', 
+        padding: '0.9rem 1.75rem', 
+        minHeight: '70px',
         marginBottom: '2rem',
         backdropFilter: 'blur(12px)',
-        background: 'rgba(255, 255, 255, 0.85)',
+        background: 'rgba(255, 255, 255, 0.88)',
         border: '1px solid var(--line)',
         borderRadius: 'var(--radius-md)',
-        boxShadow: '0 8px 32px 0 rgba(17, 19, 43, 0.06)'
+        boxShadow: '0 8px 32px 0 rgba(17, 19, 43, 0.08)'
       }}>
         {/* Brand/Title */}
-        <div className="admin-nav-brand" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-          <img src="/logo.jpg" alt="FinMantra Logo" style={{ height: '30px', width: '30px', borderRadius: '7px', objectFit: 'cover', boxShadow: '0 2px 8px rgba(224, 168, 46, 0.25)' }} />
-          <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: '1.25rem', letterSpacing: '-0.03em', color: 'var(--ink)' }}>
-            FinMantra <span style={{ color: 'var(--gold-deep)', fontWeight: 400, fontSize: '0.85rem' }}>Admin</span>
+        <div className="admin-nav-brand" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <img src="/logo.jpg" alt="FinMantra Logo" style={{ height: '40px', width: '40px', borderRadius: '9px', objectFit: 'cover', boxShadow: '0 3px 10px rgba(224, 168, 46, 0.28)' }} />
+          <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: '1.35rem', letterSpacing: '-0.03em', color: 'var(--ink)' }}>
+            FinMantra <span style={{ color: 'var(--gold-deep)', fontWeight: 500, fontSize: '0.9rem' }}>Admin</span>
           </span>
         </div>
 
