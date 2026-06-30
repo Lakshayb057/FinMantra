@@ -167,12 +167,12 @@ export default function ContactPage({ navigateTo }) {
                 fontWeight: 600,
                 color: 'var(--muted)',
                 letterSpacing: '0.02em',
-              }}>Monday – Saturday</span>
+              }}>Monday - Saturday</span>
               <span style={{
                 fontSize: '0.95rem',
                 fontWeight: 700,
                 color: 'var(--mint)',
-              }}>10:00 AM – 6:00 PM IST</span>
+              }}>10:00 AM - 6:00 PM IST</span>
             </div>
             <div style={{
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
