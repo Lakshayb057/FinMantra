@@ -197,7 +197,7 @@ export default function AdminDashboard() {
         return;
       }
 
-      // Token is verified — enable WebSocket sync
+      // Token is verified - enable WebSocket sync
       setIsAuthenticated(true);
 
       const leadsData = await leadsRes.json();

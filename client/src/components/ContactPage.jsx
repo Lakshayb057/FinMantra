@@ -22,7 +22,7 @@ export default function ContactPage({ navigateTo }) {
       icon: '📍',
       title: 'Registered Office',
       detail: 'Chaos Design Pvt. Ltd.',
-      sub: '[Address placeholder — please update with registered address]',
+      sub: '[Address placeholder - please update with registered address]',
     },
   ];
 
@@ -247,13 +247,13 @@ export default function ContactPage({ navigateTo }) {
           <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: '1.4rem', letterSpacing: '-0.03em', color: '#ffffff' }}>FinMantra</span>
         </div>
         <div style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.5)', lineHeight: 1.7, marginBottom: '1rem' }}>
-          FinMantra is a brand owned and operated by <strong style={{ color: 'rgba(255,255,255,0.7)' }}>Chaos Design Pvt. Ltd.</strong> — an authorised marketing and referral partner of its partner banks.
+          FinMantra is a brand owned and operated by <strong style={{ color: 'rgba(255,255,255,0.7)' }}>Chaos Design Pvt. Ltd.</strong> - an authorised marketing and referral partner of its partner banks.
         </div>
         <div style={{ fontSize: '0.78rem', color: 'rgba(255, 255, 255, 0.35)', lineHeight: 1.7, marginBottom: '2.5rem' }}>
           We are not a bank, lender or card issuer, and we do not charge customers for our services.
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap', fontSize: '0.82rem', color: 'rgba(255, 255, 255, 0.4)' }}>
-          <span>© 2026 FinMantra — A brand of Chaos Design Pvt. Ltd.</span>
+          <span>© 2026 FinMantra - A brand of Chaos Design Pvt. Ltd.</span>
           <span style={{ color: 'rgba(255, 255, 255, 0.25)' }}>·</span>
           <a href="#" onClick={(e) => { e.preventDefault(); navigateTo('/privacy-policy'); }} style={{ color: 'rgba(255, 255, 255, 0.5)', textDecoration: 'none', fontWeight: 500 }}>Privacy Policy</a>
           <span style={{ color: 'rgba(255, 255, 255, 0.25)' }}>·</span>

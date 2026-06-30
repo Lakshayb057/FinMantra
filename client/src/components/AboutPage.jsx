@@ -9,7 +9,7 @@ export default function AboutPage({ navigateTo }) {
     { icon: '🔒', title: 'Security First', desc: 'Your data is encrypted and never shared without consent. We follow industry-best security practices.' },
     { icon: '💯', title: '100% Free Service', desc: 'We never charge customers. Our service is completely free for all users, always.' },
     { icon: '🏦', title: 'Bank-Authorised Partner', desc: 'We are an officially authorised marketing and referral partner of leading Indian banks.' },
-    { icon: '⚡', title: 'Instant Processing', desc: 'Applications are routed directly to bank portals in real-time — no delays, no middlemen.' },
+    { icon: '⚡', title: 'Instant Processing', desc: 'Applications are routed directly to bank portals in real-time - no delays, no middlemen.' },
   ];
 
   const companyDetails = [
@@ -102,7 +102,7 @@ export default function AboutPage({ navigateTo }) {
           textAlign: 'center',
         }}>
           We help consumers compare, select, and apply for credit cards through our secure digital platform.
-          We connect users directly with bank portals — we never handle credit decisions, card issuance,
+          We connect users directly with bank portals - we never handle credit decisions, card issuance,
           or customer funds.
         </p>
       </section>
@@ -233,13 +233,13 @@ export default function AboutPage({ navigateTo }) {
           <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: '1.4rem', letterSpacing: '-0.03em', color: '#ffffff' }}>FinMantra</span>
         </div>
         <div style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.5)', lineHeight: 1.7, marginBottom: '1rem' }}>
-          FinMantra is a brand owned and operated by <strong style={{ color: 'rgba(255,255,255,0.7)' }}>Chaos Design Pvt. Ltd.</strong> — an authorised marketing and referral partner of its partner banks.
+          FinMantra is a brand owned and operated by <strong style={{ color: 'rgba(255,255,255,0.7)' }}>Chaos Design Pvt. Ltd.</strong> - an authorised marketing and referral partner of its partner banks.
         </div>
         <div style={{ fontSize: '0.78rem', color: 'rgba(255, 255, 255, 0.35)', lineHeight: 1.7, marginBottom: '2.5rem' }}>
           We are not a bank, lender or card issuer, and we do not charge customers for our services.
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap', fontSize: '0.82rem', color: 'rgba(255, 255, 255, 0.4)' }}>
-          <span>© 2026 FinMantra — A brand of Chaos Design Pvt. Ltd.</span>
+          <span>© 2026 FinMantra - A brand of Chaos Design Pvt. Ltd.</span>
           <span style={{ color: 'rgba(255, 255, 255, 0.25)' }}>·</span>
           <a href="#" onClick={(e) => { e.preventDefault(); navigateTo('/privacy-policy'); }} style={{ color: 'rgba(255, 255, 255, 0.5)', textDecoration: 'none', fontWeight: 500 }}>Privacy Policy</a>
           <span style={{ color: 'rgba(255, 255, 255, 0.25)' }}>·</span>

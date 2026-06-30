@@ -214,7 +214,7 @@ export default function AgentPortal() {
         // Filter leads submitted by this agent
         const filtered = leadsList.filter(l => l.agent_id === agent?.id);
         setAgentLeads(filtered);
-        // Token is verified — enable WebSocket sync
+        // Token is verified - enable WebSocket sync
         setIsAuthenticated(true);
       }
     } catch (err) {
