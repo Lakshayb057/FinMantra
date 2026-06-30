@@ -743,8 +743,12 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
     const adIdToCheck = utm_creative || ad_id;
     if (adIdToCheck) {
       const activeCards = await db.getCards(false);
-      const adIdStr = String(adIdToCheck).trim();
-      matchedCard = activeCards.find(c => c.ad_id && String(c.ad_id).trim() === adIdStr);
+      const adIdStr = String(adIdToCheck).trim().toLowerCase();
+      matchedCard = activeCards.find(c => {
+        if (!c.ad_id) return false;
+        const adIdList = String(c.ad_id).split(',').map(s => s.trim().toLowerCase());
+        return adIdList.includes(adIdStr);
+      });
       if (matchedCard) {
         console.log(`[Card Matching] Matched card ${matchedCard.name} (${matchedCard.id}) via ad_id: ${adIdStr}`);
       }
@@ -780,7 +784,20 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
 
     if (matchedCard) {
       card = matchedCard;
-      redirectUrlTemplate = card.redirect_url_template || '';
+      // Resolve the matching URL template if multiple templates are comma-separated
+      if (adIdToCheck && card.ad_id && card.redirect_url_template) {
+        const adIdStr = String(adIdToCheck).trim().toLowerCase();
+        const adIdList = String(card.ad_id).split(',').map(s => s.trim().toLowerCase());
+        const templatesList = String(card.redirect_url_template).split(',');
+        const adIndex = adIdList.indexOf(adIdStr);
+        if (adIndex !== -1 && templatesList[adIndex]) {
+          redirectUrlTemplate = templatesList[adIndex].trim();
+        } else {
+          redirectUrlTemplate = templatesList[0] ? templatesList[0].trim() : (card.redirect_url_template || '');
+        }
+      } else {
+        redirectUrlTemplate = card.redirect_url_template || '';
+      }
     } else {
       const settings = await db.getSettings();
       redirectUrlTemplate = settings.public_redirect_url || '';

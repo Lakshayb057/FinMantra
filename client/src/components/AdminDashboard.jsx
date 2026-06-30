@@ -1645,16 +1645,19 @@ export default function AdminDashboard() {
 
                   {((editingCard && editingCard.category === 'Digital') || (!editingCard && newCardForm.category === 'Digital')) && (
                     <div className="form-group" style={{ marginTop: '1rem' }}>
-                      <label className="form-label">Ad ID (For Campaign Ad ID Redirect Mapping)</label>
+                      <label className="form-label">Ad ID(s) (comma-separated for multiple mappings)</label>
                       <input 
                         type="text" 
                         className="form-input" 
-                        placeholder="e.g. 120246782319720736" 
+                        placeholder="e.g. 1202467823, 19720736, 98765432" 
                         value={editingCard ? (editingCard.ad_id || '') : (newCardForm.ad_id || '')}
                         onChange={(e) => editingCard 
                           ? setEditingCard({ ...editingCard, ad_id: e.target.value }) 
                           : setNewCardForm({ ...newCardForm, ad_id: e.target.value })}
                       />
+                      <div style={{ fontSize: '0.7rem', color: 'hsl(var(--text-muted))', marginTop: '0.25rem' }}>
+                        Separate multiple Ad IDs with commas. Associate them with corresponding redirect URLs below in the exact same order.
+                      </div>
                     </div>
                   )}
 
@@ -1670,17 +1673,17 @@ export default function AdminDashboard() {
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">Redirect URL Template</label>
+                    <label className="form-label">Redirect URL Template(s) (comma-separated if using multiple Ad IDs)</label>
                     <input 
-                      type="url" 
+                      type="text" 
                       className="form-input" 
-                      placeholder="https://bank.com/apply?name={name}&phone={phone}&urn={urn}"
+                      placeholder="e.g. https://bank.com/apply1?urn={urn}, https://bank.com/apply2?urn={urn}"
                       value={editingCard ? editingCard.redirect_url_template : newCardForm.redirect_url_template}
                       onChange={(e) => editingCard ? setEditingCard({ ...editingCard, redirect_url_template: e.target.value }) : setNewCardForm({ ...newCardForm, redirect_url_template: e.target.value })}
                       required
                     />
                       <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', marginTop: '0.25rem' }}>
-                        Allowed wildcards: <code>{`{name}`}</code>, <code>{`{phone}`}</code>, <code>{`{email}`}</code>, <code>{`{urn}`}</code>, <code>{`{agent_id}`}</code>, <code>{`{utm_source}`}</code>, <code>{`{utm_info}`}</code>, <code>{`{utm_creative_format}`}</code>.
+                        If using multiple Ad IDs, map each redirect template 1-to-1 using commas. Allowed wildcards: <code>{`{name}`}</code>, <code>{`{phone}`}</code>, <code>{`{email}`}</code>, <code>{`{urn}`}</code>, <code>{`{agent_id}`}</code>, <code>{`{utm_source}`}</code>, <code>{`{utm_info}`}</code>, <code>{`{utm_creative_format}`}</code>.
                       </div>
                   </div>
 
