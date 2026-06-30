@@ -1645,18 +1645,18 @@ export default function AdminDashboard() {
 
                   {((editingCard && editingCard.category === 'Digital') || (!editingCard && newCardForm.category === 'Digital')) && (
                     <div className="form-group" style={{ marginTop: '1rem' }}>
-                      <label className="form-label">Ad ID(s) (comma-separated for multiple mappings)</label>
+                      <label className="form-label">Ad ID(s) (comma-separated for campaign mapping)</label>
                       <input 
                         type="text" 
                         className="form-input" 
-                        placeholder="e.g. 1202467823, 19720736, 98765432" 
+                        placeholder="e.g. 120250847471270319, 120250867182700319, 120250867038380319" 
                         value={editingCard ? (editingCard.ad_id || '') : (newCardForm.ad_id || '')}
                         onChange={(e) => editingCard 
                           ? setEditingCard({ ...editingCard, ad_id: e.target.value }) 
                           : setNewCardForm({ ...newCardForm, ad_id: e.target.value })}
                       />
                       <div style={{ fontSize: '0.7rem', color: 'hsl(var(--text-muted))', marginTop: '0.25rem' }}>
-                        Separate multiple Ad IDs with commas. Associate them with corresponding redirect URLs below in the exact same order.
+                        Enter all campaign Ad IDs separated by commas. Any of these IDs will map to the single redirect template below.
                       </div>
                     </div>
                   )}
@@ -1673,17 +1673,17 @@ export default function AdminDashboard() {
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">Redirect URL Template(s) (comma-separated if using multiple Ad IDs)</label>
+                    <label className="form-label">Redirect URL Template</label>
                     <input 
                       type="text" 
                       className="form-input" 
-                      placeholder="e.g. https://bank.com/apply1?urn={urn}, https://bank.com/apply2?urn={urn}"
+                      placeholder="e.g. https://applyonline.hdfcbank.com/cards/credit-cards.html?CHANNELSOURCE=TDCC&ad_id={ad_id}&urn={urn}"
                       value={editingCard ? editingCard.redirect_url_template : newCardForm.redirect_url_template}
                       onChange={(e) => editingCard ? setEditingCard({ ...editingCard, redirect_url_template: e.target.value }) : setNewCardForm({ ...newCardForm, redirect_url_template: e.target.value })}
                       required
                     />
                       <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', marginTop: '0.25rem' }}>
-                        If using multiple Ad IDs, map each redirect template 1-to-1 using commas. Allowed wildcards: <code>{`{name}`}</code>, <code>{`{phone}`}</code>, <code>{`{email}`}</code>, <code>{`{urn}`}</code>, <code>{`{agent_id}`}</code>, <code>{`{utm_source}`}</code>, <code>{`{utm_info}`}</code>, <code>{`{utm_creative_format}`}</code>.
+                        Allowed wildcards: <code>{`{name}`}</code>, <code>{`{phone}`}</code>, <code>{`{email}`}</code>, <code>{`{urn}`}</code>, <code>{`{agent_id}`}</code>, <code>{`{utm_source}`}</code>, <code>{`{utm_info}`}</code>, <code>{`{ad_id}`}</code>. The <code>{`{ad_id}`}</code> wildcard will be replaced by the matching campaign Ad ID.
                       </div>
                   </div>
 

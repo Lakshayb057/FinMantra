@@ -784,20 +784,7 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
 
     if (matchedCard) {
       card = matchedCard;
-      // Resolve the matching URL template if multiple templates are comma-separated
-      if (adIdToCheck && card.ad_id && card.redirect_url_template) {
-        const adIdStr = String(adIdToCheck).trim().toLowerCase();
-        const adIdList = String(card.ad_id).split(',').map(s => s.trim().toLowerCase());
-        const templatesList = String(card.redirect_url_template).split(',');
-        const adIndex = adIdList.indexOf(adIdStr);
-        if (adIndex !== -1 && templatesList[adIndex]) {
-          redirectUrlTemplate = templatesList[adIndex].trim();
-        } else {
-          redirectUrlTemplate = templatesList[0] ? templatesList[0].trim() : (card.redirect_url_template || '');
-        }
-      } else {
-        redirectUrlTemplate = card.redirect_url_template || '';
-      }
+      redirectUrlTemplate = card.redirect_url_template || '';
     } else {
       const settings = await db.getSettings();
       redirectUrlTemplate = settings.public_redirect_url || '';
