@@ -451,7 +451,7 @@ export default function PublicLanding({ navigateTo, utmParams }) {
             <span style={{ color: 'var(--gold-deep)' }}>Apply in minutes.</span>
           </h1>
           <p style={{ color: 'var(--muted)', fontSize: '1.14rem', marginBottom: '28px', maxWidth: '38ch' }}>
-            Compare top cards, pick the one that fits how you spend, and apply online — free.
+            Compare top cards, pick the one that fits how you spend, and apply online - free.
           </p>
 
           <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '30px', padding: 0 }}>
@@ -465,7 +465,7 @@ export default function PublicLanding({ navigateTo, utmParams }) {
             </li>
             <li style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', fontWeight: 600, fontSize: '1.02rem', color: 'var(--ink)' }}>
               <span style={{ flex: '0 0 auto', width: '24px', height: '24px', borderRadius: '50%', background: 'rgba(22, 163, 123, 0.15)', color: 'var(--mint)', display: 'grid', placeItems: 'center', fontSize: '0.8rem', fontWeight: 700, marginTop: '1px' }}>✓</span>
-              No charges — ever
+              No charges - ever
             </li>
             <li style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', fontWeight: 600, fontSize: '1.02rem', color: 'var(--ink)' }}>
               <span style={{ flex: '0 0 auto', width: '24px', height: '24px', borderRadius: '50%', background: 'rgba(22, 163, 123, 0.15)', color: 'var(--mint)', display: 'grid', placeItems: 'center', fontSize: '0.8rem', fontWeight: 700, marginTop: '1px' }}>✓</span>
@@ -620,7 +620,7 @@ export default function PublicLanding({ navigateTo, utmParams }) {
           <div className="glass-card" style={{ background: 'var(--white)', border: '1px solid var(--line)', borderRadius: 'var(--radius-lg)', padding: '3.5rem 2rem', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', transition: 'var(--transition-smooth)' }}>
             <div style={{ fontFamily: 'var(--font-heading)', fontSize: '3rem', fontWeight: 800, color: 'var(--gold)', marginBottom: '1rem', lineHeight: 1 }}>01</div>
             <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--ink)', marginBottom: '0.75rem', fontFamily: 'var(--font-heading)' }}>Fill the form</h3>
-            <p style={{ color: 'var(--muted)', fontSize: '0.92rem', lineHeight: 1.5 }}>A few quick details — takes about two minutes.</p>
+            <p style={{ color: 'var(--muted)', fontSize: '0.92rem', lineHeight: 1.5 }}>A few quick details - takes about two minutes.</p>
           </div>
 
           {/* Step 2 */}
