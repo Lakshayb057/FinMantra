@@ -25,7 +25,7 @@ const DEFAULT_CSV_TEMPLATE = JSON.stringify([
   { id: "utm_category", header: "UTM Category", source: "utm_category" },
   { id: "utm_id", header: "UTM Campaign ID (utm_id)", source: "utm_id" },
   { id: "utm_creative", header: "UTM Ad ID (utm_creative)", source: "utm_creative" },
-  { id: "ad_id", header: "Ad ID (ad_id)", source: "ad_id" },
+  { id: "utm_internal", header: "UTM Internal (utm_internal)", source: "utm_internal" },
   { id: "utm_keyword", header: "UTM Keyword (utm_keyword)", source: "utm_keyword" },
   { id: "utm_matchtype", header: "UTM Matchtype (utm_matchtype)", source: "utm_matchtype" },
   { id: "utm_network", header: "UTM Network (utm_network)", source: "utm_network" },
@@ -243,6 +243,8 @@ async function initPgSchema() {
 
     try {
       await client.query("ALTER TABLE cards ADD COLUMN IF NOT EXISTS ad_id VARCHAR(100)");
+      await client.query("ALTER TABLE cards ADD COLUMN IF NOT EXISTS utm_internal VARCHAR(100)");
+      await client.query("ALTER TABLE cards ALTER COLUMN ad_id TYPE TEXT");
     } catch (migErr) {}
 
     try {
@@ -259,10 +261,9 @@ async function initPgSchema() {
       await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS landing_page TEXT");
       await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS first_landing_page TEXT");
       await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS referrer TEXT");
-    } catch (migErr) {}
-
-    try {
       await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS ad_id VARCHAR(100)");
+      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS utm_internal VARCHAR(100)");
+      await client.query("ALTER TABLE leads ALTER COLUMN ad_id TYPE TEXT");
     } catch (migErr) {}
 
     try {
@@ -276,6 +277,9 @@ async function initPgSchema() {
       await client.query("CREATE INDEX IF NOT EXISTS idx_leads_agent_id ON leads(agent_id)");
       await client.query("CREATE INDEX IF NOT EXISTS idx_leads_created_at ON leads(created_at DESC)");
       await client.query("CREATE INDEX IF NOT EXISTS idx_leads_phone ON leads(phone)");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_urn ON leads(urn)");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_card_id ON leads(card_id)");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_source ON leads(source)");
     } catch (migErr) {}
 
     const cardCount = await client.query('SELECT COUNT(*) FROM cards');
@@ -373,21 +377,77 @@ const db = {
     };
   },
 
-  async getLeadsFiltered({ agentId, limit = 2000 }) {
+  async getLeadsFiltered({ agentId, page = 1, limit = 50, search = '', card = '', source = '', startDate = '', endDate = '' }) {
     let query = 'SELECT * FROM leads';
+    let countQuery = 'SELECT COUNT(*) FROM leads';
     const params = [];
+    const clauses = [];
+    
     if (agentId) {
-      query += ' WHERE agent_id = $1';
       params.push(agentId);
+      clauses.push(`agent_id = $${params.length}`);
     }
-    query += ' ORDER BY created_at DESC LIMIT $' + (params.length + 1);
-    params.push(limit);
-
+    if (search) {
+      params.push(`%${search.trim().toLowerCase()}%`);
+      clauses.push(`(LOWER(full_name) LIKE $${params.length} OR phone LIKE $${params.length} OR LOWER(urn) LIKE $${params.length})`);
+    }
+    if (card) {
+      params.push(card);
+      clauses.push(`card_id = $${params.length}`);
+    }
+    if (source) {
+      params.push(source);
+      clauses.push(`source = $${params.length}`);
+    }
+    if (startDate) {
+      params.push(startDate);
+      clauses.push(`created_at >= $${params.length}::timestamp`);
+    }
+    if (endDate) {
+      params.push(endDate + ' 23:59:59');
+      clauses.push(`created_at <= $${params.length}::timestamp`);
+    }
+    
+    if (clauses.length > 0) {
+      const whereClause = ' WHERE ' + clauses.join(' AND ');
+      query += whereClause;
+      countQuery += whereClause;
+    }
+    
+    // Get total matching count
+    const countRes = await pool.query(countQuery, params);
+    const total = parseInt(countRes.rows[0].count, 10);
+    
+    // Pagination
+    const offset = (page - 1) * limit;
+    query += ' ORDER BY created_at DESC LIMIT $' + (params.length + 1) + ' OFFSET $' + (params.length + 2);
+    params.push(limit, offset);
+    
     const res = await pool.query(query, params);
-    return res.rows.map(row => ({
+    const leads = res.rows.map(row => ({
       ...row,
       utm_params: typeof row.utm_params === 'string' ? JSON.parse(row.utm_params) : (row.utm_params || {})
     }));
+    
+    // Today's leads count (IST)
+    const todayISTStr = new Date().toLocaleString("en-US", {timeZone: "Asia/Kolkata"});
+    const todayISTDate = new Date(todayISTStr);
+    const yyyy = todayISTDate.getFullYear();
+    const mm = String(todayISTDate.getMonth() + 1).padStart(2, '0');
+    const dd = String(todayISTDate.getDate()).padStart(2, '0');
+    const todayIST = `${yyyy}-${mm}-${dd}`;
+
+    const todayRes = await pool.query('SELECT COUNT(*) FROM leads WHERE created_at >= $1::timestamp', [todayIST + ' 00:00:00']);
+    const todaysCount = parseInt(todayRes.rows[0].count, 10);
+
+    return {
+      leads,
+      total,
+      todaysCount,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit)
+    };
   },
 
   async getLeadsForExport({ startDate, endDate }) {
@@ -418,8 +478,20 @@ const db = {
   },
 
   async addLead(lead) {
-    const todayStr = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD
-    const prefix = `FM${todayStr}`;
+    const now = new Date();
+    const formatterObj = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+    const parts = formatterObj.formatToParts(now);
+    const dateMap = {};
+    parts.forEach(p => dateMap[p.type] = p.value);
+    const yearStr = dateMap.year;
+    const monthLetter = String.fromCharCode(65 + (parseInt(dateMap.month, 10) - 1));
+    const dayStr = dateMap.day;
+    const prefix = `FM${yearStr}${monthLetter}${dayStr}`;
     
     const seqQuery = await pool.query('SELECT urn FROM leads WHERE urn LIKE $1', [`${prefix}%`]);
     let sequence = 1;
@@ -430,7 +502,7 @@ const db = {
       });
       sequence = Math.max(...sequences) + 1;
     }
-    const urn = `${prefix}${String(sequence).padStart(3, '0')}`;
+    const urn = `${prefix}${String(sequence).padStart(5, '0')}`;
     const id = 'lead_' + Math.random().toString(36).substr(2, 9);
     
     await pool.query(
@@ -441,9 +513,9 @@ const db = {
         gclid, gclsrc, dclid, msclkid, ttclid, twclid, li_fat_id,
         utm_id, utm_creative, utm_keyword, utm_matchtype, utm_network, utm_placement,
         utm_device, utm_location, gbraid, wbraid, landing_page, first_landing_page, referrer, ad_id,
-        utm_params, redirect_url, ip_address, user_agent, capi_status, capi_response, created_at
+        utm_params, redirect_url, ip_address, user_agent, capi_status, capi_response, utm_internal, created_at
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, NOW())`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, NOW())`,
       [
         id, urn, lead.full_name, lead.phone, lead.email, lead.city, lead.employment, lead.income_range,
         lead.card_id, lead.card_name, lead.card_bank, lead.source || 'public', lead.agent_id, lead.agent_name,
@@ -454,7 +526,8 @@ const db = {
         lead.utm_device, lead.utm_location, lead.gbraid, lead.wbraid, lead.landing_page, lead.first_landing_page, lead.referrer, lead.ad_id,
         JSON.stringify(lead.utm_params || {}), lead.redirect_url || '',
         lead.ip_address || null, lead.user_agent || null, lead.capi_status || null,
-        lead.capi_response ? JSON.stringify(lead.capi_response) : null
+        lead.capi_response ? JSON.stringify(lead.capi_response) : null,
+        lead.utm_internal || null
       ]
     );
     return { id, urn, ...lead, created_at: new Date().toISOString() };
@@ -469,8 +542,8 @@ const db = {
         gclid = $25, gclsrc = $26, dclid = $27, msclkid = $28, ttclid = $29, twclid = $30, li_fat_id = $31,
         utm_id = $32, utm_creative = $33, utm_keyword = $34, utm_matchtype = $35, utm_network = $36, utm_placement = $37,
         utm_device = $38, utm_location = $39, gbraid = $40, wbraid = $41, landing_page = $42, first_landing_page = $43, referrer = $44, ad_id = $45,
-        utm_params = $46, redirect_url = $47, ip_address = $48, user_agent = $49, capi_status = $50, capi_response = $51
-       WHERE id = $52`,
+        utm_params = $46, redirect_url = $47, ip_address = $48, user_agent = $49, capi_status = $50, capi_response = $51, utm_internal = $52
+       WHERE id = $53`,
       [
         lead.full_name, lead.phone, lead.email, lead.city, lead.employment, lead.income_range,
         lead.card_id, lead.card_name, lead.card_bank, lead.source, lead.agent_id, lead.agent_name, lead.agent_location, lead.consent,
@@ -481,6 +554,7 @@ const db = {
         JSON.stringify(lead.utm_params || {}), lead.redirect_url || '',
         lead.ip_address, lead.user_agent, lead.capi_status,
         lead.capi_response ? JSON.stringify(lead.capi_response) : null,
+        lead.utm_internal || null,
         id
       ]
     );
@@ -514,8 +588,8 @@ const db = {
     const active = card.active !== undefined ? card.active : true;
     const cardLocationsJson = JSON.stringify(card.card_locations || []);
     await pool.query(
-      'INSERT INTO cards (id, name, bank, category, description, redirect_url_template, display_order, active, thumbnail_url, card_locations, ad_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)',
-      [id, card.name, card.bank, card.category, card.description, card.redirect_url_template, displayOrder, active, card.thumbnail_url || '', cardLocationsJson, card.ad_id || '']
+      'INSERT INTO cards (id, name, bank, category, description, redirect_url_template, display_order, active, thumbnail_url, card_locations, ad_id, utm_internal) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)',
+      [id, card.name, card.bank, card.category, card.description, card.redirect_url_template, displayOrder, active, card.thumbnail_url || '', cardLocationsJson, card.ad_id || '', card.utm_internal || '']
     );
     return { id, ...card, display_order: displayOrder, active, card_locations: card.card_locations || [] };
   },
@@ -525,7 +599,7 @@ const db = {
     const values = [];
     let idx = 1;
     for (const [key, val] of Object.entries(cardData)) {
-      if (['name', 'bank', 'category', 'description', 'redirect_url_template', 'display_order', 'active', 'thumbnail_url', 'ad_id'].includes(key)) {
+      if (['name', 'bank', 'category', 'description', 'redirect_url_template', 'display_order', 'active', 'thumbnail_url', 'ad_id', 'utm_internal'].includes(key)) {
         fields.push(`${key} = $${idx++}`);
         values.push(val);
       } else if (key === 'card_locations') {

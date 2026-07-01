@@ -2,18 +2,58 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Users, CreditCard, MapPin, Settings as SettingsIcon, ShieldAlert, BarChart3, 
   Trash2, Download, Search, Plus, Edit, Check, X, RefreshCw, AlertCircle,
-  QrCode, Smartphone, CheckCircle, Wifi, WifiOff, Eye, MessageSquare, Layers,
-  ArrowUp, ArrowDown, MoreVertical, LogOut, Activity
+  QrCode, Smartphone, CheckCircle, Wifi, WifiOff, Eye, EyeOff, MessageSquare, Layers,
+  ArrowUp, ArrowDown, MoreVertical, LogOut, Activity, Sun, Moon
 } from 'lucide-react';
 
+const formatDateTime = (dateStr) => {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '';
+  try {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
+    const parts = formatter.formatToParts(d);
+    const p = {};
+    parts.forEach(x => p[x.type] = x.value);
+    return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}`;
+  } catch (e) {
+    return d.toLocaleString();
+  }
+};
 
-export default function AdminDashboard() {
+const getLocalDateString = (dateStr) => {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '';
+  try {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+    return formatter.format(d);
+  } catch (e) {
+    return d.toISOString().slice(0, 10);
+  }
+};
+
+export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   const [token, setToken] = useState(localStorage.getItem('finmantra_admin_token') || '');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [authError, setAuthError] = useState('');
   const [adminPasswordInput, setAdminPasswordInput] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   
   // Navigation Tabs: 'leads' | 'cards' | 'agents' | 'locations' | 'settings'
   const [activeTab, setActiveTab] = useState('leads');
@@ -34,6 +74,13 @@ export default function AdminDashboard() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCard, setFilterCard] = useState('');
   const [filterSource, setFilterSource] = useState('');
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalLeadsCount, setTotalLeadsCount] = useState(0);
+  const [todaysLeadsCount, setTodaysLeadsCount] = useState(0);
+  const [leadsPerPage, setLeadsPerPage] = useState(50);
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
   const [selectedLeads, setSelectedLeads] = useState([]);
@@ -47,7 +94,7 @@ export default function AdminDashboard() {
   const [editLeadForm, setEditLeadForm] = useState(null);
   const [customParams, setCustomParams] = useState([]);
   
-  const [newCardForm, setNewCardForm] = useState({ name: '', bank: '', category: 'Offline', ad_id: '', description: '', redirect_url_template: '', display_order: 1, active: true, card_locations: [] });
+  const [newCardForm, setNewCardForm] = useState({ name: '', bank: '', category: 'Offline', ad_id: '', utm_internal: '', description: '', redirect_url_template: '', display_order: 1, active: true, card_locations: [] });
   const [newAgentForm, setNewAgentForm] = useState({ id: '', name: '', phone: '', email: '', username: '', password: '', status: 'active', locations: [] });
   const [newLocName, setNewLocName] = useState('');
 
@@ -178,13 +225,50 @@ export default function AdminDashboard() {
     }
   }, [settings.csv_export_template]);
 
+  const fetchLeads = async (page = 1, limit = 50) => {
+    if (!token) return;
+    try {
+      const headers = { 'Authorization': `Bearer ${token}` };
+      const queryParams = new URLSearchParams({
+        page: page.toString(),
+        limit: limit.toString(),
+        search: searchTerm,
+        card: filterCard,
+        source: filterSource,
+        startDate: filterStartDate,
+        endDate: filterEndDate
+      });
+      const res = await fetch(`${API_URL}/leads?${queryParams.toString()}`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setLeads(data.leads || []);
+        setCurrentPage(data.page || 1);
+        setTotalPages(data.totalPages || 1);
+        setTotalLeadsCount(data.total || 0);
+        setTodaysLeadsCount(data.todaysCount || 0);
+      }
+    } catch (err) {
+      console.error('Error fetching leads page:', err);
+    }
+  };
+
   const loadAllAdminData = async () => {
     setLoading(true);
     try {
       const headers = { 'Authorization': `Bearer ${token}` };
       
+      const queryParams = new URLSearchParams({
+        page: currentPage.toString(),
+        limit: leadsPerPage.toString(),
+        search: searchTerm,
+        card: filterCard,
+        source: filterSource,
+        startDate: filterStartDate,
+        endDate: filterEndDate
+      });
+
       const [leadsRes, cardsRes, agentsRes, locsRes, settingsRes, baileysRes] = await Promise.all([
-        fetch(`${API_URL}/leads`, { headers }),
+        fetch(`${API_URL}/leads?${queryParams.toString()}`, { headers }),
         fetch(`${API_URL}/admin/cards`, { headers }),
         fetch(`${API_URL}/agents`, { headers }),
         fetch(`${API_URL}/locations`),
@@ -207,7 +291,12 @@ export default function AdminDashboard() {
       const settingsData = await settingsRes.json();
       const baileysData = baileysRes.ok ? await baileysRes.json() : { status: 'DISCONNECTED', qrCodeDataUrl: '', phone: '' };
 
-      setLeads(Array.isArray(leadsData) ? leadsData : []);
+      setLeads(leadsData.leads || []);
+      setCurrentPage(leadsData.page || 1);
+      setTotalPages(leadsData.totalPages || 1);
+      setTotalLeadsCount(leadsData.total || 0);
+      setTodaysLeadsCount(leadsData.todaysCount || 0);
+
       setCards(Array.isArray(cardsData) ? cardsData : []);
       setAgents(Array.isArray(agentsData) ? agentsData : []);
       setLocations(Array.isArray(locsData) ? locsData : []);
@@ -220,6 +309,18 @@ export default function AdminDashboard() {
       setLoading(false);
     }
   };
+
+  // Reset page to 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterCard, filterSource, filterStartDate, filterEndDate]);
+
+  // Refetch leads when pagination/filters change
+  useEffect(() => {
+    if (isAuthenticated && token) {
+      fetchLeads(currentPage, leadsPerPage);
+    }
+  }, [currentPage, leadsPerPage, searchTerm, filterCard, filterSource, filterStartDate, filterEndDate, isAuthenticated, token]);
 
   const showToast = (text, type = 'success') => {
     setMessage({ text, type });
@@ -386,13 +487,14 @@ export default function AdminDashboard() {
       twclid: lead.twclid || '',
       li_fat_id: lead.li_fat_id || '',
       ad_id: lead.ad_id || '',
+      utm_internal: lead.utm_internal || '',
       redirect_url: lead.redirect_url || ''
     });
 
     const standardKeys = [
       'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 
       'utm_channel', 'utm_category', 'utm_info', 'utm_creative_format', 
-      'utm_id', 'utm_creative', 'ad_id', 'utm_keyword', 'utm_matchtype', 'utm_network', 'utm_placement',
+      'utm_id', 'utm_creative', 'ad_id', 'utm_internal', 'utm_keyword', 'utm_matchtype', 'utm_network', 'utm_placement',
       'utm_device', 'utm_location', 'gbraid', 'wbraid', 'landing_page', 'first_landing_page', 'referrer',
       'fbclid', 'gclid', 'gclsrc', 'dclid', 'msclkid', 'ttclid', 'twclid', 'li_fat_id'
     ];
@@ -446,7 +548,7 @@ export default function AdminDashboard() {
       const standardKeys = [
         'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 
         'utm_channel', 'utm_category', 'utm_info', 'utm_creative_format', 
-        'utm_id', 'utm_creative', 'ad_id', 'utm_keyword', 'utm_matchtype', 'utm_network', 'utm_placement',
+        'utm_id', 'utm_creative', 'ad_id', 'utm_internal', 'utm_keyword', 'utm_matchtype', 'utm_network', 'utm_placement',
         'utm_device', 'utm_location', 'gbraid', 'wbraid', 'landing_page', 'first_landing_page', 'referrer',
         'fbclid', 'gclid', 'gclsrc', 'dclid', 'msclkid', 'ttclid', 'twclid', 'li_fat_id'
       ];
@@ -529,7 +631,7 @@ export default function AdminDashboard() {
         })
       });
       showToast('Credit card added successfully.');
-      setNewCardForm({ name: '', bank: '', category: 'Offline', description: '', redirect_url_template: '', display_order: 1, active: true, card_locations: [] });
+      setNewCardForm({ name: '', bank: '', category: 'Offline', ad_id: '', utm_internal: '', description: '', redirect_url_template: '', display_order: 1, active: true, card_locations: [] });
       loadAllAdminData();
     } catch (err) {
       showToast(err.message || 'Failed to add card.', 'error');
@@ -857,7 +959,7 @@ export default function AdminDashboard() {
     { value: 'utm_category', label: 'UTM Category' },
     { value: 'utm_id', label: 'UTM Campaign ID (utm_id)' },
     { value: 'utm_creative', label: 'UTM Ad ID (utm_creative)' },
-    { value: 'ad_id', label: 'Ad ID (ad_id)' },
+    { value: 'utm_internal', label: 'UTM Internal (utm_internal)' },
     { value: 'utm_keyword', label: 'UTM Keyword (utm_keyword)' },
     { value: 'utm_matchtype', label: 'UTM Matchtype' },
     { value: 'utm_network', label: 'UTM Network' },
@@ -937,7 +1039,7 @@ export default function AdminDashboard() {
       { id: "utm_category", header: "UTM Category", source: "utm_category" },
       { id: "utm_id", header: "UTM Campaign ID (utm_id)", source: "utm_id" },
       { id: "utm_creative", header: "UTM Ad ID (utm_creative)", source: "utm_creative" },
-      { id: "ad_id", header: "Ad ID (ad_id)", source: "ad_id" },
+      { id: "utm_internal", header: "UTM Internal (utm_internal)", source: "utm_internal" },
       { id: "utm_keyword", header: "UTM Keyword (utm_keyword)", source: "utm_keyword" },
       { id: "utm_matchtype", header: "UTM Matchtype (utm_matchtype)", source: "utm_matchtype" },
       { id: "utm_network", header: "UTM Network (utm_network)", source: "utm_network" },
@@ -947,7 +1049,7 @@ export default function AdminDashboard() {
       { id: "gbraid", header: "GBRAID (gbraid)", source: "gbraid" },
       { id: "wbraid", header: "WBRAID (wbraid)", source: "wbraid" },
       { id: "landing_page", header: "Landing Page (landing_page)", source: "landing_page" },
-      { id: "first_landing_page", header: "First Landing Page (first_landing_page)", source: "first_landing_page" },
+      { id: "first_landing_page", header: "Redirect URL (redirect_url)", source: "redirect_url" },
       { id: "referrer", header: "Referrer (referrer)", source: "referrer" },
       { id: "fbclid", header: "FBCLID", source: "fbclid" },
       { id: "gclid", header: "GCLID", source: "gclid" },
@@ -1082,33 +1184,10 @@ export default function AdminDashboard() {
   };
 
   // Filtering Logic
-  const filteredLeads = leads.filter(l => {
-    const matchesSearch = 
-      (l.full_name && l.full_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (l.phone && l.phone.includes(searchTerm)) ||
-      (l.urn && l.urn.toLowerCase().includes(searchTerm.toLowerCase()));
-    
-    const matchesCard = filterCard ? l.card_id === filterCard : true;
-    const matchesSource = filterSource ? l.source === filterSource : true;
-
-    // Date range filter
-    let matchesDate = true;
-    if (l.created_at) {
-      const leadDate = typeof l.created_at === 'string' 
-        ? l.created_at.slice(0, 10) 
-        : new Date(l.created_at).toISOString().slice(0, 10);
-      if (filterStartDate && leadDate < filterStartDate) matchesDate = false;
-      if (filterEndDate && leadDate > filterEndDate) matchesDate = false;
-    } else if (filterStartDate || filterEndDate) {
-      matchesDate = false;
-    }
-
-    return matchesSearch && matchesCard && matchesSource && matchesDate;
-  });
+  const filteredLeads = leads;
 
   // Calculate Metrics
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const todaysLeads = leads.filter(l => l.created_at && l.created_at.startsWith(todayStr));
+  const todayStr = getLocalDateString(new Date());
   const activeCards = cards.filter(c => c.active);
   const activeAgents = agents.filter(a => a.status === 'active');
 
@@ -1127,14 +1206,38 @@ export default function AdminDashboard() {
           <form onSubmit={handleAdminLogin}>
             <div className="form-group" style={{ marginBottom: '1.5rem' }}>
               <label className="form-label">Admin Security Password</label>
-              <input 
-                type="password" 
-                className="form-input" 
-                placeholder="Enter password" 
-                value={adminPasswordInput} 
-                onChange={(e) => setAdminPasswordInput(e.target.value)}
-                required 
-              />
+              <div style={{ position: 'relative' }}>
+                <input 
+                  type={showPassword ? "text" : "password"} 
+                  className="form-input" 
+                  placeholder="Enter password" 
+                  value={adminPasswordInput} 
+                  onChange={(e) => setAdminPasswordInput(e.target.value)}
+                  style={{ paddingRight: '45px' }}
+                  required 
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  style={{
+                    position: 'absolute',
+                    right: '12px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: 'var(--muted)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: 0
+                  }}
+                  title={showPassword ? "Hide Password" : "Show Password"}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
             </div>
 
             {authError && (
@@ -1193,7 +1296,7 @@ export default function AdminDashboard() {
         minHeight: '70px',
         marginBottom: '2rem',
         backdropFilter: 'blur(12px)',
-        background: 'rgba(255, 255, 255, 0.88)',
+        background: 'var(--glass-bg)',
         border: '1px solid var(--line)',
         borderRadius: 'var(--radius-md)',
         boxShadow: '0 8px 32px 0 rgba(17, 19, 43, 0.08)'
@@ -1308,6 +1411,14 @@ export default function AdminDashboard() {
         {/* Right side controls (Desktop Only) */}
         <div className="admin-nav-actions desktop-only" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
           <button 
+            className="theme-toggle-btn" 
+            onClick={toggleTheme} 
+            title={theme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
+            style={{ padding: '0.45rem', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '34px', width: '34px' }}
+          >
+            {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
+          </button>
+          <button 
             onClick={loadAllAdminData} 
             className="btn-secondary" 
             style={{ padding: '0.5rem 0.85rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.25rem', height: '34px', cursor: 'pointer' }}
@@ -1403,12 +1514,12 @@ export default function AdminDashboard() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', marginBottom: '2.5rem' }}>
         <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '3px solid hsl(var(--primary))' }}>
           <div style={{ fontSize: '0.85rem', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Total Leads</div>
-          <div style={{ fontSize: '2.2rem', fontWeight: 800, margin: '0.25rem 0' }}>{leads.length}</div>
+          <div style={{ fontSize: '2.2rem', fontWeight: 800, margin: '0.25rem 0' }}>{totalLeadsCount}</div>
           <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>Registered in Database</div>
         </div>
         <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '3px solid hsl(var(--secondary))' }}>
           <div style={{ fontSize: '0.85rem', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Leads Today</div>
-          <div style={{ fontSize: '2.2rem', fontWeight: 800, margin: '0.25rem 0', color: 'hsl(var(--secondary))' }}>{todaysLeads.length}</div>
+          <div style={{ fontSize: '2.2rem', fontWeight: 800, margin: '0.25rem 0', color: 'hsl(var(--secondary))' }}>{todaysLeadsCount}</div>
           <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>Captured since 12:00 AM</div>
         </div>
         <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '3px solid var(--gold)' }}>
@@ -1433,7 +1544,7 @@ export default function AdminDashboard() {
           {activeTab === 'leads' && (
             <div className="glass-panel">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
-                <h2 style={{ fontSize: '1.3rem' }}>Leads Log ({filteredLeads.length})</h2>
+                <h2 style={{ fontSize: '1.3rem' }}>Leads Log ({totalLeadsCount})</h2>
                 <div style={{ display: 'flex', gap: '1rem' }}>
                   {selectedLeads.length > 0 && (
                     <button onClick={handleBulkDeleteLeads} className="btn-secondary" style={{ background: 'rgba(209, 67, 67, 0.15)', color: 'var(--err)', border: '1px solid rgba(209, 67, 67, 0.2)' }}>
@@ -1508,8 +1619,7 @@ export default function AdminDashboard() {
                       <th>Name</th>
                       <th>WhatsApp No.</th>
                       <th>Card Selection</th>
-                      <th>City</th>
-                      <th>Agent Location</th>
+                      <th>Email</th>
                       <th>Source</th>
                       <th>Actions</th>
                     </tr>
@@ -1527,12 +1637,11 @@ export default function AdminDashboard() {
                             />
                           </td>
                           <td><span className="badge badge-info" style={{ cursor: 'pointer' }} onClick={() => handleViewLead(l)}>{l.urn}</span></td>
-                          <td>{l.created_at ? l.created_at.replace('T', ' ').slice(0, 16) : ''}</td>
+                          <td>{formatDateTime(l.created_at)}</td>
                           <td style={{ fontWeight: 600, cursor: 'pointer' }} onClick={() => handleViewLead(l)}>{l.full_name}</td>
                           <td>{l.phone}</td>
                           <td>{l.card_name} <span style={{ color: 'hsl(var(--text-muted))', fontSize: '0.8rem' }}>({l.card_bank})</span></td>
-                          <td>{l.city}</td>
-                          <td>{l.agent_location || '-'}</td>
+                          <td>{l.email || '-'}</td>
                           <td>
                             <span 
                               className={`badge ${l.source === 'agent' ? 'badge-warning' : 'badge-success'}`}
@@ -1567,6 +1676,77 @@ export default function AdminDashboard() {
                   </tbody>
                 </table>
               </div>
+
+              {/* Pagination Controls */}
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center', 
+                marginTop: '1.25rem', 
+                padding: '1rem', 
+                background: 'var(--paper-2)', 
+                border: '1px solid var(--line)', 
+                borderRadius: 'var(--radius-md)',
+                flexWrap: 'wrap',
+                gap: '1rem'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>Leads per page:</span>
+                  <select 
+                    className="form-select" 
+                    value={leadsPerPage} 
+                    onChange={(e) => {
+                      setLeadsPerPage(parseInt(e.target.value, 10));
+                      setCurrentPage(1);
+                    }}
+                    style={{ width: '80px', padding: '0.25rem 0.5rem', fontSize: '0.85rem', height: '32px' }}
+                  >
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                    <option value={200}>200</option>
+                  </select>
+                </div>
+                
+                <div style={{ fontSize: '0.85rem', color: 'var(--ink)', fontWeight: 600 }}>
+                  Showing {totalLeadsCount > 0 ? (currentPage - 1) * leadsPerPage + 1 : 0} - {Math.min(currentPage * leadsPerPage, totalLeadsCount)} of {totalLeadsCount} leads
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <button 
+                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} 
+                    disabled={currentPage === 1}
+                    className="btn-secondary"
+                    style={{ 
+                      padding: '0.4rem 0.8rem', 
+                      fontSize: '0.8rem', 
+                      height: '32px', 
+                      opacity: currentPage === 1 ? 0.5 : 1,
+                      cursor: currentPage === 1 ? 'not-allowed' : 'pointer'
+                    }}
+                  >
+                    Previous
+                  </button>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--muted)', margin: '0 0.5rem' }}>
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <button 
+                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} 
+                    disabled={currentPage === totalPages}
+                    className="btn-secondary"
+                    style={{ 
+                      padding: '0.4rem 0.8rem', 
+                      fontSize: '0.8rem', 
+                      height: '32px', 
+                      opacity: currentPage === totalPages ? 0.5 : 1,
+                      cursor: currentPage === totalPages ? 'not-allowed' : 'pointer'
+                    }}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+
             </div>
           )}
 
@@ -1644,21 +1824,40 @@ export default function AdminDashboard() {
                   )}
 
                   {((editingCard && editingCard.category === 'Digital') || (!editingCard && newCardForm.category === 'Digital')) && (
-                    <div className="form-group" style={{ marginTop: '1rem' }}>
-                      <label className="form-label">Ad ID(s) (comma-separated for campaign mapping)</label>
-                      <input 
-                        type="text" 
-                        className="form-input" 
-                        placeholder="e.g. 120250847471270319, 120250867182700319, 120250867038380319" 
-                        value={editingCard ? (editingCard.ad_id || '') : (newCardForm.ad_id || '')}
-                        onChange={(e) => editingCard 
-                          ? setEditingCard({ ...editingCard, ad_id: e.target.value }) 
-                          : setNewCardForm({ ...newCardForm, ad_id: e.target.value })}
-                      />
-                      <div style={{ fontSize: '0.7rem', color: 'hsl(var(--text-muted))', marginTop: '0.25rem' }}>
-                        Enter all campaign Ad IDs separated by commas. Any of these IDs will map to the single redirect template below.
+                    <>
+                      <div className="form-group" style={{ marginTop: '1rem' }}>
+                        <label className="form-label">UTM Internal (Unique campaign mapping value) <span style={{ color: 'var(--err)' }}>*</span></label>
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          placeholder="e.g. regalia_gold" 
+                          value={editingCard ? (editingCard.utm_internal || '') : (newCardForm.utm_internal || '')}
+                          onChange={(e) => editingCard 
+                            ? setEditingCard({ ...editingCard, utm_internal: e.target.value }) 
+                            : setNewCardForm({ ...newCardForm, utm_internal: e.target.value })}
+                          required
+                        />
+                        <div style={{ fontSize: '0.7rem', color: 'hsl(var(--text-muted))', marginTop: '0.25rem' }}>
+                          Enter the unique campaign UTM Internal name. This single value in the URL query parameter "utm_internal" will map to the redirect template below.
+                        </div>
                       </div>
-                    </div>
+
+                      <div className="form-group" style={{ marginTop: '1rem' }}>
+                        <label className="form-label">Campaign Ad ID(s) (ad_id) (comma-separated)</label>
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          placeholder="e.g. ad_123, ad_456" 
+                          value={editingCard ? (editingCard.ad_id || '') : (newCardForm.ad_id || '')}
+                          onChange={(e) => editingCard 
+                            ? setEditingCard({ ...editingCard, ad_id: e.target.value }) 
+                            : setNewCardForm({ ...newCardForm, ad_id: e.target.value })}
+                        />
+                        <div style={{ fontSize: '0.7rem', color: 'hsl(var(--text-muted))', marginTop: '0.25rem' }}>
+                          Optional. Enter campaign Ad ID values separated by commas. Used as fallback matching.
+                        </div>
+                      </div>
+                    </>
                   )}
 
                   <div className="form-group">
@@ -1677,13 +1876,13 @@ export default function AdminDashboard() {
                     <input 
                       type="text" 
                       className="form-input" 
-                      placeholder="e.g. https://applyonline.hdfcbank.com/cards/credit-cards.html?CHANNELSOURCE=TDCC&ad_id={ad_id}&urn={urn}"
+                      placeholder="e.g. https://applyonline.hdfcbank.com/cards/credit-cards.html?CHANNELSOURCE=TDCC&utm_internal={utm_internal}&urn={urn}"
                       value={editingCard ? editingCard.redirect_url_template : newCardForm.redirect_url_template}
                       onChange={(e) => editingCard ? setEditingCard({ ...editingCard, redirect_url_template: e.target.value }) : setNewCardForm({ ...newCardForm, redirect_url_template: e.target.value })}
                       required
                     />
                       <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', marginTop: '0.25rem' }}>
-                        Allowed wildcards: <code>{`{name}`}</code>, <code>{`{phone}`}</code>, <code>{`{email}`}</code>, <code>{`{urn}`}</code>, <code>{`{agent_id}`}</code>, <code>{`{utm_source}`}</code>, <code>{`{utm_info}`}</code>, <code>{`{ad_id}`}</code>. The <code>{`{ad_id}`}</code> wildcard will be replaced by the matching campaign Ad ID.
+                        Allowed wildcards: <code>{`{name}`}</code>, <code>{`{phone}`}</code>, <code>{`{email}`}</code>, <code>{`{urn}`}</code>, <code>{`{urn_first}`}</code>, <code>{`{urn_last}`}</code>, <code>{`{agent_id}`}</code>, <code>{`{utm_source}`}</code>, <code>{`{utm_info}`}</code>, <code>{`{utm_internal}`}</code>. The <code>{`{utm_internal}`}</code> wildcard will be replaced by the matching campaign UTM Internal name.
                       </div>
                   </div>
 
@@ -1744,9 +1943,9 @@ export default function AdminDashboard() {
                             Locations: {card.card_locations && card.card_locations.length > 0 ? card.card_locations.join(', ') : 'All Locations'}
                           </div>
                         )}
-                        {card.category === 'Digital' && card.ad_id && (
+                        {card.category === 'Digital' && (card.utm_internal || card.ad_id) && (
                           <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', margin: '0.25rem 0' }}>
-                            Campaign Ad ID: <span style={{ color: 'var(--gold-deep)', fontWeight: 600 }}>{card.ad_id}</span>
+                            UTM Internal: <span style={{ color: 'var(--gold-deep)', fontWeight: 600 }}>{card.utm_internal || card.ad_id}</span>
                           </div>
                         )}
                         <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', maxWidth: '350px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -2164,7 +2363,7 @@ export default function AdminDashboard() {
                           required 
                         />
                         <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', marginTop: '0.5rem', lineHeight: '1.3' }}>
-                          Allowed wildcards: <code>{`{name}`}</code>, <code>{`{phone}`}</code>, <code>{`{urn}`}</code>. Redirects here after OTP verification.
+                          Allowed wildcards: <code>{`{name}`}</code>, <code>{`{phone}`}</code>, <code>{`{urn}`}</code>, <code>{`{urn_first}`}</code>, <code>{`{urn_last}`}</code>. Redirects here after OTP verification.
                         </div>
                       </div>
                       
@@ -2820,7 +3019,7 @@ export default function AdminDashboard() {
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: 'var(--gold-deep)', marginBottom: '1.5rem', display: 'flex', gap: '1rem' }}>
               <span>URN: {selectedLeadDetails.urn}</span>
               <span>•</span>
-              <span>Date: {selectedLeadDetails.created_at ? selectedLeadDetails.created_at.replace('T', ' ').slice(0, 16) : ''}</span>
+              <span>Date: {formatDateTime(selectedLeadDetails.created_at)}</span>
             </div>
 
             {!isEditingLead ? (
@@ -2874,7 +3073,7 @@ export default function AdminDashboard() {
                     <div><strong>UTM Info:</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_info || 'N/A'}</span></div>
                     <div><strong>UTM Campaign ID (utm_id):</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_id || 'N/A'}</span></div>
                     <div><strong>UTM Ad ID (utm_creative):</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_creative || 'N/A'}</span></div>
-                    <div><strong>Ad ID (ad_id):</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.ad_id || 'N/A'}</span></div>
+                    <div><strong>UTM Internal:</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_internal || 'N/A'}</span></div>
                     <div><strong>UTM Keyword (utm_keyword):</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_keyword || 'N/A'}</span></div>
                     <div><strong>UTM Matchtype (utm_matchtype):</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_matchtype || 'N/A'}</span></div>
                     <div><strong>UTM Network (utm_network):</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_network || 'N/A'}</span></div>
@@ -2886,7 +3085,7 @@ export default function AdminDashboard() {
                   <h5 style={{ fontSize: '0.9rem', marginBottom: '0.5rem', color: 'hsl(var(--text-primary))', marginTop: '1rem' }}>Session & Entry Attribution</h5>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.8rem', background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)', marginBottom: '1.5rem' }}>
                     <div><strong>Landing Page URL:</strong> <span style={{ color: 'var(--gold-deep)', wordBreak: 'break-all' }}>{selectedLeadDetails.landing_page || 'N/A'}</span></div>
-                    <div><strong>First Landing Page:</strong> <span style={{ color: 'var(--gold-deep)', wordBreak: 'break-all' }}>{selectedLeadDetails.first_landing_page || 'N/A'}</span></div>
+                    <div><strong>Redirect URL:</strong> <span style={{ color: 'var(--gold-deep)', wordBreak: 'break-all' }}>{selectedLeadDetails.redirect_url || 'N/A'}</span></div>
                     <div><strong>Referrer Source:</strong> <span style={{ color: 'var(--gold-deep)', wordBreak: 'break-all' }}>{selectedLeadDetails.referrer || 'N/A'}</span></div>
                   </div>
 
@@ -2930,9 +3129,7 @@ export default function AdminDashboard() {
                 </div>
 
                 <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
-                  <button onClick={() => setIsEditingLead(true)} className="btn-primary" style={{ padding: '0.6rem 1.5rem' }}>
-                    Edit Details
-                  </button>
+                  
                   <button onClick={() => { setSelectedLeadDetails(null); setIsEditingLead(false); }} className="btn-secondary" style={{ padding: '0.6rem 1.5rem' }}>
                     Close Details
                   </button>
@@ -3179,13 +3376,13 @@ export default function AdminDashboard() {
                       />
                     </div>
                     <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>Ad ID (ad_id)</label>
+                      <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>UTM Internal</label>
                       <input 
                         type="text" 
                         className="form-input" 
                         style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} 
-                        value={editLeadForm.ad_id || ''} 
-                        onChange={(e) => handleEditLeadFormChange('ad_id', e.target.value)} 
+                        value={editLeadForm.utm_internal || ''} 
+                        onChange={(e) => handleEditLeadFormChange('utm_internal', e.target.value)} 
                       />
                     </div>
                     <div className="form-group" style={{ marginBottom: 0 }}>

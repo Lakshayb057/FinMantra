@@ -1,6 +1,26 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { LogIn, User, MapPin, CheckCircle, BarChart3, Plus, LogOut } from 'lucide-react';
+import { LogIn, User, MapPin, CheckCircle, BarChart3, Plus, LogOut, Sun, Moon } from 'lucide-react';
 import { trackLeadSubmission } from '../utils/analytics';
+
+const formatTimeOnly = (dateStr) => {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '';
+  try {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
+    const parts = formatter.formatToParts(d);
+    const p = {};
+    parts.forEach(x => p[x.type] = x.value);
+    return `${p.hour}:${p.minute}`;
+  } catch (e) {
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+  }
+};
 
 // Helper functions for cookie storage
 const setCookie = (name, value, days = 1) => {
@@ -28,7 +48,7 @@ const deleteCookie = (name) => {
   document.cookie = name + '=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
 };
 
-export default function AgentPortal() {
+export default function AgentPortal({ navigateTo, theme, toggleTheme }) {
   const [token, setToken] = useState(getCookie('finmantra_agent_token') || '');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [agent, setAgent] = useState(() => {
@@ -502,7 +522,7 @@ export default function AgentPortal() {
         minHeight: '70px',
         marginBottom: '2rem',
         backdropFilter: 'blur(12px)',
-        background: 'rgba(255, 255, 255, 0.88)',
+        background: 'var(--glass-bg)',
         border: '1px solid var(--line)',
         borderRadius: 'var(--radius-md)',
         boxShadow: '0 8px 32px 0 rgba(17, 19, 43, 0.08)'
@@ -517,6 +537,14 @@ export default function AgentPortal() {
 
         {/* Right side controls */}
         <div className="admin-nav-actions" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+          <button 
+            className="theme-toggle-btn" 
+            onClick={toggleTheme} 
+            title={theme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
+            style={{ padding: '0.45rem', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '34px', width: '34px' }}
+          >
+            {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
+          </button>
           <button 
             onClick={handleLogout} 
             className="btn-secondary" 
@@ -681,7 +709,7 @@ export default function AgentPortal() {
                   <div style={{ textAlign: 'right' }}>
                     <span className="badge badge-success" style={{ fontSize: '0.7rem' }}>{lead.urn}</span>
                     <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', marginTop: '0.25rem' }}>
-                      {lead.created_at ? lead.created_at.slice(11, 16) : ''}
+                      {formatTimeOnly(lead.created_at)}
                     </div>
                   </div>
                 </div>

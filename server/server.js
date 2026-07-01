@@ -85,7 +85,7 @@ const leadSubmitRateLimiter = new MemoryRateLimiter(60000, 30);
 
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || 'finmantrasupersecretjwtkey';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin1234';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'FM@Chaos!2026';
 
 // Health Check Endpoint - helps diagnose deployment issues
 app.get('/api/health', async (req, res) => {
@@ -699,7 +699,8 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
     device,
     location,
     utm_params,
-    ad_id
+    ad_id,
+    utm_internal
   } = req.body;
 
   const trimmedName = full_name ? String(full_name).trim() : '';
@@ -739,11 +740,23 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
   } else {
     let matchedCard = null;
     
-    // First, check if there is an active card matching by ad_id (ad_id, utm_creative, utm_content, or utm_id)
-    const adIdToCheck = utm_creative || ad_id;
-    if (adIdToCheck) {
+    // First, check if there is an active card matching by utm_internal (which carries the assigned card/model name)
+    if (utm_internal) {
       const activeCards = await db.getCards(false);
-      const adIdStr = String(adIdToCheck).trim().toLowerCase();
+      const altStr = String(utm_internal).trim().toLowerCase();
+      matchedCard = activeCards.find(c => {
+        if (!c.utm_internal) return false;
+        return String(c.utm_internal).trim().toLowerCase() === altStr;
+      });
+      if (matchedCard) {
+        console.log(`[Card Matching] Matched card ${matchedCard.name} (${matchedCard.id}) via utm_internal: ${altStr}`);
+      }
+    }
+
+    // Fallback to check if there is an active card matching by ad_id (to maintain the old functionality)
+    if (!matchedCard && ad_id) {
+      const activeCards = await db.getCards(false);
+      const adIdStr = String(ad_id).trim().toLowerCase();
       matchedCard = activeCards.find(c => {
         if (!c.ad_id) return false;
         const adIdList = String(c.ad_id).split(',').map(s => s.trim().toLowerCase());
@@ -854,6 +867,7 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
     referrer: source !== 'agent' ? (referrer || null) : null,
     utm_params: source !== 'agent' ? (resolvedUtmParams || null) : null,
     ad_id: utm_creative || ad_id || (card ? card.ad_id : null) || null,
+    utm_internal: source !== 'agent' ? (utm_internal || (card ? card.utm_internal : null) || null) : null,
     ip_address: (() => {
       let clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
       if (clientIp.includes(',')) {
@@ -866,6 +880,10 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
 
   const newLead = await db.addLead(leadData);
 
+  const urnVal = newLead.urn || '';
+  const urnFirstVal = urnVal.length >= 6 ? urnVal.substring(0, 6) : urnVal;
+  const urnLastVal = urnVal.length >= 6 ? urnVal.substring(6) : '';
+
   // Compute redirect URL using template placeholders (case-insensitive)
   const agentCodeVal = (source === 'agent' && agent_id) ? agent_id : '';
   let redirectUrl = redirectUrlTemplate;
@@ -873,8 +891,10 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
     .replace(/{name}/gi, encodeURIComponent(trimmedName))
     .replace(/{phone}/gi, encodeURIComponent(trimmedPhone))
     .replace(/{email}/gi, encodeURIComponent(trimmedEmail))
-    .replace(/{urn}/gi, encodeURIComponent(newLead.urn))
-    .replace(/{urm}/gi, encodeURIComponent(newLead.urn)) // support legacy placeholder if any
+    .replace(/{urn}/gi, encodeURIComponent(urnVal))
+    .replace(/{urm}/gi, encodeURIComponent(urnVal)) // support legacy placeholder if any
+    .replace(/{urn_first}/gi, encodeURIComponent(urnFirstVal))
+    .replace(/{urn_last}/gi, encodeURIComponent(urnLastVal))
     .replace(/{agent_id}/gi, encodeURIComponent(agentCodeVal))
     .replace(/{utm_source}/gi, encodeURIComponent(utm_source || ''))
     .replace(/{utm_medium}/gi, encodeURIComponent(utm_medium || ''))
@@ -883,6 +903,7 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
     .replace(/{utm_term}/gi, encodeURIComponent(utm_term || ''))
     .replace(/{utm_creative}/gi, encodeURIComponent(utm_creative || ''))
     .replace(/{ad_id}/gi, encodeURIComponent(leadData.ad_id || ''))
+    .replace(/{utm_internal}/gi, encodeURIComponent(leadData.utm_internal || ''))
     .replace(/{utm_content}/gi, encodeURIComponent(utm_content || ''))
     .replace(/{utm_keyword}/gi, encodeURIComponent(utm_keyword || ''))
     .replace(/{utm_matchtype}/gi, encodeURIComponent(utm_matchtype || ''))
@@ -1022,8 +1043,18 @@ app.get('/api/leads', authenticateToken, async (req, res) => {
   const role = req.user.role;
   if (role === 'admin' || role === 'agent') {
     const agentId = role === 'agent' ? req.user.id : null;
-    const leads = await db.getLeadsFiltered({ agentId });
-    res.json(leads);
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 50;
+    const search = req.query.search || '';
+    const card = req.query.card || '';
+    const source = req.query.source || '';
+    const startDate = req.query.startDate || '';
+    const endDate = req.query.endDate || '';
+    
+    const result = await db.getLeadsFiltered({
+      agentId, page, limit, search, card, source, startDate, endDate
+    });
+    res.json(result);
   } else {
     res.status(403).json({ error: 'Access denied' });
   }
@@ -1109,7 +1140,7 @@ app.get('/api/leads/export', authenticateToken, requireAdmin, async (req, res) =
       { id: "utm_category", header: "UTM Category", source: "utm_category" },
       { id: "utm_id", header: "UTM Campaign ID (utm_id)", source: "utm_id" },
       { id: "utm_creative", header: "UTM Ad ID (utm_creative)", source: "utm_creative" },
-      { id: "ad_id", header: "Ad ID (ad_id)", source: "ad_id" },
+      { id: "utm_internal", header: "UTM Internal (utm_internal)", source: "utm_internal" },
       { id: "utm_keyword", header: "UTM Keyword (utm_keyword)", source: "utm_keyword" },
       { id: "utm_matchtype", header: "UTM Matchtype (utm_matchtype)", source: "utm_matchtype" },
       { id: "utm_network", header: "UTM Network (utm_network)", source: "utm_network" },
@@ -1145,7 +1176,28 @@ app.get('/api/leads/export', authenticateToken, requireAdmin, async (req, res) =
       let val = '';
       const source = col.source;
       if (source === 'created_at') {
-        val = l.created_at ? (typeof l.created_at === 'string' ? l.created_at : new Date(l.created_at).toISOString()).replace('T', ' ').slice(0, 16) : '';
+        if (l.created_at) {
+          const d = new Date(l.created_at);
+          try {
+            const formatter = new Intl.DateTimeFormat('en-CA', {
+              timeZone: 'Asia/Kolkata',
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit',
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false
+            });
+            const parts = formatter.formatToParts(d);
+            const p = {};
+            parts.forEach(x => p[x.type] = x.value);
+            val = `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}`;
+          } catch (e) {
+            val = d.toISOString().replace('T', ' ').slice(0, 16);
+          }
+        } else {
+          val = '';
+        }
       } else if (source === 'utm_params') {
         val = l.utm_params ? JSON.stringify(l.utm_params) : '{}';
       } else if (l[source] !== undefined && l[source] !== null) {
@@ -1179,7 +1231,7 @@ app.get('/api/admin/cards', authenticateToken, requireAdmin, async (req, res) =>
 
 // Create Card (Admin Only)
 app.post('/api/cards', authenticateToken, requireAdmin, async (req, res) => {
-  const { name, bank, category, ad_id, description, redirect_url_template, display_order, active, card_locations } = req.body;
+  const { name, bank, category, ad_id, utm_internal, description, redirect_url_template, display_order, active, card_locations } = req.body;
 
   const trimmedName = name ? String(name).trim() : '';
   const trimmedBank = bank ? String(bank).trim() : '';
@@ -1187,6 +1239,10 @@ app.post('/api/cards', authenticateToken, requireAdmin, async (req, res) => {
 
   if (!trimmedName || !trimmedBank || !trimmedUrl) {
     return res.status(400).json({ error: 'Card Name, Bank and Redirect URL Template are required' });
+  }
+
+  if (category === 'Digital' && (!utm_internal || !String(utm_internal).trim())) {
+    return res.status(400).json({ error: 'utm_internal is mandatory for Digital cards' });
   }
 
   if (!/^https?:\/\//i.test(trimmedUrl)) {
@@ -1203,6 +1259,7 @@ app.post('/api/cards', authenticateToken, requireAdmin, async (req, res) => {
     bank: trimmedBank,
     category: category || 'Offline',
     ad_id: ad_id || '',
+    utm_internal: utm_internal || '',
     description: description ? String(description).trim() : '',
     redirect_url_template: trimmedUrl,
     display_order: display_order || 1,
@@ -1218,7 +1275,7 @@ app.post('/api/cards', authenticateToken, requireAdmin, async (req, res) => {
 
 // Update Card (Admin Only)
 app.put('/api/cards/:id', authenticateToken, requireAdmin, async (req, res) => {
-  const { name, bank, category, ad_id, description, redirect_url_template, display_order, active, card_locations } = req.body;
+  const { name, bank, category, ad_id, utm_internal, description, redirect_url_template, display_order, active, card_locations } = req.body;
 
   const trimmedName = name ? String(name).trim() : '';
   const trimmedBank = bank ? String(bank).trim() : '';
@@ -1226,6 +1283,10 @@ app.put('/api/cards/:id', authenticateToken, requireAdmin, async (req, res) => {
 
   if (!trimmedName || !trimmedBank || !trimmedUrl) {
     return res.status(400).json({ error: 'Card Name, Bank and Redirect URL Template are required' });
+  }
+
+  if (category === 'Digital' && (!utm_internal || !String(utm_internal).trim())) {
+    return res.status(400).json({ error: 'utm_internal is mandatory for Digital cards' });
   }
 
   if (!/^https?:\/\//i.test(trimmedUrl)) {
@@ -1237,6 +1298,7 @@ app.put('/api/cards/:id', authenticateToken, requireAdmin, async (req, res) => {
     bank: trimmedBank,
     category: category || 'Offline',
     ad_id: ad_id || '',
+    utm_internal: utm_internal || '',
     description: description ? String(description).trim() : '',
     redirect_url_template: trimmedUrl,
     display_order: display_order || 1,

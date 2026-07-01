@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Sun, Moon } from 'lucide-react';
 import PublicLanding from './components/PublicLanding';
 import AgentPortal from './components/AgentPortal';
 import AdminDashboard from './components/AdminDashboard';
@@ -30,6 +31,17 @@ function getCookie(name) {
 
 export default function App() {
   const [currentPath, setCurrentPath] = useState(window.location.pathname);
+  const [theme, setTheme] = useState(localStorage.getItem('finmantra_theme') || 'light');
+  
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('finmantra_theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => prev === 'light' ? 'dark' : 'light');
+  };
+
   const [utmParams, setUtmParams] = useState({ utm_source: '', utm_info: '' });
   const [showSplash, setShowSplash] = useState(true);
   const [fadeSplash, setFadeSplash] = useState(false);
@@ -135,6 +147,7 @@ export default function App() {
     if (!params.utm_device) params.utm_device = searchParams.get('utm_device') || searchParams.get('device') || '';
     if (!params.utm_location) params.utm_location = searchParams.get('utm_location') || searchParams.get('location') || '';
     if (!params.ad_id) params.ad_id = searchParams.get('utm_creative') || searchParams.get('ad_id') || '';
+    if (!params.utm_internal) params.utm_internal = searchParams.get('utm_internal') || '';
 
     // Merge URL params with cached params if any, prioritizing URL parameters
     const cachedStr = sessionStorage.getItem('finmantra_utm');
@@ -158,14 +171,15 @@ export default function App() {
   const renderView = () => {
     const pathParts = currentPath.split('/');
     if (pathParts[1] === 'refer') {
-      const urn = pathParts[4];
+      const activeParts = pathParts.filter(Boolean);
+      const urn = activeParts[activeParts.length - 1];
       return <ReferralRedirect urn={urn} />;
     }
     if (currentPath === '/agent') {
-      return <AgentPortal navigateTo={navigateTo} />;
+      return <AgentPortal navigateTo={navigateTo} theme={theme} toggleTheme={toggleTheme} />;
     }
     if (currentPath === '/admin') {
-      return <AdminDashboard navigateTo={navigateTo} />;
+      return <AdminDashboard navigateTo={navigateTo} theme={theme} toggleTheme={toggleTheme} />;
     }
     if (currentPath === '/about') {
       return <AboutPage navigateTo={navigateTo} />;
@@ -202,7 +216,7 @@ export default function App() {
             <img src="/logo.jpg" alt="FinMantra Logo" style={{ height: '44px', width: '44px', borderRadius: '10px', objectFit: 'cover', boxShadow: '0 3px 10px rgba(224, 168, 46, 0.3)' }} />
             <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: '1.45rem', letterSpacing: '-0.03em' }}>FinMantra</span>
           </div>
-          <nav className="nav-links">
+          <nav className="nav-links" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
             {currentPath === '/' && (
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', letterSpacing: '0.05em', color: 'var(--mint)', border: '1.5px solid rgba(22,163,123,0.35)', padding: '0.4em 0.85em', borderRadius: '999px', fontWeight: 700 }}>
                 100% FREE • NO CHARGES
@@ -214,6 +228,14 @@ export default function App() {
             {currentPath === '/admin' && (
               <span className="nav-link active">Admin Dashboard</span>
             )}
+            <button 
+              className="theme-toggle-btn" 
+              onClick={toggleTheme} 
+              title={theme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
+              style={{ padding: '0.45rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+            </button>
           </nav>
         </header>
       )}

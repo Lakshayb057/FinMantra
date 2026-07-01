@@ -52,6 +52,73 @@
   --transition-fast: all 0.15s ease-out;
 }
 
+[data-theme='dark'] {
+  --paper: #090a0f;
+  --paper-2: #12131a;
+  --ink: #f0f0f5;
+  --ink-2: #e0e0e8;
+  --gold: #f0b83e;
+  --gold-deep: #e0a82e;
+  --mint: #1ec296;
+  --muted: #8d92a3;
+  --line: #222433;
+  --white: #0f1017;
+  --err: #e05c5c;
+
+  --shadow: 0 24px 60px -28px rgba(0,0,0,.6);
+  --shadow-sm: 0 8px 22px -16px rgba(0,0,0,.45);
+
+  --bg-base: 235 20% 5%;
+  --bg-surface: 235 25% 8%;
+  --bg-surface-elevated: 235 20% 10%;
+  
+  --primary: 41 75% 53%;
+  --primary-glow: rgba(240, 184, 62, 0.06);
+  --secondary: 41 75% 53%;
+  --accent-gold: 41 75% 53%;
+  --accent-green: 163 76% 36%;
+  
+  --text-primary: 235 20% 95%;
+  --text-secondary: 228 10% 70%;
+  --text-muted: 228 10% 60%;
+  
+  --border-glow: rgba(240, 184, 62, 0.06);
+  --border-light: 235 20% 18%;
+  
+  --glass-bg: rgba(15, 16, 23, 0.95);
+  --glass-border: rgba(34, 36, 51, 0.8);
+}
+
+/* Theme Toggle Button Style */
+.theme-toggle-btn {
+  background: var(--paper-2);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition-fast);
+  box-shadow: var(--shadow-sm);
+}
+
+.theme-toggle-btn:hover {
+  background: var(--line);
+  transform: scale(1.05);
+}
+
+[data-theme='dark'] .form-input:focus, 
+[data-theme='dark'] .form-select:focus {
+  background: var(--paper-2);
+}
+
+[data-theme='dark'] body {
+  background-image: radial-gradient(800px 460px at 92% -10%, rgba(224,168,46,.07), transparent 60%);
+}
+
+
 /* Base resets & styling */
 * {
   box-sizing: border-box;

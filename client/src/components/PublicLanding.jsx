@@ -678,7 +678,7 @@ export default function PublicLanding({ navigateTo, utmParams }) {
 
         {/* Disclaimer text */}
         <div style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.5)', lineHeight: 1.7, marginBottom: '1rem', textAlign: 'justify', maxWidth: '100%' }}>
-          FinMantra is a brand owned and operated by <strong style={{ color: 'rgba(255,255,255,0.7)' }}>Chaos Design Pvt. Ltd.</strong> &mdash; an authorised marketing and referral partner of its partner banks.
+          FinMantra is a brand owned and operated by <strong style={{ color: 'rgba(255,255,255,0.7)' }}>Chaos Design Pvt. Ltd.</strong> - an authorised marketing and referral partner of its partner banks.
         </div>
         <div style={{ fontSize: '0.78rem', color: 'rgba(255, 255, 255, 0.35)', lineHeight: 1.7, marginBottom: '2.5rem' }}>
           We are not a bank, lender or card issuer, and we do not charge customers for our services. Card features, fees and rewards are indicative and subject to the bank's current terms. Approval, credit limit and final terms are at the sole discretion of the respective bank. Please borrow responsibly.
@@ -686,7 +686,7 @@ export default function PublicLanding({ navigateTo, utmParams }) {
 
         {/* Links row */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap', fontSize: '0.82rem', color: 'rgba(255, 255, 255, 0.4)' }}>
-          <span>&copy; 2026 FinMantra &mdash; A brand of Chaos Design Pvt. Ltd.</span>
+          <span>&copy; 2026 FinMantra - A brand of Chaos Design Pvt. Ltd.</span>
           <span style={{ color: 'rgba(255, 255, 255, 0.25)' }}>&middot;</span>
           <a href="#" onClick={(e) => { e.preventDefault(); navigateTo('/privacy-policy'); window.scrollTo(0, 0); }} style={{ color: 'rgba(255, 255, 255, 0.5)', textDecoration: 'none', fontWeight: 500 }} onMouseEnter={(e) => e.currentTarget.style.color = '#ffffff'} onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(255, 255, 255, 0.5)'}>Privacy Policy</a>
           <span style={{ color: 'rgba(255, 255, 255, 0.25)' }}>&middot;</span>
