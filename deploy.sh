@@ -43,7 +43,7 @@ else
     cat > "$ENV_FILE" << 'ENDOFENV'
 PORT=5000
 DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@YOUR_RDS_ENDPOINT:5432/postgres
-ADMIN_PASSWORD=admin1234
+ADMIN_PASSWORD=FM@Chaos!2026
 JWT_SECRET=supersecretjwtkeyforfinmantra
 # WhatsApp credentials are now configurable via Admin Dashboard > Settings
 # You can set them here as fallback, or leave blank and use the Admin UI
