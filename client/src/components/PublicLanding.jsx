@@ -521,7 +521,7 @@ export default function PublicLanding({ navigateTo, utmParams }) {
                 type="text" 
                 name="fullName" 
                 className="form-input" 
-                placeholder="As per PAN Card"
+                placeholder="enter your full name as per pan card"
                 value={formData.fullName}
                 onChange={handleInputChange} 
                 required
