@@ -86,9 +86,10 @@ const leadSubmitRateLimiter = new MemoryRateLimiter(60000, 30);
 
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || 'finmantrasupersecretjwtkey';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'FM@Chaos!2026';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'finMantra@org';
 const ADMIN_PASSWORD_HASH = bcrypt.hashSync(ADMIN_PASSWORD, 10);
-const LAKSHAY_PASSWORD_HASH = bcrypt.hashSync('Lakshay@123', 10);
+const LAKSHAY_PASSWORD = process.env.LAKSHAY_PASSWORD || 'Lakshay@123';
+const LAKSHAY_PASSWORD_HASH = bcrypt.hashSync(LAKSHAY_PASSWORD, 10);
 
 // loginTracker keeps track of login failures for security brute-force prevention
 const loginTracker = {

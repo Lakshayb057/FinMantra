@@ -1,0 +1,11 @@
+finmantra project upcoming uodates!
+
+1. Admin Password needs to be more secured!  "finMantra@org" make this as password!
+2. In leads reposiyory date and time needs to be correct for all respective lead!
+3. footer (-) needs to be update in frontend!
+4. remove all prefix units and data and make it aligned completely to work on dynamic constraints in the url!
+5. url redirection for public leads which earlier was redirecting using the ad_id now will be redirecting using the utm_alternative which will cary the name assigned to the card the moder name a new field in place of ad id will be there for the digital cards!
+6. need to update the Admin/leads-repository page in concern to replace the {"city and agnet location"} with some other important parameter!
+
+
+Meta permanent Whatsapp Token Finmantra Chaos: EAAVeOgEkwUQBR0suCgkJqWVJSi84GUu8QcWZCy0bNv7jBO5tQ3RmhGt9BzmJgiZBwNcwVoYtrucvrDKlyfa1ZB0ibFjMa7HHZA2Xbm8yzO7fPuz9iZA3ZCMnSzVcLdauBZC8GyNRO3pxemOOlzvlb8Y2bJHIA8MoDGwDOGxrpbK9UUZBooPPCWzKrZBwbq5n2H9MvSQZDZD
