@@ -33,6 +33,28 @@ export function initAnalytics(settings = {}) {
       console.error('[GTM] Failed to inject container script:', err);
     }
   }
+  // Inject Microsoft Clarity if Project ID is provided in settings
+  const clarityId = settings.clarity_project_id;
+  if (clarityId && !document.getElementById('clarity-dynamic-script')) {
+    try {
+      window.clarity = window.clarity || function() {
+        (window.clarity.q = window.clarity.q || []).push(arguments);
+      };
+      const f = document.getElementsByTagName('script')[0];
+      const j = document.createElement('script');
+      j.id = 'clarity-dynamic-script';
+      j.async = true;
+      j.src = 'https://www.clarity.ms/tag/' + clarityId;
+      if (f && f.parentNode) {
+        f.parentNode.insertBefore(j, f);
+      } else {
+        document.head.appendChild(j);
+      }
+      console.log(`[Clarity] Dynamic script injected with Project ID: ${clarityId}`);
+    } catch (err) {
+      console.error('[Clarity] Failed to inject container script:', err);
+    }
+  }
 }
 
 export function trackLeadSubmission({ fullName, email, phone, eventId = null, contentName = 'Lead Submitted', status = 'submitted' }) {

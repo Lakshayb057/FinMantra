@@ -3091,6 +3091,20 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                           Use this code to test real-time server events directly inside Meta Events Manager Test Console.
                         </div>
                       </div>
+
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontWeight: 600 }}>Microsoft Clarity Project ID</label>
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          placeholder="e.g. n3x7p9q1z"
+                          value={settings.clarity_project_id || ''}
+                          onChange={(e) => setSettings({ ...settings, clarity_project_id: e.target.value.trim() })}
+                        />
+                        <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', marginTop: '0.35rem' }}>
+                          Enter your Microsoft Clarity project ID (normally a 9-10 character alphanumeric code) to enable screen recordings, heatmaps, and session replay.
+                        </div>
+                      </div>
                     </div>
 
                     <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
