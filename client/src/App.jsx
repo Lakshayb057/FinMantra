@@ -257,7 +257,7 @@ function ReferralRedirect({ urn }) {
   useEffect(() => {
     const fetchLeadAndRedirect = async () => {
       try {
-        const API_URL = window.location.hostname === 'localhost' ? 'http://localhost:5000/api' : '/api';
+        const API_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.port === '5173') ? 'http://localhost:5000/api' : '/api';
         const res = await fetch(`${API_URL}/leads/urn/${urn}`);
         const data = await res.json();
 

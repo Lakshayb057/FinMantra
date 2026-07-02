@@ -46,12 +46,32 @@ const getLocalDateString = (dateStr) => {
   }
 };
 
+const decodeToken = (token) => {
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+      return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+    }).join(''));
+    return JSON.parse(jsonPayload);
+  } catch (e) {
+    return null;
+  }
+};
+
 export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   const [token, setToken] = useState(localStorage.getItem('finmantra_admin_token') || '');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [canDelete, setCanDelete] = useState(() => {
+    const savedToken = localStorage.getItem('finmantra_admin_token');
+    if (!savedToken) return false;
+    const decoded = decodeToken(savedToken);
+    return decoded ? !!decoded.canDelete : false;
+  });
   const [loading, setLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [authError, setAuthError] = useState('');
+  const [timeLeft, setTimeLeft] = useState(0);
   const [adminPasswordInput, setAdminPasswordInput] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   
@@ -101,7 +121,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   const [message, setMessage] = useState({ text: '', type: 'success' });
   const idleTimerRef = useRef(null);
 
-  const API_URL = window.location.hostname === 'localhost' ? 'http://localhost:5000/api' : '/api';
+  const API_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.port === '5173') ? 'http://localhost:5000/api' : '/api';
 
   const apiFetch = async (url, options = {}) => {
     const res = await fetch(url, options);
@@ -327,6 +347,27 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
     setTimeout(() => setMessage({ text: '', type: 'success' }), 4000);
   };
 
+  useEffect(() => {
+    if (timeLeft <= 0) return;
+    const timer = setInterval(() => {
+      setTimeLeft(prev => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          setAuthError('');
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [timeLeft]);
+
+  const formatTime = (secs) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m}m ${s}s`;
+  };
+
   const handleAdminLogin = async (e) => {
     e.preventDefault();
     setAuthError('');
@@ -343,8 +384,14 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       if (res.ok) {
         localStorage.setItem('finmantra_admin_token', data.token);
         setToken(data.token);
+        const decoded = decodeToken(data.token);
+        setCanDelete(decoded ? !!decoded.canDelete : false);
+        setTimeLeft(0);
       } else {
         setAuthError(data.error || 'Access denied');
+        if (data.timeLeft) {
+          setTimeLeft(data.timeLeft);
+        }
       }
     } catch (err) {
       setAuthError('Database connection error.');
@@ -356,6 +403,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   const handleLogout = () => {
     localStorage.removeItem('finmantra_admin_token');
     setToken('');
+    setCanDelete(false);
     setIsAuthenticated(false);
     setAdminPasswordInput('');
   };
@@ -488,7 +536,10 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       li_fat_id: lead.li_fat_id || '',
       ad_id: lead.ad_id || '',
       utm_internal: lead.utm_internal || '',
-      redirect_url: lead.redirect_url || ''
+      redirect_url: lead.redirect_url || '',
+      has_credit_card: lead.has_credit_card || '',
+      pincode: lead.pincode || '',
+      monthly_income: lead.monthly_income || ''
     });
 
     const standardKeys = [
@@ -496,7 +547,8 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       'utm_channel', 'utm_category', 'utm_info', 'utm_creative_format', 
       'utm_id', 'utm_creative', 'ad_id', 'utm_internal', 'utm_keyword', 'utm_matchtype', 'utm_network', 'utm_placement',
       'utm_device', 'utm_location', 'gbraid', 'wbraid', 'landing_page', 'first_landing_page', 'referrer',
-      'fbclid', 'gclid', 'gclsrc', 'dclid', 'msclkid', 'ttclid', 'twclid', 'li_fat_id'
+      'fbclid', 'gclid', 'gclsrc', 'dclid', 'msclkid', 'ttclid', 'twclid', 'li_fat_id',
+      '_fbc', '_fbp', 'has_credit_card', 'pincode', 'monthly_income'
     ];
     
     const customList = [];
@@ -979,7 +1031,10 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
     { value: 'ttclid', label: 'TTCLID' },
     { value: 'twclid', label: 'TWCLID' },
     { value: 'li_fat_id', label: 'LI_FAT_ID' },
-    { value: 'utm_params', label: 'All Tracking Parameters (JSON)' }
+    { value: 'utm_params', label: 'All Tracking Parameters (JSON)' },
+    { value: 'has_credit_card', label: 'Already Has Credit Card?' },
+    { value: 'pincode', label: 'Residence Pincode' },
+    { value: 'monthly_income', label: 'Monthly Income' }
   ];
 
   const handleMoveColumnUp = (index) => {
@@ -1062,7 +1117,10 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       { id: "utm_params", header: "All Tracking Parameters (JSON)", source: "utm_params" },
       { id: "agent_name", header: "Agent Name", source: "agent_name" },
       { id: "agent_location", header: "Agent Location", source: "agent_location" },
-      { id: "redirect_url", header: "Redirect URL", source: "redirect_url" }
+      { id: "redirect_url", header: "Redirect URL", source: "redirect_url" },
+      { id: "has_credit_card", header: "Already Has Credit Card?", source: "has_credit_card" },
+      { id: "pincode", header: "Residence Pincode", source: "pincode" },
+      { id: "monthly_income", header: "Monthly Income", source: "monthly_income" }
     ];
     setCsvColumns(defaultCols);
   };
@@ -1246,8 +1304,8 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
               </div>
             )}
 
-            <button type="submit" className="btn-primary" style={{ width: '100%' }} disabled={loading}>
-              {loading ? 'Validating credentials...' : 'Enter Admin Room'}
+            <button type="submit" className="btn-primary" style={{ width: '100%' }} disabled={loading || timeLeft > 0}>
+              {timeLeft > 0 ? `Blocked (Try again in ${formatTime(timeLeft)})` : (loading ? 'Validating credentials...' : 'Enter Admin Room')}
             </button>
           </form>
           <div style={{ textAlign: 'center', marginTop: '1.5rem' }}>
@@ -1546,7 +1604,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
                 <h2 style={{ fontSize: '1.3rem' }}>Leads Log ({totalLeadsCount})</h2>
                 <div style={{ display: 'flex', gap: '1rem' }}>
-                  {selectedLeads.length > 0 && (
+                  {canDelete && selectedLeads.length > 0 && (
                     <button onClick={handleBulkDeleteLeads} className="btn-secondary" style={{ background: 'rgba(209, 67, 67, 0.15)', color: 'var(--err)', border: '1px solid rgba(209, 67, 67, 0.2)' }}>
                       <Trash2 size={16} /> Delete Selected ({selectedLeads.length})
                     </button>
@@ -1606,20 +1664,26 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                 <table className="data-table">
                   <thead>
                     <tr>
-                      <th style={{ width: '40px' }}>
-                        <input 
-                          type="checkbox" 
-                          checked={filteredLeads.length > 0 && selectedLeads.length === filteredLeads.length} 
-                          onChange={handleSelectAllLeads}
-                          style={{ accentColor: 'hsl(var(--primary))' }}
-                        />
-                      </th>
+                      {canDelete && (
+                        <th style={{ width: '40px' }}>
+                          <input 
+                            type="checkbox" 
+                            checked={filteredLeads.length > 0 && selectedLeads.length === filteredLeads.length} 
+                            onChange={handleSelectAllLeads}
+                            style={{ accentColor: 'hsl(var(--primary))' }}
+                          />
+                        </th>
+                      )}
                       <th>URN No.</th>
                       <th>Date & Time</th>
                       <th>Name</th>
                       <th>WhatsApp No.</th>
                       <th>Card Selection</th>
                       <th>Email</th>
+                      <th>Employment</th>
+                      <th>Already Has Card?</th>
+                      <th>Pincode</th>
+                      <th>Monthly Income</th>
                       <th>Source</th>
                       <th>Actions</th>
                     </tr>
@@ -1628,20 +1692,30 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                     {filteredLeads.length > 0 ? (
                       filteredLeads.map(l => (
                         <tr key={l.id}>
-                          <td>
-                            <input 
-                              type="checkbox" 
-                              checked={selectedLeads.includes(l.id)} 
-                              onChange={() => handleSelectLead(l.id)}
-                              style={{ accentColor: 'hsl(var(--primary))' }}
-                            />
-                          </td>
+                          {canDelete && (
+                            <td>
+                              <input 
+                                type="checkbox" 
+                                checked={selectedLeads.includes(l.id)} 
+                                onChange={() => handleSelectLead(l.id)}
+                                style={{ accentColor: 'hsl(var(--primary))' }}
+                              />
+                            </td>
+                          )}
                           <td><span className="badge badge-info" style={{ cursor: 'pointer' }} onClick={() => handleViewLead(l)}>{l.urn}</span></td>
                           <td>{formatDateTime(l.created_at)}</td>
                           <td style={{ fontWeight: 600, cursor: 'pointer' }} onClick={() => handleViewLead(l)}>{l.full_name}</td>
                           <td>{l.phone}</td>
                           <td>{l.card_name} <span style={{ color: 'hsl(var(--text-muted))', fontSize: '0.8rem' }}>({l.card_bank})</span></td>
                           <td>{l.email || '-'}</td>
+                          <td>{l.employment || '-'}</td>
+                          <td>
+                            <span className={`badge ${l.has_credit_card === 'Yes' ? 'badge-success' : 'badge-secondary'}`}>
+                              {l.has_credit_card || '-'}
+                            </span>
+                          </td>
+                          <td><code>{l.pincode || '-'}</code></td>
+                          <td>{l.monthly_income ? `₹${l.monthly_income}` : '-'}</td>
                           <td>
                             <span 
                               className={`badge ${l.source === 'agent' ? 'badge-warning' : 'badge-success'}`}
@@ -1660,15 +1734,17 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                             <button onClick={() => handleViewLead(l)} style={{ color: 'hsl(var(--primary))', background: 'none', border: 'none', cursor: 'pointer', marginRight: '12px' }} title="View details">
                               <Eye size={16} />
                             </button>
-                            <button onClick={() => handleSingleDeleteLead(l.id)} style={{ color: 'var(--err)', background: 'none', border: 'none', cursor: 'pointer' }} title="Delete lead">
-                              <Trash2 size={16} />
-                            </button>
+                            {canDelete && (
+                              <button onClick={() => handleSingleDeleteLead(l.id)} style={{ color: 'var(--err)', background: 'none', border: 'none', cursor: 'pointer' }} title="Delete lead">
+                                <Trash2 size={16} />
+                              </button>
+                            )}
                           </td>
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td colSpan="10" style={{ textAlign: 'center', padding: '3rem', color: 'hsl(var(--text-muted))' }}>
+                        <td colSpan={canDelete ? 13 : 12} style={{ textAlign: 'center', padding: '3rem', color: 'hsl(var(--text-muted))' }}>
                           No leads captured matching current filter query parameters.
                         </td>
                       </tr>
@@ -2339,6 +2415,31 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                   <Activity size={16} />
                   <span>Meta CAPI & GTM</span>
                 </button>
+
+                {canDelete && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveSettingsSubTab('form_builder')}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.75rem',
+                      padding: '0.75rem 1rem',
+                      borderRadius: 'var(--radius-md)',
+                      border: 'none',
+                      background: activeSettingsSubTab === 'form_builder' ? 'rgba(224, 168, 46, 0.15)' : 'transparent',
+                      color: activeSettingsSubTab === 'form_builder' ? 'var(--gold)' : 'hsl(var(--text-secondary))',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      textAlign: 'left',
+                      fontWeight: activeSettingsSubTab === 'form_builder' ? 600 : 400
+                    }}
+                    className="settings-menu-item"
+                  >
+                    <QrCode size={16} />
+                    <span>Landing Form Builder</span>
+                  </button>
+                )}
               </div>
 
 
@@ -2999,6 +3100,16 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                     </div>
                   </form>
                 )}
+
+                {activeSettingsSubTab === 'form_builder' && canDelete && (
+                  <FormBuilderSettings 
+                    settings={settings}
+                    setSettings={setSettings}
+                    showToast={showToast}
+                    token={token}
+                    API_URL={API_URL}
+                  />
+                )}
               </div>
             </div>
           )}
@@ -3032,6 +3143,10 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                       <div><strong>Name:</strong> {selectedLeadDetails.full_name}</div>
                       <div><strong>Phone:</strong> +91 {selectedLeadDetails.phone}</div>
                       <div><strong>Email:</strong> {selectedLeadDetails.email}</div>
+                      <div><strong>Employment Type:</strong> {selectedLeadDetails.employment || 'N/A'}</div>
+                      <div><strong>Already Has Credit Card?</strong> {selectedLeadDetails.has_credit_card || 'N/A'}</div>
+                      <div><strong>Residence Pincode:</strong> <code>{selectedLeadDetails.pincode || 'N/A'}</code></div>
+                      <div><strong>Net Monthly Income:</strong> {selectedLeadDetails.monthly_income ? `₹${selectedLeadDetails.monthly_income}` : 'N/A'}</div>
                       <div>
                         <strong>Consent:</strong>{' '}
                         <span style={{ color: selectedLeadDetails.consent ? 'var(--mint)' : 'var(--err)', fontWeight: 600 }}>
@@ -3107,7 +3222,10 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                   {selectedLeadDetails.utm_params && Object.keys(selectedLeadDetails.utm_params).some(k => ![
                     'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 
                     'utm_channel', 'utm_category', 'utm_info', 'utm_creative_format', 
-                    'fbclid', 'gclid', 'gclsrc', 'dclid', 'msclkid', 'ttclid', 'twclid', 'li_fat_id'
+                    'utm_id', 'utm_creative', 'ad_id', 'utm_internal', 'utm_keyword', 'utm_matchtype', 'utm_network', 'utm_placement',
+                    'utm_device', 'utm_location', 'gbraid', 'wbraid', 'landing_page', 'first_landing_page', 'referrer',
+                    'fbclid', 'gclid', 'gclsrc', 'dclid', 'msclkid', 'ttclid', 'twclid', 'li_fat_id',
+                    '_fbc', '_fbp', 'has_credit_card', 'pincode', 'monthly_income'
                   ].includes(k)) && (
                     <>
                       <h5 style={{ fontSize: '0.9rem', marginBottom: '0.5rem', color: 'hsl(var(--text-primary))' }}>Custom / Other Query Parameters</h5>
@@ -3116,7 +3234,10 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                           .filter(([k]) => ![
                             'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 
                             'utm_channel', 'utm_category', 'utm_info', 'utm_creative_format', 
-                            'fbclid', 'gclid', 'gclsrc', 'dclid', 'msclkid', 'ttclid', 'twclid', 'li_fat_id'
+                            'utm_id', 'utm_creative', 'ad_id', 'utm_internal', 'utm_keyword', 'utm_matchtype', 'utm_network', 'utm_placement',
+                            'utm_device', 'utm_location', 'gbraid', 'wbraid', 'landing_page', 'first_landing_page', 'referrer',
+                            'fbclid', 'gclid', 'gclsrc', 'dclid', 'msclkid', 'ttclid', 'twclid', 'li_fat_id',
+                            '_fbc', '_fbp', 'has_credit_card', 'pincode', 'monthly_income'
                           ].includes(k))
                           .map(([k, v]) => (
                             <div key={k}>
@@ -3183,6 +3304,53 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                           <option value="true">Accepted</option>
                           <option value="false">No Consent</option>
                         </select>
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>Employment Type</label>
+                        <select 
+                          className="form-select" 
+                          style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} 
+                          value={editLeadForm.employment || ''} 
+                          onChange={(e) => handleEditLeadFormChange('employment', e.target.value)}
+                        >
+                          <option value="">Select Employment</option>
+                          <option value="Salaried">Salaried</option>
+                          <option value="Self Employed (Business)">Self Employed (Business)</option>
+                          <option value="Self Employed (Professional)">Self Employed (Professional)</option>
+                        </select>
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>Already Has Credit Card?</label>
+                        <select 
+                          className="form-select" 
+                          style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} 
+                          value={editLeadForm.has_credit_card || ''} 
+                          onChange={(e) => handleEditLeadFormChange('has_credit_card', e.target.value)}
+                        >
+                          <option value="">Select Option</option>
+                          <option value="Yes">Yes</option>
+                          <option value="No">No</option>
+                        </select>
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>Residence Pincode</label>
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} 
+                          value={editLeadForm.pincode || ''} 
+                          onChange={(e) => handleEditLeadFormChange('pincode', e.target.value)} 
+                        />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>Net Monthly Income</label>
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} 
+                          value={editLeadForm.monthly_income || ''} 
+                          onChange={(e) => handleEditLeadFormChange('monthly_income', e.target.value)} 
+                        />
                       </div>
                     </div>
                   </div>
@@ -3639,6 +3807,714 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function FormBuilderSettings({ settings, setSettings, showToast, token, API_URL }) {
+  const [schema, setSchema] = useState(() => {
+    try {
+      if (settings.landing_form_schema) {
+        return typeof settings.landing_form_schema === 'string'
+          ? JSON.parse(settings.landing_form_schema)
+          : settings.landing_form_schema;
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    // Fallback default
+    return {
+      fields: {
+        fullName: { visible: true, required: true, label: "Full Name (as per PAN Card)", placeholder: "Enter your full name as per PAN Card" },
+        phone: { visible: true, required: true, label: "Mobile Number", placeholder: "Enter your mobile number" },
+        email: { visible: true, required: true, label: "Email Id", placeholder: "Enter your email ID" },
+        has_credit_card: { visible: true, required: true, label: "Do you already have a credit card?" },
+        employment: {
+          visible: true,
+          required: true,
+          label: "Employment Type",
+          options: [
+            { value: "Salaried", enabled: true },
+            { value: "Self Employed (Business)", enabled: false },
+            { value: "Self Employed (Professional)", enabled: false }
+          ]
+        },
+        monthly_income: { visible: true, required: true, label: "Net Monthly Income", placeholder: "Net Monthly Income" },
+        pincode: { visible: true, required: true, label: "Residence Pincode", placeholder: "Residence Pincode" }
+      }
+    };
+  });
+
+  const [newOptionVal, setNewOptionVal] = useState('');
+  const [pincodeMode, setPincodeMode] = useState(settings.pincode_serviceability_mode || 'all');
+  const [pincodeList, setPincodeList] = useState(settings.pincode_serviceability_list || '');
+  const [saving, setSaving] = useState(false);
+  const [tilt, setTilt] = useState({ x: 0, y: 0 });
+
+  const handleMouseMove = (e) => {
+    const card = e.currentTarget;
+    const box = card.getBoundingClientRect();
+    const x = e.clientX - box.left - box.width / 2;
+    const y = e.clientY - box.top - box.height / 2;
+    // Calculate rotation angles
+    const rotX = -y / 15;
+    const rotY = x / 15;
+    setTilt({ x: rotX, y: rotY });
+  };
+
+  const handleMouseLeave = () => {
+    setTilt({ x: 0, y: 0 });
+  };
+
+  const updateField = (fieldName, prop, value) => {
+    setSchema(prev => {
+      const updatedFields = { ...prev.fields };
+      updatedFields[fieldName] = {
+        ...updatedFields[fieldName],
+        [prop]: value
+      };
+      return { ...prev, fields: updatedFields };
+    });
+  };
+
+  const handleAddEmploymentOption = () => {
+    if (!newOptionVal.trim()) return;
+    setSchema(prev => {
+      const emp = prev.fields.employment;
+      const opts = [...(emp.options || [])];
+      if (opts.some(o => o.value.toLowerCase() === newOptionVal.trim().toLowerCase())) {
+        showToast('Option already exists.', 'error');
+        return prev;
+      }
+      opts.push({ value: newOptionVal.trim(), enabled: true });
+      return {
+        ...prev,
+        fields: {
+          ...prev.fields,
+          employment: { ...emp, options: opts }
+        }
+      };
+    });
+    setNewOptionVal('');
+  };
+
+  const handleRemoveEmploymentOption = (idx) => {
+    setSchema(prev => {
+      const emp = prev.fields.employment;
+      const opts = emp.options.filter((_, i) => i !== idx);
+      return {
+        ...prev,
+        fields: {
+          ...prev.fields,
+          employment: { ...emp, options: opts }
+        }
+      };
+    });
+  };
+
+  const handleToggleEmploymentOptionEnabled = (idx) => {
+    setSchema(prev => {
+      const emp = prev.fields.employment;
+      const opts = emp.options.map((opt, i) => i === idx ? { ...opt, enabled: !opt.enabled } : opt);
+      return {
+        ...prev,
+        fields: {
+          ...prev.fields,
+          employment: { ...emp, options: opts }
+        }
+      };
+    });
+  };
+
+  const handleSaveSchema = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch(`${API_URL}/settings`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          landing_form_schema: JSON.stringify(schema),
+          pincode_serviceability_mode: pincodeMode,
+          pincode_serviceability_list: pincodeList
+        })
+      });
+      if (res.ok) {
+        setSettings(prev => ({
+          ...prev,
+          landing_form_schema: schema,
+          pincode_serviceability_mode: pincodeMode,
+          pincode_serviceability_list: pincodeList
+        }));
+        showToast('Form configuration & pincode serviceability rules saved successfully!', 'success');
+      } else {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to save schema');
+      }
+    } catch (e) {
+      showToast(e.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap', textAlign: 'left' }}>
+      {/* Settings Form */}
+      <div style={{ flex: '1.2', minWidth: '320px' }}>
+        <h3 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.75rem', color: 'var(--gold-deep)' }}>
+          <QrCode size={20} />
+          <span>Landing Form Customizer</span>
+        </h3>
+        <p style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', marginBottom: '1.5rem' }}>
+          Enable or disable fields, edit labels, placeholders, and manage drop-down options for the public application form.
+        </p>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', marginBottom: '2rem' }}>
+          {Object.entries(schema.fields).map(([fieldName, config]) => (
+            <div key={fieldName} className="glass-panel" style={{ padding: '1.25rem', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-md)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px dashed var(--border-light)', paddingBottom: '0.5rem' }}>
+                <span style={{ fontWeight: 600, textTransform: 'capitalize', color: 'var(--gold)' }}>
+                  {fieldName === 'fullName' ? 'Full Name Field' : fieldName.replace(/_/g, ' ')}
+                </span>
+                <div style={{ display: 'flex', gap: '0.8rem', alignItems: 'center' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem', cursor: 'pointer' }}>
+                    <input 
+                      type="checkbox" 
+                      checked={config.visible} 
+                      onChange={(e) => updateField(fieldName, 'visible', e.target.checked)}
+                      style={{ accentColor: 'var(--gold)' }}
+                    />
+                    Visible
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem', cursor: 'pointer' }}>
+                    <input 
+                      type="checkbox" 
+                      checked={config.required} 
+                      disabled={!config.visible}
+                      onChange={(e) => updateField(fieldName, 'required', e.target.checked)}
+                      style={{ accentColor: 'var(--gold)' }}
+                    />
+                    Required
+                  </label>
+                </div>
+              </div>
+
+              {config.visible && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.75rem' }}>Field Display Label</label>
+                    <input 
+                      type="text" 
+                      className="form-input" 
+                      style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }}
+                      value={config.label}
+                      onChange={(e) => updateField(fieldName, 'label', e.target.value)}
+                    />
+                  </div>
+
+                  {config.placeholder !== undefined && (
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.75rem' }}>Input Placeholder Text</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }}
+                        value={config.placeholder}
+                        onChange={(e) => updateField(fieldName, 'placeholder', e.target.value)}
+                      />
+                    </div>
+                  )}
+
+                  {/* Field Validation Rules Section */}
+                  <div style={{ marginTop: '0.75rem', borderTop: '1px dashed var(--border-light)', paddingTop: '0.75rem' }}>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--gold-deep)', display: 'block', marginBottom: '0.4rem' }}>Validation Rules Settings</span>
+                    
+                    {fieldName === 'fullName' && (
+                      <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem', cursor: 'pointer' }}>
+                          <input 
+                            type="checkbox" 
+                            checked={config.validationRules?.alphabeticOnly !== false} 
+                            onChange={(e) => {
+                              const rules = { ...config.validationRules, alphabeticOnly: e.target.checked };
+                              updateField(fieldName, 'validationRules', rules);
+                            }}
+                            style={{ accentColor: 'var(--gold)' }}
+                          />
+                          Only Letters & Spaces
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem', cursor: 'pointer' }}>
+                          <input 
+                            type="checkbox" 
+                            checked={config.validationRules?.requireSecondWord !== false} 
+                            onChange={(e) => {
+                              const rules = { ...config.validationRules, requireSecondWord: e.target.checked };
+                              updateField(fieldName, 'validationRules', rules);
+                            }}
+                            style={{ accentColor: 'var(--gold)' }}
+                          />
+                          Require Last Name / Father Name
+                        </label>
+                      </div>
+                    )}
+
+                    {fieldName === 'phone' && (
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.7rem' }}>Enforce allowed starting digits (comma separated)</label>
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          style={{ padding: '0.3rem 0.5rem', fontSize: '0.8rem' }}
+                          value={config.validationRules?.allowedDigitsStart || '6,7,8,9'}
+                          onChange={(e) => {
+                            const rules = { ...config.validationRules, allowedDigitsStart: e.target.value };
+                            updateField(fieldName, 'validationRules', rules);
+                          }}
+                        />
+                      </div>
+                    )}
+
+                    {fieldName === 'monthly_income' && (
+                      <div style={{ display: 'flex', gap: '1rem' }}>
+                        <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
+                          <label className="form-label" style={{ fontSize: '0.7rem' }}>Min Income Range (₹)</label>
+                          <input 
+                            type="number" 
+                            className="form-input" 
+                            style={{ padding: '0.3rem 0.5rem', fontSize: '0.8rem' }}
+                            value={config.validationRules?.minIncome !== undefined ? config.validationRules.minIncome : 25000}
+                            onChange={(e) => {
+                              const rules = { ...config.validationRules, minIncome: parseInt(e.target.value, 10) || 0 };
+                              updateField(fieldName, 'validationRules', rules);
+                            }}
+                          />
+                        </div>
+                        <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
+                          <label className="form-label" style={{ fontSize: '0.7rem' }}>Max Income Range (₹)</label>
+                          <input 
+                            type="number" 
+                            className="form-input" 
+                            style={{ padding: '0.3rem 0.5rem', fontSize: '0.8rem' }}
+                            value={config.validationRules?.maxIncome !== undefined ? config.validationRules.maxIncome : 1000000}
+                            onChange={(e) => {
+                              const rules = { ...config.validationRules, maxIncome: parseInt(e.target.value, 10) || 0 };
+                              updateField(fieldName, 'validationRules', rules);
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {fieldName !== 'fullName' && fieldName !== 'phone' && fieldName !== 'monthly_income' && (
+                      <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', fontStyle: 'italic' }}>
+                        Standard required checks apply to this field.
+                      </div>
+                    )}
+                  </div>
+
+                  {fieldName === 'employment' && (
+                    <div style={{ marginTop: '0.5rem', borderTop: '1px solid var(--border-light)', paddingTop: '0.75rem' }}>
+                      <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 600, display: 'block', marginBottom: '0.5rem' }}>Dropdown Choices</label>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginBottom: '0.75rem' }}>
+                        {(config.options || []).map((opt, oIdx) => (
+                          <div key={oIdx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,0.03)', padding: '0.4rem 0.6rem', borderRadius: 'var(--radius-sm)' }}>
+                            <span style={{ fontSize: '0.8rem', color: opt.enabled ? 'hsl(var(--text-primary))' : 'hsl(var(--text-muted))', textDecoration: opt.enabled ? 'none' : 'line-through' }}>{opt.value}</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+                              <label style={{ display: 'flex', alignItems: 'center', gap: '0.2rem', fontSize: '0.75rem', cursor: 'pointer' }}>
+                                <input 
+                                  type="checkbox" 
+                                  checked={opt.enabled} 
+                                  onChange={() => handleToggleEmploymentOptionEnabled(oIdx)}
+                                  style={{ accentColor: 'var(--mint)' }}
+                                />
+                                Enabled
+                              </label>
+                              <button 
+                                type="button" 
+                                onClick={() => handleRemoveEmploymentOption(oIdx)} 
+                                style={{ color: 'var(--err)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                                title="Remove Option"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <input 
+                          type="text" 
+                          placeholder="Add new choice..." 
+                          className="form-input" 
+                          style={{ padding: '0.4rem 0.6rem', fontSize: '0.8rem', margin: 0 }}
+                          value={newOptionVal}
+                          onChange={(e) => setNewOptionVal(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddEmploymentOption())}
+                        />
+                        <button 
+                          type="button" 
+                          onClick={handleAddEmploymentOption} 
+                          className="btn-primary" 
+                          style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', whiteSpace: 'nowrap' }}
+                        >
+                          <Plus size={14} /> Add
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Pincode Serviceability Card */}
+        <div className="glass-panel" style={{ padding: '1.25rem', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-md)', marginBottom: '1.5rem' }}>
+          <h4 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--gold)', marginBottom: '0.75rem', borderBottom: '1px dashed var(--border-light)', paddingBottom: '0.5rem' }}>
+            Pincode Serviceability Rules
+          </h4>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label" style={{ fontSize: '0.8rem' }}>Validation Mode</label>
+              <select 
+                className="form-select"
+                style={{ padding: '0.5rem 0.75rem', fontSize: '0.85rem' }}
+                value={pincodeMode}
+                onChange={(e) => setPincodeMode(e.target.value)}
+              >
+                <option value="all">Allow All Pincodes (No filtering)</option>
+                <option value="whitelist">Whitelist Mode (Only allow serviceable list)</option>
+                <option value="blacklist">Blacklist Mode (Block restricted list)</option>
+              </select>
+            </div>
+
+            {pincodeMode !== 'all' && (
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" style={{ fontSize: '0.8rem' }}>
+                  {pincodeMode === 'whitelist' ? 'Serviceable Pincodes List' : 'Blocked Pincodes List'}
+                </label>
+                <textarea 
+                  className="form-input"
+                  rows="4"
+                  placeholder="Enter comma-separated pincodes (e.g. 110001, 110002, 400001)"
+                  value={pincodeList}
+                  onChange={(e) => setPincodeList(e.target.value)}
+                  style={{ fontSize: '0.8rem', fontFamily: 'var(--font-mono)' }}
+                />
+                <div style={{ fontSize: '0.7rem', color: 'hsl(var(--text-muted))', marginTop: '0.35rem' }}>
+                  Separate values with commas. Spaces and carriage returns are automatically cleaned.
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <button 
+          type="button" 
+          onClick={handleSaveSchema} 
+          className="btn-primary" 
+          style={{ width: '100%', padding: '0.8rem', fontSize: '1rem', fontWeight: 600 }}
+          disabled={saving}
+        >
+          {saving ? 'Saving Form Settings...' : 'Save Form Schema Configuration'}
+        </button>
+      </div>
+
+      {/* 3D Mobile Mock-up Preview */}
+      <div style={{ flex: '1', minWidth: '320px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', paddingTop: '2.5rem' }}>
+        <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--gold)', marginBottom: '1rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          Interactive 3D Live Preview
+        </span>
+
+        {/* 3D Mobile Container */}
+        <div 
+          onMouseMove={handleMouseMove}
+          onMouseLeave={handleMouseLeave}
+          style={{
+            width: '320px',
+            height: '630px',
+            background: 'var(--card-bg, #0b1120)',
+            border: '8px solid #222d44',
+            borderRadius: '40px',
+            boxShadow: '0 30px 60px rgba(0,0,0,0.4), inset 0 2px 8px rgba(255,255,255,0.05)',
+            position: 'relative',
+            overflow: 'hidden',
+            transition: 'transform 0.1s ease-out, box-shadow 0.3s',
+            transform: `perspective(1000px) rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)`,
+            transformStyle: 'preserve-3d',
+            cursor: 'grab'
+          }}
+        >
+          {/* Mobile Camera Notch */}
+          <div style={{
+            position: 'absolute',
+            top: '0',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            width: '120px',
+            height: '24px',
+            background: '#222d44',
+            borderBottomLeftRadius: '15px',
+            borderBottomRightRadius: '15px',
+            zIndex: 10
+          }} />
+
+          {/* Screen Content */}
+          <div style={{
+            height: '100%',
+            width: '100%',
+            overflowY: 'auto',
+            padding: '2rem 1.25rem 1.25rem 1.25rem',
+            background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(8, 13, 28, 0.95))',
+            color: '#fff',
+            scrollbarWidth: 'none',
+            textAlign: 'left'
+          }} className="mock-screen">
+            {/* Header */}
+            <div style={{ textAlign: 'center', marginBottom: '1.5rem', marginTop: '0.5rem' }}>
+              <div style={{ fontSize: '1.25rem', fontWeight: 800, background: 'linear-gradient(90deg, #e0a82e, #fff)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+                FinMantra
+              </div>
+              <div style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '0.2rem' }}>
+                Check Credit Card Eligibility
+              </div>
+            </div>
+
+            {/* Simulated Form */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {/* Full Name */}
+              {schema.fields.fullName.visible && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#e2e8f0' }}>
+                    {schema.fields.fullName.label} {schema.fields.fullName.required && <span style={{ color: 'var(--err)' }}>*</span>}
+                  </label>
+                  <input 
+                    type="text" 
+                    placeholder={schema.fields.fullName.placeholder}
+                    disabled
+                    style={{
+                      width: '100%',
+                      padding: '0.5rem 0.75rem',
+                      background: 'rgba(255,255,255,0.05)',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      borderRadius: '8px',
+                      color: '#94a3b8',
+                      fontSize: '0.8rem',
+                      cursor: 'not-allowed'
+                    }}
+                  />
+                </div>
+              )}
+
+              {/* Mobile */}
+              {schema.fields.phone.visible && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#e2e8f0' }}>
+                    {schema.fields.phone.label} {schema.fields.phone.required && <span style={{ color: 'var(--err)' }}>*</span>}
+                  </label>
+                  <input 
+                    type="text" 
+                    placeholder={schema.fields.phone.placeholder}
+                    disabled
+                    style={{
+                      width: '100%',
+                      padding: '0.5rem 0.75rem',
+                      background: 'rgba(255,255,255,0.05)',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      borderRadius: '8px',
+                      color: '#94a3b8',
+                      fontSize: '0.8rem',
+                      cursor: 'not-allowed'
+                    }}
+                  />
+                </div>
+              )}
+
+              {/* Email */}
+              {schema.fields.email.visible && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#e2e8f0' }}>
+                    {schema.fields.email.label} {schema.fields.email.required && <span style={{ color: 'var(--err)' }}>*</span>}
+                  </label>
+                  <input 
+                    type="text" 
+                    placeholder={schema.fields.email.placeholder}
+                    disabled
+                    style={{
+                      width: '100%',
+                      padding: '0.5rem 0.75rem',
+                      background: 'rgba(255,255,255,0.05)',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      borderRadius: '8px',
+                      color: '#94a3b8',
+                      fontSize: '0.8rem',
+                      cursor: 'not-allowed'
+                    }}
+                  />
+                </div>
+              )}
+
+              {/* Has Credit Card */}
+              {schema.fields.has_credit_card.visible && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#e2e8f0' }}>
+                    {schema.fields.has_credit_card.label} {schema.fields.has_credit_card.required && <span style={{ color: 'var(--err)' }}>*</span>}
+                  </label>
+                  <div style={{ display: 'flex', gap: '0.75rem' }}>
+                    <button 
+                      type="button" 
+                      disabled
+                      style={{
+                        flex: 1,
+                        padding: '0.5rem',
+                        borderRadius: '8px',
+                        background: 'rgba(255,255,255,0.05)',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        color: '#cbd5e1',
+                        fontSize: '0.8rem',
+                        fontWeight: 600,
+                        cursor: 'not-allowed'
+                      }}
+                    >
+                      Yes
+                    </button>
+                    <button 
+                      type="button" 
+                      disabled
+                      style={{
+                        flex: 1,
+                        padding: '0.5rem',
+                        borderRadius: '8px',
+                        background: 'rgba(255,255,255,0.05)',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        color: '#cbd5e1',
+                        fontSize: '0.8rem',
+                        fontWeight: 600,
+                        cursor: 'not-allowed'
+                      }}
+                    >
+                      No
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Employment */}
+              {schema.fields.employment.visible && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#e2e8f0' }}>
+                    {schema.fields.employment.label} {schema.fields.employment.required && <span style={{ color: 'var(--err)' }}>*</span>}
+                  </label>
+                  <select 
+                    disabled
+                    style={{
+                      width: '100%',
+                      padding: '0.5rem 0.75rem',
+                      background: 'rgba(255,255,255,0.05)',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      borderRadius: '8px',
+                      color: '#cbd5e1',
+                      fontSize: '0.8rem',
+                      cursor: 'not-allowed'
+                    }}
+                  >
+                    <option value="">Select Employment</option>
+                    {(schema.fields.employment.options || []).map((o, idx) => (
+                      <option key={idx} value={o.value} disabled={!o.enabled}>
+                        {o.value} {!o.enabled && '(Disabled)'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Monthly Income */}
+              {schema.fields.monthly_income && schema.fields.monthly_income.visible && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#e2e8f0' }}>
+                    {schema.fields.monthly_income.label} {schema.fields.monthly_income.required && <span style={{ color: 'var(--err)' }}>*</span>}
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <span style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: '#cbd5e1', fontSize: '0.8rem' }}>₹</span>
+                    <input 
+                      type="text" 
+                      placeholder={schema.fields.monthly_income.placeholder}
+                      disabled
+                      style={{
+                        width: '100%',
+                        padding: '0.5rem 0.75rem 0.5rem 1.5rem',
+                        background: 'rgba(255,255,255,0.05)',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        borderRadius: '8px',
+                        color: '#94a3b8',
+                        fontSize: '0.8rem',
+                        cursor: 'not-allowed'
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Residence Pincode */}
+              {schema.fields.pincode.visible && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#e2e8f0' }}>
+                    {schema.fields.pincode.label} {schema.fields.pincode.required && <span style={{ color: 'var(--err)' }}>*</span>}
+                  </label>
+                  <input 
+                    type="text" 
+                    placeholder={schema.fields.pincode.placeholder}
+                    disabled
+                    style={{
+                      width: '100%',
+                      padding: '0.5rem 0.75rem',
+                      background: 'rgba(255,255,255,0.05)',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      borderRadius: '8px',
+                      color: '#94a3b8',
+                      fontSize: '0.8rem',
+                      cursor: 'not-allowed'
+                    }}
+                  />
+                </div>
+              )}
+
+              {/* T&C Consent */}
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.4rem', marginTop: '0.5rem' }}>
+                <input type="checkbox" disabled style={{ marginTop: '0.15rem' }} checked />
+                <span style={{ fontSize: '0.65rem', color: '#94a3b8', lineHeight: '1.25' }}>
+                  I authorize FinMantra to check credit card eligibility as per policies.
+                </span>
+              </div>
+
+              {/* Proceed Button */}
+              <button 
+                type="button" 
+                disabled
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  borderRadius: '30px',
+                  background: 'linear-gradient(135deg, #e0a82e, #cfa024)',
+                  border: 'none',
+                  color: '#000',
+                  fontSize: '0.9rem',
+                  fontWeight: 700,
+                  marginTop: '0.5rem',
+                  boxShadow: '0 4px 15px rgba(224, 168, 70, 0.3)',
+                  cursor: 'not-allowed'
+                }}
+              >
+                Proceed
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

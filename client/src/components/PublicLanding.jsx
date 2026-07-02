@@ -1,6 +1,99 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ShieldCheck, Zap, HelpCircle, ArrowRight, X, Clock, RefreshCw, Layers } from 'lucide-react';
+import { ShieldCheck, Zap, HelpCircle, ArrowRight, X, Clock, RefreshCw, Layers, ArrowLeft, User, Phone, Mail, Briefcase, MapPin, ChevronDown } from 'lucide-react';
 import { trackLeadSubmission, initAnalytics } from '../utils/analytics';
+
+// Offline fallback helper to resolve Indian pincodes to State/Region
+const getStateFromPincode = (pin) => {
+  if (!pin || pin.length < 2) return null;
+  const prefix2 = pin.substring(0, 2);
+  const prefix1 = pin.substring(0, 1);
+  
+  const mapping = {
+    '11': 'Delhi',
+    '12': 'Haryana',
+    '13': 'Haryana',
+    '14': 'Punjab',
+    '15': 'Punjab',
+    '16': 'Chandigarh',
+    '17': 'Himachal Pradesh',
+    '18': 'Jammu & Kashmir',
+    '19': 'Jammu & Kashmir',
+    '20': 'Uttar Pradesh',
+    '21': 'Uttar Pradesh',
+    '22': 'Uttar Pradesh',
+    '23': 'Uttar Pradesh',
+    '24': 'Uttar Pradesh',
+    '25': 'Uttar Pradesh',
+    '26': 'Uttar Pradesh',
+    '27': 'Uttar Pradesh',
+    '28': 'Uttar Pradesh',
+    '30': 'Rajasthan',
+    '31': 'Rajasthan',
+    '32': 'Rajasthan',
+    '33': 'Rajasthan',
+    '34': 'Rajasthan',
+    '36': 'Gujarat',
+    '37': 'Gujarat',
+    '38': 'Gujarat',
+    '39': 'Gujarat',
+    '40': 'Maharashtra',
+    '41': 'Maharashtra',
+    '42': 'Maharashtra',
+    '43': 'Maharashtra',
+    '44': 'Maharashtra',
+    '45': 'Madhya Pradesh',
+    '46': 'Madhya Pradesh',
+    '47': 'Madhya Pradesh',
+    '48': 'Madhya Pradesh',
+    '49': 'Chhattisgarh',
+    '50': 'Telangana',
+    '51': 'Andhra Pradesh',
+    '52': 'Andhra Pradesh',
+    '53': 'Andhra Pradesh',
+    '56': 'Karnataka',
+    '57': 'Karnataka',
+    '58': 'Karnataka',
+    '59': 'Karnataka',
+    '60': 'Tamil Nadu',
+    '61': 'Tamil Nadu',
+    '62': 'Tamil Nadu',
+    '63': 'Tamil Nadu',
+    '64': 'Tamil Nadu',
+    '67': 'Kerala',
+    '68': 'Kerala',
+    '69': 'Kerala',
+    '70': 'West Bengal',
+    '71': 'West Bengal',
+    '72': 'West Bengal',
+    '73': 'West Bengal',
+    '74': 'West Bengal',
+    '75': 'Odisha',
+    '76': 'Odisha',
+    '77': 'Odisha',
+    '78': 'Assam',
+    '79': 'North Eastern States',
+    '80': 'Bihar',
+    '81': 'Bihar',
+    '82': 'Bihar',
+    '83': 'Jharkhand',
+    '84': 'Bihar',
+    '85': 'Bihar',
+  };
+
+  const regionMapping = {
+    '1': 'Northern Region',
+    '2': 'Northern Region (UP/Uttarakhand)',
+    '3': 'Western Region (Rajasthan/Gujarat)',
+    '4': 'Western Region (Maharashtra/MP)',
+    '5': 'Southern Region (AP/Telangana/Karnataka)',
+    '6': 'Southern Region (TN/Kerala)',
+    '7': 'Eastern Region (WB/Orissa/North East)',
+    '8': 'Eastern Region (Bihar/Jharkhand)',
+    '9': 'Army Postal Service'
+  };
+
+  return mapping[prefix2] || regionMapping[prefix1] || null;
+};
 
 export default function PublicLanding({ navigateTo, utmParams }) {
   const getCategoryColor = (cat) => {
@@ -34,10 +127,22 @@ export default function PublicLanding({ navigateTo, utmParams }) {
     phone: '',
     email: '',
     city: '',
-    employment: 'Salaried',
+    employment: '',
     income: 'Below ₹25,000',
-    selectedCard: ''
+    selectedCard: '',
+    has_credit_card: '',
+    pincode: '',
+    monthly_income: ''
   });
+
+  const [errors, setErrors] = useState({});
+  const [employmentDropdownOpen, setEmploymentDropdownOpen] = useState(false);
+  const empDropdownRef = useRef(null);
+
+  // Pincode Lookup & Serviceability States
+  const [pincodeLoading, setPincodeLoading] = useState(false);
+  const [pincodeLocationText, setPincodeLocationText] = useState('');
+  const [pincodeError, setPincodeError] = useState('');
 
   // OTP State
   const [showOtpModal, setShowOtpModal] = useState(false);
@@ -49,12 +154,32 @@ export default function PublicLanding({ navigateTo, utmParams }) {
   // Resume Session State
   const [resumeSession, setResumeSession] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formStep, setFormStep] = useState(1);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Canvas Animation Reference
   const canvasRef = useRef(null);
 
   // API base URL
-  const API_URL = window.location.hostname === 'localhost' ? 'http://localhost:5000/api' : '/api';
+  const API_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.port === '5173') ? 'http://localhost:5000/api' : '/api';
+  // Close employment dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (empDropdownRef.current && !empDropdownRef.current.contains(e.target)) {
+        setEmploymentDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Load initial cards, locations, settings
   useEffect(() => {
@@ -96,6 +221,80 @@ export default function PublicLanding({ navigateTo, utmParams }) {
       setResumeSession(JSON.parse(lastSession));
     }
   }, []);
+
+  // Auto-Lookup Pincode API
+  useEffect(() => {
+    const lookupPincode = async () => {
+      const pin = formData.pincode.trim();
+      if (pin.length !== 6 || !/^\d+$/.test(pin)) {
+        setPincodeLocationText('');
+        setPincodeError('');
+        return;
+      }
+
+      setPincodeLoading(true);
+      setPincodeError('');
+      setPincodeLocationText('');
+
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2500);
+
+        const res = await fetch(`https://api.postalpincode.in/pincode/${pin}`, { signal: controller.signal });
+        clearTimeout(timeoutId);
+
+        if (!res.ok) throw new Error('API lookup failed');
+        const data = await res.json();
+        
+        if (data && data[0] && data[0].Status === 'Success') {
+          const postOffices = data[0].PostOffice;
+          if (postOffices && postOffices.length > 0) {
+            const district = postOffices[0].District;
+            const state = postOffices[0].State;
+            setPincodeLocationText(`${district}, ${state}`);
+            // Auto fill city in lead data
+            setFormData(prev => ({ ...prev, city: district }));
+          } else {
+            // Offline fallback if not found in response
+            const fallbackState = getStateFromPincode(pin);
+            if (fallbackState) {
+              setPincodeLocationText(fallbackState);
+              setFormData(prev => ({ ...prev, city: fallbackState }));
+            } else {
+              setPincodeError('Pincode not found');
+            }
+          }
+        } else {
+          // Offline fallback if status is not success
+          const fallbackState = getStateFromPincode(pin);
+          if (fallbackState) {
+            setPincodeLocationText(fallbackState);
+            setFormData(prev => ({ ...prev, city: fallbackState }));
+          } else {
+            setPincodeError('Invalid Pincode');
+          }
+        }
+      } catch (e) {
+        if (e.name === 'AbortError') {
+          console.warn('Pincode lookup timed out (using offline estimation).');
+        } else {
+          console.error('Failed to look up pincode details', e);
+        }
+        // Offline fallback on error/timeout
+        const fallbackState = getStateFromPincode(pin);
+        if (fallbackState) {
+          setPincodeLocationText(`${fallbackState} (Estimated)`);
+          setFormData(prev => ({ ...prev, city: fallbackState }));
+        } else {
+          setPincodeError('Invalid Pincode');
+        }
+      } finally {
+        setPincodeLoading(false);
+      }
+    };
+
+    lookupPincode();
+  }, [formData.pincode]);
 
 
 
@@ -238,10 +437,108 @@ export default function PublicLanding({ navigateTo, utmParams }) {
     cardEl.style.transform = 'rotateX(0deg) rotateY(0deg) translateY(0px)';
   };
 
+  const validateField = (name, value) => {
+    let errorText = '';
+    
+    if (name === 'fullName') {
+      const trimmed = value.trim();
+      const rules = formSchema.fields.fullName?.validationRules || {};
+      const alphabeticOnly = rules.alphabeticOnly !== false;
+      const requireSecondWord = rules.requireSecondWord !== false;
+
+      if (trimmed) {
+        if (alphabeticOnly && !/^[a-zA-Z\s]+$/.test(trimmed)) {
+          errorText = 'Enter your Name as per PAN card';
+        } else if (requireSecondWord) {
+          const words = trimmed.split(/\s+/).filter(Boolean);
+          if (words.length < 2) {
+            errorText = 'Please enter your Last Name / Father Name';
+          }
+        }
+      } else if (formSchema.fields.fullName?.required) {
+        errorText = 'This field is required';
+      }
+    }
+    
+    if (name === 'phone') {
+      const rules = formSchema.fields.phone?.validationRules || {};
+      const allowedStr = rules.allowedDigitsStart || '6,7,8,9';
+      const startChars = allowedStr.split(',').map(s => s.trim()).filter(Boolean);
+      
+      if (value) {
+        const isValidStart = startChars.some(char => value.startsWith(char));
+        if (!isValidStart) {
+          errorText = `Mobile number should start with ${startChars.join(',')} only`;
+        } else if (value.length !== 10) {
+          errorText = 'Mobile number must be exactly 10 digits.';
+        }
+      } else if (formSchema.fields.phone?.required) {
+        errorText = 'This field is required';
+      }
+    }
+    
+    if (name === 'email') {
+      if (value) {
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+          errorText = 'Please enter valid Email';
+        }
+      } else if (formSchema.fields.email?.required) {
+        errorText = 'This field is required';
+      }
+    }
+    
+    if (name === 'monthly_income') {
+      const rules = formSchema.fields.monthly_income?.validationRules || {};
+      const minIncome = rules.minIncome !== undefined ? rules.minIncome : 25000;
+      const maxIncome = rules.maxIncome !== undefined ? rules.maxIncome : 1000000;
+
+      if (value) {
+        const incomeNum = parseInt(value, 10);
+        if (isNaN(incomeNum) || incomeNum < minIncome || incomeNum > maxIncome) {
+          const minLabel = minIncome >= 1000 ? (minIncome / 1000) + 'k' : minIncome;
+          const maxLabel = maxIncome >= 100000 ? (maxIncome / 100000) + ' lakhs' : (maxIncome >= 1000 ? (maxIncome / 1000) + 'k' : maxIncome);
+          errorText = `Salary ranges from ${minLabel} to ${maxLabel}`;
+        }
+      } else if (formSchema.fields.monthly_income?.required) {
+        errorText = 'This field is required';
+      }
+    }
+    
+    if (name === 'pincode') {
+      if (value) {
+        if (value.length !== 6) {
+          errorText = 'Pincode must be exactly 6 digits.';
+        }
+      } else if (formSchema.fields.pincode?.required) {
+        errorText = 'This field is required';
+      }
+    }
+
+    setErrors(prev => {
+      const updated = { ...prev };
+      if (errorText) {
+        updated[name] = errorText;
+      } else {
+        delete updated[name];
+      }
+      return updated;
+    });
+  };
+
   // Form Input Change Handler
   const handleInputChange = (e) => {
     const { name, value } = e.target;
+    
+    // Numeric-only restriction for phone, monthly_income, and pincode
+    if (name === 'phone' || name === 'monthly_income' || name === 'pincode') {
+      const cleanVal = value.replace(/\D/g, '');
+      setFormData(prev => ({ ...prev, [name]: cleanVal }));
+      validateField(name, cleanVal);
+      return;
+    }
+
     setFormData(prev => ({ ...prev, [name]: value }));
+    validateField(name, value);
   };
 
   // Pre-fill form when user selects a card from the grid
@@ -253,28 +550,159 @@ export default function PublicLanding({ navigateTo, utmParams }) {
     }
   };
 
+  // Step-by-step form validation helper
+  const validateStep = (stepNum) => {
+    const newErrors = {};
+    const isSalaried = (formData.employment === 'Salaried');
+
+    if (stepNum === 1) {
+      // Validate Full Name
+      if (formSchema.fields.fullName.visible) {
+        const val = formData.fullName.trim();
+        const rules = formSchema.fields.fullName.validationRules || {};
+        const alphabeticOnly = rules.alphabeticOnly !== false;
+        const requireSecondWord = rules.requireSecondWord !== false;
+
+        if (!val) {
+          if (formSchema.fields.fullName.required) newErrors.fullName = 'This field is required';
+        } else if (alphabeticOnly && !/^[a-zA-Z\s]+$/.test(val)) {
+          newErrors.fullName = 'Enter your Name as per PAN card';
+        } else if (requireSecondWord) {
+          const words = val.split(/\s+/).filter(Boolean);
+          if (words.length < 2) {
+            newErrors.fullName = 'Please enter your Last Name / Father Name';
+          }
+        }
+      }
+
+      // Validate Phone
+      if (formSchema.fields.phone.visible) {
+        const val = formData.phone;
+        const rules = formSchema.fields.phone.validationRules || {};
+        const allowedStr = rules.allowedDigitsStart || '6,7,8,9';
+        const startChars = allowedStr.split(',').map(s => s.trim()).filter(Boolean);
+
+        if (!val) {
+          if (formSchema.fields.phone.required) newErrors.phone = 'This field is required';
+        } else {
+          const isValidStart = startChars.some(char => val.startsWith(char));
+          if (!isValidStart) {
+            newErrors.phone = `Mobile number should start with ${startChars.join(',')} only`;
+          } else if (val.length !== 10) {
+            newErrors.phone = 'Mobile number must be exactly 10 digits.';
+          }
+        }
+      }
+
+      // Validate Email
+      if (formSchema.fields.email.visible) {
+        const val = formData.email.trim();
+        if (!val) {
+          if (formSchema.fields.email.required) newErrors.email = 'This field is required';
+        } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) {
+          newErrors.email = 'Please enter valid Email';
+        }
+      }
+    } else if (stepNum === 2) {
+      // Validate Employment
+      if (formSchema.fields.employment.visible && formSchema.fields.employment.required) {
+        if (!formData.employment) {
+          newErrors.employment = 'This field is required';
+        }
+      }
+
+      // Validate Monthly Income
+      if (formSchema.fields.monthly_income && formSchema.fields.monthly_income.visible) {
+        const val = formData.monthly_income;
+        const isFieldRequired = formSchema.fields.monthly_income.required;
+        const rules = formSchema.fields.monthly_income.validationRules || {};
+        const minIncome = rules.minIncome !== undefined ? rules.minIncome : 25000;
+        const maxIncome = rules.maxIncome !== undefined ? rules.maxIncome : 1000000;
+
+        if (!val) {
+          if (isFieldRequired) {
+            newErrors.monthly_income = 'This field is required';
+          }
+        } else {
+          const incomeNum = parseInt(val, 10);
+          if (isNaN(incomeNum) || incomeNum < minIncome || incomeNum > maxIncome) {
+            const minLabel = minIncome >= 1000 ? (minIncome / 1000) + 'k' : minIncome;
+            const maxLabel = maxIncome >= 100000 ? (maxIncome / 100000) + ' lakhs' : (maxIncome >= 1000 ? (maxIncome / 1000) + 'k' : maxIncome);
+            newErrors.monthly_income = `Salary ranges from ${minLabel} to ${maxLabel}`;
+          }
+        }
+      }
+
+      // Validate Credit Card Toggle
+      if (formSchema.fields.has_credit_card.visible && formSchema.fields.has_credit_card.required) {
+        if (!formData.has_credit_card) {
+          newErrors.has_credit_card = 'This field is required';
+        }
+      }
+
+      // Validate Pincode
+      if (formSchema.fields.pincode.visible) {
+        const val = formData.pincode.trim();
+        const isFieldRequired = formSchema.fields.pincode.required;
+        if (!val) {
+          if (isFieldRequired) {
+            newErrors.pincode = 'This field is required';
+          }
+        } else if (val.length !== 6 || !/^\d+$/.test(val)) {
+          newErrors.pincode = 'Pincode must be exactly 6 digits.';
+        } else {
+          const pinMode = settings.pincode_serviceability_mode || 'all';
+          const pinListRaw = settings.pincode_serviceability_list || '';
+          if (pinMode !== 'all') {
+            const pinArray = pinListRaw.split(',').map(p => p.trim()).filter(Boolean);
+            const isInList = pinArray.includes(val);
+            
+            if (pinMode === 'whitelist' && !isInList) {
+              newErrors.pincode = 'Credit card services are not available at your pincode currently.';
+            }
+            if (pinMode === 'blacklist' && isInList) {
+              newErrors.pincode = 'Credit card services are not available at your pincode currently.';
+            }
+          }
+        }
+      }
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handlePrevStep = () => {
+    setFormStep(1);
+  };
+
   // Form Submission & Verification
   const handleFormSubmit = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     setFormError('');
+    setPincodeError('');
 
-    const { fullName, phone, email } = formData;
-
-    if (!fullName || !phone || !email) {
-      setFormError('Please fill in all details before submitting.');
+    if (!isMobile && formStep === 1) {
+      if (validateStep(1)) {
+        setFormStep(2);
+      }
       return;
     }
 
-    if (phone.length !== 10 || !/^\d+$/.test(phone)) {
-      setFormError('Please enter a valid 10-digit WhatsApp number.');
+    // Validation checks
+    const step1Valid = validateStep(1);
+    const step2Valid = validateStep(2);
+    if (!step1Valid) {
+      if (!isMobile) setFormStep(1);
+      setFormError(isMobile ? 'Please correct the highlighted errors before submitting.' : 'Please correct the errors in Step 1 before submitting.');
+      return;
+    }
+    if (!step2Valid) {
+      setFormError('Please correct the highlighted errors before submitting.');
       return;
     }
 
-    if (!/\S+@\S+\.\S+/.test(email)) {
-      setFormError('Please enter a valid email address.');
-      return;
-    }
-
+    const { fullName, email, phone } = formData;
     setIsSubmitting(true);
     try {
       // Trigger browser events (Meta Pixel & GTM) immediately upon clicking Verify & Apply Now button
@@ -337,6 +765,11 @@ export default function PublicLanding({ navigateTo, utmParams }) {
             full_name: formData.fullName,
             phone: formData.phone,
             email: formData.email,
+            city: formData.city || null,
+            employment: formData.employment,
+            has_credit_card: formData.has_credit_card,
+            pincode: formData.pincode,
+            monthly_income: formData.monthly_income,
             source: 'public',
             consent: true,
             ...utmParams,
@@ -431,6 +864,38 @@ export default function PublicLanding({ navigateTo, utmParams }) {
     setResumeSession(null);
   };
 
+  const formSchema = (() => {
+    try {
+      if (settings.landing_form_schema) {
+        return typeof settings.landing_form_schema === 'string'
+          ? JSON.parse(settings.landing_form_schema)
+          : settings.landing_form_schema;
+      }
+    } catch (e) {
+      console.error('Failed to parse form schema', e);
+    }
+    return {
+      fields: {
+        fullName: { visible: true, required: true, label: "Full Name (as per PAN Card)", placeholder: "Enter your full name as per PAN Card" },
+        phone: { visible: true, required: true, label: "Mobile Number", placeholder: "WhatsApp number (10 digits)" },
+        email: { visible: true, required: true, label: "Email address", placeholder: "e.g. name@example.com" },
+        has_credit_card: { visible: true, required: true, label: "Do you already have a credit card?" },
+        employment: {
+          visible: true,
+          required: true,
+          label: "Employment Type",
+          options: [
+            { value: "Salaried", enabled: true },
+            { value: "Self Employed (Business)", enabled: false },
+            { value: "Self Employed (Professional)", enabled: false }
+          ]
+        },
+        monthly_income: { visible: true, required: true, label: "Net Monthly Income", placeholder: "Net Monthly Income" },
+        pincode: { visible: true, required: true, label: "Residence Pincode", placeholder: "Residence Pincode" }
+      }
+    };
+  })();
+
   return (
     <div style={{ position: 'relative' }}>
       
@@ -440,7 +905,7 @@ export default function PublicLanding({ navigateTo, utmParams }) {
       </div>
 
       {/* Hero section */}
-      <section style={{ display: 'grid', gridTemplateColumns: '1fr 440px', gap: '48px', padding: '60px 8% 72px 8%', position: 'relative', zIndex: 1, alignItems: 'start' }} className="hero-section">
+      <section style={{ display: 'grid', gridTemplateColumns: '1fr 560px', gap: '48px', padding: '60px 8% 72px 8%', position: 'relative', zIndex: 1, alignItems: 'start' }} className="hero-section">
         {/* Left Side Pitch */}
         <div style={{ paddingTop: '20px' }}>
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--gold-deep)', marginBottom: '18px', fontWeight: 700 }}>
@@ -515,76 +980,691 @@ export default function PublicLanding({ navigateTo, utmParams }) {
             </div>
           )}
           <form onSubmit={handleFormSubmit}>
-            <div className="form-group">
-              <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>Full Name</label>
-              <input 
-                type="text" 
-                name="fullName" 
-                className="form-input" 
-                placeholder="enter your full name as per pan card"
-                value={formData.fullName}
-                onChange={handleInputChange} 
-                required
-                disabled={isSubmitting}
-              />
+            {/* Step indicator — desktop only */}
+            {!isMobile && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', position: 'relative', padding: '0 8px' }}>
+              <div style={{ position: 'absolute', top: '15px', left: '16px', right: '16px', height: '2px', background: 'var(--line)', zIndex: 1 }}>
+                <div style={{ width: formStep === 2 ? '100%' : '0%', height: '100%', background: 'var(--gold)', transition: 'width 0.3s ease' }}></div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 2, position: 'relative' }}>
+                <div style={{ 
+                  width: '32px', height: '32px', borderRadius: '50%', 
+                  background: formStep >= 1 ? 'var(--gold)' : 'var(--white)', 
+                  border: formStep >= 1 ? '2px solid var(--gold)' : '2px solid var(--line)',
+                  color: formStep >= 1 ? 'var(--white)' : 'var(--muted)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.85rem',
+                  transition: 'all 0.3s ease',
+                  boxShadow: formStep === 1 ? '0 0 12px rgba(224, 168, 46, 0.3)' : 'none'
+                }}>1</div>
+                <span style={{ fontSize: '0.75rem', fontWeight: 600, marginTop: '6px', color: formStep === 1 ? 'var(--gold-deep)' : 'var(--muted)' }}>Contact</span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 2, position: 'relative' }}>
+                <div style={{ 
+                  width: '32px', height: '32px', borderRadius: '50%', 
+                  background: formStep >= 2 ? 'var(--gold)' : 'var(--white)', 
+                  border: formStep >= 2 ? '2px solid var(--gold)' : '2px solid var(--line)',
+                  color: formStep >= 2 ? 'var(--white)' : 'var(--muted)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.85rem',
+                  transition: 'all 0.3s ease',
+                  boxShadow: formStep === 2 ? '0 0 12px rgba(224, 168, 46, 0.3)' : 'none'
+                }}>2</div>
+                <span style={{ fontSize: '0.75rem', fontWeight: 600, marginTop: '6px', color: formStep === 2 ? 'var(--gold-deep)' : 'var(--muted)' }}>Financial</span>
+              </div>
             </div>
-            
-            <div className="form-group">
-              <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>Phone</label>
-              <input 
-                type="tel" 
-                name="phone" 
-                className="form-input" 
-                placeholder="WhatsApp number (10 digits)"
-                maxLength="10"
-                value={formData.phone}
-                onChange={handleInputChange} 
-                required
-                disabled={isSubmitting}
-              />
-            </div>
+            )}
 
-            <div className="form-group">
-              <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>Email address</label>
-              <input 
-                type="email" 
-                name="email" 
-                className="form-input" 
-                placeholder="e.g. name@example.com"
-                value={formData.email}
-                onChange={handleInputChange} 
-                required
-                disabled={isSubmitting}
-              />
-            </div>
+            {/* ===== MOBILE: Single long-scroll form (all fields visible) ===== */}
+            {isMobile && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                {formSchema.fields.fullName.visible && (
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
+                      {formSchema.fields.fullName.label}
+                    </label>
+                    <div style={{ position: 'relative' }}>
+                      <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', opacity: 0.7, display: 'flex', alignItems: 'center' }}>
+                        <User size={18} />
+                      </span>
+                      <input 
+                        type="text" name="fullName" className="form-input"
+                        style={{ paddingLeft: '2.5rem', height: '48px', borderRadius: 'var(--radius-sm)' }}
+                        placeholder={formSchema.fields.fullName.placeholder}
+                        value={formData.fullName} onChange={handleInputChange}
+                        required={formSchema.fields.fullName.required} disabled={isSubmitting}
+                      />
+                    </div>
+                    {errors.fullName && <div style={{ color: 'var(--err)', fontSize: '0.8rem', marginTop: '0.25rem' }}>{errors.fullName}</div>}
+                  </div>
+                )}
 
-            <div className="consent" style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', margin: '6px 0 16px' }}>
-              <input type="checkbox" id="consent" required disabled={isSubmitting} style={{ marginTop: '3px', flex: '0 0 auto', width: '18px', height: '18px', accentColor: 'var(--gold)' }} />
-              <label htmlFor="consent" style={{ fontSize: '0.78rem', color: 'var(--muted)', lineHeight: 1.5, cursor: 'pointer' }}>
-                {settings.consent_text || 'I authorise FinMantra and its partner banks to contact me via call, SMS, WhatsApp and email about credit card offers, even if I\'m registered under DND/NDNC.'}{' '}
-                I've read the <a href={settings.terms_link || '#'} target="_blank" rel="noreferrer" style={{ color: 'var(--gold-deep)', textDecoration: 'underline' }}>Terms</a> & <a href={settings.privacy_link || '#'} target="_blank" rel="noreferrer" style={{ color: 'var(--gold-deep)', textDecoration: 'underline' }}>Privacy Policy</a>.
-              </label>
-            </div>
+                {formSchema.fields.phone.visible && (
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
+                      {formSchema.fields.phone.label}
+                    </label>
+                    <div style={{ position: 'relative' }}>
+                      <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', opacity: 0.7, display: 'flex', alignItems: 'center' }}>
+                        <Phone size={18} />
+                      </span>
+                      <input
+                        type="tel" name="phone" className="form-input"
+                        style={{ paddingLeft: '2.5rem', height: '48px', borderRadius: 'var(--radius-sm)' }}
+                        placeholder={formSchema.fields.phone.placeholder}
+                        maxLength="10" value={formData.phone} onChange={handleInputChange}
+                        required={formSchema.fields.phone.required} disabled={isSubmitting}
+                      />
+                    </div>
+                    {errors.phone && <div style={{ color: 'var(--err)', fontSize: '0.75rem', marginTop: '0.25rem' }}>{errors.phone}</div>}
+                  </div>
+                )}
 
-            {formError && (
-              <div style={{ background: 'rgba(209, 67, 67, 0.1)', border: '1px solid rgba(209, 67, 67, 0.2)', padding: '0.75rem 1rem', borderRadius: 'var(--radius-sm)', color: 'var(--err)', fontSize: '0.85rem', marginBottom: '1rem' }}>
-                {formError}
+                {formSchema.fields.email.visible && (
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
+                      {formSchema.fields.email.label}
+                    </label>
+                    <div style={{ position: 'relative' }}>
+                      <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', opacity: 0.7, display: 'flex', alignItems: 'center' }}>
+                        <Mail size={18} />
+                      </span>
+                      <input
+                        type="email" name="email" className="form-input"
+                        style={{ paddingLeft: '2.5rem', height: '48px', borderRadius: 'var(--radius-sm)' }}
+                        placeholder={formSchema.fields.email.placeholder}
+                        value={formData.email} onChange={handleInputChange}
+                        required={formSchema.fields.email.required} disabled={isSubmitting}
+                      />
+                    </div>
+                    {errors.email && <div style={{ color: 'var(--err)', fontSize: '0.75rem', marginTop: '0.25rem' }}>{errors.email}</div>}
+                  </div>
+                )}
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                  {formSchema.fields.employment.visible && (
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
+                        {formSchema.fields.employment.label}
+                      </label>
+                      <div ref={empDropdownRef} style={{ position: 'relative' }}>
+                        <div
+                          onClick={() => !isSubmitting && setEmploymentDropdownOpen(prev => !prev)}
+                          className="form-input"
+                          style={{
+                            paddingLeft: '2.5rem', paddingRight: '2.5rem',
+                            height: '48px', borderRadius: 'var(--radius-sm)',
+                            display: 'flex', alignItems: 'center',
+                            cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                            color: formData.employment ? 'var(--ink)' : 'var(--muted)',
+                            userSelect: 'none',
+                            border: '1.5px solid',
+                            borderColor: employmentDropdownOpen ? 'var(--gold)' : 'var(--line)',
+                            boxShadow: employmentDropdownOpen ? '0 0 0 3px rgba(224, 168, 46, 0.2)' : undefined
+                          }}
+                        >
+                          <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', opacity: 0.7, display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
+                            <Briefcase size={18} />
+                          </span>
+                          {formData.employment || 'Select Employment'}
+                          <ChevronDown size={16} style={{
+                            position: 'absolute', right: '0.85rem', top: '50%',
+                            transform: employmentDropdownOpen ? 'translateY(-50%) rotate(180deg)' : 'translateY(-50%)',
+                            transition: 'transform 0.2s ease',
+                            color: 'var(--muted)'
+                          }} />
+                        </div>
+
+                        {employmentDropdownOpen && (
+                          <div style={{
+                            position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
+                            background: 'var(--white)',
+                            border: '1.5px solid var(--line)',
+                            borderRadius: 'var(--radius-sm)',
+                            boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+                            zIndex: 50,
+                            overflow: 'hidden',
+                            animation: 'fadeIn 0.15s ease'
+                          }}>
+                            {(formSchema.fields.employment.options || []).map(opt => (
+                              <div
+                                key={opt.value}
+                                onClick={() => {
+                                  if (!opt.enabled) return;
+                                  setFormData(prev => ({ ...prev, employment: opt.value }));
+                                  setEmploymentDropdownOpen(false);
+                                }}
+                                style={{
+                                  padding: '0.65rem 1rem',
+                                  fontSize: '0.9rem',
+                                  cursor: opt.enabled ? 'pointer' : 'not-allowed',
+                                  opacity: opt.enabled ? 1 : 0.4,
+                                  background: formData.employment === opt.value ? 'rgba(224, 168, 46, 0.15)' : 'transparent',
+                                  color: formData.employment === opt.value ? 'var(--gold-deep)' : 'var(--ink)',
+                                  fontWeight: formData.employment === opt.value ? 700 : 400,
+                                  transition: 'background 0.15s ease, color 0.15s ease',
+                                  borderBottom: '1px solid var(--line)'
+                                }}
+                                onMouseEnter={e => { 
+                                  if (opt.enabled && formData.employment !== opt.value) { 
+                                    e.currentTarget.style.background = 'var(--paper-2)'; 
+                                  } 
+                                }}
+                                onMouseLeave={e => { 
+                                  if (formData.employment !== opt.value) { 
+                                    e.currentTarget.style.background = 'transparent'; 
+                                  } 
+                                }}
+                              >
+                                {opt.label || opt.value}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <input type="hidden" name="employment" value={formData.employment} required={formSchema.fields.employment.required} />
+                      </div>
+                      {errors.employment && <div style={{ color: 'var(--err)', fontSize: '0.75rem', marginTop: '0.25rem' }}>{errors.employment}</div>}
+                    </div>
+                  )}
+
+                  {formSchema.fields.monthly_income && formSchema.fields.monthly_income.visible && (
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
+                        {formSchema.fields.monthly_income.label}
+                      </label>
+                      <input
+                        type="text" name="monthly_income" className="form-input"
+                        style={{ height: '48px', borderRadius: 'var(--radius-sm)' }}
+                        placeholder={formSchema.fields.monthly_income.placeholder || 'e.g. 50000'}
+                        value={formData.monthly_income} onChange={handleInputChange}
+                        required={formSchema.fields.monthly_income.required}
+                        disabled={isSubmitting}
+                      />
+                      {errors.monthly_income && <div style={{ color: 'var(--err)', fontSize: '0.75rem', marginTop: '0.25rem' }}>{errors.monthly_income}</div>}
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '0.75rem', alignItems: 'start' }}>
+                  {formSchema.fields.has_credit_card.visible && (
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
+                        {formSchema.fields.has_credit_card.label}
+                      </label>
+                      <div 
+                        onClick={() => {
+                          if (isSubmitting) return;
+                          setFormData(prev => ({ 
+                            ...prev, 
+                            has_credit_card: prev.has_credit_card === 'Yes' ? 'No' : 'Yes' 
+                          }));
+                        }}
+                        style={{
+                          position: 'relative',
+                          display: 'flex',
+                          alignItems: 'center',
+                          width: '130px',
+                          height: '42px',
+                          background: 'var(--paper-2)',
+                          border: errors.has_credit_card ? '1.5px solid var(--err)' : '1px solid var(--line)',
+                          borderRadius: 'var(--radius-sm)',
+                          padding: '4px',
+                          cursor: 'pointer',
+                          opacity: 1,
+                          userSelect: 'none',
+                          marginTop: '0.3rem',
+                          transition: 'all 0.3s ease'
+                        }}
+                      >
+                        {formData.has_credit_card && (
+                          <div style={{
+                            position: 'absolute',
+                            left: formData.has_credit_card === 'Yes' ? 'calc(100% - 63px)' : '4px',
+                            width: '59px',
+                            height: '32px',
+                            background: 'var(--gold)',
+                            borderRadius: '8px',
+                            boxShadow: '0 2px 8px rgba(224, 168, 46, 0.35)',
+                            transition: 'left 0.25s cubic-bezier(0.16, 1, 0.3, 1)'
+                          }}></div>
+                        )}
+                        <div style={{
+                          position: 'relative',
+                          zIndex: 2,
+                          display: 'flex',
+                          width: '100%',
+                          height: '100%',
+                          alignItems: 'center',
+                          justifyContent: 'space-around',
+                          fontSize: '0.85rem',
+                          fontWeight: 700
+                        }}>
+                          <span style={{ 
+                            color: formData.has_credit_card === 'No' ? 'var(--white)' : 'var(--muted)',
+                            transition: 'color 0.25s ease',
+                            width: '59px',
+                            textAlign: 'center'
+                          }}>No</span>
+                          <span style={{ 
+                            color: formData.has_credit_card === 'Yes' ? 'var(--white)' : 'var(--muted)',
+                            transition: 'color 0.25s ease',
+                            width: '59px',
+                            textAlign: 'center'
+                          }}>Yes</span>
+                        </div>
+                      </div>
+                      {errors.has_credit_card && <div style={{ color: 'var(--err)', fontSize: '0.7rem', marginTop: '0.25rem' }}>{errors.has_credit_card}</div>}
+                      <input type="hidden" name="has_credit_card" value={formData.has_credit_card}
+                        required={formSchema.fields.has_credit_card.required} />
+                    </div>
+                  )}
+
+                  {formSchema.fields.pincode.visible && (
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
+                        {formSchema.fields.pincode.label}
+                      </label>
+                      <div style={{ position: 'relative' }}>
+                        <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', opacity: 0.7, display: 'flex', alignItems: 'center' }}>
+                          <MapPin size={18} />
+                        </span>
+                        <input
+                          type="text" name="pincode" className="form-input"
+                          style={{
+                            paddingLeft: '2.5rem',
+                            height: '48px',
+                            borderRadius: 'var(--radius-sm)',
+                            opacity: 1
+                          }}
+                          placeholder={formSchema.fields.pincode.placeholder}
+                          maxLength="6" value={formData.pincode} onChange={handleInputChange}
+                          required={formSchema.fields.pincode.required}
+                          disabled={isSubmitting}
+                        />
+                      </div>
+                      {pincodeLoading && <div style={{ fontSize: '0.7rem', color: 'var(--gold)', marginTop: '0.25rem' }}>Verifying...</div>}
+                      {pincodeLocationText && (
+                        <div style={{ fontSize: '0.7rem', color: 'var(--mint)', marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                          <span style={{ display: 'inline-block', width: '5px', height: '5px', borderRadius: '50%', background: 'var(--mint)' }}></span>
+                          {pincodeLocationText}
+                        </div>
+                      )}
+                      {(errors.pincode || pincodeError) && <div style={{ fontSize: '0.7rem', color: 'var(--err)', marginTop: '0.25rem' }}>{errors.pincode || pincodeError}</div>}
+                    </div>
+                  )}
+                </div>
+
+                <div className="consent" style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', margin: '4px 0 10px' }}>
+                  <input type="checkbox" id="consent" required disabled={isSubmitting} style={{ marginTop: '3px', flex: '0 0 auto', width: '18px', height: '18px', accentColor: 'var(--gold)' }} />
+                  <label htmlFor="consent" style={{ fontSize: '0.78rem', color: 'var(--muted)', lineHeight: 1.5, cursor: 'pointer' }}>
+                    {settings.consent_text || 'I authorise FinMantra and its partner banks to contact me via call, SMS, WhatsApp and email about credit card offers, even if I\'m registered under DND/NDNC.'}{' '}
+                    I've read the <a href={settings.terms_link || '#'} target="_blank" rel="noreferrer" style={{ color: 'var(--gold-deep)', textDecoration: 'underline' }}>Terms</a> & <a href={settings.privacy_link || '#'} target="_blank" rel="noreferrer" style={{ color: 'var(--gold-deep)', textDecoration: 'underline' }}>Privacy Policy</a>.
+                  </label>
+                </div>
+
+                {formError && (
+                  <div style={{ background: 'rgba(209, 67, 67, 0.1)', border: '1px solid rgba(209, 67, 67, 0.2)', padding: '0.75rem 1rem', borderRadius: 'var(--radius-sm)', color: 'var(--err)', fontSize: '0.85rem' }}>
+                    {formError}
+                  </div>
+                )}
+
+                <button type="submit" className="btn-primary" style={{ width: '100%', height: '48px' }} disabled={isSubmitting}>
+                  {isSubmitting ? (
+                    <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                      Processing... <RefreshCw size={18} className="animate-spin" />
+                    </span>
+                  ) : (
+                    <>
+                      Verify & Apply Now <ArrowRight size={18} />
+                    </>
+                  )}
+                </button>
               </div>
             )}
 
-            <button type="submit" className="btn-primary" style={{ width: '100%' }} disabled={isSubmitting}>
-              {isSubmitting ? (
-                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
-                  Processing... <RefreshCw size={18} className="animate-spin" />
-                </span>
-              ) : (
-                <>
-                  Verify & Apply Now <ArrowRight size={18} />
-                </>
-              )}
-            </button>
+            {/* ===== DESKTOP: 2-Step Wizard ===== */}
+            {/* STEP 1: CONTACT DETAILS */}
+            {!isMobile && formStep === 1 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', animation: 'fadeIn 0.3s ease' }}>
+                {formSchema.fields.fullName.visible && (
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
+                      {formSchema.fields.fullName.label}
+                    </label>
+                    <div style={{ position: 'relative' }}>
+                      <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', opacity: 0.7, display: 'flex', alignItems: 'center' }}>
+                        <User size={18} />
+                      </span>
+                      <input 
+                        type="text" name="fullName" className="form-input"
+                        style={{ paddingLeft: '2.5rem', height: '48px', borderRadius: 'var(--radius-sm)' }}
+                        placeholder={formSchema.fields.fullName.placeholder}
+                        value={formData.fullName} onChange={handleInputChange}
+                        required={formSchema.fields.fullName.required} disabled={isSubmitting}
+                      />
+                    </div>
+                    {errors.fullName && <div style={{ color: 'var(--err)', fontSize: '0.8rem', marginTop: '0.25rem' }}>{errors.fullName}</div>}
+                  </div>
+                )}
 
-            <div className="securenote" style={{ textAlign: 'center', fontSize: '0.78rem', color: 'var(--muted)', marginTop: '12px', display: 'flex', gap: '6px', justifyContent: 'center', alignItems: 'center' }}>
+                {formSchema.fields.phone.visible && (
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
+                      {formSchema.fields.phone.label}
+                    </label>
+                    <div style={{ position: 'relative' }}>
+                      <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', opacity: 0.7, display: 'flex', alignItems: 'center' }}>
+                        <Phone size={18} />
+                      </span>
+                      <input
+                        type="tel" name="phone" className="form-input"
+                        style={{ paddingLeft: '2.5rem', height: '48px', borderRadius: 'var(--radius-sm)' }}
+                        placeholder={formSchema.fields.phone.placeholder}
+                        maxLength="10" value={formData.phone} onChange={handleInputChange}
+                        required={formSchema.fields.phone.required} disabled={isSubmitting}
+                      />
+                    </div>
+                    {errors.phone && <div style={{ color: 'var(--err)', fontSize: '0.75rem', marginTop: '0.25rem' }}>{errors.phone}</div>}
+                  </div>
+                )}
+
+                {formSchema.fields.email.visible && (
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
+                      {formSchema.fields.email.label}
+                    </label>
+                    <div style={{ position: 'relative' }}>
+                      <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', opacity: 0.7, display: 'flex', alignItems: 'center' }}>
+                        <Mail size={18} />
+                      </span>
+                      <input
+                        type="email" name="email" className="form-input"
+                        style={{ paddingLeft: '2.5rem', height: '48px', borderRadius: 'var(--radius-sm)' }}
+                        placeholder={formSchema.fields.email.placeholder}
+                        value={formData.email} onChange={handleInputChange}
+                        required={formSchema.fields.email.required} disabled={isSubmitting}
+                      />
+                    </div>
+                    {errors.email && <div style={{ color: 'var(--err)', fontSize: '0.75rem', marginTop: '0.25rem' }}>{errors.email}</div>}
+                  </div>
+                )}
+
+                <button 
+                  type="button" 
+                  onClick={() => { if (validateStep(1)) setFormStep(2); }} 
+                  className="btn-primary" 
+                  style={{ width: '100%', marginTop: '1rem', height: '48px' }}
+                >
+                  Continue to Next Step <ArrowRight size={18} />
+                </button>
+              </div>
+            )}
+
+            {/* STEP 2: PROFESSIONAL & FINANCIAL DETAILS */}
+            {!isMobile && formStep === 2 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', animation: 'fadeIn 0.3s ease' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                  {formSchema.fields.employment.visible && (
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
+                        {formSchema.fields.employment.label}
+                      </label>
+                      <div ref={!isMobile ? empDropdownRef : undefined} style={{ position: 'relative' }}>
+                        <div
+                          onClick={() => !isSubmitting && setEmploymentDropdownOpen(prev => !prev)}
+                          className="form-input"
+                          style={{
+                            paddingLeft: '2.5rem', paddingRight: '2.5rem',
+                            height: '48px', borderRadius: 'var(--radius-sm)',
+                            display: 'flex', alignItems: 'center',
+                            cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                            color: formData.employment ? 'var(--ink)' : 'var(--muted)',
+                            userSelect: 'none',
+                            border: '1.5px solid',
+                            borderColor: employmentDropdownOpen ? 'var(--gold)' : 'var(--line)',
+                            boxShadow: employmentDropdownOpen ? '0 0 0 3px rgba(224, 168, 46, 0.2)' : undefined
+                          }}
+                        >
+                          <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', opacity: 0.7, display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
+                            <Briefcase size={18} />
+                          </span>
+                          {formData.employment || 'Select Employment'}
+                          <ChevronDown size={16} style={{
+                            position: 'absolute', right: '0.85rem', top: '50%',
+                            transform: employmentDropdownOpen ? 'translateY(-50%) rotate(180deg)' : 'translateY(-50%)',
+                            transition: 'transform 0.2s ease',
+                            color: 'var(--muted)'
+                          }} />
+                        </div>
+
+                        {employmentDropdownOpen && (
+                          <div style={{
+                            position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
+                            background: 'var(--white)',
+                            border: '1.5px solid var(--line)',
+                            borderRadius: 'var(--radius-sm)',
+                            boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+                            zIndex: 50,
+                            overflow: 'hidden',
+                            animation: 'fadeIn 0.15s ease'
+                          }}>
+                            {(formSchema.fields.employment.options || []).map(opt => (
+                              <div
+                                key={opt.value}
+                                onClick={() => {
+                                  if (!opt.enabled) return;
+                                  setFormData(prev => ({ ...prev, employment: opt.value }));
+                                  setEmploymentDropdownOpen(false);
+                                }}
+                                style={{
+                                  padding: '0.65rem 1rem',
+                                  fontSize: '0.9rem',
+                                  cursor: opt.enabled ? 'pointer' : 'not-allowed',
+                                  opacity: opt.enabled ? 1 : 0.4,
+                                  background: formData.employment === opt.value ? 'rgba(224, 168, 46, 0.15)' : 'transparent',
+                                  color: formData.employment === opt.value ? 'var(--gold-deep)' : 'var(--ink)',
+                                  fontWeight: formData.employment === opt.value ? 700 : 400,
+                                  transition: 'background 0.15s ease, color 0.15s ease',
+                                  borderBottom: '1px solid var(--line)'
+                                }}
+                                onMouseEnter={e => { 
+                                  if (opt.enabled && formData.employment !== opt.value) { 
+                                    e.currentTarget.style.background = 'var(--paper-2)'; 
+                                  } 
+                                }}
+                                onMouseLeave={e => { 
+                                  if (formData.employment !== opt.value) { 
+                                    e.currentTarget.style.background = 'transparent'; 
+                                  } 
+                                }}
+                              >
+                                {opt.label || opt.value}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <input type="hidden" name="employment" value={formData.employment} required={formSchema.fields.employment.required} />
+                      </div>
+                      {errors.employment && <div style={{ color: 'var(--err)', fontSize: '0.75rem', marginTop: '0.25rem' }}>{errors.employment}</div>}
+                    </div>
+                  )}
+
+                  {formSchema.fields.monthly_income && formSchema.fields.monthly_income.visible && (
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
+                        {formSchema.fields.monthly_income.label}
+                      </label>
+                      <div style={{ position: 'relative' }}>
+                        <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', fontWeight: 700, fontSize: '1rem', opacity: 0.8, display: 'flex', alignItems: 'center' }}>₹</span>
+                        <input
+                          type="text" name="monthly_income" className="form-input"
+                          style={{
+                            paddingLeft: '2.25rem',
+                            height: '48px',
+                            borderRadius: 'var(--radius-sm)',
+                            opacity: 1
+                          }}
+                          placeholder={formSchema.fields.monthly_income.placeholder || 'Net Monthly Income'}
+                          value={formData.monthly_income} onChange={handleInputChange}
+                          required={formSchema.fields.monthly_income.required}
+                          disabled={isSubmitting}
+                        />
+                      </div>
+                      {errors.monthly_income && <div style={{ color: 'var(--err)', fontSize: '0.75rem', marginTop: '0.25rem' }}>{errors.monthly_income}</div>}
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '0.75rem', alignItems: 'start' }}>
+                  {formSchema.fields.has_credit_card.visible && (
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
+                        {formSchema.fields.has_credit_card.label}
+                      </label>
+                      <div 
+                        onClick={() => {
+                          if (isSubmitting) return;
+                          setFormData(prev => ({ 
+                            ...prev, 
+                            has_credit_card: prev.has_credit_card === 'Yes' ? 'No' : 'Yes' 
+                          }));
+                        }}
+                        style={{
+                          position: 'relative',
+                          display: 'flex',
+                          alignItems: 'center',
+                          width: '130px',
+                          height: '42px',
+                          background: 'var(--paper-2)',
+                          border: errors.has_credit_card ? '1.5px solid var(--err)' : '1px solid var(--line)',
+                          borderRadius: 'var(--radius-sm)',
+                          padding: '4px',
+                          cursor: 'pointer',
+                          opacity: 1,
+                          userSelect: 'none',
+                          marginTop: '0.3rem',
+                          transition: 'all 0.3s ease'
+                        }}
+                      >
+                        {/* Sliding Background Pill */}
+                        {formData.has_credit_card && (
+                          <div style={{
+                            position: 'absolute',
+                            left: formData.has_credit_card === 'Yes' ? 'calc(100% - 63px)' : '4px',
+                            width: '59px',
+                            height: '32px',
+                            background: 'var(--gold)',
+                            borderRadius: '8px',
+                            boxShadow: '0 2px 8px rgba(224, 168, 46, 0.35)',
+                            transition: 'left 0.25s cubic-bezier(0.16, 1, 0.3, 1)'
+                          }}></div>
+                        )}
+
+                        {/* Labels */}
+                        <div style={{
+                          position: 'relative',
+                          zIndex: 2,
+                          display: 'flex',
+                          width: '100%',
+                          height: '100%',
+                          alignItems: 'center',
+                          justifyContent: 'space-around',
+                          fontSize: '0.85rem',
+                          fontWeight: 700
+                        }}>
+                          <span style={{ 
+                            color: formData.has_credit_card === 'No' ? 'var(--white)' : 'var(--muted)',
+                            transition: 'color 0.25s ease',
+                            width: '59px',
+                            textAlign: 'center'
+                          }}>No</span>
+                          <span style={{ 
+                            color: formData.has_credit_card === 'Yes' ? 'var(--white)' : 'var(--muted)',
+                            transition: 'color 0.25s ease',
+                            width: '59px',
+                            textAlign: 'center'
+                          }}>Yes</span>
+                        </div>
+                      </div>
+                      {errors.has_credit_card && <div style={{ color: 'var(--err)', fontSize: '0.7rem', marginTop: '0.25rem' }}>{errors.has_credit_card}</div>}
+                      <input type="hidden" name="has_credit_card" value={formData.has_credit_card}
+                        required={formSchema.fields.has_credit_card.required} />
+                    </div>
+                  )}
+
+                  {formSchema.fields.pincode.visible && (
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
+                        {formSchema.fields.pincode.label}
+                      </label>
+                      <div style={{ position: 'relative' }}>
+                        <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', opacity: 0.7, display: 'flex', alignItems: 'center' }}>
+                          <MapPin size={18} />
+                        </span>
+                        <input
+                          type="text" name="pincode" className="form-input"
+                          style={{
+                            paddingLeft: '2.5rem',
+                            height: '48px',
+                            borderRadius: 'var(--radius-sm)',
+                            opacity: 1
+                          }}
+                          placeholder={formSchema.fields.pincode.placeholder}
+                          maxLength="6" value={formData.pincode} onChange={handleInputChange}
+                          required={formSchema.fields.pincode.required}
+                          disabled={isSubmitting}
+                        />
+                      </div>
+                      {pincodeLoading && <div style={{ fontSize: '0.7rem', color: 'var(--gold)', marginTop: '0.25rem' }}>Verifying...</div>}
+                      {pincodeLocationText && (
+                        <div style={{ fontSize: '0.7rem', color: 'var(--mint)', marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                          <span style={{ display: 'inline-block', width: '5px', height: '5px', borderRadius: '50%', background: 'var(--mint)' }}></span>
+                          {pincodeLocationText}
+                        </div>
+                      )}
+                      {(errors.pincode || pincodeError) && <div style={{ fontSize: '0.7rem', color: 'var(--err)', marginTop: '0.25rem' }}>{errors.pincode || pincodeError}</div>}
+                    </div>
+                  )}
+                </div>
+
+                <div className="consent" style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', margin: '4px 0 10px' }}>
+                  <input type="checkbox" id="consent" required disabled={isSubmitting} style={{ marginTop: '3px', flex: '0 0 auto', width: '18px', height: '18px', accentColor: 'var(--gold)' }} />
+                  <label htmlFor="consent" style={{ fontSize: '0.78rem', color: 'var(--muted)', lineHeight: 1.5, cursor: 'pointer' }}>
+                    {settings.consent_text || 'I authorise FinMantra and its partner banks to contact me via call, SMS, WhatsApp and email about credit card offers, even if I\'m registered under DND/NDNC.'}{' '}
+                    I've read the <a href={settings.terms_link || '#'} target="_blank" rel="noreferrer" style={{ color: 'var(--gold-deep)', textDecoration: 'underline' }}>Terms</a> & <a href={settings.privacy_link || '#'} target="_blank" rel="noreferrer" style={{ color: 'var(--gold-deep)', textDecoration: 'underline' }}>Privacy Policy</a>.
+                  </label>
+                </div>
+
+                {formError && (
+                  <div style={{ background: 'rgba(209, 67, 67, 0.1)', border: '1px solid rgba(209, 67, 67, 0.2)', padding: '0.75rem 1rem', borderRadius: 'var(--radius-sm)', color: 'var(--err)', fontSize: '0.85rem' }}>
+                    {formError}
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
+                  <button 
+                    type="button" 
+                    onClick={handlePrevStep} 
+                    className="btn-primary" 
+                    style={{ flex: '0 0 auto', background: 'transparent', border: '1px solid var(--line)', color: 'var(--ink)', width: '48px', height: '48px', borderRadius: '50%', padding: 0 }}
+                  >
+                    <ArrowLeft size={18} />
+                  </button>
+                  
+                  <button type="submit" className="btn-primary" style={{ flex: 1, height: '48px' }} disabled={isSubmitting}>
+                    {isSubmitting ? (
+                      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                        Processing... <RefreshCw size={18} className="animate-spin" />
+                      </span>
+                    ) : (
+                      <>
+                        Verify & Apply Now <ArrowRight size={18} />
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+            
+            <div className="securenote" style={{ textAlign: 'center', fontSize: '0.78rem', color: 'var(--muted)', marginTop: '16px', display: 'flex', gap: '6px', justifyContent: 'center', alignItems: 'center' }}>
               <span>✓ No hidden charges</span>
               <span>•</span>
               <span>✓ 100% paperless & secure</span>
@@ -594,7 +1674,7 @@ export default function PublicLanding({ navigateTo, utmParams }) {
       </section>
 
       {/* Dark Horizontal Badge Strip */}
-      <div style={{ background: 'var(--ink)', padding: '1.2rem 8%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '4rem', flexWrap: 'wrap', zIndex: 2, position: 'relative' }}>
+      <div style={{ background: 'var(--dark-section-bg)', padding: '1.2rem 8%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '4rem', flexWrap: 'wrap', zIndex: 2, position: 'relative' }}>
         <div style={{ color: '#ffffff', fontSize: '0.88rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <span style={{ color: 'var(--gold)' }}>✓</span> Cards from India's leading banks
         </div>
@@ -669,7 +1749,7 @@ export default function PublicLanding({ navigateTo, utmParams }) {
       </section>
 
       {/* Footer */}
-      <footer style={{ padding: '4.5rem 8% 3rem 8%', background: 'var(--ink)', position: 'relative', zIndex: 1, color: '#ffffff' }}>
+      <footer style={{ padding: '4.5rem 8% 3rem 8%', background: 'var(--dark-section-bg)', position: 'relative', zIndex: 1, color: '#ffffff' }}>
         {/* Logo */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1.5rem' }}>
           <img src="/logo.jpg" alt="FinMantra Logo" style={{ height: '32px', width: '32px', borderRadius: '8px', objectFit: 'cover', boxShadow: '0 2px 8px rgba(224, 168, 46, 0.3)' }} />

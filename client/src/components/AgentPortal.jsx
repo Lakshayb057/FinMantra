@@ -76,6 +76,7 @@ export default function AgentPortal({ navigateTo, theme, toggleTheme }) {
   const [loading, setLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [authError, setAuthError] = useState('');
+  const [timeLeft, setTimeLeft] = useState(0);
   
   // Login form
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
@@ -87,7 +88,8 @@ export default function AgentPortal({ navigateTo, theme, toggleTheme }) {
     fullName: '',
     phone: '',
     email: '',
-    cardId: ''
+    cardId: '',
+    monthly_income: ''
   });
   
   const [leadError, setLeadError] = useState('');
@@ -111,7 +113,7 @@ export default function AgentPortal({ navigateTo, theme, toggleTheme }) {
     });
   }, [cards, agentLocation]);
   
-  const API_URL = window.location.hostname === 'localhost' ? 'http://localhost:5000/api' : '/api';
+  const API_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.port === '5173') ? 'http://localhost:5000/api' : '/api';
 
   // Check and enforce location selection
   useEffect(() => {
@@ -242,6 +244,27 @@ export default function AgentPortal({ navigateTo, theme, toggleTheme }) {
     }
   };
 
+  useEffect(() => {
+    if (timeLeft <= 0) return;
+    const timer = setInterval(() => {
+      setTimeLeft(prev => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          setAuthError('');
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [timeLeft]);
+
+  const formatTime = (secs) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m}m ${s}s`;
+  };
+
   const handleLoginChange = (e) => {
     const { name, value } = e.target;
     setLoginForm(prev => ({ ...prev, [name]: value }));
@@ -265,8 +288,12 @@ export default function AgentPortal({ navigateTo, theme, toggleTheme }) {
         setCookie('finmantra_agent', JSON.stringify(data.agent), 1);
         setToken(data.token);
         setAgent(data.agent);
+        setTimeLeft(0);
       } else {
         setAuthError(data.error || 'Invalid credentials');
+        if (data.timeLeft) {
+          setTimeLeft(data.timeLeft);
+        }
       }
     } catch (err) {
       setAuthError('Connection error. Server is offline.');
@@ -288,6 +315,11 @@ export default function AgentPortal({ navigateTo, theme, toggleTheme }) {
 
   const handleLeadChange = (e) => {
     const { name, value } = e.target;
+    if (name === 'monthly_income' || name === 'phone') {
+      const cleanVal = value.replace(/\D/g, '');
+      setLeadForm(prev => ({ ...prev, [name]: cleanVal }));
+      return;
+    }
     setLeadForm(prev => ({ ...prev, [name]: value }));
   };
 
@@ -296,10 +328,10 @@ export default function AgentPortal({ navigateTo, theme, toggleTheme }) {
     setLeadError('');
     setLeadSuccess('');
 
-    const { fullName, phone, email, cardId } = leadForm;
+    const { fullName, phone, email, cardId, monthly_income } = leadForm;
 
-    if (!fullName || !phone || !email || !cardId) {
-      setLeadError('Please fill in all details, including card selection.');
+    if (!fullName || !phone || !email || !cardId || !monthly_income) {
+      setLeadError('Please fill in all details, including card selection and monthly income.');
       return;
     }
 
@@ -327,7 +359,8 @@ export default function AgentPortal({ navigateTo, theme, toggleTheme }) {
           agent_id: agent?.id,
           agent_name: agent?.name,
           agent_location: agentLocation,
-          consent: true
+          consent: true,
+          monthly_income: monthly_income ? String(monthly_income).trim() : null
         })
       });
       const data = await res.json();
@@ -350,7 +383,8 @@ export default function AgentPortal({ navigateTo, theme, toggleTheme }) {
           fullName: '',
           phone: '',
           email: '',
-          cardId: ''
+          cardId: '',
+          monthly_income: ''
         });
 
         // Reload agent performance leads
@@ -419,8 +453,8 @@ export default function AgentPortal({ navigateTo, theme, toggleTheme }) {
               </div>
             )}
 
-            <button type="submit" className="btn-primary" style={{ width: '100%' }} disabled={loading}>
-              {loading ? 'Authenticating...' : 'Access Terminal'} <LogIn size={18} />
+            <button type="submit" className="btn-primary" style={{ width: '100%' }} disabled={loading || timeLeft > 0}>
+              {timeLeft > 0 ? `Blocked (Try again in ${formatTime(timeLeft)})` : (loading ? 'Authenticating...' : 'Access Terminal')} <LogIn size={18} />
             </button>
           </form>
           <div style={{ textAlign: 'center', marginTop: '1.5rem' }}>
@@ -656,6 +690,20 @@ export default function AgentPortal({ navigateTo, theme, toggleTheme }) {
             </div>
 
             <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+              <label className="form-label">Net Monthly Income (₹)</label>
+              <input 
+                type="text" 
+                name="monthly_income" 
+                className="form-input" 
+                placeholder="e.g. 50000"
+                value={leadForm.monthly_income}
+                onChange={handleLeadChange} 
+                required
+                disabled={isSubmitting}
+              />
+            </div>
+
+            <div className="form-group" style={{ marginBottom: '1.5rem' }}>
               <label className="form-label">Select Card</label>
               <select 
                 name="cardId" 
@@ -703,7 +751,7 @@ export default function AgentPortal({ navigateTo, theme, toggleTheme }) {
                   <div>
                     <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>{lead.full_name}</div>
                     <div style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))' }}>
-                      {lead.card_name} • {lead.city}
+                      {lead.card_name} {lead.monthly_income ? `• ₹${lead.monthly_income}` : ''} • {lead.city || 'Walk-in'}
                     </div>
                   </div>
                   <div style={{ textAlign: 'right' }}>

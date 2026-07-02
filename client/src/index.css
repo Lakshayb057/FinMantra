@@ -16,6 +16,7 @@
   --line: #E6E1D5;
   --white: #FFFFFF;
   --err: #D14343;
+  --dark-section-bg: #11132B;
 
   /* Shadows & Radius */
   --shadow: 0 24px 60px -28px rgba(17,19,43,.55);
@@ -60,10 +61,11 @@
   --gold: #f0b83e;
   --gold-deep: #e0a82e;
   --mint: #1ec296;
-  --muted: #8d92a3;
+  --muted: #b0b5c6;
   --line: #222433;
   --white: #0f1017;
   --err: #e05c5c;
+  --dark-section-bg: #0c0d14;
 
   --shadow: 0 24px 60px -28px rgba(0,0,0,.6);
   --shadow-sm: 0 8px 22px -16px rgba(0,0,0,.45);
@@ -235,7 +237,7 @@ a:hover {
 
 /* Forms & Inputs */
 .form-group {
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
 .form-label {
@@ -250,11 +252,11 @@ a:hover {
 
 .form-input, .form-select {
   width: 100%;
-  padding: 0.8em 0.9em;
+  padding: 0.65em 0.9em;
   border: 1.5px solid var(--line);
   border-radius: var(--radius-sm);
   font-family: inherit;
-  font-size: 1rem;
+  font-size: 0.95rem;
   background: var(--white);
   color: var(--ink);
   transition: border 0.15s, box-shadow 0.15s;
@@ -270,6 +272,38 @@ a:hover {
 .form-select option {
   background-color: var(--white);
   color: var(--ink);
+  padding: 0.5em 0.75em;
+  font-size: 0.95rem;
+}
+
+.form-select option:checked,
+.form-select option:hover {
+  background: linear-gradient(0deg, rgba(224, 168, 46, 0.15) 0%, rgba(224, 168, 46, 0.15) 100%);
+  color: var(--gold-deep);
+  font-weight: 600;
+}
+
+.form-select option:disabled {
+  color: var(--muted);
+  opacity: 0.5;
+}
+
+[data-theme='dark'] .form-select {
+  background-color: var(--paper-2);
+  color: var(--ink);
+  border-color: var(--line);
+}
+
+[data-theme='dark'] .form-select option {
+  background-color: #12131a;
+  color: #f0f0f5;
+}
+
+[data-theme='dark'] .form-select option:checked,
+[data-theme='dark'] .form-select option:hover {
+  background: linear-gradient(0deg, rgba(240, 184, 62, 0.2) 0%, rgba(240, 184, 62, 0.2) 100%);
+  color: #f0b83e;
+  font-weight: 600;
 }
 
 /* Buttons */
@@ -850,6 +884,16 @@ a:hover {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/* Autofill background overrides for dark/light mode */
+input:-webkit-autofill,
+input:-webkit-autofill:hover, 
+input:-webkit-autofill:focus, 
+input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px var(--white) inset !important;
+  -webkit-text-fill-color: var(--ink) !important;
+  transition: background-color 5000s ease-in-out 0s;
 }
 
 

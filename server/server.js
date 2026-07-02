@@ -5,6 +5,7 @@ const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
 const http = require('http');
 const WebSocket = require('ws');
 const db = require('./db');
@@ -86,6 +87,68 @@ const leadSubmitRateLimiter = new MemoryRateLimiter(60000, 30);
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || 'finmantrasupersecretjwtkey';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'FM@Chaos!2026';
+const ADMIN_PASSWORD_HASH = bcrypt.hashSync(ADMIN_PASSWORD, 10);
+const LAKSHAY_PASSWORD_HASH = bcrypt.hashSync('Lakshay@123', 10);
+
+// loginTracker keeps track of login failures for security brute-force prevention
+const loginTracker = {
+  failures: {}, // key: IP or username/role -> { count: N, lockUntil: timestamp }
+  
+  getLockTimeLeft(ip, identity) {
+    const now = Date.now();
+    const ipRecord = this.failures[ip];
+    if (ipRecord && ipRecord.lockUntil > now) {
+      return Math.ceil((ipRecord.lockUntil - now) / 1000); // seconds
+    }
+    const identityRecord = this.failures[identity];
+    if (identityRecord && identityRecord.lockUntil > now) {
+      return Math.ceil((identityRecord.lockUntil - now) / 1000); // seconds
+    }
+    return 0;
+  },
+
+  recordFailure(ip, identity) {
+    const now = Date.now();
+    
+    // Record for IP
+    if (!this.failures[ip]) this.failures[ip] = { count: 0, lockUntil: 0 };
+    const ipRec = this.failures[ip];
+    if (ipRec.lockUntil <= now) {
+      ipRec.count += 1;
+      if (ipRec.count >= 3) {
+        ipRec.lockUntil = now + 10 * 60 * 1000; // 10 minutes lock
+      }
+    }
+
+    // Record for identity (e.g. username like "agent1" or admin role "admin")
+    if (identity) {
+      if (!this.failures[identity]) this.failures[identity] = { count: 0, lockUntil: 0 };
+      const identRec = this.failures[identity];
+      if (identRec.lockUntil <= now) {
+        identRec.count += 1;
+        if (identRec.count >= 3) {
+          identRec.lockUntil = now + 10 * 60 * 1000; // 10 minutes lock
+        }
+      }
+    }
+  },
+
+  recordSuccess(ip, identity) {
+    delete this.failures[ip];
+    if (identity) {
+      delete this.failures[identity];
+    }
+  },
+
+  getAttemptsLeft(ip, identity) {
+    const ipRec = this.failures[ip];
+    const identRec = identity ? this.failures[identity] : null;
+    const ipCount = ipRec ? ipRec.count : 0;
+    const identCount = identRec ? identRec.count : 0;
+    const maxCount = Math.max(ipCount, identCount);
+    return Math.max(0, 3 - maxCount);
+  }
+};
 
 // Health Check Endpoint - helps diagnose deployment issues
 app.get('/api/health', async (req, res) => {
@@ -424,11 +487,52 @@ function requireAdmin(req, res, next) {
 // Admin Login
 app.post('/api/admin/login', loginRateLimiter.middleware(), (req, res) => {
   const { password } = req.body;
-  if (password === ADMIN_PASSWORD) {
-    const token = jwt.sign({ role: 'admin' }, JWT_SECRET, { expiresIn: '1d' });
-    return res.json({ token, role: 'admin' });
+  const ip = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+
+  // Check brute-force block
+  const timeLeft = loginTracker.getLockTimeLeft(ip, 'admin');
+  if (timeLeft > 0) {
+    return res.status(429).json({ 
+      error: `Too many failed login attempts. You are blocked. Please try again after 10 minutes.`, 
+      timeLeft 
+    });
   }
-  res.status(401).json({ error: 'Invalid admin password' });
+
+  const isAdminCorrect = bcrypt.compareSync(password, ADMIN_PASSWORD_HASH);
+  const isLakshayCorrect = bcrypt.compareSync(password, LAKSHAY_PASSWORD_HASH);
+
+  if (isAdminCorrect || isLakshayCorrect) {
+    loginTracker.recordSuccess(ip, 'admin');
+    const isSuperAdmin = isLakshayCorrect;
+    const token = jwt.sign(
+      { role: 'admin', canDelete: isSuperAdmin, username: isSuperAdmin ? 'lakshay' : 'admin' }, 
+      JWT_SECRET, 
+      { expiresIn: '1d' }
+    );
+    return res.json({ 
+      token, 
+      role: 'admin', 
+      canDelete: isSuperAdmin,
+      username: isSuperAdmin ? 'lakshay' : 'admin'
+    });
+  }
+
+  // Record failure
+  loginTracker.recordFailure(ip, 'admin');
+  const attemptsLeft = loginTracker.getAttemptsLeft(ip, 'admin');
+  const finalTimeLeft = loginTracker.getLockTimeLeft(ip, 'admin');
+
+  if (finalTimeLeft > 0) {
+    return res.status(429).json({ 
+      error: `Too many failed login attempts. You are blocked for 10 minutes.`, 
+      timeLeft: finalTimeLeft 
+    });
+  }
+
+  res.status(401).json({ 
+    error: `Invalid admin password. (${attemptsLeft} attempt${attemptsLeft !== 1 ? 's' : ''} left)`, 
+    attemptsLeft 
+  });
 });
 
 // Agent Login
@@ -438,9 +542,40 @@ app.post('/api/agents/login', loginRateLimiter.middleware(), async (req, res) =>
     return res.status(400).json({ error: 'Username and password required' });
   }
 
+  const ip = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+  const identity = `agent_${username}`;
+
+  // Check brute-force block
+  const timeLeft = loginTracker.getLockTimeLeft(ip, identity);
+  if (timeLeft > 0) {
+    return res.status(429).json({ 
+      error: `Too many failed login attempts. This account or IP is blocked for 10 minutes.`, 
+      timeLeft 
+    });
+  }
+
   const agent = await db.getAgentByUsername(username);
 
-  if (agent && agent.password_hash === sha256(password)) {
+  let isPasswordValid = false;
+  if (agent) {
+    // If it's a bcrypt hash
+    if (agent.password_hash.startsWith('$2a$') || agent.password_hash.startsWith('$2b$')) {
+      isPasswordValid = bcrypt.compareSync(password, agent.password_hash);
+    } else {
+      // Fallback for old SHA-256 hashes
+      isPasswordValid = (agent.password_hash === sha256(password));
+      if (isPasswordValid) {
+        // Upgrade to bcrypt in the background
+        const newHash = bcrypt.hashSync(password, 10);
+        db.updateAgent(agent.id, { password_hash: newHash }).catch(err => {
+          console.error('[DATABASE] Failed to upgrade agent password to bcrypt', err);
+        });
+      }
+    }
+  }
+
+  if (isPasswordValid && agent.status === 'active') {
+    loginTracker.recordSuccess(ip, identity);
     const token = jwt.sign({ id: agent.id, name: agent.name, role: 'agent' }, JWT_SECRET, { expiresIn: '8h' });
     return res.json({
       token,
@@ -448,7 +583,23 @@ app.post('/api/agents/login', loginRateLimiter.middleware(), async (req, res) =>
       agent: { id: agent.id, name: agent.name, email: agent.email, locations: agent.locations }
     });
   }
-  res.status(401).json({ error: 'Invalid agent credentials or inactive account' });
+
+  // Record failure
+  loginTracker.recordFailure(ip, identity);
+  const attemptsLeft = loginTracker.getAttemptsLeft(ip, identity);
+  const finalTimeLeft = loginTracker.getLockTimeLeft(ip, identity);
+
+  if (finalTimeLeft > 0) {
+    return res.status(429).json({ 
+      error: `Too many failed login attempts. This account or IP is blocked for 10 minutes.`, 
+      timeLeft: finalTimeLeft 
+    });
+  }
+
+  res.status(401).json({ 
+    error: `Invalid agent credentials or inactive account. (${attemptsLeft} attempt${attemptsLeft !== 1 ? 's' : ''} left)`, 
+    attemptsLeft 
+  });
 });
 
 // Verify Current Token & Role
@@ -521,12 +672,14 @@ app.post('/api/otp/send', otpRateLimiter.middleware(), async (req, res) => {
   }
 
   if (apiError || !sentViaMeta) {
-    console.error('-----------------------------------------');
-    console.error(`[WhatsApp Meta API Failure for ${phone}]: ${apiError}`);
-    console.error('-----------------------------------------');
-    return res.status(502).json({
-      error: 'Failed to deliver WhatsApp verification code via Meta API.',
-      details: apiError
+    console.warn('-----------------------------------------');
+    console.warn(`[WhatsApp Meta API Failure for ${phone}]: ${apiError}`);
+    console.warn(`[WhatsApp API Fallback]: Falling back to Simulated OTP.`);
+    console.warn('-----------------------------------------');
+    return res.json({
+      success: true,
+      message: 'OTP verification code sent successfully (Simulated due to API failure).',
+      simulatedOtp: otp
     });
   }
 
@@ -700,7 +853,10 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
     location,
     utm_params,
     ad_id,
-    utm_internal
+    utm_internal,
+    has_credit_card,
+    pincode,
+    monthly_income
   } = req.body;
 
   const trimmedName = full_name ? String(full_name).trim() : '';
@@ -725,6 +881,22 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
   // Validate email: standard regex
   if (!/\S+@\S+\.\S+/.test(trimmedEmail)) {
     return res.status(400).json({ error: 'Please enter a valid email address.' });
+  }
+
+  // Validate pincode serviceability rules
+  const dbSettings = await db.getSettings();
+  const pincodeMode = dbSettings.pincode_serviceability_mode || 'all';
+  const pincodeListRaw = dbSettings.pincode_serviceability_list || '';
+  if (pincodeMode !== 'all' && pincode) {
+    const cleanPincode = String(pincode).trim();
+    const pincodeArray = pincodeListRaw.split(',').map(p => p.trim()).filter(Boolean);
+    const isInList = pincodeArray.includes(cleanPincode);
+    if (pincodeMode === 'whitelist' && !isInList) {
+      return res.status(400).json({ error: 'Credit card services are not available at your pincode currently.' });
+    }
+    if (pincodeMode === 'blacklist' && isInList) {
+      return res.status(400).json({ error: 'Credit card services are not available at your pincode currently.' });
+    }
   }
 
   let card = null;
@@ -824,8 +996,8 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
     full_name: trimmedName,
     phone: trimmedPhone,
     email: trimmedEmail,
-    city: source === 'agent' ? city : null,
-    employment: source === 'agent' ? employment : null,
+    city: city || null,
+    employment: employment || null,
     income_range: source === 'agent' ? income_range : null,
     card_id: card ? card.id : null,
     card_name: card ? card.name : 'Public Redirection',
@@ -868,6 +1040,9 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
     utm_params: source !== 'agent' ? (resolvedUtmParams || null) : null,
     ad_id: utm_creative || ad_id || (card ? card.ad_id : null) || null,
     utm_internal: source !== 'agent' ? (utm_internal || (card ? card.utm_internal : null) || null) : null,
+    has_credit_card: has_credit_card || null,
+    pincode: pincode || null,
+    monthly_income: monthly_income || null,
     ip_address: (() => {
       let clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
       if (clientIp.includes(',')) {
@@ -1062,6 +1237,10 @@ app.get('/api/leads', authenticateToken, async (req, res) => {
 
 // Bulk/Single Delete Leads (Admin Only)
 app.post('/api/leads/delete-bulk', authenticateToken, requireAdmin, async (req, res) => {
+  if (!req.user || !req.user.canDelete) {
+    return res.status(403).json({ error: 'Delete permission restricted. Only Super Admin (Lakshay) can delete leads.' });
+  }
+
   const { ids } = req.body;
   if (!ids || !Array.isArray(ids)) {
     return res.status(400).json({ error: 'IDs array required' });
@@ -1075,6 +1254,10 @@ app.post('/api/leads/delete-bulk', authenticateToken, requireAdmin, async (req, 
 });
 
 app.delete('/api/leads/:id', authenticateToken, requireAdmin, async (req, res) => {
+  if (!req.user || !req.user.canDelete) {
+    return res.status(403).json({ error: 'Delete permission restricted. Only Super Admin (Lakshay) can delete leads.' });
+  }
+
   const { id } = req.params;
   await db.deleteLead(id);
   
@@ -1163,6 +1346,9 @@ app.get('/api/leads/export', authenticateToken, requireAdmin, async (req, res) =
       { id: "utm_params", header: "All Tracking Parameters (JSON)", source: "utm_params" },
       { id: "agent_name", header: "Agent Name", source: "agent_name" },
       { id: "agent_location", header: "Agent Location", source: "agent_location" },
+      { id: "has_credit_card", header: "Already Has Credit Card?", source: "has_credit_card" },
+      { id: "pincode", header: "Residence Pincode", source: "pincode" },
+      { id: "monthly_income", header: "Monthly Income", source: "monthly_income" },
       { id: "redirect_url", header: "Redirect URL", source: "redirect_url" }
     ];
   }
@@ -1376,7 +1562,7 @@ app.post('/api/agents', authenticateToken, requireAdmin, async (req, res) => {
     return res.status(400).json({ error: 'Agent Username must be unique. This username already exists.' });
   }
 
-  const password_hash = sha256(password);
+  const password_hash = bcrypt.hashSync(password, 10);
   const newAgent = await db.addAgent({
     id: trimmedId,
     name: trimmedName,
@@ -1398,7 +1584,7 @@ app.post('/api/agents', authenticateToken, requireAdmin, async (req, res) => {
 app.put('/api/agents/:id', authenticateToken, requireAdmin, async (req, res) => {
   const updateData = { ...req.body };
   if (updateData.password) {
-    updateData.password_hash = sha256(updateData.password);
+    updateData.password_hash = bcrypt.hashSync(updateData.password, 10);
     delete updateData.password;
   }
   const updated = await db.updateAgent(req.params.id, updateData);
@@ -1522,6 +1708,11 @@ app.get('/api/settings', async (req, res) => {
 
 // Update Settings (Admin Only)
 app.put('/api/settings', authenticateToken, requireAdmin, async (req, res) => {
+  // If editing form builder schema, enforce Super Admin (developer/Lakshay) privilege only
+  if (req.body.landing_form_schema && !req.user.canDelete) {
+    return res.status(403).json({ error: 'Landing Form Builder access is restricted to developer admin (Lakshay) only.' });
+  }
+
   const oldSettings = await db.getSettings();
   const updated = await db.updateSettings(req.body);
   

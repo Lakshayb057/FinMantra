@@ -48,7 +48,10 @@ const DEFAULT_CSV_TEMPLATE = JSON.stringify([
   { id: "utm_params", header: "All Tracking Parameters (JSON)", source: "utm_params" },
   { id: "agent_name", header: "Agent Name", source: "agent_name" },
   { id: "agent_location", header: "Agent Location", source: "agent_location" },
-  { id: "redirect_url", header: "Redirect URL", source: "redirect_url" }
+  { id: "redirect_url", header: "Redirect URL", source: "redirect_url" },
+  { id: "has_credit_card", header: "Already Has Credit Card?", source: "has_credit_card" },
+  { id: "pincode", header: "Residence Pincode", source: "pincode" },
+  { id: "monthly_income", header: "Monthly Income", source: "monthly_income" }
 ]);
 
 const rawDbUrl = process.env.DATABASE_URL ? process.env.DATABASE_URL.trim().replace(/^["']|["']$/g, '') : '';
@@ -264,6 +267,9 @@ async function initPgSchema() {
       await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS ad_id VARCHAR(100)");
       await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS utm_internal VARCHAR(100)");
       await client.query("ALTER TABLE leads ALTER COLUMN ad_id TYPE TEXT");
+      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS has_credit_card VARCHAR(100)");
+      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS pincode VARCHAR(100)");
+      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS monthly_income VARCHAR(100)");
     } catch (migErr) {}
 
     try {
@@ -309,6 +315,100 @@ async function initPgSchema() {
         ('whatsapp_gateway', 'meta'),
         ('csv_export_template', $1)
       `, [DEFAULT_CSV_TEMPLATE]);
+    }
+
+    // Ensure existing csv_export_template settings key is updated with monthly_income, pincode, has_credit_card
+    const csvExportTemplateQuery = await client.query("SELECT value FROM settings WHERE key = 'csv_export_template'");
+    if (csvExportTemplateQuery.rows.length > 0) {
+      try {
+        const currentVal = csvExportTemplateQuery.rows[0].value;
+        const currentCols = typeof currentVal === 'string' ? JSON.parse(currentVal) : currentVal;
+        if (Array.isArray(currentCols)) {
+          let updated = false;
+          const targetFields = [
+            { id: "has_credit_card", header: "Already Has Credit Card?", source: "has_credit_card" },
+            { id: "pincode", header: "Residence Pincode", source: "pincode" },
+            { id: "monthly_income", header: "Monthly Income", source: "monthly_income" }
+          ];
+          for (const target of targetFields) {
+            const exists = currentCols.some(col => col.id === target.id || col.source === target.source);
+            if (!exists) {
+              currentCols.push(target);
+              updated = true;
+            }
+          }
+          if (updated) {
+            await client.query("UPDATE settings SET value = $1 WHERE key = 'csv_export_template'", [JSON.stringify(currentCols)]);
+            console.log('[Database] Migrated existing csv_export_template with monthly_income, has_credit_card, and pincode columns.');
+          }
+        }
+      } catch (e) {
+        console.error('[Database] Failed to migrate existing csv_export_template:', e);
+      }
+    }
+
+    const formSchemaCheck = await client.query("SELECT COUNT(*) FROM settings WHERE key = 'landing_form_schema'");
+    if (parseInt(formSchemaCheck.rows[0].count, 10) === 0) {
+      await client.query("INSERT INTO settings (key, value) VALUES ('landing_form_schema', $1)", [
+        JSON.stringify({
+          fields: {
+            fullName: {
+              visible: true,
+              required: true,
+              label: "Full Name (as per PAN Card)",
+              placeholder: "Enter your full name as per PAN Card"
+            },
+            phone: {
+              visible: true,
+              required: true,
+              label: "Mobile Number",
+              placeholder: "Enter your mobile number"
+            },
+            email: {
+              visible: true,
+              required: true,
+              label: "Email Id",
+              placeholder: "Enter your email ID"
+            },
+            has_credit_card: {
+              visible: true,
+              required: true,
+              label: "Do you already have a credit card?"
+            },
+            employment: {
+              visible: true,
+              required: true,
+              label: "Employment Type",
+              options: [
+                { value: "Salaried", enabled: true },
+                { value: "Self Employed (Business)", enabled: false },
+                { value: "Self Employed (Professional)", enabled: false }
+              ]
+            },
+            monthly_income: {
+              visible: true,
+              required: true,
+              label: "Net Monthly Income",
+              placeholder: "Net Monthly Income"
+            },
+            pincode: {
+              visible: true,
+              required: true,
+              label: "Residence Pincode",
+              placeholder: "Residence Pincode"
+            }
+          }
+        })
+      ]);
+    }
+
+    const pincodeModeCheck = await client.query("SELECT COUNT(*) FROM settings WHERE key = 'pincode_serviceability_mode'");
+    if (parseInt(pincodeModeCheck.rows[0].count, 10) === 0) {
+      await client.query("INSERT INTO settings (key, value) VALUES ('pincode_serviceability_mode', 'all')");
+    }
+    const pincodeListCheck = await client.query("SELECT COUNT(*) FROM settings WHERE key = 'pincode_serviceability_list'");
+    if (parseInt(pincodeListCheck.rows[0].count, 10) === 0) {
+      await client.query("INSERT INTO settings (key, value) VALUES ('pincode_serviceability_list', '')");
     }
 
     await client.query('COMMIT');
@@ -513,9 +613,9 @@ const db = {
         gclid, gclsrc, dclid, msclkid, ttclid, twclid, li_fat_id,
         utm_id, utm_creative, utm_keyword, utm_matchtype, utm_network, utm_placement,
         utm_device, utm_location, gbraid, wbraid, landing_page, first_landing_page, referrer, ad_id,
-        utm_params, redirect_url, ip_address, user_agent, capi_status, capi_response, utm_internal, created_at
+        utm_params, redirect_url, ip_address, user_agent, capi_status, capi_response, utm_internal, has_credit_card, pincode, monthly_income, created_at
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, NOW())`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, NOW())`,
       [
         id, urn, lead.full_name, lead.phone, lead.email, lead.city, lead.employment, lead.income_range,
         lead.card_id, lead.card_name, lead.card_bank, lead.source || 'public', lead.agent_id, lead.agent_name,
@@ -527,7 +627,10 @@ const db = {
         JSON.stringify(lead.utm_params || {}), lead.redirect_url || '',
         lead.ip_address || null, lead.user_agent || null, lead.capi_status || null,
         lead.capi_response ? JSON.stringify(lead.capi_response) : null,
-        lead.utm_internal || null
+        lead.utm_internal || null,
+        lead.has_credit_card || null,
+        lead.pincode || null,
+        lead.monthly_income || null
       ]
     );
     return { id, urn, ...lead, created_at: new Date().toISOString() };
@@ -542,8 +645,9 @@ const db = {
         gclid = $25, gclsrc = $26, dclid = $27, msclkid = $28, ttclid = $29, twclid = $30, li_fat_id = $31,
         utm_id = $32, utm_creative = $33, utm_keyword = $34, utm_matchtype = $35, utm_network = $36, utm_placement = $37,
         utm_device = $38, utm_location = $39, gbraid = $40, wbraid = $41, landing_page = $42, first_landing_page = $43, referrer = $44, ad_id = $45,
-        utm_params = $46, redirect_url = $47, ip_address = $48, user_agent = $49, capi_status = $50, capi_response = $51, utm_internal = $52
-       WHERE id = $53`,
+        utm_params = $46, redirect_url = $47, ip_address = $48, user_agent = $49, capi_status = $50, capi_response = $51, utm_internal = $52,
+        has_credit_card = $53, pincode = $54, monthly_income = $55
+       WHERE id = $56`,
       [
         lead.full_name, lead.phone, lead.email, lead.city, lead.employment, lead.income_range,
         lead.card_id, lead.card_name, lead.card_bank, lead.source, lead.agent_id, lead.agent_name, lead.agent_location, lead.consent,
@@ -555,6 +659,9 @@ const db = {
         lead.ip_address, lead.user_agent, lead.capi_status,
         lead.capi_response ? JSON.stringify(lead.capi_response) : null,
         lead.utm_internal || null,
+        lead.has_credit_card || null,
+        lead.pincode || null,
+        lead.monthly_income || null,
         id
       ]
     );
