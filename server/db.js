@@ -270,6 +270,9 @@ async function initPgSchema() {
       await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS has_credit_card VARCHAR(100)");
       await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS pincode VARCHAR(100)");
       await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS monthly_income VARCHAR(100)");
+      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS mis_status VARCHAR(100)");
+      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS mis_mapped_at TIMESTAMP WITH TIME ZONE");
+      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS mis_data JSONB DEFAULT '{}'");
     } catch (migErr) {}
 
     try {
@@ -880,7 +883,199 @@ const db = {
       await pool.query('UPDATE otp_log SET attempts = $1 WHERE phone = $2', [newAttempts, phone]);
       return { success: false, reason: `Invalid OTP. Attempts left: ${3 - newAttempts}` };
     }
+  },
+
+  async updateLeadMISStatus(id, misStatus, misData) {
+    const res = await pool.query(
+      `UPDATE leads 
+       SET mis_status = $1, mis_mapped_at = NOW(), mis_data = $2
+       WHERE id = $3
+       RETURNING id, urn, full_name`,
+      [misStatus, JSON.stringify(misData), id]
+    );
+    return res.rows[0] || null;
+  },
+
+  async getMISStats() {
+    // 1. Total Leads
+    const totalLeadsRes = await pool.query('SELECT COUNT(*) FROM leads');
+    const totalLeads = parseInt(totalLeadsRes.rows[0].count, 10);
+
+    // 2. Mapped Leads
+    const mappedLeadsRes = await pool.query('SELECT COUNT(*) FROM leads WHERE mis_status IS NOT NULL');
+    const totalMapped = parseInt(mappedLeadsRes.rows[0].count, 10);
+
+    // 3. Status breakdown
+    const statusRes = await pool.query(`
+      SELECT mis_status, COUNT(*) as count 
+      FROM leads 
+      WHERE mis_status IS NOT NULL 
+      GROUP BY mis_status
+    `);
+    const statusBreakdown = {};
+    statusRes.rows.forEach(r => {
+      statusBreakdown[r.mis_status] = parseInt(r.count, 10);
+    });
+
+    // 4. Card name distribution for mapped leads
+    const cardRes = await pool.query(`
+      SELECT COALESCE(card_name, 'Unknown') as card_name, COUNT(*) as count 
+      FROM leads 
+      WHERE mis_status IS NOT NULL 
+      GROUP BY card_name
+    `);
+    const cardDistribution = cardRes.rows.map(r => ({
+      name: r.card_name,
+      count: parseInt(r.count, 10)
+    }));
+
+    // 5. Timeline - mapped count over past 15 days
+    const timelineRes = await pool.query(`
+      SELECT DATE(mis_mapped_at) as date, COUNT(*) as count
+      FROM leads
+      WHERE mis_mapped_at IS NOT NULL
+      GROUP BY DATE(mis_mapped_at)
+      ORDER BY DATE(mis_mapped_at) ASC
+      LIMIT 15
+    `);
+    const timeline = timelineRes.rows.map(r => ({
+      date: r.date ? new Date(r.date).toISOString().split('T')[0] : '',
+      count: parseInt(r.count, 10)
+    }));
+
+    // 6. KYC Type distribution
+    const kycRes = await pool.query(`
+      SELECT COALESCE(mis_data->>'kyc_type', 'Unknown') as kyc_type, COUNT(*) as count
+      FROM leads
+      WHERE mis_status IS NOT NULL
+      GROUP BY mis_data->>'kyc_type'
+    `);
+    const kycDistribution = kycRes.rows.map(r => ({
+      name: r.kyc_type,
+      count: parseInt(r.count, 10)
+    }));
+
+    // 7. Source Type distribution
+    const sourceRes = await pool.query(`
+      SELECT COALESCE(mis_data->>'source_type', 'Unknown') as source_type, COUNT(*) as count
+      FROM leads
+      WHERE mis_status IS NOT NULL
+      GROUP BY mis_data->>'source_type'
+    `);
+    const sourceDistribution = sourceRes.rows.map(r => ({
+      name: r.source_type,
+      count: parseInt(r.count, 10)
+    }));
+
+    // 8. Card Type distribution
+    const cardTypeRes = await pool.query(`
+      SELECT COALESCE(mis_data->>'card_type', 'Unknown') as card_type, COUNT(*) as count
+      FROM leads
+      WHERE mis_status IS NOT NULL
+      GROUP BY mis_data->>'card_type'
+    `);
+    const cardTypeDistribution = cardTypeRes.rows.map(r => ({
+      name: r.card_type,
+      count: parseInt(r.count, 10)
+    }));
+
+    // 9. Customer Type distribution
+    const custTypeRes = await pool.query(`
+      SELECT COALESCE(mis_data->>'customer_type', 'Unknown') as customer_type, COUNT(*) as count
+      FROM leads
+      WHERE mis_status IS NOT NULL
+      GROUP BY mis_data->>'customer_type'
+    `);
+    const customerTypeDistribution = custTypeRes.rows.map(r => ({
+      name: r.customer_type,
+      count: parseInt(r.count, 10)
+    }));
+
+    // 10. Card Activation Status distribution
+    const activeStatusRes = await pool.query(`
+      SELECT COALESCE(mis_data->>'card_activation_status', 'Inactive/Unknown') as activation_status, COUNT(*) as count
+      FROM leads
+      WHERE mis_status IS NOT NULL
+      GROUP BY mis_data->>'card_activation_status'
+    `);
+    const activationStatusDistribution = activeStatusRes.rows.map(r => ({
+      name: r.activation_status,
+      count: parseInt(r.count, 10)
+    }));
+
+    // 11. Pincode mapping for Heatmap
+    const pincodeRes = await pool.query(`
+      SELECT COALESCE(pincode, 'Unknown') as pincode, COUNT(*) as count
+      FROM leads
+      WHERE mis_status IS NOT NULL
+      GROUP BY pincode
+      ORDER BY count DESC
+      LIMIT 100
+    `);
+    const pincodeHeatmap = pincodeRes.rows.map(r => ({
+      pincode: r.pincode,
+      count: parseInt(r.count, 10)
+    }));
+
+    // 12. Full funnel analytics
+    const funnelSubmit = totalLeads;
+    
+    const funnelIpaRes = await pool.query(`
+      SELECT COUNT(*) FROM leads 
+      WHERE mis_status IS NOT NULL AND LOWER(mis_data->>'ipa_status') LIKE '%approved%'
+    `);
+    const funnelIpa = parseInt(funnelIpaRes.rows[0].count, 10);
+
+    const funnelKycRes = await pool.query(`
+      SELECT COUNT(*) FROM leads 
+      WHERE mis_status IS NOT NULL AND (LOWER(mis_data->>'kyc_status') LIKE '%success%' OR LOWER(mis_data->>'kyc_status') LIKE '%complete%' OR LOWER(mis_data->>'vkyc_status') LIKE '%success%' OR LOWER(mis_data->>'vkyc_status') LIKE '%complete%')
+    `);
+    const funnelKyc = parseInt(funnelKycRes.rows[0].count, 10);
+
+    const funnelDecisionRes = await pool.query(`
+      SELECT COUNT(*) FROM leads 
+      WHERE mis_status IS NOT NULL AND (LOWER(mis_data->>'final_decision') = 'approve' OR LOWER(mis_data->>'final_decision') = 'approved')
+    `);
+    const funnelDecision = parseInt(funnelDecisionRes.rows[0].count, 10);
+
+    const funnelActiveRes = await pool.query(`
+      SELECT COUNT(*) FROM leads 
+      WHERE mis_status IS NOT NULL AND (
+        LOWER(mis_data->>'card_activation_status') = 'txn active' OR 
+        LOWER(mis_data->>'card_activation_status') = 'txn active - rs 100' OR 
+        LOWER(mis_data->>'card_activation_status') = 'v + active'
+      )
+    `);
+    const funnelActive = parseInt(funnelActiveRes.rows[0].count, 10);
+
+    const mappedLeadsListRes = await pool.query('SELECT * FROM leads WHERE mis_status IS NOT NULL ORDER BY mis_mapped_at DESC');
+    const mappedLeadsList = mappedLeadsListRes.rows.map(row => ({
+      ...row,
+      utm_params: typeof row.utm_params === 'string' ? JSON.parse(row.utm_params) : (row.utm_params || {})
+    }));
+
+    return {
+      totalLeads,
+      totalMapped,
+      statusBreakdown,
+      cardDistribution,
+      timeline,
+      kycDistribution,
+      sourceDistribution,
+      cardTypeDistribution,
+      customerTypeDistribution,
+      activationStatusDistribution,
+      pincodeHeatmap,
+      mappedLeadsList,
+      funnel: {
+        submit: funnelSubmit,
+        ipa: funnelIpa,
+        kyc: funnelKyc,
+        decision: funnelDecision,
+        active: funnelActive
+      }
+    };
   }
-};
+}
 
 module.exports = db;

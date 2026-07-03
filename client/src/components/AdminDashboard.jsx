@@ -3,7 +3,8 @@ import {
   Users, CreditCard, MapPin, Settings as SettingsIcon, ShieldAlert, BarChart3, 
   Trash2, Download, Search, Plus, Edit, Check, X, RefreshCw, AlertCircle,
   QrCode, Smartphone, CheckCircle, Wifi, WifiOff, Eye, EyeOff, MessageSquare, Layers,
-  ArrowUp, ArrowDown, MoreVertical, LogOut, Activity, Sun, Moon
+  ArrowUp, ArrowDown, MoreVertical, LogOut, Activity, Sun, Moon,
+  TrendingUp, Upload, CheckCircle2, Filter
 } from 'lucide-react';
 
 const formatDateTime = (dateStr) => {
@@ -113,6 +114,22 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   const [isEditingLead, setIsEditingLead] = useState(false);
   const [editLeadForm, setEditLeadForm] = useState(null);
   const [customParams, setCustomParams] = useState([]);
+  
+  // MIS & Dashboard States
+  const [misStats, setMisStats] = useState(null);
+  const [loadingMISStats, setLoadingMISStats] = useState(false);
+  const [showUploadMISModal, setShowUploadMISModal] = useState(false);
+  const [misFile, setMisFile] = useState(null);
+  const [misUploadResult, setMisUploadResult] = useState(null);
+  const [showMISResultModal, setShowMISResultModal] = useState(false);
+  const [selectedMappedLead, setSelectedMappedLead] = useState(null);
+  
+  // Dashboard Filters
+  const [dashCreatedDate, setDashCreatedDate] = useState('');
+  const [dashCardType, setDashCardType] = useState('');
+  const [dashState, setDashState] = useState('');
+  const [dashKycType, setDashKycType] = useState('');
+  const [dashIpaStatus, setDashIpaStatus] = useState('');
   
   const [newCardForm, setNewCardForm] = useState({ name: '', bank: '', category: 'Offline', ad_id: '', utm_internal: '', description: '', redirect_url_template: '', display_order: 1, active: true, card_locations: [] });
   const [newAgentForm, setNewAgentForm] = useState({ id: '', name: '', phone: '', email: '', username: '', password: '', status: 'active', locations: [] });
@@ -271,6 +288,29 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       console.error('Error fetching leads page:', err);
     }
   };
+
+  const fetchMISStats = async () => {
+    if (!token) return;
+    setLoadingMISStats(true);
+    try {
+      const headers = { 'Authorization': `Bearer ${token}` };
+      const res = await fetch(`${API_URL}/leads/mis-stats`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setMisStats(data);
+      }
+    } catch (err) {
+      console.error('Error fetching MIS stats:', err);
+    } finally {
+      setLoadingMISStats(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'leads_dashboard' && isAuthenticated && token) {
+      fetchMISStats();
+    }
+  }, [activeTab, isAuthenticated, token]);
 
   const loadAllAdminData = async () => {
     setLoading(true);
@@ -1389,6 +1429,25 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
             <BarChart3 size={14} /> Leads Repository
           </button>
           <button 
+            className={`nav-link ${activeTab === 'leads_dashboard' ? 'active' : ''}`} 
+            onClick={() => setActiveTab('leads_dashboard')}
+            style={{ 
+              padding: '0.5rem 0.85rem', 
+              fontSize: '0.85rem', 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '0.4rem', 
+              border: activeTab === 'leads_dashboard' ? '1px solid var(--line)' : '1px solid transparent', 
+              background: activeTab === 'leads_dashboard' ? 'var(--paper-2)' : 'transparent', 
+              color: activeTab === 'leads_dashboard' ? 'var(--ink)' : 'var(--muted)', 
+              cursor: 'pointer', 
+              transition: 'all 0.2s', 
+              borderRadius: 'var(--radius-sm)' 
+            }}
+          >
+            <TrendingUp size={14} /> Leads Dashboard
+          </button>
+          <button 
             className={`nav-link ${activeTab === 'cards' ? 'active' : ''}`} 
             onClick={() => setActiveTab('cards')}
             style={{ 
@@ -1520,6 +1579,12 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
               <BarChart3 size={14} /> Leads Repository
             </button>
             <button 
+              className={`nav-link ${activeTab === 'leads_dashboard' ? 'active' : ''}`} 
+              onClick={() => { setActiveTab('leads_dashboard'); setShowMobileMenu(false); }}
+            >
+              <TrendingUp size={14} /> Leads Dashboard
+            </button>
+            <button 
               className={`nav-link ${activeTab === 'cards' ? 'active' : ''}`} 
               onClick={() => { setActiveTab('cards'); setShowMobileMenu(false); }}
             >
@@ -1609,8 +1674,11 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                       <Trash2 size={16} /> Delete Selected ({selectedLeads.length})
                     </button>
                   )}
-                  <button onClick={handleCsvExport} className="btn-primary" style={{ padding: '0.6rem 1.2rem', fontSize: '0.9rem' }}>
+                   <button onClick={handleCsvExport} className="btn-primary" style={{ padding: '0.6rem 1.2rem', fontSize: '0.9rem' }}>
                     <Download size={16} /> Export to CSV
+                  </button>
+                  <button onClick={() => setShowUploadMISModal(true)} className="btn-secondary" style={{ padding: '0.6rem 1.2rem', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <Upload size={16} /> Upload MIS
                   </button>
                 </div>
               </div>
@@ -1823,6 +1891,537 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                 </div>
               </div>
 
+            </div>
+          )}
+
+          {/* LEADS DASHBOARD TAB */}
+          {activeTab === 'leads_dashboard' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', textAlign: 'left' }}>
+              {/* Dashboard Header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+                <div>
+                  <h2 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.25rem' }}>Leads Mapping Analytics</h2>
+                  <p style={{ color: 'hsl(var(--text-secondary))', fontSize: '0.85rem' }}>
+                    Visual analytics, funnel conversion, and geographical mapping from bank MIS uploads.
+                  </p>
+                </div>
+                <button 
+                  onClick={fetchMISStats} 
+                  className="btn-secondary"
+                  disabled={loadingMISStats}
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.6rem 1.2rem', fontSize: '0.9rem' }}
+                >
+                  <RefreshCw size={14} className={loadingMISStats ? 'spin' : ''} /> Sync Dashboard
+                </button>
+              </div>
+
+              {/* Filters Panel */}
+              <div className="glass-panel" style={{ padding: '1.25rem' }}>
+                <h3 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <Filter size={16} /> Filters (Dynamic Re-calculation)
+                </h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem', alignItems: 'center' }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '4px' }}>Created Date (MIS)</label>
+                    <input 
+                      type="date" 
+                      className="form-input" 
+                      style={{ padding: '0.4rem 0.6rem', fontSize: '0.8rem' }}
+                      value={dashCreatedDate}
+                      onChange={(e) => setDashCreatedDate(e.target.value)}
+                    />
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '4px' }}>Card Type</label>
+                    <select 
+                      className="form-select" 
+                      style={{ padding: '0.4rem 0.6rem', fontSize: '0.8rem' }}
+                      value={dashCardType}
+                      onChange={(e) => setDashCardType(e.target.value)}
+                    >
+                      <option value="">All Card Types</option>
+                      {Array.from(new Set((misStats?.mappedLeadsList || []).map(l => l.mis_data?.card_type).filter(Boolean))).map((t, i) => (
+                        <option key={i} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '4px' }}>State</label>
+                    <select 
+                      className="form-select" 
+                      style={{ padding: '0.4rem 0.6rem', fontSize: '0.8rem' }}
+                      value={dashState}
+                      onChange={(e) => setDashState(e.target.value)}
+                    >
+                      <option value="">All States</option>
+                      {Array.from(new Set((misStats?.mappedLeadsList || []).map(l => l.mis_data?.state).filter(Boolean))).map((s, i) => (
+                        <option key={i} value={s}>{s}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '4px' }}>KYC Type</label>
+                    <select 
+                      className="form-select" 
+                      style={{ padding: '0.4rem 0.6rem', fontSize: '0.8rem' }}
+                      value={dashKycType}
+                      onChange={(e) => setDashKycType(e.target.value)}
+                    >
+                      <option value="">All KYC Types</option>
+                      {Array.from(new Set((misStats?.mappedLeadsList || []).map(l => l.mis_data?.kyc_type).filter(Boolean))).map((k, i) => (
+                        <option key={i} value={k}>{k}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '4px' }}>IPA Status</label>
+                    <select 
+                      className="form-select" 
+                      style={{ padding: '0.4rem 0.6rem', fontSize: '0.8rem' }}
+                      value={dashIpaStatus}
+                      onChange={(e) => setDashIpaStatus(e.target.value)}
+                    >
+                      <option value="">All IPA Statuses</option>
+                      {Array.from(new Set((misStats?.mappedLeadsList || []).map(l => l.mis_data?.ipa_status).filter(Boolean))).map((st, i) => (
+                        <option key={i} value={st}>{st}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      setDashCreatedDate('');
+                      setDashCardType('');
+                      setDashState('');
+                      setDashKycType('');
+                      setDashIpaStatus('');
+                    }}
+                    className="btn-secondary" 
+                    style={{ padding: '0.5rem 1rem', fontSize: '0.8rem', height: '34px', marginTop: '1.25rem' }}
+                  >
+                    Reset
+                  </button>
+                </div>
+              </div>
+
+              {loadingMISStats || !misStats ? (
+                <div style={{ textAlign: 'center', padding: '5rem', color: 'hsl(var(--text-muted))' }} className="glass-panel">
+                  Loading dashboard charts...
+                </div>
+              ) : (() => {
+                const list = misStats.mappedLeadsList || [];
+                const filtered = list.filter(lead => {
+                  if (dashCreatedDate) {
+                    const submitDate = lead.mis_data?.application_submit_date_time || '';
+                    if (!submitDate.includes(dashCreatedDate)) return false;
+                  }
+                  if (dashCardType && lead.mis_data?.card_type !== dashCardType) return false;
+                  if (dashState && lead.mis_data?.state?.toLowerCase() !== dashState.toLowerCase()) return false;
+                  if (dashKycType && lead.mis_data?.kyc_type !== dashKycType) return false;
+                  if (dashIpaStatus && lead.mis_data?.ipa_status !== dashIpaStatus) return false;
+                  return true;
+                });
+
+                const totalSubmit = filtered.length;
+                const approvedCount = filtered.filter(l => l.mis_status === 'Approved').length;
+                const rejectedCount = filtered.filter(l => l.mis_status === 'Rejected').length;
+                const pendingCount = filtered.filter(l => l.mis_status === 'Pending').length;
+                const approvalRate = totalSubmit > 0 ? ((approvedCount / totalSubmit) * 100).toFixed(1) : '0';
+
+                const funnelIpa = filtered.filter(l => String(l.mis_data?.ipa_status).toLowerCase().includes('approved')).length;
+                const funnelKyc = filtered.filter(l => {
+                  const ks = String(l.mis_data?.kyc_status).toLowerCase();
+                  const vs = String(l.mis_data?.vkyc_status).toLowerCase();
+                  return ks.includes('success') || ks.includes('complete') || vs.includes('success') || vs.includes('complete');
+                }).length;
+                const funnelDecision = filtered.filter(l => {
+                  const dec = String(l.mis_data?.final_decision).toLowerCase();
+                  return dec === 'approve' || dec === 'approved';
+                }).length;
+                const funnelActive = filtered.filter(l => {
+                  const act = String(l.mis_data?.card_activation_status).toLowerCase();
+                  return act === 'txn active' || act === 'txn active - rs 100' || act === 'v + active';
+                }).length;
+
+                const ipaApproved = filtered.filter(l => String(l.mis_data?.ipa_status).toLowerCase().includes('approved')).length;
+                const ipaDeclined = filtered.filter(l => String(l.mis_data?.ipa_status).toLowerCase().includes('declined') || String(l.mis_data?.ipa_status).toLowerCase().includes('reject')).length;
+
+                const kycDist = {};
+                filtered.forEach(l => {
+                  const k = l.mis_data?.kyc_type || 'Unknown';
+                  kycDist[k] = (kycDist[k] || 0) + 1;
+                });
+
+                const srcDist = {};
+                filtered.forEach(l => {
+                  const s = l.mis_data?.source_type || 'Unknown';
+                  srcDist[s] = (srcDist[s] || 0) + 1;
+                });
+
+                const cardTypeDist = {};
+                filtered.forEach(l => {
+                  const ct = l.mis_data?.card_type || 'Unknown';
+                  cardTypeDist[ct] = (cardTypeDist[ct] || 0) + 1;
+                });
+
+                const custTypeDist = {};
+                filtered.forEach(l => {
+                  const c = l.mis_data?.customer_type || 'Unknown';
+                  custTypeDist[c] = (custTypeDist[c] || 0) + 1;
+                });
+
+                const actDist = {};
+                filtered.forEach(l => {
+                  const a = l.mis_data?.card_activation_status || 'Inactive/Unknown';
+                  actDist[a] = (actDist[a] || 0) + 1;
+                });
+
+                const pinDist = {};
+                filtered.forEach(l => {
+                  const p = l.pincode || 'Unknown';
+                  pinDist[p] = (pinDist[p] || 0) + 1;
+                });
+                const topPincodes = Object.entries(pinDist)
+                  .map(([pincode, count]) => ({ pincode, count }))
+                  .sort((a,b) => b.count - a.count)
+                  .slice(0, 50);
+
+                const prodDist = {};
+                filtered.forEach(l => {
+                  const n = l.mis_data?.card_name || l.card_name || 'Unknown';
+                  prodDist[n] = (prodDist[n] || 0) + 1;
+                });
+
+                return (
+                  <>
+                    {/* KPI SUMMARY CARDS */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.25rem' }}>
+                      <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid var(--gold)' }}>
+                        <div style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Total Mapped Applications</div>
+                        <div style={{ fontSize: '2rem', fontWeight: 800, margin: '0.25rem 0' }}>{totalSubmit}</div>
+                        <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>Matched from MIS</div>
+                      </div>
+                      <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid var(--mint)' }}>
+                        <div style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Approved rate</div>
+                        <div style={{ fontSize: '2rem', fontWeight: 800, margin: '0.25rem 0', color: 'var(--mint)' }}>{approvalRate}%</div>
+                        <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>{approvedCount} of {totalSubmit} approved</div>
+                      </div>
+                      <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid var(--err)' }}>
+                        <div style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Rejected applications</div>
+                        <div style={{ fontSize: '2rem', fontWeight: 800, margin: '0.25rem 0', color: 'var(--err)' }}>{rejectedCount}</div>
+                        <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>Declined by partner bank</div>
+                      </div>
+                      <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid #E0A82E' }}>
+                        <div style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Pending status</div>
+                        <div style={{ fontSize: '2rem', fontWeight: 800, margin: '0.25rem 0', color: 'var(--gold-deep)' }}>{pendingCount}</div>
+                        <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>In verification stage</div>
+                      </div>
+                    </div>
+
+                    {/* 9 VISUALS GRID */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem' }}>
+                      
+                      {/* Visual 1: Funnel Chart */}
+                      <div className="glass-panel" style={{ padding: '1.5rem', gridColumn: 'span 2' }}>
+                        <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1.25rem' }}>Conversion Funnel Stages (%)</h4>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', padding: '0.5rem 0' }}>
+                          {[
+                            { name: 'Total Application Submit', count: totalSubmit, pct: 100, color: 'var(--ink)' },
+                            { name: 'IPA Approved', count: funnelIpa, pct: totalSubmit > 0 ? Math.round((funnelIpa / totalSubmit) * 100) : 0, color: 'hsl(var(--primary))' },
+                            { name: 'KYC Success', count: funnelKyc, pct: totalSubmit > 0 ? Math.round((funnelKyc / totalSubmit) * 100) : 0, color: 'var(--gold-deep)' },
+                            { name: 'Final Decision (Approve)', count: funnelDecision, pct: totalSubmit > 0 ? Math.round((funnelDecision / totalSubmit) * 100) : 0, color: 'var(--mint)' },
+                            { name: 'Card Activation Status (TXN ACTIVE)', count: funnelActive, pct: totalSubmit > 0 ? Math.round((funnelActive / totalSubmit) * 100) : 0, color: '#10b981' }
+                          ].map((stage, idx) => (
+                            <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', fontWeight: 600 }}>
+                                <span>{stage.name}</span>
+                                <span>{stage.count} ({stage.pct}%)</span>
+                              </div>
+                              <div style={{ height: '24px', background: 'var(--paper-2)', borderRadius: '6px', overflow: 'hidden', position: 'relative' }}>
+                                <div style={{ height: '100%', width: `${stage.pct}%`, background: stage.color, transition: 'width 0.5s ease-in-out' }} />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Visual 2: Pie Chart - IPA Approved vs Declined */}
+                      <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
+                        <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>IPA Decision Breakdown</h4>
+                        <div style={{ display: 'flex', flex: 1, alignItems: 'center', justifyContent: 'center', gap: '1.5rem' }}>
+                          <svg width="120" height="120" viewBox="0 0 36 36">
+                            <circle cx="18" cy="18" r="15.915" fill="none" stroke="var(--line)" strokeWidth="4.2" />
+                            {totalSubmit > 0 && (() => {
+                              const ipaAppPct = (ipaApproved / totalSubmit) * 100;
+                              const ipaDecPct = (ipaDeclined / totalSubmit) * 100;
+                              return (
+                                <>
+                                  <circle cx="18" cy="18" r="15.915" fill="none" stroke="var(--mint)" strokeWidth="4.2" strokeDasharray={`${ipaAppPct} ${100 - ipaAppPct}`} strokeDashoffset="25" />
+                                  <circle cx="18" cy="18" r="15.915" fill="none" stroke="var(--err)" strokeWidth="4.2" strokeDasharray={`${ipaDecPct} ${100 - ipaDecPct}`} strokeDashoffset={25 - ipaAppPct} />
+                                </>
+                              );
+                            })()}
+                          </svg>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.8rem', textAlign: 'left' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                              <span style={{ height: '10px', width: '10px', borderRadius: '50%', background: 'var(--mint)' }} />
+                              <span>Approved: {ipaApproved}</span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                              <span style={{ height: '10px', width: '10px', borderRadius: '50%', background: 'var(--err)' }} />
+                              <span>Declined: {ipaDeclined}</span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                              <span style={{ height: '10px', width: '10px', borderRadius: '50%', background: 'var(--line)' }} />
+                              <span>Other/Pending: {totalSubmit - ipaApproved - ipaDeclined}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Visual 3: Bar Chart - KYC Type */}
+                      <div className="glass-panel" style={{ padding: '1.5rem' }}>
+                        <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>KYC Type Distribution</h4>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '180px', overflowY: 'auto' }}>
+                          {Object.entries(kycDist).map(([name, val], idx) => {
+                            const pct = totalSubmit > 0 ? (val / totalSubmit) * 100 : 0;
+                            return (
+                              <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem' }}>
+                                <div style={{ width: '80px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', textAlign: 'right' }}>{name}</div>
+                                <div style={{ flex: 1, height: '14px', background: 'var(--paper-2)', borderRadius: '4px', overflow: 'hidden' }}>
+                                  <div style={{ height: '100%', width: `${pct}%`, background: 'var(--gold)' }} />
+                                </div>
+                                <div style={{ width: '40px', fontWeight: 'bold' }}>{val}</div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Visual 4: Pie Chart - Source Type */}
+                      <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
+                        <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>Source Type</h4>
+                        <div style={{ display: 'flex', flex: 1, alignItems: 'center', justifyContent: 'center', gap: '1.5rem' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.8rem', textAlign: 'left', width: '100%' }}>
+                            {Object.entries(srcDist).map(([name, val], idx) => {
+                              const colors = ['#E0A82E', '#16A37B', '#11132B', '#5C6070', '#D14343'];
+                              const color = colors[idx % colors.length];
+                              const pct = totalSubmit > 0 ? ((val / totalSubmit) * 100).toFixed(1) : 0;
+                              return (
+                                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                    <span style={{ height: '8px', width: '8px', borderRadius: '50%', background: color }} />
+                                    <span>{name}</span>
+                                  </div>
+                                  <span style={{ fontWeight: 'bold' }}>{val} ({pct}%)</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Visual 5: Bar Chart - Card Type */}
+                      <div className="glass-panel" style={{ padding: '1.5rem' }}>
+                        <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>Card Type</h4>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                          {Object.entries(cardTypeDist).map(([name, val], idx) => {
+                            const pct = totalSubmit > 0 ? (val / totalSubmit) * 100 : 0;
+                            return (
+                              <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem' }}>
+                                <div style={{ width: '80px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', textAlign: 'right' }}>{name}</div>
+                                <div style={{ flex: 1, height: '14px', background: 'var(--paper-2)', borderRadius: '4px', overflow: 'hidden' }}>
+                                  <div style={{ height: '100%', width: `${pct}%`, background: 'var(--ink)' }} />
+                                </div>
+                                <div style={{ width: '40px', fontWeight: 'bold' }}>{val}</div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Visual 6: Pie Chart - Customer Type */}
+                      <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
+                        <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>Customer Type</h4>
+                        <div style={{ display: 'flex', flex: 1, alignItems: 'center', justifyContent: 'center', gap: '1.5rem' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.8rem', textAlign: 'left', width: '100%' }}>
+                            {Object.entries(custTypeDist).map(([name, val], idx) => {
+                              const colors = ['#16A37B', '#D14343', '#E0A82E', '#11132B'];
+                              const color = colors[idx % colors.length];
+                              const pct = totalSubmit > 0 ? ((val / totalSubmit) * 100).toFixed(1) : 0;
+                              return (
+                                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                    <span style={{ height: '8px', width: '8px', borderRadius: '50%', background: color }} />
+                                    <span>{name}</span>
+                                  </div>
+                                  <span style={{ fontWeight: 'bold' }}>{val} ({pct}%)</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Visual 7: Bar Chart - Card Activation Status */}
+                      <div className="glass-panel" style={{ padding: '1.5rem' }}>
+                        <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>Card Activation Status</h4>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                          {Object.entries(actDist).map(([name, val], idx) => {
+                            const pct = totalSubmit > 0 ? (val / totalSubmit) * 100 : 0;
+                            return (
+                              <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem' }}>
+                                <div style={{ width: '100px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', textAlign: 'right' }}>{name}</div>
+                                <div style={{ flex: 1, height: '14px', background: 'var(--paper-2)', borderRadius: '4px', overflow: 'hidden' }}>
+                                  <div style={{ height: '100%', width: `${pct}%`, background: 'var(--mint)' }} />
+                                </div>
+                                <div style={{ width: '40px', fontWeight: 'bold' }}>{val}</div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Visual 8: India Map Pincode Heatmap */}
+                      <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gridColumn: 'span 2' }}>
+                        <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '0.5rem' }}>Geographic Heatmap (Pincode & Regions)</h4>
+                        <p style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', marginBottom: '1.25rem' }}>Top active regions by client volume and residence pincode density.</p>
+                        
+                        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '2rem' }} className="admin-split-grid">
+                          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', background: 'var(--paper-2)', borderRadius: '12px', padding: '1rem', minHeight: '220px' }}>
+                            <svg width="220" height="220" viewBox="0 0 200 220" style={{ display: 'block' }}>
+                              <path d="M100 20 L130 50 L140 80 L160 110 L150 140 L130 180 L100 210 L70 180 L50 140 L40 110 L60 80 L70 50 Z" fill="none" stroke="var(--line)" strokeWidth="1.5" strokeDasharray="3,3" />
+                              <text x="100" y="115" fontSize="10" textAnchor="middle" fill="hsl(var(--text-muted))" opacity="0.3">INDIA HEATMAP</text>
+                              
+                              {[
+                                { name: 'North / Delhi', x: 100, y: 70, weight: filtered.filter(l => String(l.mis_data?.state).toLowerCase().includes('delhi') || String(l.mis_data?.state).toLowerCase().includes('haryana')).length },
+                                { name: 'West / Maharashtra', x: 75, y: 130, weight: filtered.filter(l => String(l.mis_data?.state).toLowerCase().includes('maharashtra') || String(l.mis_data?.state).toLowerCase().includes('gujarat')).length },
+                                { name: 'South / Karnataka', x: 90, y: 170, weight: filtered.filter(l => String(l.mis_data?.state).toLowerCase().includes('karnataka') || String(l.mis_data?.state).toLowerCase().includes('tamil') || String(l.mis_data?.state).toLowerCase().includes('telangana')).length },
+                                { name: 'East / West Bengal', x: 140, y: 110, weight: filtered.filter(l => String(l.mis_data?.state).toLowerCase().includes('bengal') || String(l.mis_data?.state).toLowerCase().includes('bihar')).length }
+                              ].map((node, i) => {
+                                const maxWeight = Math.max(1, totalSubmit);
+                                const radius = 8 + (node.weight / maxWeight) * 20;
+                                return (
+                                  <g key={i}>
+                                    <circle cx={node.x} cy={node.y} r={radius} fill="rgba(224, 168, 46, 0.25)" stroke="var(--gold)" strokeWidth="1.5" />
+                                    <circle cx={node.x} cy={node.y} r="3" fill="var(--ink)" />
+                                    <text x={node.x} y={node.y - radius - 3} fontSize="7.5" fontWeight="bold" textAnchor="middle" fill="var(--ink)">{node.name} ({node.weight})</text>
+                                  </g>
+                                );
+                              })}
+                            </svg>
+                          </div>
+                          
+                          <div style={{ textAlign: 'left' }}>
+                            <h5 style={{ fontSize: '0.8rem', fontWeight: 700, marginBottom: '0.5rem' }}>Top Pincodes</h5>
+                            <div style={{ maxHeight: '180px', overflowY: 'auto', border: '1px solid var(--line)', borderRadius: '8px', padding: '0.5rem' }}>
+                              {topPincodes.length === 0 ? (
+                                <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', padding: '1rem', textAlign: 'center' }}>No pincodes found</div>
+                              ) : (
+                                <table style={{ width: '100%', fontSize: '0.75rem', borderCollapse: 'collapse' }}>
+                                  <thead>
+                                    <tr style={{ borderBottom: '1px solid var(--line)' }}>
+                                      <th style={{ textAlign: 'left', padding: '0.25rem' }}>Pincode</th>
+                                      <th style={{ textAlign: 'right', padding: '0.25rem' }}>Leads Mapped</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {topPincodes.map((item, idx) => (
+                                      <tr key={idx} style={{ borderBottom: '1px solid rgba(0,0,0,0.02)' }}>
+                                        <td style={{ padding: '0.25rem', fontFamily: 'var(--font-mono)' }}>{item.pincode}</td>
+                                        <td style={{ padding: '0.25rem', textAlign: 'right', fontWeight: 600 }}>{item.count}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Visual 9: Product Des / Card Name */}
+                      <div className="glass-panel" style={{ padding: '1.5rem', gridColumn: 'span 2' }}>
+                        <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>Product Description (Card Name Distribution)</h4>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
+                          {Object.entries(prodDist).map(([name, val], idx) => {
+                            const pct = totalSubmit > 0 ? (val / totalSubmit) * 100 : 0;
+                            return (
+                              <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', padding: '0.5rem', background: 'var(--paper-2)', borderRadius: '8px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', fontWeight: 600 }}>
+                                  <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '160px' }}>{name}</span>
+                                  <span>{val}</span>
+                                </div>
+                                <div style={{ height: '8px', background: 'var(--line)', borderRadius: '3px', overflow: 'hidden' }}>
+                                  <div style={{ height: '100%', width: `${pct}%`, background: 'var(--gold)' }} />
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                    </div>
+
+                    {/* MAPPED LEADS LOG TABLE */}
+                    <div className="glass-panel" style={{ padding: '1.5rem' }}>
+                      <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '1.25rem' }}>MIS Mapped Leads Log</h3>
+                      
+                      <div style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                          <thead>
+                            <tr style={{ borderBottom: '2px solid var(--line)', color: 'hsl(var(--text-secondary))' }}>
+                              <th style={{ textAlign: 'left', padding: '0.75rem' }}>URN</th>
+                              <th style={{ textAlign: 'left', padding: '0.75rem' }}>Name</th>
+                              <th style={{ textAlign: 'left', padding: '0.75rem' }}>Bank Ref No</th>
+                              <th style={{ textAlign: 'left', padding: '0.75rem' }}>IPA Status</th>
+                              <th style={{ textAlign: 'left', padding: '0.75rem' }}>Final Decision</th>
+                              <th style={{ textAlign: 'left', padding: '0.75rem' }}>Mapping Date</th>
+                              <th style={{ textAlign: 'center', padding: '0.75rem' }}>Action</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filtered.length === 0 ? (
+                              <tr>
+                                <td colSpan="7" style={{ textAlign: 'center', padding: '3rem', color: 'hsl(var(--text-muted))' }}>
+                                  No mapped leads match the current filters.
+                                </td>
+                              </tr>
+                            ) : (
+                              filtered.map((lead, idx) => (
+                                <tr key={idx} style={{ borderBottom: '1px solid var(--line)', transition: 'background 0.2s' }}>
+                                  <td style={{ padding: '0.75rem', fontFamily: 'var(--font-mono)' }}>{lead.urn}</td>
+                                  <td style={{ padding: '0.75rem', fontWeight: 600 }}>{lead.full_name}</td>
+                                  <td style={{ padding: '0.75rem', fontFamily: 'var(--font-mono)' }}>{lead.mis_data?.bank_reference_number || 'N/A'}</td>
+                                  <td style={{ padding: '0.75rem' }}>
+                                    <span className={`badge badge-${String(lead.mis_data?.ipa_status).toLowerCase().includes('approved') ? 'success' : String(lead.mis_data?.ipa_status).toLowerCase().includes('declined') ? 'danger' : 'warning'}`}>
+                                      {lead.mis_data?.ipa_status || 'N/A'}
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: '0.75rem' }}>
+                                    <span className={`badge badge-${lead.mis_status === 'Approved' ? 'success' : lead.mis_status === 'Rejected' ? 'danger' : 'warning'}`}>
+                                      {lead.mis_status}
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: '0.75rem', fontSize: '0.75rem' }}>{formatDateTime(lead.mis_mapped_at)}</td>
+                                  <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                                    <button 
+                                      onClick={() => setSelectedMappedLead(lead)} 
+                                      className="btn-secondary" 
+                                      style={{ padding: '0.35rem 0.75rem', fontSize: '0.75rem' }}
+                                    >
+                                      Details
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           )}
 
@@ -3129,6 +3728,253 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
           )}
 
 
+        </div>
+      )}
+
+      {/* Upload MIS Modal */}
+      {showUploadMISModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, backdropFilter: 'blur(8px)' }}>
+          <div className="glass-panel admin-dialog-panel" style={{ width: '90%', maxWidth: '500px', position: 'relative', borderTop: '4px solid var(--gold)', padding: '2rem' }}>
+            <button onClick={() => { setShowUploadMISModal(false); setMisFile(null); }} style={{ position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none', color: 'hsl(var(--text-primary))', cursor: 'pointer' }}>
+              <X size={20} />
+            </button>
+            <h3 style={{ fontSize: '1.4rem', marginBottom: '0.5rem', color: 'hsl(var(--text-primary))' }}>Upload Bank MIS Report</h3>
+            <p style={{ fontSize: '0.85rem', color: 'hsl(var(--text-secondary))', marginBottom: '1.5rem' }}>
+              Upload an Excel (.xls, .xlsx), CSV (.csv), or PDF (.pdf) file. The system will extract URNs (including split urn_first/last parts or LC2_CODE) and automatically map decision statuses.
+            </p>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', marginBottom: '1.5rem' }}>
+              <div 
+                style={{ 
+                  border: '2px dashed var(--line)', 
+                  borderRadius: 'var(--radius-md)', 
+                  padding: '2.5rem 1.5rem', 
+                  textAlign: 'center', 
+                  background: 'rgba(224, 168, 46, 0.02)', 
+                  cursor: 'pointer',
+                  position: 'relative'
+                }}
+              >
+                <input 
+                  type="file" 
+                  accept=".csv,.xls,.xlsx,.pdf"
+                  onChange={(e) => setMisFile(e.target.files[0])}
+                  style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }}
+                />
+                <Upload size={32} style={{ color: 'hsl(var(--primary))', marginBottom: '0.75rem', opacity: 0.8 }} />
+                <div style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.25rem' }}>
+                  {misFile ? misFile.name : 'Choose a file or drag it here'}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>
+                  Supports CSV, Excel, or PDF
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+              <button 
+                onClick={() => { setShowUploadMISModal(false); setMisFile(null); }} 
+                className="btn-secondary"
+                disabled={isSubmitting}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={async () => {
+                  if (!misFile) {
+                    showToast('Please select a file first', 'error');
+                    return;
+                  }
+                  setIsSubmitting(true);
+                  const formData = new FormData();
+                  formData.append('file', misFile);
+                  try {
+                    const res = await fetch(`${API_URL}/leads/upload-mis`, {
+                      method: 'POST',
+                      headers: { 'Authorization': `Bearer ${token}` },
+                      body: formData
+                    });
+                    if (res.ok) {
+                      const data = await res.json();
+                      setMisUploadResult(data);
+                      setShowUploadMISModal(false);
+                      setMisFile(null);
+                      setShowMISResultModal(true);
+                      fetchLeads(currentPage, leadsPerPage);
+                      if (activeTab === 'leads_dashboard') fetchMISStats();
+                    } else {
+                      const errData = await res.json();
+                      showToast(errData.error || 'Failed to upload MIS file', 'error');
+                    }
+                  } catch (err) {
+                    console.error('MIS upload error:', err);
+                    showToast('Error uploading file', 'error');
+                  } finally {
+                    setIsSubmitting(false);
+                  }
+                }} 
+                className="btn-primary"
+                disabled={isSubmitting || !misFile}
+              >
+                {isSubmitting ? 'Uploading & Matching...' : 'Upload & Process'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MIS Result Modal */}
+      {showMISResultModal && misUploadResult && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, backdropFilter: 'blur(8px)' }}>
+          <div className="glass-panel admin-dialog-panel" style={{ width: '95%', maxWidth: '600px', position: 'relative', borderTop: '4px solid var(--mint)', padding: '2rem', maxHeight: '85vh', overflowY: 'auto' }}>
+            <button onClick={() => setShowMISResultModal(false)} style={{ position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none', color: 'hsl(var(--text-primary))', cursor: 'pointer' }}>
+              <X size={20} />
+            </button>
+            <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: '56px', width: '56px', borderRadius: '50%', background: 'rgba(22, 163, 123, 0.1)', color: 'var(--mint)', marginBottom: '0.75rem' }}>
+                <CheckCircle2 size={32} />
+              </div>
+              <h3 style={{ fontSize: '1.4rem', color: 'hsl(var(--text-primary))' }}>MIS Processing Complete</h3>
+              <p style={{ fontSize: '0.85rem', color: 'hsl(var(--text-secondary))' }}>Bank report URNs matched against FinMantra leads database.</p>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+              <div style={{ padding: '1rem', background: 'rgba(22, 163, 123, 0.05)', border: '1px solid rgba(22, 163, 123, 0.15)', borderRadius: 'var(--radius-sm)', textAlign: 'center' }}>
+                <div style={{ fontSize: '0.8rem', color: 'var(--mint)', fontWeight: 600 }}>Matched & Mapped</div>
+                <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--mint)' }}>{misUploadResult.totalMatched}</div>
+              </div>
+              <div style={{ padding: '1rem', background: 'rgba(209, 67, 67, 0.05)', border: '1px solid rgba(209, 67, 67, 0.15)', borderRadius: 'var(--radius-sm)', textAlign: 'center' }}>
+                <div style={{ fontSize: '0.8rem', color: 'var(--err)', fontWeight: 600 }}>Unmatched (Ignored)</div>
+                <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--err)' }}>{misUploadResult.totalUnmatched}</div>
+              </div>
+            </div>
+
+            {misUploadResult.matchedDetails.length > 0 && (
+              <div style={{ marginBottom: '1.5rem', textAlign: 'left' }}>
+                <h4 style={{ fontSize: '0.9rem', marginBottom: '0.5rem', fontWeight: 700 }}>Matched Leads Detail ({misUploadResult.matchedDetails.length})</h4>
+                <div style={{ maxHeight: '150px', overflowY: 'auto', border: '1px solid var(--line)', borderRadius: '8px', padding: '0.5rem' }}>
+                  <table style={{ width: '100%', fontSize: '0.8rem', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid var(--line)' }}>
+                        <th style={{ textAlign: 'left', padding: '0.35rem' }}>URN</th>
+                        <th style={{ textAlign: 'left', padding: '0.35rem' }}>Name</th>
+                        <th style={{ textAlign: 'left', padding: '0.35rem' }}>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {misUploadResult.matchedDetails.map((item, idx) => (
+                        <tr key={idx} style={{ borderBottom: '1px solid rgba(0,0,0,0.03)' }}>
+                          <td style={{ padding: '0.35rem', fontFamily: 'var(--font-mono)' }}>{item.urn}</td>
+                          <td style={{ padding: '0.35rem' }}>{item.name}</td>
+                          <td style={{ padding: '0.35rem' }}>
+                            <span className={`badge badge-${item.status === 'Approved' ? 'success' : item.status === 'Rejected' ? 'danger' : 'warning'}`}>{item.status}</span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {misUploadResult.unmatchedDetails.length > 0 && (
+              <div style={{ textAlign: 'left' }}>
+                <h4 style={{ fontSize: '0.9rem', marginBottom: '0.5rem', fontWeight: 700, color: 'var(--err)' }}>Unmatched URNs Detail ({misUploadResult.unmatchedDetails.length})</h4>
+                <div style={{ maxHeight: '120px', overflowY: 'auto', border: '1px solid var(--line)', borderRadius: '8px', padding: '0.5rem' }}>
+                  <table style={{ width: '100%', fontSize: '0.8rem', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid var(--line)' }}>
+                        <th style={{ textAlign: 'left', padding: '0.35rem' }}>URN</th>
+                        <th style={{ textAlign: 'left', padding: '0.35rem' }}>Decision</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {misUploadResult.unmatchedDetails.map((item, idx) => (
+                        <tr key={idx} style={{ borderBottom: '1px solid rgba(0,0,0,0.03)' }}>
+                          <td style={{ padding: '0.35rem', fontFamily: 'var(--font-mono)' }}>{item.urn}</td>
+                          <td style={{ padding: '0.35rem' }}>{item.status}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
+              <button onClick={() => setShowMISResultModal(false)} className="btn-primary">
+                Acknowledge & Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mapped Lead MIS Details Modal */}
+      {selectedMappedLead && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, backdropFilter: 'blur(8px)' }}>
+          <div className="glass-panel admin-dialog-panel" style={{ width: '90%', maxWidth: '600px', position: 'relative', borderTop: '4px solid var(--mint)', padding: '2rem', maxHeight: '90vh', overflowY: 'auto' }}>
+            <button onClick={() => setSelectedMappedLead(null)} style={{ position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none', color: 'hsl(var(--text-primary))', cursor: 'pointer' }}>
+              <X size={20} />
+            </button>
+            <h3 style={{ fontSize: '1.4rem', marginBottom: '0.2rem', color: 'hsl(var(--text-primary))' }}>Bank MIS Details</h3>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: 'var(--mint)', marginBottom: '1.5rem', display: 'flex', gap: '1rem' }}>
+              <span>Client Name: {selectedMappedLead.full_name}</span>
+              <span>•</span>
+              <span>URN: {selectedMappedLead.urn}</span>
+            </div>
+
+            <div style={{ border: '1px solid var(--line)', borderRadius: '10px', overflow: 'hidden' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', background: 'var(--paper-2)', padding: '0.65rem 1rem', fontWeight: 'bold', fontSize: '0.8rem', borderBottom: '1px solid var(--line)' }}>
+                <div>Bank MIS Parameter</div>
+                <div>Mapped Value</div>
+              </div>
+              <div style={{ maxHeight: '50vh', overflowY: 'auto' }}>
+                {[
+                  { label: 'Bank Reference Number', key: 'bank_reference_number' },
+                  { label: 'Application Submit Date/Time', key: 'application_submit_date_time' },
+                  { label: 'Customer Type', key: 'customer_type' },
+                  { label: 'state', key: 'state' },
+                  { label: 'IPA Status', key: 'ipa_status' },
+                  { label: 'DAP Final Flag', key: 'dap_final_flag' },
+                  { label: 'DROPOFFREASON', key: 'dropoff_reason' },
+                  { label: 'VKYC STATUS', key: 'vkyc_status' },
+                  { label: 'KYC TYPE', key: 'kyc_type' },
+                  { label: 'VKYC EXPIRY DATE', key: 'vkyc_expiry_date' },
+                  { label: 'PROMO CODE', key: 'promo_code' },
+                  { label: 'FINAL DECISION', key: 'final_decision' },
+                  { label: 'FINAL DECISION DATE', key: 'final_decision_date' },
+                  { label: 'CURRENT STAGE', key: 'current_stage' },
+                  { label: 'CURABLE FLAG', key: 'curable_flag' },
+                  { label: 'COMPANY NAME', key: 'company_name' },
+                  { label: 'BKYC Status', key: 'bkyc_status' },
+                  { label: 'KYC Status', key: 'kyc_status' },
+                  { label: 'Decision Month', key: 'decision_month' },
+                  { label: 'Decline Descreption', key: 'decline_description' },
+                  { label: 'Decline Type', key: 'decline_type' },
+                  { label: 'Card Name', key: 'card_name' },
+                  { label: 'Card Type', key: 'card_type' },
+                  { label: 'Card Activation Staus', key: 'card_activation_status' },
+                  { label: 'Source Type', key: 'source_type' },
+                  { label: 'KYC Completion date', key: 'kyc_completion_date' }
+                ].map((item, idx) => {
+                  const val = selectedMappedLead.mis_data?.[item.key] || 'N/A';
+                  return (
+                    <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', padding: '0.65rem 1rem', fontSize: '0.8rem', borderBottom: '1px solid rgba(0,0,0,0.04)', textAlign: 'left' }}>
+                      <div style={{ color: 'hsl(var(--text-secondary))', fontWeight: 500 }}>{item.label}</div>
+                      <div style={{ color: 'var(--ink)', fontFamily: item.key.includes('date') || item.key.includes('number') ? 'var(--font-mono)' : 'inherit', wordBreak: 'break-all' }}>{val}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
+              <button onClick={() => setSelectedMappedLead(null)} className="btn-secondary">
+                Close Details
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

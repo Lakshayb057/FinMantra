@@ -10,6 +10,10 @@ const http = require('http');
 const WebSocket = require('ws');
 const db = require('./db');
 const baileys = require('./baileys');
+const multer = require('multer');
+const xlsx = require('xlsx');
+const pdfParse = require('pdf-parse');
+const upload = multer({ storage: multer.memoryStorage() });
 
 // Automatically wrap async route handlers to propagate exceptions to global error handler
 const Layer = require('express/lib/router/layer');
@@ -1212,6 +1216,264 @@ app.get('/api/leads/urm/:urm', async (req, res) => {
   } else {
     res.status(404).json({ error: 'Application URN tracking record not found' });
   }
+});
+
+// URN Canonicalizer Helper
+function canonicalizeURN(urnStr) {
+  if (!urnStr) return '';
+  const clean = String(urnStr).trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  
+  // Try to match the DB format: FM + year(4) + monthLetter(1) + day(2) + sequence(5)
+  const dbMatch = clean.match(/^FM(\d{4})([A-L])(\d{2})(\d+)$/);
+  if (dbMatch) {
+    const year = dbMatch[1];
+    const monthLetter = dbMatch[2];
+    const day = dbMatch[3];
+    const seq = parseInt(dbMatch[4], 10);
+    const monthNum = String(monthLetter.charCodeAt(0) - 64).padStart(2, '0');
+    return `FM${year}${monthNum}${day}${seq}`;
+  }
+
+  // Try to match the MIS format: FM + year(4) + monthNum(2) + day(2) + sequence
+  const misMatch = clean.match(/^FM(\d{4})(\d{2})(\d{2})(\d+)$/);
+  if (misMatch) {
+    const year = misMatch[1];
+    const monthNum = misMatch[2];
+    const day = misMatch[3];
+    const seq = parseInt(misMatch[4], 10);
+    return `FM${year}${monthNum}${day}${seq}`;
+  }
+
+  // Try to match raw numbers only
+  const numMatch = clean.match(/^(\d{4})(\d{2})(\d{2})(\d+)$/);
+  if (numMatch) {
+    const year = numMatch[1];
+    const monthNum = numMatch[2];
+    const day = numMatch[3];
+    const seq = parseInt(numMatch[4], 10);
+    return `FM${year}${monthNum}${day}${seq}`;
+  }
+
+  return clean;
+}
+
+// Case/space-insensitive row value getter
+function getRowValue(row, targetKey) {
+  const cleanTarget = targetKey.toLowerCase().replace(/[^a-z0-9]/g, '');
+  for (const key of Object.keys(row)) {
+    const cleanKey = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (cleanKey === cleanTarget) {
+      return row[key];
+    }
+  }
+  return '';
+}
+
+// Helper to standardise MIS status
+function standardizeStatus(statusStr, rawRow) {
+  if (!statusStr) return 'Pending';
+  const clean = String(statusStr).trim().toLowerCase();
+  
+  if (clean.includes('approve') || clean.includes('success') || clean.includes('disbursed') || clean.includes('active') || clean === 'approved') {
+    return 'Approved';
+  }
+  if (clean.includes('reject') || clean.includes('decline') || clean.includes('cancel') || clean === 'rejected') {
+    return 'Rejected';
+  }
+  return 'Pending';
+}
+
+// Upload MIS Route
+app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single('file'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No file uploaded' });
+  }
+
+  const filename = req.file.originalname;
+  const ext = filename.split('.').pop().toLowerCase();
+  let parsedRows = [];
+
+  try {
+    if (ext === 'csv') {
+      const csvText = req.file.buffer.toString('utf-8');
+      const lines = csvText.split('\n');
+      if (lines.length > 0) {
+        const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+        for (let i = 1; i < lines.length; i++) {
+          if (!lines[i].trim()) continue;
+          const values = [];
+          let current = '';
+          let inQuotes = false;
+          const line = lines[i];
+          for (let j = 0; j < line.length; j++) {
+            const char = line[j];
+            if (char === '"') {
+              inQuotes = !inQuotes;
+            } else if (char === ',' && !inQuotes) {
+              values.push(current.trim().replace(/^"|"$/g, ''));
+              current = '';
+            } else {
+              current += char;
+            }
+          }
+          values.push(current.trim().replace(/^"|"$/g, ''));
+          
+          if (values.length > 0) {
+            const rowObj = {};
+            headers.forEach((header, idx) => {
+              rowObj[header] = values[idx] || '';
+            });
+            parsedRows.push(rowObj);
+          }
+        }
+      }
+    } else if (ext === 'xls' || ext === 'xlsx') {
+      const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
+      const sheetName = workbook.SheetNames[0];
+      parsedRows = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
+    } else if (ext === 'pdf') {
+      const pdfData = await pdfParse(req.file.buffer);
+      const lines = pdfData.text.split('\n');
+      
+      lines.forEach(line => {
+        const cleanLine = line.trim();
+        if (!cleanLine) return;
+        
+        const urnRegex = /FM[0-9A-Z]{9,15}/gi;
+        const matches = cleanLine.match(urnRegex);
+        if (matches && matches.length > 0) {
+          matches.forEach(matchedUrn => {
+            let status = 'Pending';
+            const lowerLine = cleanLine.toLowerCase();
+            if (lowerLine.includes('approve') || lowerLine.includes('disbursed') || lowerLine.includes('success') || lowerLine.includes('active')) {
+              status = 'Approved';
+            } else if (lowerLine.includes('reject') || lowerLine.includes('decline') || lowerLine.includes('cancel')) {
+              status = 'Rejected';
+            }
+            
+            parsedRows.push({
+              APPLICATION_REFERENCE_NUMBER: matchedUrn,
+              FINAL_DECISION: status,
+              IPA_STATUS: status,
+              CREATION_DATE_TIME: new Date().toISOString()
+            });
+          });
+        }
+      });
+    } else {
+      return res.status(400).json({ error: 'Unsupported file format. Please upload CSV, XLS, XLSX, or PDF.' });
+    }
+  } catch (err) {
+    console.error('[Upload MIS] Parsing error:', err);
+    return res.status(500).json({ error: `Failed to parse file: ${err.message}` });
+  }
+
+  if (parsedRows.length === 0) {
+    return res.status(200).json({
+      success: true,
+      totalMatched: 0,
+      totalUnmatched: 0,
+      matchedDetails: [],
+      unmatchedDetails: []
+    });
+  }
+
+  // Get all leads from database for in-memory matching
+  const leadsRes = await db.pool.query('SELECT id, urn, full_name, card_name FROM leads');
+  const dbLeads = leadsRes.rows;
+
+  const dbUrnMap = new Map();
+  dbLeads.forEach(lead => {
+    if (lead.urn) {
+      const canonical = canonicalizeURN(lead.urn);
+      if (canonical) dbUrnMap.set(canonical, lead);
+    }
+  });
+
+  let totalMatched = 0;
+  let totalUnmatched = 0;
+  const matchedDetails = [];
+  const unmatchedDetails = [];
+
+  for (const row of parsedRows) {
+    const urnFirst = getRowValue(row, 'urn_first');
+    const urnLast = getRowValue(row, 'urn_last');
+    let rawUrn = '';
+    
+    if (urnFirst && urnLast) {
+      rawUrn = String(urnFirst).trim() + String(urnLast).trim();
+    } else {
+      rawUrn = getRowValue(row, 'APPLICATION_REFERENCE_NUMBER') || getRowValue(row, 'urn') || getRowValue(row, 'LC2_CODE');
+    }
+
+    if (!rawUrn) continue;
+
+    const canonicalMIS = canonicalizeURN(rawUrn);
+    const matchedLead = dbUrnMap.get(canonicalMIS);
+
+    const misData = {
+      bank_reference_number: String(getRowValue(row, 'APPLICATION_REFERENCE_NUMBER') || getRowValue(row, 'Bank Reference Number')).trim(),
+      application_submit_date_time: String(getRowValue(row, 'CREATION_DATE_TIME') || getRowValue(row, 'Application Submit Date/Time')).trim(),
+      customer_type: String(getRowValue(row, 'CUSTOMER_TYPE') || getRowValue(row, 'Customer Type')).trim(),
+      state: String(getRowValue(row, 'STATE') || getRowValue(row, 'state')).trim(),
+      ipa_status: String(getRowValue(row, 'IPA_STATUS') || getRowValue(row, 'IPA Status')).trim(),
+      dap_final_flag: String(getRowValue(row, 'DAP_FINAL_FLAG') || getRowValue(row, 'DAP Final Flag')).trim(),
+      dropoff_reason: String(getRowValue(row, 'DROPOFF_REASON') || getRowValue(row, 'DROPOFFREASON')).trim(),
+      vkyc_status: String(getRowValue(row, 'VKYC_STATUS') || getRowValue(row, 'VKYC STATUS')).trim(),
+      kyc_type: String(getRowValue(row, 'VKYC_CONSENT_DATE') || getRowValue(row, 'KYC TYPE')).trim(),
+      vkyc_expiry_date: String(getRowValue(row, 'VKYC_EXPIRY_DATE') || getRowValue(row, 'VKYC EXPIRY DATE')).trim(),
+      promo_code: String(getRowValue(row, 'PROMO_CODE') || getRowValue(row, 'PROMO CODE')).trim(),
+      final_decision: String(getRowValue(row, 'FINAL_DECISION') || getRowValue(row, 'FINAL DECISION')).trim(),
+      final_decision_date: String(getRowValue(row, 'FINAL_DECISION_DATE') || getRowValue(row, 'FINAL DECISION DATE')).trim(),
+      current_stage: String(getRowValue(row, 'CURRENT_STAGE') || getRowValue(row, 'CURRENT STAGE')).trim(),
+      curable_flag: String(getRowValue(row, 'CURABLE_FLAG') || getRowValue(row, 'CURABLE FLAG')).trim(),
+      company_name: String(getRowValue(row, 'COMPANY_NAME') || getRowValue(row, 'COMPANY NAME')).trim(),
+      bkyc_status: String(getRowValue(row, 'BKYC Status') || getRowValue(row, 'BKYC Status')).trim(),
+      kyc_status: String(getRowValue(row, 'KYC Status') || getRowValue(row, 'KYC Status')).trim(),
+      decision_month: String(getRowValue(row, 'Decision Month') || getRowValue(row, 'Decision Month')).trim(),
+      decline_description: String(getRowValue(row, 'Decline Descreption') || getRowValue(row, 'Decline Descreption')).trim(),
+      decline_type: String(getRowValue(row, 'Decline Type') || getRowValue(row, 'Decline Type')).trim(),
+      card_name: String(getRowValue(row, 'Product Des') || getRowValue(row, 'Card Name')).trim(),
+      card_type: String(getRowValue(row, 'Card Type') || getRowValue(row, 'Card Type')).trim(),
+      card_activation_status: String(getRowValue(row, 'Card Activation Staus') || getRowValue(row, 'Card Activation Staus')).trim(),
+      source_type: String(getRowValue(row, 'Source Type') || getRowValue(row, 'Source Type')).trim(),
+      kyc_completion_date: String(getRowValue(row, 'KYC Completion date') || getRowValue(row, 'KYC Completion date')).trim()
+    };
+
+    const finalDecision = misData.final_decision || misData.ipa_status;
+    const standardStatus = standardizeStatus(finalDecision, row);
+
+    if (matchedLead) {
+      totalMatched++;
+      await db.updateLeadMISStatus(matchedLead.id, standardStatus, misData);
+      matchedDetails.push({
+        urn: matchedLead.urn,
+        name: matchedLead.full_name,
+        cardName: matchedLead.card_name,
+        status: standardStatus
+      });
+    } else {
+      totalUnmatched++;
+      unmatchedDetails.push({
+        urn: rawUrn,
+        status: standardStatus
+      });
+    }
+  }
+
+  res.json({
+    success: true,
+    totalMatched,
+    totalUnmatched,
+    matchedDetails,
+    unmatchedDetails
+  });
+});
+
+// GET MIS stats for Dashboard
+app.get('/api/leads/mis-stats', authenticateToken, requireAdmin, async (req, res) => {
+  const stats = await db.getMISStats();
+  res.json(stats);
 });
 
 // Fetch Leads (Admin or Agent)
