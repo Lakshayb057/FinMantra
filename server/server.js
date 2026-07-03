@@ -1379,15 +1379,80 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
   }
 
   // Get all leads from database for in-memory matching
-  const leadsRes = await db.pool.query('SELECT id, urn, full_name, card_name FROM leads');
-  const dbLeads = leadsRes.rows;
+  const leadsRes = await db.pool.query('SELECT id, urn, full_name, card_name, created_at FROM leads');
+  const dbLeads = leadsRes.rows.map(lead => {
+    // Extract integer sequence number
+    let seq = null;
+    if (lead.urn) {
+      const clean = lead.urn.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+      const dbMatch = clean.match(/^FM\d{4}[A-L]\d{2}(\d+)$/);
+      if (dbMatch) {
+        seq = parseInt(dbMatch[1], 10);
+      } else {
+        const misMatch = clean.match(/^FM\d{4}\d{2}\d{2}(\d+)$/);
+        if (misMatch) {
+          seq = parseInt(misMatch[1], 10);
+        } else {
+          const trailingDigits = clean.match(/\d+$/);
+          if (trailingDigits) {
+            seq = parseInt(trailingDigits[0], 10);
+          }
+        }
+      }
+    }
+    return {
+      ...lead,
+      canonical: lead.urn ? canonicalizeURN(lead.urn) : '',
+      seq,
+      createdTime: new Date(lead.created_at).getTime()
+    };
+  });
+
+  // Helper to parse dates in various formats robustly
+  const parseDateHelper = (val) => {
+    if (!val) return null;
+    if (val instanceof Date) return val;
+    if (typeof val === 'number') {
+      if (val > 30000 && val < 60000) {
+        // Excel serial date
+        return new Date(Math.round((val - 25569) * 86400 * 1000));
+      }
+      return new Date(val);
+    }
+    const str = String(val).trim();
+    if (!str) return null;
+    
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) return d;
+    
+    const parts = str.split(/[-/:\s]+/);
+    if (parts.length >= 3) {
+      let day = parseInt(parts[0], 10);
+      let month = parts[1];
+      let year = parseInt(parts[2], 10);
+      
+      if (year < 100) year += 2000;
+      if (day > 1000) {
+        year = day;
+        day = parseInt(parts[2], 10);
+      }
+      
+      let monthNum = parseInt(month, 10);
+      if (isNaN(monthNum)) {
+        const months = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+        monthNum = months.indexOf(month.toLowerCase().substring(0, 3)) + 1;
+      }
+      
+      if (year && monthNum && day) {
+        return new Date(year, monthNum - 1, day);
+      }
+    }
+    return null;
+  };
 
   const dbUrnMap = new Map();
   dbLeads.forEach(lead => {
-    if (lead.urn) {
-      const canonical = canonicalizeURN(lead.urn);
-      if (canonical) dbUrnMap.set(canonical, lead);
-    }
+    if (lead.canonical) dbUrnMap.set(lead.canonical, lead);
   });
 
   let totalMatched = 0;
@@ -1409,8 +1474,53 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
 
     if (!rawUrn) continue;
 
-    const canonicalMIS = canonicalizeURN(rawUrn);
-    const matchedLead = dbUrnMap.get(canonicalMIS);
+    const misVal = String(rawUrn).trim();
+    const misDateStr = getRowValue(row, 'CREATION_DATE_TIME') || getRowValue(row, 'Application Submit Date/Time');
+    const misDate = parseDateHelper(misDateStr);
+    
+    // Extract numeric sequence from MIS value
+    const cleanMis = misVal.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const misSeqMatch = cleanMis.match(/\d+$/);
+    const misSeq = misSeqMatch ? parseInt(misSeqMatch[0], 10) : null;
+
+    let matchedLead = null;
+
+    // Strategy 1: Canonical exact match
+    const canonicalMIS = canonicalizeURN(misVal);
+    matchedLead = dbUrnMap.get(canonicalMIS);
+
+    // Strategy 2: Reconstructed prefix match (e.g. G0100020 or 0701020)
+    if (!matchedLead && (misVal.startsWith('G') || misVal.match(/^\d{2}\d{2}/))) {
+      const reconstructed = canonicalizeURN('FM2026' + misVal);
+      matchedLead = dbLeads.find(l => l.canonical === reconstructed);
+    }
+
+    // Strategy 3: Sequence + Date match (closest match within 36 hours)
+    if (!matchedLead && misSeq !== null && misDate) {
+      const candidates = dbLeads.filter(l => l.seq === misSeq);
+      let minDiff = Infinity;
+      let bestCandidate = null;
+      
+      candidates.forEach(cand => {
+        const diff = Math.abs(cand.createdTime - misDate.getTime());
+        if (diff < minDiff) {
+          minDiff = diff;
+          bestCandidate = cand;
+        }
+      });
+      
+      if (bestCandidate && minDiff < 36 * 60 * 60 * 1000) {
+        matchedLead = bestCandidate;
+      }
+    }
+
+    // Strategy 4: Unique Sequence match
+    if (!matchedLead && misSeq !== null) {
+      const candidates = dbLeads.filter(l => l.seq === misSeq);
+      if (candidates.length === 1) {
+        matchedLead = candidates[0];
+      }
+    }
 
     const misData = {
       bank_reference_number: String(getRowValue(row, 'APPLICATION_REFERENCE_NUMBER') || getRowValue(row, 'Bank Reference Number')).trim(),
