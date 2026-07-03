@@ -1394,6 +1394,7 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
   let totalUnmatched = 0;
   const matchedDetails = [];
   const unmatchedDetails = [];
+  const updates = [];
 
   for (const row of parsedRows) {
     const urnFirst = getRowValue(row, 'urn_first');
@@ -1445,7 +1446,11 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
 
     if (matchedLead) {
       totalMatched++;
-      await db.updateLeadMISStatus(matchedLead.id, standardStatus, misData);
+      updates.push({
+        id: matchedLead.id,
+        status: standardStatus,
+        data: misData
+      });
       matchedDetails.push({
         urn: matchedLead.urn,
         name: matchedLead.full_name,
@@ -1459,6 +1464,11 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
         status: standardStatus
       });
     }
+  }
+
+  // Execute bulk updates in high-performance batch query
+  if (updates.length > 0) {
+    await db.bulkUpdateLeadMISStatus(updates);
   }
 
   res.json({

@@ -432,6 +432,7 @@ async function initPgSchema() {
 }
 
 const db = {
+  pool,
   // Initialize Database Schema (PG only) with connection retry safety
   async init() {
     let retries = 5;
@@ -1075,6 +1076,36 @@ const db = {
         active: funnelActive
       }
     };
+  },
+
+  async bulkUpdateLeadMISStatus(updates) {
+    if (!updates || updates.length === 0) return;
+    const batchSize = 1000;
+    for (let i = 0; i < updates.length; i += batchSize) {
+      const batch = updates.slice(i, i + batchSize);
+      const valueLines = [];
+      const queryParams = [];
+      let paramIndex = 1;
+      
+      batch.forEach(up => {
+        valueLines.push(`($${paramIndex}::integer, $${paramIndex + 1}::varchar, $${paramIndex + 2}::jsonb)`);
+        queryParams.push(up.id);
+        queryParams.push(up.status);
+        queryParams.push(JSON.stringify(up.data));
+        paramIndex += 3;
+      });
+      
+      const queryText = `
+        UPDATE leads AS l
+        SET mis_status = tmp.mis_status,
+            mis_mapped_at = NOW(),
+            mis_data = tmp.mis_data
+        FROM (VALUES ${valueLines.join(', ')}) AS tmp(id, mis_status, mis_data)
+        WHERE l.id = tmp.id
+      `;
+      
+      await pool.query(queryText, queryParams);
+    }
   }
 }
 
