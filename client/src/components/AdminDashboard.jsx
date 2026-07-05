@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { INDIA_STATES_SVG, aggregateLeadsByState, getHeatColor, pincodeToState } from '../utils/indiaMap.js';
 import { 
   Users, CreditCard, MapPin, Settings as SettingsIcon, ShieldAlert, BarChart3, 
   Trash2, Download, Search, Plus, Edit, Check, X, RefreshCw, AlertCircle,
@@ -45,6 +46,49 @@ const getLocalDateString = (dateStr) => {
   } catch (e) {
     return d.toISOString().slice(0, 10);
   }
+};
+
+// Helper: format MIS values — converts Excel serial dates to readable format
+const formatMISValue = (value, key) => {
+  if (value === '' || value === undefined || value === null) return 'N/A';
+  const str = String(value).trim();
+  if (str === '') return 'N/A';
+
+  // Check if this is a date/time field and the value is an Excel serial number
+  const isDateField = key && (key.toLowerCase().includes('date') || key.toLowerCase().includes('time') || key.toLowerCase().includes('expiry'));
+  if (isDateField) {
+    const numVal = parseFloat(str);
+    if (!isNaN(numVal) && numVal > 30000 && numVal < 60000) {
+      // Excel serial date: days since 1900-01-01 (with the 1900 leap year bug)
+      const utcMs = Math.round((numVal - 25569) * 86400 * 1000);
+      const d = new Date(utcMs);
+      if (!isNaN(d.getTime())) {
+        try {
+          return d.toLocaleString('en-IN', {
+            timeZone: 'Asia/Kolkata',
+            year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit', hour12: false
+          }) + ' IST';
+        } catch (_) {
+          return d.toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+        }
+      }
+    }
+    // Try normal date parse
+    const parsed = new Date(str);
+    if (!isNaN(parsed.getTime()) && str.length > 6) {
+      try {
+        return parsed.toLocaleString('en-IN', {
+          timeZone: 'Asia/Kolkata',
+          year: 'numeric', month: '2-digit', day: '2-digit',
+          hour: '2-digit', minute: '2-digit', hour12: false
+        }) + ' IST';
+      } catch (_) {
+        return str;
+      }
+    }
+  }
+  return str;
 };
 
 const decodeToken = (token) => {
@@ -105,6 +149,10 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
   const [selectedLeads, setSelectedLeads] = useState([]);
+  const [selectedMappedLeads, setSelectedMappedLeads] = useState([]);
+  const [showPasswordConfirmModal, setShowPasswordConfirmModal] = useState(false);
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [pendingDeleteAction, setPendingDeleteAction] = useState(null);
 
   // CRUD Editing Modals/States
   const [editingCard, setEditingCard] = useState(null);
@@ -126,10 +174,21 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   
   // Dashboard Filters
   const [dashCreatedDate, setDashCreatedDate] = useState('');
+  const [dashDateTo, setDashDateTo] = useState('');
   const [dashCardType, setDashCardType] = useState('');
   const [dashState, setDashState] = useState('');
   const [dashKycType, setDashKycType] = useState('');
   const [dashIpaStatus, setDashIpaStatus] = useState('');
+  const [dashFinalDecision, setDashFinalDecision] = useState('');
+  const [dashCardName, setDashCardName] = useState('');
+  const [dashCustomerType, setDashCustomerType] = useState('');
+  const [dashCurrentStage, setDashCurrentStage] = useState('');
+  const [dashCardActivation, setDashCardActivation] = useState('');
+  const [dashVkycStatus, setDashVkycStatus] = useState('');
+  const [dashAgent, setDashAgent] = useState('');
+  const [dashSourceType, setDashSourceType] = useState('');
+  const [dashSearch, setDashSearch] = useState('');
+  const [dashFiltersExpanded, setDashFiltersExpanded] = useState(false);
   
   const [newCardForm, setNewCardForm] = useState({ name: '', bank: '', category: 'Offline', ad_id: '', utm_internal: '', description: '', redirect_url_template: '', display_order: 1, active: true, card_locations: [] });
   const [newAgentForm, setNewAgentForm] = useState({ id: '', name: '', phone: '', email: '', username: '', password: '', status: 'active', locations: [] });
@@ -497,6 +556,71 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       setSelectedLeads([]);
     } else {
       setSelectedLeads(filteredLeads.map(l => l.id));
+    }
+  };
+
+  const handleSelectMappedLead = (id) => {
+    if (selectedMappedLeads.includes(id)) {
+      setSelectedMappedLeads(selectedMappedLeads.filter(x => x !== id));
+    } else {
+      setSelectedMappedLeads([...selectedMappedLeads, id]);
+    }
+  };
+
+  const handleSelectAllMappedLeads = (filteredList) => {
+    if (selectedMappedLeads.length === filteredList.length) {
+      setSelectedMappedLeads([]);
+    } else {
+      setSelectedMappedLeads(filteredList.map(l => l.id));
+    }
+  };
+
+  const triggerDeleteMappedLeads = (ids, type = 'single') => {
+    setPendingDeleteAction({ type, ids });
+    setConfirmPassword('');
+    setShowPasswordConfirmModal(true);
+  };
+
+  const handleConfirmDeleteMappedLeads = async () => {
+    if (confirmPassword !== 'Lakshay@123') {
+      showToast('Incorrect admin password.', 'error');
+      return;
+    }
+
+    if (!pendingDeleteAction || !pendingDeleteAction.ids || pendingDeleteAction.ids.length === 0) return;
+
+    try {
+      if (pendingDeleteAction.type === 'single') {
+        const id = pendingDeleteAction.ids[0];
+        await apiFetch(`${API_URL}/leads/${id}/unmap`, {
+          method: 'POST',
+          headers: { 
+            'Authorization': `Bearer ${token}`,
+            'x-admin-password': 'Lakshay@123'
+          }
+        });
+      } else {
+        await apiFetch(`${API_URL}/leads/unmap-bulk`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+            'x-admin-password': 'Lakshay@123'
+          },
+          body: JSON.stringify({ ids: pendingDeleteAction.ids })
+        });
+      }
+      
+      showToast('Successfully unmapped lead(s) from dashboard.');
+      setSelectedMappedLeads([]);
+      setShowPasswordConfirmModal(false);
+      setPendingDeleteAction(null);
+      
+      // Refresh both leads data and dashboard stats
+      loadAllAdminData();
+      fetchMISStats();
+    } catch (err) {
+      showToast(err.message || 'Unmapping failed.', 'error');
     }
   };
 
@@ -1628,34 +1752,38 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       </div>
 
       {/* Welcome Title Block */}
-      <div style={{ marginBottom: '2.5rem' }}>
-        <h2 style={{ fontSize: '1.75rem', marginBottom: '0.25rem', color: 'var(--text-light)' }}>Admin Control Room</h2>
-        <p style={{ color: 'hsl(var(--text-secondary))', fontSize: '0.9rem' }}>Configure credit cards catalog, dynamic destination links, agents, kiosks and monitor client logs.</p>
-      </div>
+      {activeTab === 'leads' && (
+        <div style={{ marginBottom: '2.5rem' }}>
+          <h2 style={{ fontSize: '1.75rem', marginBottom: '0.25rem', color: 'var(--text-light)' }}>Admin Control Room</h2>
+          <p style={{ color: 'hsl(var(--text-secondary))', fontSize: '0.9rem' }}>Configure credit cards catalog, dynamic destination links, agents, kiosks and monitor client logs.</p>
+        </div>
+      )}
 
       {/* Metrics Strips */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', marginBottom: '2.5rem' }}>
-        <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '3px solid hsl(var(--primary))' }}>
-          <div style={{ fontSize: '0.85rem', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Total Leads</div>
-          <div style={{ fontSize: '2.2rem', fontWeight: 800, margin: '0.25rem 0' }}>{totalLeadsCount}</div>
-          <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>Registered in Database</div>
+      {activeTab === 'leads' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', marginBottom: '2.5rem' }}>
+          <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '3px solid hsl(var(--primary))' }}>
+            <div style={{ fontSize: '0.85rem', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Total Leads</div>
+            <div style={{ fontSize: '2.2rem', fontWeight: 800, margin: '0.25rem 0' }}>{totalLeadsCount}</div>
+            <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>Registered in Database</div>
+          </div>
+          <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '3px solid hsl(var(--secondary))' }}>
+            <div style={{ fontSize: '0.85rem', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Leads Today</div>
+            <div style={{ fontSize: '2.2rem', fontWeight: 800, margin: '0.25rem 0', color: 'hsl(var(--secondary))' }}>{todaysLeadsCount}</div>
+            <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>Captured since 12:00 AM</div>
+          </div>
+          <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '3px solid var(--gold)' }}>
+            <div style={{ fontSize: '0.85rem', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Active Agents</div>
+            <div style={{ fontSize: '2.2rem', fontWeight: 800, margin: '0.25rem 0', color: 'var(--gold-deep)' }}>{activeAgents.length}</div>
+            <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>Field officers active</div>
+          </div>
+          <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '3px solid hsl(var(--accent-gold))' }}>
+            <div style={{ fontSize: '0.85rem', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Cards Catalog</div>
+            <div style={{ fontSize: '2.2rem', fontWeight: 800, margin: '0.25rem 0', color: 'hsl(var(--accent-gold))' }}>{activeCards.length}</div>
+            <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>Active redirect options</div>
+          </div>
         </div>
-        <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '3px solid hsl(var(--secondary))' }}>
-          <div style={{ fontSize: '0.85rem', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Leads Today</div>
-          <div style={{ fontSize: '2.2rem', fontWeight: 800, margin: '0.25rem 0', color: 'hsl(var(--secondary))' }}>{todaysLeadsCount}</div>
-          <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>Captured since 12:00 AM</div>
-        </div>
-        <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '3px solid var(--gold)' }}>
-          <div style={{ fontSize: '0.85rem', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Active Agents</div>
-          <div style={{ fontSize: '2.2rem', fontWeight: 800, margin: '0.25rem 0', color: 'var(--gold-deep)' }}>{activeAgents.length}</div>
-          <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>Field officers active</div>
-        </div>
-        <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '3px solid hsl(var(--accent-gold))' }}>
-          <div style={{ fontSize: '0.85rem', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Cards Catalog</div>
-          <div style={{ fontSize: '2.2rem', fontWeight: 800, margin: '0.25rem 0', color: 'hsl(var(--accent-gold))' }}>{activeCards.length}</div>
-          <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>Active redirect options</div>
-        </div>
-      </div>
+      )}
 
       {/* TAB CONTENT */}
       {loading ? (
@@ -1916,92 +2044,112 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
               </div>
 
               {/* Filters Panel */}
-              <div className="glass-panel" style={{ padding: '1.25rem' }}>
-                <h3 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <Filter size={16} /> Filters (Dynamic Re-calculation)
-                </h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem', alignItems: 'center' }}>
+              {(() => {
+                const allLeads = misStats?.mappedLeadsList || [];
+                const activeFilterCount = [dashCreatedDate, dashDateTo, dashCardType, dashState, dashKycType, dashIpaStatus, dashFinalDecision, dashCardName, dashCustomerType, dashCurrentStage, dashCardActivation, dashVkycStatus, dashAgent, dashSourceType, dashSearch].filter(Boolean).length;
+
+                const mkOpts = (field) => Array.from(new Set(allLeads.map(l => l.mis_data?.[field]).filter(v => v && String(v).trim()))).sort();
+                const mkAgentOpts = () => Array.from(new Set(allLeads.map(l => l.agent_name).filter(Boolean))).sort();
+
+                const filterSelectStyle = { padding: '0.4rem 0.6rem', fontSize: '0.78rem' };
+                const filterLabelStyle = { fontSize: '0.72rem', marginBottom: '3px', color: 'var(--muted)', fontWeight: 600, letterSpacing: '0.3px' };
+
+                const FilterSelect = ({ label, value, onChange, options, placeholder }) => (
                   <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '4px' }}>Created Date (MIS)</label>
-                    <input 
-                      type="date" 
-                      className="form-input" 
-                      style={{ padding: '0.4rem 0.6rem', fontSize: '0.8rem' }}
-                      value={dashCreatedDate}
-                      onChange={(e) => setDashCreatedDate(e.target.value)}
-                    />
-                  </div>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '4px' }}>Card Type</label>
-                    <select 
-                      className="form-select" 
-                      style={{ padding: '0.4rem 0.6rem', fontSize: '0.8rem' }}
-                      value={dashCardType}
-                      onChange={(e) => setDashCardType(e.target.value)}
-                    >
-                      <option value="">All Card Types</option>
-                      {Array.from(new Set((misStats?.mappedLeadsList || []).map(l => l.mis_data?.card_type).filter(Boolean))).map((t, i) => (
-                        <option key={i} value={t}>{t}</option>
-                      ))}
+                    <label className="form-label" style={filterLabelStyle}>{label}</label>
+                    <select className="form-select" style={filterSelectStyle} value={value} onChange={(e) => onChange(e.target.value)}>
+                      <option value="">{placeholder}</option>
+                      {options.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
                     </select>
                   </div>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '4px' }}>State</label>
-                    <select 
-                      className="form-select" 
-                      style={{ padding: '0.4rem 0.6rem', fontSize: '0.8rem' }}
-                      value={dashState}
-                      onChange={(e) => setDashState(e.target.value)}
-                    >
-                      <option value="">All States</option>
-                      {Array.from(new Set((misStats?.mappedLeadsList || []).map(l => l.mis_data?.state).filter(Boolean))).map((s, i) => (
-                        <option key={i} value={s}>{s}</option>
-                      ))}
-                    </select>
+                );
+
+                return (
+                  <div className="glass-panel" style={{ padding: '1.25rem 1.5rem', marginBottom: '1.5rem' }}>
+                    {/* Header row */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                        <Filter size={14} style={{ color: 'var(--gold)' }} />
+                        <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--ink)' }}>Filters (Dynamic Re-calculation)</span>
+                        {activeFilterCount > 0 && (
+                          <span style={{
+                            background: 'var(--gold)', color: '#fff', fontSize: '0.65rem', fontWeight: 800,
+                            padding: '0.15rem 0.5rem', borderRadius: '10px', minWidth: '20px', textAlign: 'center'
+                          }}>{activeFilterCount}</span>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                        <button
+                          onClick={() => setDashFiltersExpanded(!dashFiltersExpanded)}
+                          className="btn-secondary"
+                          style={{ padding: '0.35rem 0.75rem', fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}
+                        >
+                          {dashFiltersExpanded ? 'Less Filters' : 'More Filters'}
+                          <span style={{ fontSize: '0.6rem', transform: dashFiltersExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>▼</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setDashCreatedDate(''); setDashDateTo(''); setDashCardType(''); setDashState('');
+                            setDashKycType(''); setDashIpaStatus(''); setDashFinalDecision(''); setDashCardName('');
+                            setDashCustomerType(''); setDashCurrentStage(''); setDashCardActivation('');
+                            setDashVkycStatus(''); setDashAgent(''); setDashSourceType(''); setDashSearch('');
+                          }}
+                          className="btn-secondary"
+                          style={{ padding: '0.35rem 0.75rem', fontSize: '0.72rem', opacity: activeFilterCount > 0 ? 1 : 0.5 }}
+                          disabled={activeFilterCount === 0}
+                        >
+                          Reset All
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Search bar */}
+                    <div style={{ marginBottom: '0.85rem' }}>
+                      <div style={{ position: 'relative' }}>
+                        <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} />
+                        <input
+                          type="text"
+                          className="form-input"
+                          placeholder="Search by URN, Name, or Bank Reference..."
+                          value={dashSearch}
+                          onChange={(e) => setDashSearch(e.target.value)}
+                          style={{ paddingLeft: '2rem', padding: '0.45rem 0.6rem 0.45rem 2rem', fontSize: '0.8rem', width: '100%' }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Row 1: Primary filters (always visible) */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem', alignItems: 'end' }}>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={filterLabelStyle}>Date From (MIS)</label>
+                        <input type="date" className="form-input" style={filterSelectStyle} value={dashCreatedDate} onChange={(e) => setDashCreatedDate(e.target.value)} />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={filterLabelStyle}>Date To (MIS)</label>
+                        <input type="date" className="form-input" style={filterSelectStyle} value={dashDateTo} onChange={(e) => setDashDateTo(e.target.value)} />
+                      </div>
+                      <FilterSelect label="Card Type" value={dashCardType} onChange={setDashCardType} options={mkOpts('card_type')} placeholder="All Card Types" />
+                      <FilterSelect label="State" value={dashState} onChange={setDashState} options={mkOpts('state')} placeholder="All States" />
+                      <FilterSelect label="IPA Status" value={dashIpaStatus} onChange={setDashIpaStatus} options={mkOpts('ipa_status')} placeholder="All IPA" />
+                      <FilterSelect label="Final Decision" value={dashFinalDecision} onChange={setDashFinalDecision} options={mkOpts('final_decision')} placeholder="All Decisions" />
+                    </div>
+
+                    {/* Row 2: Extended filters (collapsible) */}
+                    {dashFiltersExpanded && (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem', alignItems: 'end', marginTop: '0.85rem', paddingTop: '0.85rem', borderTop: '1px solid var(--line)' }}>
+                        <FilterSelect label="Card Name" value={dashCardName} onChange={setDashCardName} options={mkOpts('card_name')} placeholder="All Cards" />
+                        <FilterSelect label="KYC Type" value={dashKycType} onChange={setDashKycType} options={mkOpts('kyc_type')} placeholder="All KYC" />
+                        <FilterSelect label="Customer Type" value={dashCustomerType} onChange={setDashCustomerType} options={mkOpts('customer_type')} placeholder="All Customers" />
+                        <FilterSelect label="Current Stage" value={dashCurrentStage} onChange={setDashCurrentStage} options={mkOpts('current_stage')} placeholder="All Stages" />
+                        <FilterSelect label="Card Activation" value={dashCardActivation} onChange={setDashCardActivation} options={mkOpts('card_activation_status')} placeholder="All Status" />
+                        <FilterSelect label="VKYC Status" value={dashVkycStatus} onChange={setDashVkycStatus} options={mkOpts('vkyc_status')} placeholder="All VKYC" />
+                        <FilterSelect label="Agent" value={dashAgent} onChange={setDashAgent} options={mkAgentOpts()} placeholder="All Agents" />
+                        <FilterSelect label="Source Type" value={dashSourceType} onChange={setDashSourceType} options={mkOpts('source_type')} placeholder="All Sources" />
+                      </div>
+                    )}
                   </div>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '4px' }}>KYC Type</label>
-                    <select 
-                      className="form-select" 
-                      style={{ padding: '0.4rem 0.6rem', fontSize: '0.8rem' }}
-                      value={dashKycType}
-                      onChange={(e) => setDashKycType(e.target.value)}
-                    >
-                      <option value="">All KYC Types</option>
-                      {Array.from(new Set((misStats?.mappedLeadsList || []).map(l => l.mis_data?.kyc_type).filter(Boolean))).map((k, i) => (
-                        <option key={i} value={k}>{k}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '4px' }}>IPA Status</label>
-                    <select 
-                      className="form-select" 
-                      style={{ padding: '0.4rem 0.6rem', fontSize: '0.8rem' }}
-                      value={dashIpaStatus}
-                      onChange={(e) => setDashIpaStatus(e.target.value)}
-                    >
-                      <option value="">All IPA Statuses</option>
-                      {Array.from(new Set((misStats?.mappedLeadsList || []).map(l => l.mis_data?.ipa_status).filter(Boolean))).map((st, i) => (
-                        <option key={i} value={st}>{st}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <button 
-                    onClick={() => {
-                      setDashCreatedDate('');
-                      setDashCardType('');
-                      setDashState('');
-                      setDashKycType('');
-                      setDashIpaStatus('');
-                    }}
-                    className="btn-secondary" 
-                    style={{ padding: '0.5rem 1rem', fontSize: '0.8rem', height: '34px', marginTop: '1.25rem' }}
-                  >
-                    Reset
-                  </button>
-                </div>
-              </div>
+                );
+              })()}
 
               {loadingMISStats || !misStats ? (
                 <div style={{ textAlign: 'center', padding: '5rem', color: 'hsl(var(--text-muted))' }} className="glass-panel">
@@ -2010,14 +2158,50 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
               ) : (() => {
                 const list = misStats.mappedLeadsList || [];
                 const filtered = list.filter(lead => {
-                  if (dashCreatedDate) {
-                    const submitDate = lead.mis_data?.application_submit_date_time || '';
-                    if (!submitDate.includes(dashCreatedDate)) return false;
+                  // Text search (URN, Name, Bank Ref)
+                  if (dashSearch) {
+                    const s = dashSearch.toLowerCase();
+                    const urn = String(lead.urn || '').toLowerCase();
+                    const name = String(lead.full_name || '').toLowerCase();
+                    const bankRef = String(lead.mis_data?.bank_reference_number || '').toLowerCase();
+                    if (!urn.includes(s) && !name.includes(s) && !bankRef.includes(s)) return false;
+                  }
+
+                  // Date range filter
+                  if (dashCreatedDate || dashDateTo) {
+                    const submitDateVal = lead.mis_data?.application_submit_date_time || '';
+                    if (submitDateVal) {
+                      let parsedDate = null;
+                      const numVal = parseFloat(submitDateVal);
+                      if (!isNaN(numVal) && numVal > 30000 && numVal < 60000) {
+                        parsedDate = new Date(Math.round((numVal - 25569) * 86400 * 1000));
+                      } else {
+                        parsedDate = new Date(submitDateVal);
+                      }
+                      
+                      if (parsedDate && !isNaN(parsedDate.getTime())) {
+                        const dateStr = parsedDate.toISOString().split('T')[0];
+                        if (dashCreatedDate && dateStr < dashCreatedDate) return false;
+                        if (dashDateTo && dateStr > dashDateTo) return false;
+                      } else {
+                        return false;
+                      }
+                    } else {
+                      return false;
+                    }
                   }
                   if (dashCardType && lead.mis_data?.card_type !== dashCardType) return false;
                   if (dashState && lead.mis_data?.state?.toLowerCase() !== dashState.toLowerCase()) return false;
                   if (dashKycType && lead.mis_data?.kyc_type !== dashKycType) return false;
                   if (dashIpaStatus && lead.mis_data?.ipa_status !== dashIpaStatus) return false;
+                  if (dashFinalDecision && lead.mis_data?.final_decision !== dashFinalDecision) return false;
+                  if (dashCardName && lead.mis_data?.card_name !== dashCardName) return false;
+                  if (dashCustomerType && lead.mis_data?.customer_type !== dashCustomerType) return false;
+                  if (dashCurrentStage && lead.mis_data?.current_stage !== dashCurrentStage) return false;
+                  if (dashCardActivation && lead.mis_data?.card_activation_status !== dashCardActivation) return false;
+                  if (dashVkycStatus && lead.mis_data?.vkyc_status !== dashVkycStatus) return false;
+                  if (dashAgent && lead.agent_name !== dashAgent) return false;
+                  if (dashSourceType && lead.mis_data?.source_type !== dashSourceType) return false;
                   return true;
                 });
 
@@ -2027,23 +2211,33 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                 const pendingCount = filtered.filter(l => l.mis_status === 'Pending').length;
                 const approvalRate = totalSubmit > 0 ? ((approvedCount / totalSubmit) * 100).toFixed(1) : '0';
 
-                const funnelIpa = filtered.filter(l => String(l.mis_data?.ipa_status).toLowerCase().includes('approved')).length;
+                const funnelIpa = filtered.filter(l => {
+                  const ipa = String(l.mis_data?.ipa_status || '').toLowerCase();
+                  return ipa.includes('approve') || ipa.includes('success');
+                }).length;
                 const funnelKyc = filtered.filter(l => {
-                  const ks = String(l.mis_data?.kyc_status).toLowerCase();
-                  const vs = String(l.mis_data?.vkyc_status).toLowerCase();
-                  return ks.includes('success') || ks.includes('complete') || vs.includes('success') || vs.includes('complete');
+                  const ks = String(l.mis_data?.kyc_status || '').toLowerCase();
+                  const vs = String(l.mis_data?.vkyc_status || '').toLowerCase();
+                  const kt = String(l.mis_data?.kyc_type || '').toLowerCase();
+                  return ks.includes('success') || ks.includes('complete') || vs.includes('success') || vs.includes('complete') || ks.includes('biokyc') || kt.includes('biokyc');
                 }).length;
                 const funnelDecision = filtered.filter(l => {
-                  const dec = String(l.mis_data?.final_decision).toLowerCase();
-                  return dec === 'approve' || dec === 'approved';
+                  const dec = String(l.mis_data?.final_decision || '').toLowerCase();
+                  return dec.includes('approve') || dec.includes('success');
                 }).length;
                 const funnelActive = filtered.filter(l => {
-                  const act = String(l.mis_data?.card_activation_status).toLowerCase();
-                  return act === 'txn active' || act === 'txn active - rs 100' || act === 'v + active';
+                  const act = String(l.mis_data?.card_activation_status || '').toLowerCase();
+                  return act.includes('active') || act === 'yes';
                 }).length;
 
-                const ipaApproved = filtered.filter(l => String(l.mis_data?.ipa_status).toLowerCase().includes('approved')).length;
-                const ipaDeclined = filtered.filter(l => String(l.mis_data?.ipa_status).toLowerCase().includes('declined') || String(l.mis_data?.ipa_status).toLowerCase().includes('reject')).length;
+                const ipaApproved = filtered.filter(l => {
+                  const ipa = String(l.mis_data?.ipa_status || '').toLowerCase();
+                  return ipa.includes('approve') || ipa.includes('success');
+                }).length;
+                const ipaDeclined = filtered.filter(l => {
+                  const ipa = String(l.mis_data?.ipa_status || '').toLowerCase();
+                  return ipa.includes('decline') || ipa.includes('reject') || ipa.includes('cancel');
+                }).length;
 
                 const kycDist = {};
                 filtered.forEach(l => {
@@ -2053,7 +2247,8 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
                 const srcDist = {};
                 filtered.forEach(l => {
-                  const s = l.mis_data?.source_type || 'Unknown';
+                  let s = String(l.mis_data?.source_type || '').trim();
+                  if (!s || s === '-') s = 'Blank';
                   srcDist[s] = (srcDist[s] || 0) + 1;
                 });
 
@@ -2077,7 +2272,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
                 const pinDist = {};
                 filtered.forEach(l => {
-                  const p = l.pincode || 'Unknown';
+                  const p = l.mis_data?.PIN_CODE || l.mis_data?.pin_code || l.pincode || 'Unknown';
                   pinDist[p] = (pinDist[p] || 0) + 1;
                 });
                 const topPincodes = Object.entries(pinDist)
@@ -2087,7 +2282,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
                 const prodDist = {};
                 filtered.forEach(l => {
-                  const n = l.mis_data?.card_name || l.card_name || 'Unknown';
+                  const n = l.mis_data?.card_name || 'Unknown';
                   prodDist[n] = (prodDist[n] || 0) + 1;
                 });
 
@@ -2121,26 +2316,87 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem' }}>
                       
                       {/* Visual 1: Funnel Chart */}
-                      <div className="glass-panel" style={{ padding: '1.5rem', gridColumn: 'span 2' }}>
-                        <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1.25rem' }}>Conversion Funnel Stages (%)</h4>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', padding: '0.5rem 0' }}>
-                          {[
-                            { name: 'Total Application Submit', count: totalSubmit, pct: 100, color: 'var(--ink)' },
-                            { name: 'IPA Approved', count: funnelIpa, pct: totalSubmit > 0 ? Math.round((funnelIpa / totalSubmit) * 100) : 0, color: 'hsl(var(--primary))' },
-                            { name: 'KYC Success', count: funnelKyc, pct: totalSubmit > 0 ? Math.round((funnelKyc / totalSubmit) * 100) : 0, color: 'var(--gold-deep)' },
-                            { name: 'Final Decision (Approve)', count: funnelDecision, pct: totalSubmit > 0 ? Math.round((funnelDecision / totalSubmit) * 100) : 0, color: 'var(--mint)' },
-                            { name: 'Card Activation Status (TXN ACTIVE)', count: funnelActive, pct: totalSubmit > 0 ? Math.round((funnelActive / totalSubmit) * 100) : 0, color: '#10b981' }
-                          ].map((stage, idx) => (
-                            <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', fontWeight: 600 }}>
-                                <span>{stage.name}</span>
-                                <span>{stage.count} ({stage.pct}%)</span>
-                              </div>
-                              <div style={{ height: '24px', background: 'var(--paper-2)', borderRadius: '6px', overflow: 'hidden', position: 'relative' }}>
-                                <div style={{ height: '100%', width: `${stage.pct}%`, background: stage.color, transition: 'width 0.5s ease-in-out' }} />
-                              </div>
-                            </div>
-                          ))}
+                      <div className="glass-panel" style={{ padding: '2rem', gridColumn: 'span 2', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                        <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1.5rem', width: '100%', textAlign: 'left' }}>Conversion Funnel Stages (%)</h4>
+                        <div style={{ width: '100%', maxWidth: '600px', display: 'flex', justifyContent: 'center', overflowX: 'auto' }}>
+                          <svg width="600" height="300" viewBox="0 0 600 300" style={{ display: 'block', overflow: 'visible' }}>
+                            {(() => {
+                              const stages = [
+                                { name: 'Total Application Submit', count: totalSubmit, pct: 100, color: 'var(--ink)' },
+                                { name: 'IPA Approved', count: funnelIpa, pct: totalSubmit > 0 ? Math.round((funnelIpa / totalSubmit) * 100) : 0, color: 'hsl(var(--primary))' },
+                                { name: 'KYC Success', count: funnelKyc, pct: totalSubmit > 0 ? Math.round((funnelKyc / totalSubmit) * 100) : 0, color: 'var(--gold-deep)' },
+                                { name: 'Final Decision (Approve)', count: funnelDecision, pct: totalSubmit > 0 ? Math.round((funnelDecision / totalSubmit) * 100) : 0, color: 'var(--mint)' },
+                                { name: 'Card Activation Status (TXN ACTIVE)', count: funnelActive, pct: totalSubmit > 0 ? Math.round((funnelActive / totalSubmit) * 100) : 0, color: '#10b981' }
+                              ];
+
+                              return stages.map((stage, idx) => {
+                                const yStart = idx * 60;
+                                const yEnd = (idx + 1) * 60;
+                                const yCenter = yStart + 30;
+
+                                const pctTop = stage.pct;
+                                const pctBottom = (idx < 4) ? stages[idx + 1].pct : Math.max(15, stage.pct * 0.7);
+
+                                // Map percentage to width: range from 60px to 240px
+                                const wTop = (pctTop / 100) * 180 + 60;
+                                const wBottom = (pctBottom / 100) * 180 + 60;
+
+                                const xCenter = 450;
+                                const xTopLeft = xCenter - wTop / 2;
+                                const xTopRight = xCenter + wTop / 2;
+                                const xBottomLeft = xCenter - wBottom / 2;
+                                const xBottomRight = xCenter + wBottom / 2;
+
+                                const pathD = `M ${xTopLeft} ${yStart} L ${xTopRight} ${yStart} L ${xBottomRight} ${yEnd} L ${xBottomLeft} ${yEnd} Z`;
+
+                                return (
+                                  <g key={idx}>
+                                    {/* Sloped connected block with glassmorphic strokes */}
+                                    <path 
+                                      d={pathD} 
+                                      fill={stage.color} 
+                                      stroke="var(--paper)" 
+                                      strokeWidth="1.5" 
+                                      style={{ transition: 'all 0.5s ease-in-out' }}
+                                    />
+                                    
+                                    {/* Overlay percentage text */}
+                                    <text 
+                                      x={xCenter} 
+                                      y={yCenter + 4} 
+                                      fontSize="11" 
+                                      fontWeight="bold" 
+                                      fill="#ffffff" 
+                                      textAnchor="middle"
+                                      style={{ pointerEvents: 'none', textShadow: '0 1px 2px rgba(0,0,0,0.4)' }}
+                                    >
+                                      {stage.pct}%
+                                    </text>
+
+                                    {/* Left Side description label */}
+                                    <text x="20" y={yCenter - 4} fontSize="11" fontWeight="700" fill="var(--ink)">
+                                      {stage.name}
+                                    </text>
+                                    <text x="20" y={yCenter + 12} fontSize="10.5" fontWeight="600" fill="hsl(var(--text-muted))">
+                                      {stage.count} Leads | {stage.pct}%
+                                    </text>
+
+                                    {/* Dotted connecting guideline */}
+                                    <line 
+                                      x1="260" 
+                                      y1={yCenter} 
+                                      x2={xCenter - (wTop + wBottom)/4 - 10} 
+                                      y2={yCenter} 
+                                      stroke="var(--line)" 
+                                      strokeWidth="1" 
+                                      strokeDasharray="3,3" 
+                                      opacity="0.6"
+                                    />
+                                  </g>
+                                );
+                              });
+                            })()}
+                          </svg>
                         </div>
                       </div>
 
@@ -2153,10 +2409,12 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                             {totalSubmit > 0 && (() => {
                               const ipaAppPct = (ipaApproved / totalSubmit) * 100;
                               const ipaDecPct = (ipaDeclined / totalSubmit) * 100;
+                              const ipaOthPct = 100 - ipaAppPct - ipaDecPct;
                               return (
                                 <>
                                   <circle cx="18" cy="18" r="15.915" fill="none" stroke="var(--mint)" strokeWidth="4.2" strokeDasharray={`${ipaAppPct} ${100 - ipaAppPct}`} strokeDashoffset="25" />
                                   <circle cx="18" cy="18" r="15.915" fill="none" stroke="var(--err)" strokeWidth="4.2" strokeDasharray={`${ipaDecPct} ${100 - ipaDecPct}`} strokeDashoffset={25 - ipaAppPct} />
+                                  <circle cx="18" cy="18" r="15.915" fill="none" stroke="var(--line)" strokeWidth="4.2" strokeDasharray={`${ipaOthPct} ${100 - ipaOthPct}`} strokeDashoffset={25 - ipaAppPct - ipaDecPct} />
                                 </>
                               );
                             })()}
@@ -2282,62 +2540,186 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                       </div>
 
                       {/* Visual 8: India Map Pincode Heatmap */}
-                      <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gridColumn: 'span 2' }}>
-                        <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '0.5rem' }}>Geographic Heatmap (Pincode & Regions)</h4>
-                        <p style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', marginBottom: '1.25rem' }}>Top active regions by client volume and residence pincode density.</p>
-                        
-                        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '2rem' }} className="admin-split-grid">
-                          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', background: 'var(--paper-2)', borderRadius: '12px', padding: '1rem', minHeight: '220px' }}>
-                            <svg width="220" height="220" viewBox="0 0 200 220" style={{ display: 'block' }}>
-                              <path d="M100 20 L130 50 L140 80 L160 110 L150 140 L130 180 L100 210 L70 180 L50 140 L40 110 L60 80 L70 50 Z" fill="none" stroke="var(--line)" strokeWidth="1.5" strokeDasharray="3,3" />
-                              <text x="100" y="115" fontSize="10" textAnchor="middle" fill="hsl(var(--text-muted))" opacity="0.3">INDIA HEATMAP</text>
-                              
-                              {[
-                                { name: 'North / Delhi', x: 100, y: 70, weight: filtered.filter(l => String(l.mis_data?.state).toLowerCase().includes('delhi') || String(l.mis_data?.state).toLowerCase().includes('haryana')).length },
-                                { name: 'West / Maharashtra', x: 75, y: 130, weight: filtered.filter(l => String(l.mis_data?.state).toLowerCase().includes('maharashtra') || String(l.mis_data?.state).toLowerCase().includes('gujarat')).length },
-                                { name: 'South / Karnataka', x: 90, y: 170, weight: filtered.filter(l => String(l.mis_data?.state).toLowerCase().includes('karnataka') || String(l.mis_data?.state).toLowerCase().includes('tamil') || String(l.mis_data?.state).toLowerCase().includes('telangana')).length },
-                                { name: 'East / West Bengal', x: 140, y: 110, weight: filtered.filter(l => String(l.mis_data?.state).toLowerCase().includes('bengal') || String(l.mis_data?.state).toLowerCase().includes('bihar')).length }
-                              ].map((node, i) => {
-                                const maxWeight = Math.max(1, totalSubmit);
-                                const radius = 8 + (node.weight / maxWeight) * 20;
-                                return (
-                                  <g key={i}>
-                                    <circle cx={node.x} cy={node.y} r={radius} fill="rgba(224, 168, 46, 0.25)" stroke="var(--gold)" strokeWidth="1.5" />
-                                    <circle cx={node.x} cy={node.y} r="3" fill="var(--ink)" />
-                                    <text x={node.x} y={node.y - radius - 3} fontSize="7.5" fontWeight="bold" textAnchor="middle" fill="var(--ink)">{node.name} ({node.weight})</text>
-                                  </g>
-                                );
-                              })}
-                            </svg>
-                          </div>
-                          
-                          <div style={{ textAlign: 'left' }}>
-                            <h5 style={{ fontSize: '0.8rem', fontWeight: 700, marginBottom: '0.5rem' }}>Top Pincodes</h5>
-                            <div style={{ maxHeight: '180px', overflowY: 'auto', border: '1px solid var(--line)', borderRadius: '8px', padding: '0.5rem' }}>
-                              {topPincodes.length === 0 ? (
-                                <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', padding: '1rem', textAlign: 'center' }}>No pincodes found</div>
-                              ) : (
-                                <table style={{ width: '100%', fontSize: '0.75rem', borderCollapse: 'collapse' }}>
-                                  <thead>
-                                    <tr style={{ borderBottom: '1px solid var(--line)' }}>
-                                      <th style={{ textAlign: 'left', padding: '0.25rem' }}>Pincode</th>
-                                      <th style={{ textAlign: 'right', padding: '0.25rem' }}>Leads Mapped</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {topPincodes.map((item, idx) => (
-                                      <tr key={idx} style={{ borderBottom: '1px solid rgba(0,0,0,0.02)' }}>
-                                        <td style={{ padding: '0.25rem', fontFamily: 'var(--font-mono)' }}>{item.pincode}</td>
-                                        <td style={{ padding: '0.25rem', textAlign: 'right', fontWeight: 600 }}>{item.count}</td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              )}
+                      {(() => {
+                        const stateLeadCounts = aggregateLeadsByState(filtered);
+                        const maxStateLeads = Math.max(1, ...Object.values(stateLeadCounts));
+                        const topStates = Object.entries(stateLeadCounts)
+                          .map(([state, count]) => ({ state, count }))
+                          .sort((a, b) => b.count - a.count)
+                          .slice(0, 15);
+
+                        return (
+                          <div className="glass-panel" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', gridColumn: 'span 2' }}>
+                            <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '0.25rem' }}>Geographic Heatmap — India (Pincode & State Mapping)</h4>
+                            <p style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', marginBottom: '1.5rem' }}>Leads density by Indian state, mapped from residence pincodes and MIS state data.</p>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: '2rem' }} className="admin-split-grid">
+                              {/* India SVG Map */}
+                              <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', background: 'var(--paper-2)', borderRadius: '16px', padding: '1.25rem', minHeight: '420px', border: '1px solid var(--line)', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)', position: 'relative' }}>
+                                <svg width="100%" height="100%" viewBox="40 0 460 430" style={{ display: 'block', overflow: 'visible', maxHeight: '400px' }} preserveAspectRatio="xMidYMid meet">
+                                  <defs>
+                                    <filter id="india-state-glow">
+                                      <feGaussianBlur in="SourceGraphic" stdDeviation="2" />
+                                    </filter>
+                                    <linearGradient id="indiaHeatGrad" x1="0" y1="0" x2="1" y2="0">
+                                      <stop offset="0%" stopColor="rgba(224, 168, 46, 0.06)" />
+                                      <stop offset="50%" stopColor="rgba(224, 168, 46, 0.50)" />
+                                      <stop offset="100%" stopColor="rgba(198, 138, 18, 0.92)" />
+                                    </linearGradient>
+                                  </defs>
+
+                                  {/* India country boundary outline */}
+                                  <path
+                                    d="M168,30 L185,22 L210,18 L225,25 L235,15 L260,10 L280,15 L285,30 L275,45 L262,48 L248,78 L262,85 L258,100 L242,108 L265,112 L290,120 L310,135 L330,130 L350,128 L370,120 L385,125 L392,140 L410,60 L435,52 L460,55 L478,65 L475,80 L470,95 L465,108 L455,112 L452,125 L448,112 L455,100 L445,90 L425,85 L400,88 L380,95 L385,100 L395,105 L395,115 L395,130 L400,142 L398,155 L400,165 L408,172 L415,168 L418,155 L418,145 L428,140 L435,148 L432,160 L425,165 L415,140 L420,115 L435,118 L442,130 L435,122 L445,95 L448,105 L388,158 L382,175 L378,195 L375,215 L368,228 L358,232 L350,220 L342,238 L325,248 L308,250 L292,245 L280,235 L280,262 L295,270 L305,285 L310,305 L298,318 L282,325 L268,320 L255,335 L248,355 L238,370 L225,382 L210,388 L195,392 L178,395 L165,398 L158,385 L150,398 L142,408 L135,400 L130,385 L128,368 L132,350 L138,340 L145,332 L130,320 L120,305 L115,288 L112,275 L105,250 L95,240 L80,235 L68,225 L60,210 L55,195 L62,180 L70,168 L95,160 L98,125 L105,110 L130,105 L155,108 L165,40 Z"
+                                    fill="none"
+                                    stroke="var(--ink)"
+                                    strokeWidth="1.5"
+                                    strokeLinejoin="round"
+                                    opacity="0.15"
+                                  />
+
+                                  {/* Render each state */}
+                                  {Object.entries(INDIA_STATES_SVG).map(([stateName, stateData]) => {
+                                    const count = stateLeadCounts[stateName] || 0;
+                                    const fillColor = getHeatColor(count, maxStateLeads);
+                                    const isActive = count > 0;
+                                    return (
+                                      <g key={stateName} style={{ cursor: isActive ? 'pointer' : 'default' }}>
+                                        <path
+                                          d={stateData.path}
+                                          fill={fillColor}
+                                          stroke="var(--line)"
+                                          strokeWidth="0.8"
+                                          strokeLinejoin="round"
+                                          style={{ transition: 'fill 0.3s ease, stroke-width 0.2s ease' }}
+                                          onMouseEnter={(e) => {
+                                            e.target.style.strokeWidth = '2';
+                                            e.target.style.stroke = 'var(--gold)';
+                                            const tooltip = document.getElementById('india-map-tooltip');
+                                            if (tooltip) {
+                                              tooltip.textContent = `${stateName}: ${count} Lead${count !== 1 ? 's' : ''}`;
+                                              tooltip.style.opacity = '1';
+                                              tooltip.style.transform = 'translateY(0)';
+                                            }
+                                          }}
+                                          onMouseLeave={(e) => {
+                                            e.target.style.strokeWidth = '0.8';
+                                            e.target.style.stroke = 'var(--line)';
+                                            const tooltip = document.getElementById('india-map-tooltip');
+                                            if (tooltip) {
+                                              tooltip.style.opacity = '0';
+                                              tooltip.style.transform = 'translateY(4px)';
+                                            }
+                                          }}
+                                        />
+                                        {/* Pulsing dot for active states */}
+                                        {isActive && count >= (maxStateLeads * 0.15) && (
+                                          <>
+                                            <circle cx={stateData.cx} cy={stateData.cy} r="3" fill="var(--gold)" opacity="0.9">
+                                              <animate attributeName="r" values="3;7;3" dur="2.5s" repeatCount="indefinite" />
+                                              <animate attributeName="opacity" values="0.9;0.15;0.9" dur="2.5s" repeatCount="indefinite" />
+                                            </circle>
+                                            <circle cx={stateData.cx} cy={stateData.cy} r="2" fill="var(--paper)" stroke="var(--gold-deep)" strokeWidth="0.8" />
+                                          </>
+                                        )}
+                                      </g>
+                                    );
+                                  })}
+
+                                  {/* Legend bar */}
+                                  <rect x="60" y="405" width="160" height="8" rx="4" fill="url(#indiaHeatGrad)" />
+                                  <text x="60" y="422" fontSize="7" fill="hsl(var(--text-muted))">0</text>
+                                  <text x="136" y="422" fontSize="7" fill="hsl(var(--text-muted))" textAnchor="middle">Leads</text>
+                                  <text x="220" y="422" fontSize="7" fill="hsl(var(--text-muted))" textAnchor="end">{maxStateLeads}</text>
+                                </svg>
+
+                                {/* Floating tooltip */}
+                                <div
+                                  id="india-map-tooltip"
+                                  style={{
+                                    position: 'absolute', bottom: '12px', left: '50%', transform: 'translateX(-50%) translateY(4px)',
+                                    background: 'var(--paper)', border: '1px solid var(--line)', borderRadius: '8px',
+                                    padding: '0.4rem 0.8rem', fontSize: '0.75rem', fontWeight: 700, color: 'var(--ink)',
+                                    boxShadow: '0 4px 12px rgba(0,0,0,0.08)', opacity: 0, transition: 'opacity 0.2s, transform 0.2s',
+                                    pointerEvents: 'none', whiteSpace: 'nowrap', zIndex: 10
+                                  }}
+                                />
+                              </div>
+
+                              {/* Right panel: Top States + Top Pincodes */}
+                              <div style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                                {/* Top States */}
+                                <div>
+                                  <h5 style={{ fontSize: '0.8rem', fontWeight: 700, marginBottom: '0.75rem', color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                    <MapPin size={13} /> Top States
+                                  </h5>
+                                  <div style={{ maxHeight: '180px', overflowY: 'auto', paddingRight: '0.25rem' }}>
+                                    {topStates.length === 0 ? (
+                                      <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', padding: '1.5rem 1rem', textAlign: 'center', background: 'var(--paper-2)', borderRadius: '12px' }}>
+                                        No state data available
+                                      </div>
+                                    ) : (
+                                      topStates.map((item, idx) => {
+                                        const maxCount = Math.max(1, topStates[0]?.count || 1);
+                                        const pct = (item.count / maxCount) * 100;
+                                        return (
+                                          <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', padding: '0.5rem 0.65rem', background: 'var(--paper-2)', borderRadius: '10px', marginBottom: '0.4rem', border: '1px solid var(--line)' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem', fontWeight: 700 }}>
+                                              <span style={{ color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                                <span style={{ height: '8px', width: '8px', borderRadius: '2px', background: getHeatColor(item.count, maxStateLeads), border: '1px solid var(--gold)' }} />
+                                                {item.state}
+                                              </span>
+                                              <span style={{ color: 'var(--gold-deep)', fontFamily: 'var(--font-mono)' }}>{item.count}</span>
+                                            </div>
+                                            <div style={{ height: '5px', background: 'var(--line)', borderRadius: '3px', overflow: 'hidden' }}>
+                                              <div style={{ height: '100%', width: `${pct}%`, background: 'var(--gold)', borderRadius: '3px', transition: 'width 0.5s ease-out' }} />
+                                            </div>
+                                          </div>
+                                        );
+                                      })
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Top Pincodes */}
+                                <div>
+                                  <h5 style={{ fontSize: '0.8rem', fontWeight: 700, marginBottom: '0.75rem', color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                    <Activity size={13} /> Top Pincodes
+                                  </h5>
+                                  <div style={{ maxHeight: '180px', overflowY: 'auto', paddingRight: '0.25rem' }}>
+                                    {topPincodes.length === 0 ? (
+                                      <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', padding: '1.5rem 1rem', textAlign: 'center', background: 'var(--paper-2)', borderRadius: '12px' }}>
+                                        No active pincodes found
+                                      </div>
+                                    ) : (
+                                      topPincodes.slice(0, 20).map((item, idx) => {
+                                        const maxCount = Math.max(1, topPincodes[0]?.count || 1);
+                                        const pct = (item.count / maxCount) * 100;
+                                        const mappedState = pincodeToState(item.pincode);
+                                        return (
+                                          <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', padding: '0.5rem 0.65rem', background: 'var(--paper-2)', borderRadius: '10px', marginBottom: '0.4rem', border: '1px solid var(--line)' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem', fontWeight: 700 }}>
+                                              <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                                <span style={{ height: '6px', width: '6px', borderRadius: '50%', background: 'var(--gold)' }} />
+                                                {item.pincode}
+                                                {mappedState && <span style={{ fontFamily: 'inherit', fontSize: '0.65rem', color: 'hsl(var(--text-muted))', fontWeight: 500 }}>({mappedState})</span>}
+                                              </span>
+                                              <span style={{ color: 'var(--gold-deep)' }}>{item.count}</span>
+                                            </div>
+                                            <div style={{ height: '5px', background: 'var(--line)', borderRadius: '3px', overflow: 'hidden' }}>
+                                              <div style={{ height: '100%', width: `${pct}%`, background: 'var(--gold)', borderRadius: '3px', transition: 'width 0.5s ease-out' }} />
+                                            </div>
+                                          </div>
+                                        );
+                                      })
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </div>
+                        );
+                      })()}
 
                       {/* Visual 9: Product Des / Card Name */}
                       <div className="glass-panel" style={{ padding: '1.5rem', gridColumn: 'span 2' }}>
@@ -2364,16 +2746,36 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
                     {/* MAPPED LEADS LOG TABLE */}
                     <div className="glass-panel" style={{ padding: '1.5rem' }}>
-                      <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '1.25rem' }}>MIS Mapped Leads Log</h3>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+                        <h3 style={{ fontSize: '1.2rem', fontWeight: 700, margin: 0 }}>MIS Mapped Leads Log</h3>
+                        {selectedMappedLeads.length > 0 && (
+                          <button 
+                            onClick={() => triggerDeleteMappedLeads(selectedMappedLeads, 'bulk')} 
+                            className="btn-danger" 
+                            style={{ padding: '0.35rem 0.75rem', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.25rem', background: 'var(--err)', borderColor: 'var(--err)' }}
+                          >
+                            <Trash2 size={14} /> Delete Selected ({selectedMappedLeads.length})
+                          </button>
+                        )}
+                      </div>
                       
                       <div style={{ overflowX: 'auto' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                           <thead>
                             <tr style={{ borderBottom: '2px solid var(--line)', color: 'hsl(var(--text-secondary))' }}>
+                              <th style={{ width: '40px', padding: '0.75rem', textAlign: 'center' }}>
+                                <input 
+                                  type="checkbox"
+                                  checked={filtered.length > 0 && selectedMappedLeads.length === filtered.length}
+                                  onChange={() => handleSelectAllMappedLeads(filtered)}
+                                  style={{ cursor: 'pointer' }}
+                                />
+                              </th>
                               <th style={{ textAlign: 'left', padding: '0.75rem' }}>URN</th>
                               <th style={{ textAlign: 'left', padding: '0.75rem' }}>Name</th>
                               <th style={{ textAlign: 'left', padding: '0.75rem' }}>Bank Ref No</th>
                               <th style={{ textAlign: 'left', padding: '0.75rem' }}>IPA Status</th>
+                              <th style={{ textAlign: 'left', padding: '0.75rem' }}>Submit Date</th>
                               <th style={{ textAlign: 'left', padding: '0.75rem' }}>Final Decision</th>
                               <th style={{ textAlign: 'left', padding: '0.75rem' }}>Mapping Date</th>
                               <th style={{ textAlign: 'center', padding: '0.75rem' }}>Action</th>
@@ -2382,20 +2784,36 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                           <tbody>
                             {filtered.length === 0 ? (
                               <tr>
-                                <td colSpan="7" style={{ textAlign: 'center', padding: '3rem', color: 'hsl(var(--text-muted))' }}>
+                                <td colSpan="9" style={{ textAlign: 'center', padding: '3rem', color: 'hsl(var(--text-muted))' }}>
                                   No mapped leads match the current filters.
                                 </td>
                               </tr>
                             ) : (
                               filtered.map((lead, idx) => (
                                 <tr key={idx} style={{ borderBottom: '1px solid var(--line)', transition: 'background 0.2s' }}>
+                                  <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                                    <input 
+                                      type="checkbox"
+                                      checked={selectedMappedLeads.includes(lead.id)}
+                                      onChange={() => handleSelectMappedLead(lead.id)}
+                                      style={{ cursor: 'pointer' }}
+                                    />
+                                  </td>
                                   <td style={{ padding: '0.75rem', fontFamily: 'var(--font-mono)' }}>{lead.urn}</td>
                                   <td style={{ padding: '0.75rem', fontWeight: 600 }}>{lead.full_name}</td>
                                   <td style={{ padding: '0.75rem', fontFamily: 'var(--font-mono)' }}>{lead.mis_data?.bank_reference_number || 'N/A'}</td>
                                   <td style={{ padding: '0.75rem' }}>
-                                    <span className={`badge badge-${String(lead.mis_data?.ipa_status).toLowerCase().includes('approved') ? 'success' : String(lead.mis_data?.ipa_status).toLowerCase().includes('declined') ? 'danger' : 'warning'}`}>
+                                    <span className={`badge badge-${(() => {
+                                      const status = String(lead.mis_data?.ipa_status || '').toLowerCase();
+                                      if (status.includes('approve') || status.includes('success') || status.includes('active')) return 'success';
+                                      if (status.includes('decline') || status.includes('reject') || status.includes('cancel')) return 'danger';
+                                      return 'warning';
+                                    })()}`}>
                                       {lead.mis_data?.ipa_status || 'N/A'}
                                     </span>
+                                  </td>
+                                  <td style={{ padding: '0.75rem', fontSize: '0.75rem', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
+                                    {formatMISValue(lead.mis_data?.application_submit_date_time, 'application_submit_date_time')}
                                   </td>
                                   <td style={{ padding: '0.75rem' }}>
                                     <span className={`badge badge-${lead.mis_status === 'Approved' ? 'success' : lead.mis_status === 'Rejected' ? 'danger' : 'warning'}`}>
@@ -2403,14 +2821,24 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                                     </span>
                                   </td>
                                   <td style={{ padding: '0.75rem', fontSize: '0.75rem' }}>{formatDateTime(lead.mis_mapped_at)}</td>
-                                  <td style={{ padding: '0.75rem', textAlign: 'center' }}>
-                                    <button 
-                                      onClick={() => setSelectedMappedLead(lead)} 
-                                      className="btn-secondary" 
-                                      style={{ padding: '0.35rem 0.75rem', fontSize: '0.75rem' }}
-                                    >
-                                      Details
-                                    </button>
+                                  <td style={{ padding: '0.75rem' }}>
+                                    <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
+                                      <button 
+                                        onClick={() => setSelectedMappedLead(lead)} 
+                                        className="btn-secondary" 
+                                        style={{ padding: '0.35rem 0.75rem', fontSize: '0.75rem' }}
+                                      >
+                                        Details
+                                      </button>
+                                      <button 
+                                        onClick={() => triggerDeleteMappedLeads([lead.id], 'single')} 
+                                        className="btn-danger-outline" 
+                                        style={{ padding: '0.35rem 0.5rem', fontSize: '0.75rem', color: 'var(--err)', background: 'none', border: '1px solid var(--err)', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                        title="Delete Mapped Lead"
+                                      >
+                                        <Trash2 size={14} />
+                                      </button>
+                                    </div>
                                   </td>
                                 </tr>
                               ))
@@ -3801,7 +4229,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                       setMisFile(null);
                       setShowMISResultModal(true);
                       fetchLeads(currentPage, leadsPerPage);
-                      if (activeTab === 'leads_dashboard') fetchMISStats();
+                      fetchMISStats();
                     } else {
                       const errData = await res.json();
                       showToast(errData.error || 'Failed to upload MIS file', 'error');
@@ -3910,6 +4338,50 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
         </div>
       )}
 
+      {/* Password Confirmation Modal */}
+      {showPasswordConfirmModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1150, backdropFilter: 'blur(8px)' }}>
+          <div className="glass-panel admin-dialog-panel" style={{ width: '90%', maxWidth: '400px', position: 'relative', borderTop: '4px solid var(--err)', padding: '2rem', textAlign: 'center' }}>
+            <button onClick={() => { setShowPasswordConfirmModal(false); setPendingDeleteAction(null); }} style={{ position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none', color: 'hsl(var(--text-primary))', cursor: 'pointer' }}>
+              <X size={20} />
+            </button>
+            <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: '48px', width: '48px', borderRadius: '50%', background: 'rgba(209, 67, 67, 0.1)', color: 'var(--err)', marginBottom: '0.75rem' }}>
+              <Trash2 size={24} />
+            </div>
+            <h3 style={{ fontSize: '1.2rem', color: 'hsl(var(--text-primary))', marginBottom: '0.5rem' }}>Confirm Admin Password</h3>
+            <p style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', marginBottom: '1.25rem' }}>
+              Please enter the admin password to authorize unmapping of {pendingDeleteAction?.ids?.length} lead(s) from the dashboard.
+            </p>
+            <input 
+              type="password"
+              placeholder="Enter password 'Lakshay@123'"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleConfirmDeleteMappedLeads(); }}
+              className="form-control"
+              style={{ width: '100%', marginBottom: '1.5rem', padding: '0.6rem 0.8rem', border: '1px solid var(--line)', borderRadius: '6px', background: 'var(--paper)', color: 'var(--ink)' }}
+              autoFocus
+            />
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+              <button 
+                onClick={() => { setShowPasswordConfirmModal(false); setPendingDeleteAction(null); }} 
+                className="btn-secondary"
+                style={{ padding: '0.5rem 1rem', fontSize: '0.8rem' }}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleConfirmDeleteMappedLeads} 
+                className="btn-primary"
+                style={{ padding: '0.5rem 1rem', fontSize: '0.8rem', background: 'var(--err)', borderColor: 'var(--err)' }}
+              >
+                Confirm Unmap
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Mapped Lead MIS Details Modal */}
       {selectedMappedLead && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, backdropFilter: 'blur(8px)' }}>
@@ -3930,42 +4402,74 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                 <div>Mapped Value</div>
               </div>
               <div style={{ maxHeight: '50vh', overflowY: 'auto' }}>
-                {[
-                  { label: 'Bank Reference Number', key: 'bank_reference_number' },
-                  { label: 'Application Submit Date/Time', key: 'application_submit_date_time' },
-                  { label: 'Customer Type', key: 'customer_type' },
-                  { label: 'state', key: 'state' },
-                  { label: 'IPA Status', key: 'ipa_status' },
-                  { label: 'DAP Final Flag', key: 'dap_final_flag' },
-                  { label: 'DROPOFFREASON', key: 'dropoff_reason' },
-                  { label: 'VKYC STATUS', key: 'vkyc_status' },
-                  { label: 'KYC TYPE', key: 'kyc_type' },
-                  { label: 'VKYC EXPIRY DATE', key: 'vkyc_expiry_date' },
-                  { label: 'PROMO CODE', key: 'promo_code' },
-                  { label: 'FINAL DECISION', key: 'final_decision' },
-                  { label: 'FINAL DECISION DATE', key: 'final_decision_date' },
-                  { label: 'CURRENT STAGE', key: 'current_stage' },
-                  { label: 'CURABLE FLAG', key: 'curable_flag' },
-                  { label: 'COMPANY NAME', key: 'company_name' },
-                  { label: 'BKYC Status', key: 'bkyc_status' },
-                  { label: 'KYC Status', key: 'kyc_status' },
-                  { label: 'Decision Month', key: 'decision_month' },
-                  { label: 'Decline Descreption', key: 'decline_description' },
-                  { label: 'Decline Type', key: 'decline_type' },
-                  { label: 'Card Name', key: 'card_name' },
-                  { label: 'Card Type', key: 'card_type' },
-                  { label: 'Card Activation Staus', key: 'card_activation_status' },
-                  { label: 'Source Type', key: 'source_type' },
-                  { label: 'KYC Completion date', key: 'kyc_completion_date' }
-                ].map((item, idx) => {
-                  const val = selectedMappedLead.mis_data?.[item.key] || 'N/A';
-                  return (
-                    <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', padding: '0.65rem 1rem', fontSize: '0.8rem', borderBottom: '1px solid rgba(0,0,0,0.04)', textAlign: 'left' }}>
-                      <div style={{ color: 'hsl(var(--text-secondary))', fontWeight: 500 }}>{item.label}</div>
-                      <div style={{ color: 'var(--ink)', fontFamily: item.key.includes('date') || item.key.includes('number') ? 'var(--font-mono)' : 'inherit', wordBreak: 'break-all' }}>{val}</div>
-                    </div>
-                  );
-                })}
+                {(() => {
+                  const standardFields = [
+                    { label: 'Bank Reference Number', key: 'bank_reference_number' },
+                    { label: 'Application Submit Date/Time', key: 'application_submit_date_time' },
+                    { label: 'Customer Type', key: 'customer_type' },
+                    { label: 'state', key: 'state' },
+                    { label: 'IPA Status', key: 'ipa_status' },
+                    { label: 'DAP Final Flag', key: 'dap_final_flag' },
+                    { label: 'DROPOFFREASON', key: 'dropoff_reason' },
+                    { label: 'VKYC STATUS', key: 'vkyc_status' },
+                    { label: 'KYC TYPE', key: 'kyc_type' },
+                    { label: 'VKYC EXPIRY DATE', key: 'vkyc_expiry_date' },
+                    { label: 'PROMO CODE', key: 'promo_code' },
+                    { label: 'FINAL DECISION', key: 'final_decision' },
+                    { label: 'FINAL DECISION DATE', key: 'final_decision_date' },
+                    { label: 'CURRENT STAGE', key: 'current_stage' },
+                    { label: 'CURABLE FLAG', key: 'curable_flag' },
+                    { label: 'COMPANY NAME', key: 'company_name' },
+                    { label: 'BKYC Status', key: 'bkyc_status' },
+                    { label: 'KYC Status', key: 'kyc_status' },
+                    { label: 'Decision Month', key: 'decision_month' },
+                    { label: 'Decline Descreption', key: 'decline_description' },
+                    { label: 'Decline Type', key: 'decline_type' },
+                    { label: 'Card Name', key: 'card_name' },
+                    { label: 'Card Type', key: 'card_type' },
+                    { label: 'Card Activation Staus', key: 'card_activation_status' },
+                    { label: 'Source Type', key: 'source_type' },
+                    { label: 'KYC Completion date', key: 'kyc_completion_date' }
+                  ];
+
+                  const standardKeys = new Set(standardFields.map(f => f.key));
+                  const allRows = [];
+
+                  // Add standard rows
+                  standardFields.forEach(item => {
+                    const rawVal = selectedMappedLead.mis_data?.[item.key];
+                    const val = formatMISValue(rawVal, item.key);
+                    allRows.push({ label: item.label, value: val, key: item.key });
+                  });
+
+                  // Add extra custom rows from the uploaded file
+                  if (selectedMappedLead.mis_data) {
+                    Object.entries(selectedMappedLead.mis_data).forEach(([k, v]) => {
+                      if (!standardKeys.has(k) && v !== '' && v !== null && v !== undefined) {
+                        allRows.push({ label: k, value: formatMISValue(v, k), key: k });
+                      }
+                    });
+                  }
+
+                  return allRows.map((item, idx) => {
+                    const valStr = String(item.value).toLowerCase();
+                    let valColor = 'var(--ink)';
+                    let valFontWeight = 'inherit';
+                    if (valStr.includes('approve') || valStr.includes('success') || valStr.includes('active') || valStr === 'yes') {
+                      valColor = 'var(--mint)';
+                      valFontWeight = '600';
+                    } else if (valStr.includes('decline') || valStr.includes('reject') || valStr.includes('fail') || valStr === 'no') {
+                      valColor = 'var(--err)';
+                      valFontWeight = '600';
+                    }
+                    return (
+                      <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', padding: '0.65rem 1rem', fontSize: '0.8rem', borderBottom: '1px solid rgba(0,0,0,0.04)', textAlign: 'left' }}>
+                        <div style={{ color: 'hsl(var(--text-secondary))', fontWeight: 500 }}>{item.label}</div>
+                        <div style={{ color: valColor, fontWeight: valFontWeight, fontFamily: item.key.includes('date') || item.key.includes('number') ? 'var(--font-mono)' : 'inherit', wordBreak: 'break-all' }}>{item.value}</div>
+                      </div>
+                    );
+                  });
+                })()}
               </div>
             </div>
 

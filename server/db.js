@@ -682,6 +682,16 @@ const db = {
     return true;
   },
 
+  async unmapLead(id) {
+    await pool.query("UPDATE leads SET mis_status = NULL, mis_mapped_at = NULL, mis_data = '{}' WHERE id = $1", [id]);
+    return true;
+  },
+
+  async unmapLeads(ids) {
+    await pool.query("UPDATE leads SET mis_status = NULL, mis_mapped_at = NULL, mis_data = '{}' WHERE id = ANY($1::varchar[])", [ids]);
+    return true;
+  },
+
   // --- Cards ---
   async getCards(includeInactive = false) {
     const res = includeInactive
@@ -902,158 +912,144 @@ const db = {
     const totalLeadsRes = await pool.query('SELECT COUNT(*) FROM leads');
     const totalLeads = parseInt(totalLeadsRes.rows[0].count, 10);
 
-    // 2. Mapped Leads
-    const mappedLeadsRes = await pool.query('SELECT COUNT(*) FROM leads WHERE mis_status IS NOT NULL');
-    const totalMapped = parseInt(mappedLeadsRes.rows[0].count, 10);
+    // Get all mapped leads
+    const mappedLeadsListRes = await pool.query('SELECT * FROM leads WHERE mis_status IS NOT NULL ORDER BY mis_mapped_at DESC');
+    
+    // Expand history list in JS
+    const expandedList = [];
+    mappedLeadsListRes.rows.forEach(row => {
+      let history = [];
+      try {
+        const misDataObj = typeof row.mis_data === 'string' ? JSON.parse(row.mis_data) : (row.mis_data || {});
+        if (Array.isArray(misDataObj.history)) {
+          history = misDataObj.history;
+        }
+      } catch (e) {}
 
-    // 3. Status breakdown
-    const statusRes = await pool.query(`
-      SELECT mis_status, COUNT(*) as count 
-      FROM leads 
-      WHERE mis_status IS NOT NULL 
-      GROUP BY mis_status
-    `);
-    const statusBreakdown = {};
-    statusRes.rows.forEach(r => {
-      statusBreakdown[r.mis_status] = parseInt(r.count, 10);
+      if (history.length > 0) {
+        history.forEach(hist => {
+          expandedList.push({
+            ...row,
+            mis_status: hist.status || row.mis_status,
+            mis_mapped_at: hist.mapped_at || row.mis_mapped_at,
+            mis_data: hist.data || {},
+            utm_params: typeof row.utm_params === 'string' ? JSON.parse(row.utm_params) : (row.utm_params || {})
+          });
+        });
+      } else {
+        expandedList.push({
+          ...row,
+          utm_params: typeof row.utm_params === 'string' ? JSON.parse(row.utm_params) : (row.utm_params || {})
+        });
+      }
     });
 
-    // 4. Card name distribution for mapped leads
-    const cardRes = await pool.query(`
-      SELECT COALESCE(card_name, 'Unknown') as card_name, COUNT(*) as count 
-      FROM leads 
-      WHERE mis_status IS NOT NULL 
-      GROUP BY card_name
-    `);
-    const cardDistribution = cardRes.rows.map(r => ({
-      name: r.card_name,
-      count: parseInt(r.count, 10)
-    }));
+    const totalMapped = expandedList.length;
+
+    // 3. Status breakdown
+    const statusBreakdown = {};
+    expandedList.forEach(r => {
+      const status = r.mis_status || 'Unknown';
+      statusBreakdown[status] = (statusBreakdown[status] || 0) + 1;
+    });
+
+    // 4. Card name distribution
+    const cardDistMap = {};
+    expandedList.forEach(r => {
+      const cardName = r.mis_data?.card_name || 'Unknown';
+      cardDistMap[cardName] = (cardDistMap[cardName] || 0) + 1;
+    });
+    const cardDistribution = Object.entries(cardDistMap).map(([name, count]) => ({ name, count }));
 
     // 5. Timeline - mapped count over past 15 days
-    const timelineRes = await pool.query(`
-      SELECT DATE(mis_mapped_at) as date, COUNT(*) as count
-      FROM leads
-      WHERE mis_mapped_at IS NOT NULL
-      GROUP BY DATE(mis_mapped_at)
-      ORDER BY DATE(mis_mapped_at) ASC
-      LIMIT 15
-    `);
-    const timeline = timelineRes.rows.map(r => ({
-      date: r.date ? new Date(r.date).toISOString().split('T')[0] : '',
-      count: parseInt(r.count, 10)
-    }));
+    const timelineMap = {};
+    expandedList.forEach(r => {
+      if (r.mis_mapped_at) {
+        const dateStr = new Date(r.mis_mapped_at).toISOString().split('T')[0];
+        timelineMap[dateStr] = (timelineMap[dateStr] || 0) + 1;
+      }
+    });
+    const timeline = Object.entries(timelineMap)
+      .map(([date, count]) => ({ date, count }))
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .slice(-15);
 
     // 6. KYC Type distribution
-    const kycRes = await pool.query(`
-      SELECT COALESCE(mis_data->>'kyc_type', 'Unknown') as kyc_type, COUNT(*) as count
-      FROM leads
-      WHERE mis_status IS NOT NULL
-      GROUP BY mis_data->>'kyc_type'
-    `);
-    const kycDistribution = kycRes.rows.map(r => ({
-      name: r.kyc_type,
-      count: parseInt(r.count, 10)
-    }));
+    const kycMap = {};
+    expandedList.forEach(r => {
+      const kycType = r.mis_data?.kyc_type || 'Unknown';
+      kycMap[kycType] = (kycMap[kycType] || 0) + 1;
+    });
+    const kycDistribution = Object.entries(kycMap).map(([name, count]) => ({ name, count }));
 
     // 7. Source Type distribution
-    const sourceRes = await pool.query(`
-      SELECT COALESCE(mis_data->>'source_type', 'Unknown') as source_type, COUNT(*) as count
-      FROM leads
-      WHERE mis_status IS NOT NULL
-      GROUP BY mis_data->>'source_type'
-    `);
-    const sourceDistribution = sourceRes.rows.map(r => ({
-      name: r.source_type,
-      count: parseInt(r.count, 10)
-    }));
+    const sourceMap = {};
+    expandedList.forEach(r => {
+      let sourceType = String(r.mis_data?.source_type || '').trim();
+      if (!sourceType || sourceType === '-') sourceType = 'Blank';
+      sourceMap[sourceType] = (sourceMap[sourceType] || 0) + 1;
+    });
+    const sourceDistribution = Object.entries(sourceMap).map(([name, count]) => ({ name, count }));
 
     // 8. Card Type distribution
-    const cardTypeRes = await pool.query(`
-      SELECT COALESCE(mis_data->>'card_type', 'Unknown') as card_type, COUNT(*) as count
-      FROM leads
-      WHERE mis_status IS NOT NULL
-      GROUP BY mis_data->>'card_type'
-    `);
-    const cardTypeDistribution = cardTypeRes.rows.map(r => ({
-      name: r.card_type,
-      count: parseInt(r.count, 10)
-    }));
+    const cardTypeMap = {};
+    expandedList.forEach(r => {
+      const cardType = r.mis_data?.card_type || 'Unknown';
+      cardTypeMap[cardType] = (cardTypeMap[cardType] || 0) + 1;
+    });
+    const cardTypeDistribution = Object.entries(cardTypeMap).map(([name, count]) => ({ name, count }));
 
     // 9. Customer Type distribution
-    const custTypeRes = await pool.query(`
-      SELECT COALESCE(mis_data->>'customer_type', 'Unknown') as customer_type, COUNT(*) as count
-      FROM leads
-      WHERE mis_status IS NOT NULL
-      GROUP BY mis_data->>'customer_type'
-    `);
-    const customerTypeDistribution = custTypeRes.rows.map(r => ({
-      name: r.customer_type,
-      count: parseInt(r.count, 10)
-    }));
+    const custTypeMap = {};
+    expandedList.forEach(r => {
+      const custType = r.mis_data?.customer_type || 'Unknown';
+      custTypeMap[custType] = (custTypeMap[custType] || 0) + 1;
+    });
+    const customerTypeDistribution = Object.entries(custTypeMap).map(([name, count]) => ({ name, count }));
 
     // 10. Card Activation Status distribution
-    const activeStatusRes = await pool.query(`
-      SELECT COALESCE(mis_data->>'card_activation_status', 'Inactive/Unknown') as activation_status, COUNT(*) as count
-      FROM leads
-      WHERE mis_status IS NOT NULL
-      GROUP BY mis_data->>'card_activation_status'
-    `);
-    const activationStatusDistribution = activeStatusRes.rows.map(r => ({
-      name: r.activation_status,
-      count: parseInt(r.count, 10)
-    }));
+    const activeStatusMap = {};
+    expandedList.forEach(r => {
+      const act = r.mis_data?.card_activation_status || 'Inactive/Unknown';
+      activeStatusMap[act] = (activeStatusMap[act] || 0) + 1;
+    });
+    const activationStatusDistribution = Object.entries(activeStatusMap).map(([name, count]) => ({ name, count }));
 
     // 11. Pincode mapping for Heatmap
-    const pincodeRes = await pool.query(`
-      SELECT COALESCE(pincode, 'Unknown') as pincode, COUNT(*) as count
-      FROM leads
-      WHERE mis_status IS NOT NULL
-      GROUP BY pincode
-      ORDER BY count DESC
-      LIMIT 100
-    `);
-    const pincodeHeatmap = pincodeRes.rows.map(r => ({
-      pincode: r.pincode,
-      count: parseInt(r.count, 10)
-    }));
+    const pinMap = {};
+    expandedList.forEach(r => {
+      const pin = r.mis_data?.PIN_CODE || r.mis_data?.pin_code || r.pincode || 'Unknown';
+      pinMap[pin] = (pinMap[pin] || 0) + 1;
+    });
+    const pincodeHeatmap = Object.entries(pinMap)
+      .map(([pincode, count]) => ({ pincode, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 100);
 
     // 12. Full funnel analytics
     const funnelSubmit = totalLeads;
     
-    const funnelIpaRes = await pool.query(`
-      SELECT COUNT(*) FROM leads 
-      WHERE mis_status IS NOT NULL AND LOWER(mis_data->>'ipa_status') LIKE '%approved%'
-    `);
-    const funnelIpa = parseInt(funnelIpaRes.rows[0].count, 10);
+    const funnelIpa = expandedList.filter(l => {
+      const ipa = String(l.mis_data?.ipa_status || '').toLowerCase();
+      return ipa.includes('approve') || ipa.includes('success');
+    }).length;
 
-    const funnelKycRes = await pool.query(`
-      SELECT COUNT(*) FROM leads 
-      WHERE mis_status IS NOT NULL AND (LOWER(mis_data->>'kyc_status') LIKE '%success%' OR LOWER(mis_data->>'kyc_status') LIKE '%complete%' OR LOWER(mis_data->>'vkyc_status') LIKE '%success%' OR LOWER(mis_data->>'vkyc_status') LIKE '%complete%')
-    `);
-    const funnelKyc = parseInt(funnelKycRes.rows[0].count, 10);
+    const funnelKyc = expandedList.filter(l => {
+      const ks = String(l.mis_data?.kyc_status || '').toLowerCase();
+      const vs = String(l.mis_data?.vkyc_status || '').toLowerCase();
+      const kt = String(l.mis_data?.kyc_type || '').toLowerCase();
+      return ks.includes('success') || ks.includes('complete') || vs.includes('success') || vs.includes('complete') || ks.includes('biokyc') || kt.includes('biokyc');
+    }).length;
 
-    const funnelDecisionRes = await pool.query(`
-      SELECT COUNT(*) FROM leads 
-      WHERE mis_status IS NOT NULL AND (LOWER(mis_data->>'final_decision') = 'approve' OR LOWER(mis_data->>'final_decision') = 'approved')
-    `);
-    const funnelDecision = parseInt(funnelDecisionRes.rows[0].count, 10);
+    const funnelDecision = expandedList.filter(l => {
+      const dec = String(l.mis_data?.final_decision || '').toLowerCase();
+      return dec.includes('approve') || dec.includes('success');
+    }).length;
 
-    const funnelActiveRes = await pool.query(`
-      SELECT COUNT(*) FROM leads 
-      WHERE mis_status IS NOT NULL AND (
-        LOWER(mis_data->>'card_activation_status') = 'txn active' OR 
-        LOWER(mis_data->>'card_activation_status') = 'txn active - rs 100' OR 
-        LOWER(mis_data->>'card_activation_status') = 'v + active'
-      )
-    `);
-    const funnelActive = parseInt(funnelActiveRes.rows[0].count, 10);
-
-    const mappedLeadsListRes = await pool.query('SELECT * FROM leads WHERE mis_status IS NOT NULL ORDER BY mis_mapped_at DESC');
-    const mappedLeadsList = mappedLeadsListRes.rows.map(row => ({
-      ...row,
-      utm_params: typeof row.utm_params === 'string' ? JSON.parse(row.utm_params) : (row.utm_params || {})
-    }));
+    const funnelActive = expandedList.filter(l => {
+      const act = String(l.mis_data?.card_activation_status || '').toLowerCase();
+      return act.includes('active') || act === 'yes';
+    }).length;
 
     return {
       totalLeads,
@@ -1067,7 +1063,7 @@ const db = {
       customerTypeDistribution,
       activationStatusDistribution,
       pincodeHeatmap,
-      mappedLeadsList,
+      mappedLeadsList: expandedList,
       funnel: {
         submit: funnelSubmit,
         ipa: funnelIpa,
@@ -1088,7 +1084,7 @@ const db = {
       let paramIndex = 1;
       
       batch.forEach(up => {
-        valueLines.push(`($${paramIndex}::integer, $${paramIndex + 1}::varchar, $${paramIndex + 2}::jsonb)`);
+        valueLines.push(`($${paramIndex}::varchar, $${paramIndex + 1}::varchar, $${paramIndex + 2}::jsonb)`);
         queryParams.push(up.id);
         queryParams.push(up.status);
         queryParams.push(JSON.stringify(up.data));

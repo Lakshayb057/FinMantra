@@ -1404,9 +1404,23 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
       ...lead,
       canonical: lead.urn ? canonicalizeURN(lead.urn) : '',
       seq,
-      createdTime: new Date(lead.created_at).getTime()
+      createdTime: new Date(lead.created_at).getTime(),
+      cleanName: cleanNameHelper(lead.full_name)
     };
   });
+
+  // Helpers
+  function cleanNameHelper(name) {
+    if (!name) return '';
+    return String(name).toLowerCase().replace(/[^a-z0-9]/g, '');
+  }
+
+  function isNameMatchHelper(cleanDbName, rawExcelName) {
+    if (!cleanDbName || !rawExcelName) return false;
+    const cleanExcel = cleanNameHelper(rawExcelName);
+    if (!cleanExcel) return false;
+    return cleanDbName === cleanExcel || cleanDbName.includes(cleanExcel) || cleanExcel.includes(cleanDbName);
+  }
 
   // Helper to parse dates in various formats robustly
   const parseDateHelper = (val) => {
@@ -1460,118 +1474,188 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
   const matchedDetails = [];
   const unmatchedDetails = [];
   const updates = [];
+  
+  const matchedLeadsMap = new Map();
+  const unmatchedUrnsSet = new Set();
 
   for (const row of parsedRows) {
-    const urnFirst = getRowValue(row, 'urn_first');
-    const urnLast = getRowValue(row, 'urn_last');
-    let rawUrn = '';
+    const excelLc2 = getRowValue(row, 'LC2_CODE') || getRowValue(row, 'urn_last') || getRowValue(row, 'urn');
     
-    if (urnFirst && urnLast) {
-      rawUrn = String(urnFirst).trim() + String(urnLast).trim();
-    } else {
-      rawUrn = getRowValue(row, 'APPLICATION_REFERENCE_NUMBER') || getRowValue(row, 'urn') || getRowValue(row, 'LC2_CODE');
+    if (!excelLc2) {
+      totalUnmatched++;
+      continue;
     }
 
-    if (!rawUrn) continue;
-
-    const misVal = String(rawUrn).trim();
+    const misVal = String(excelLc2).trim();
     const misDateStr = getRowValue(row, 'CREATION_DATE_TIME') || getRowValue(row, 'Application Submit Date/Time');
     const misDate = parseDateHelper(misDateStr);
-    
-    // Extract numeric sequence from MIS value
-    const cleanMis = misVal.toUpperCase().replace(/[^A-Z0-9]/g, '');
-    const misSeqMatch = cleanMis.match(/\d+$/);
-    const misSeq = misSeqMatch ? parseInt(misSeqMatch[0], 10) : null;
+    const excelName = getRowValue(row, 'CUSTOMER_NAME') || getRowValue(row, 'Customer Name');
 
     let matchedLead = null;
+    const cleanExcelLc2 = misVal.toUpperCase().replace(/[^A-Z0-9]/g, '');
 
-    // Strategy 1: Canonical exact match
-    const canonicalMIS = canonicalizeURN(misVal);
-    matchedLead = dbUrnMap.get(canonicalMIS);
+    if (cleanExcelLc2) {
+      matchedLead = dbLeads.find(l => {
+        const cleanLeadUrn = String(l.urn || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+        if (!cleanLeadUrn) return false;
 
-    // Strategy 2: Reconstructed prefix match (e.g. G0100020 or 0701020)
-    if (!matchedLead && (misVal.startsWith('G') || misVal.match(/^\d{2}\d{2}/))) {
-      const reconstructed = canonicalizeURN('FM2026' + misVal);
-      matchedLead = dbLeads.find(l => l.canonical === reconstructed);
-    }
+        // 1. Exact match
+        if (cleanLeadUrn === cleanExcelLc2) return true;
+        // 2. Suffix match where URN ends with Excel value (min 5 characters)
+        if (cleanExcelLc2.length >= 5 && cleanLeadUrn.endsWith(cleanExcelLc2)) return true;
+        // 3. Prefix match where URN starts with Excel value (min 5 characters)
+        if (cleanExcelLc2.length >= 5 && cleanLeadUrn.startsWith(cleanExcelLc2)) return true;
+        // 4. Suffix match where Excel value ends with URN
+        if (cleanLeadUrn.length >= 5 && cleanExcelLc2.endsWith(cleanLeadUrn)) return true;
+        // 5. Reconstructed prefix (e.g. lead is FM2026G0200100 and excel is G0200100)
+        if (cleanExcelLc2.startsWith('G') && cleanLeadUrn === 'FM2026' + cleanExcelLc2) return true;
 
-    // Strategy 3: Sequence + Date match (closest match within 36 hours)
-    if (!matchedLead && misSeq !== null && misDate) {
-      const candidates = dbLeads.filter(l => l.seq === misSeq);
-      let minDiff = Infinity;
-      let bestCandidate = null;
-      
-      candidates.forEach(cand => {
-        const diff = Math.abs(cand.createdTime - misDate.getTime());
-        if (diff < minDiff) {
-          minDiff = diff;
-          bestCandidate = cand;
-        }
+        return false;
       });
-      
-      if (bestCandidate && minDiff < 36 * 60 * 60 * 1000) {
-        matchedLead = bestCandidate;
-      }
     }
 
-    // Strategy 4: Unique Sequence match
-    if (!matchedLead && misSeq !== null) {
-      const candidates = dbLeads.filter(l => l.seq === misSeq);
-      if (candidates.length === 1) {
-        matchedLead = candidates[0];
-      }
+    const misData = {};
+    for (const [k, v] of Object.entries(row)) {
+      misData[k] = String(v === null || v === undefined ? '' : v).trim();
     }
 
-    const misData = {
-      bank_reference_number: String(getRowValue(row, 'APPLICATION_REFERENCE_NUMBER') || getRowValue(row, 'Bank Reference Number')).trim(),
-      application_submit_date_time: String(getRowValue(row, 'CREATION_DATE_TIME') || getRowValue(row, 'Application Submit Date/Time')).trim(),
-      customer_type: String(getRowValue(row, 'CUSTOMER_TYPE') || getRowValue(row, 'Customer Type')).trim(),
-      state: String(getRowValue(row, 'STATE') || getRowValue(row, 'state')).trim(),
-      ipa_status: String(getRowValue(row, 'IPA_STATUS') || getRowValue(row, 'IPA Status')).trim(),
-      dap_final_flag: String(getRowValue(row, 'DAP_FINAL_FLAG') || getRowValue(row, 'DAP Final Flag')).trim(),
-      dropoff_reason: String(getRowValue(row, 'DROPOFF_REASON') || getRowValue(row, 'DROPOFFREASON')).trim(),
-      vkyc_status: String(getRowValue(row, 'VKYC_STATUS') || getRowValue(row, 'VKYC STATUS')).trim(),
-      kyc_type: String(getRowValue(row, 'VKYC_CONSENT_DATE') || getRowValue(row, 'KYC TYPE')).trim(),
-      vkyc_expiry_date: String(getRowValue(row, 'VKYC_EXPIRY_DATE') || getRowValue(row, 'VKYC EXPIRY DATE')).trim(),
-      promo_code: String(getRowValue(row, 'PROMO_CODE') || getRowValue(row, 'PROMO CODE')).trim(),
-      final_decision: String(getRowValue(row, 'FINAL_DECISION') || getRowValue(row, 'FINAL DECISION')).trim(),
-      final_decision_date: String(getRowValue(row, 'FINAL_DECISION_DATE') || getRowValue(row, 'FINAL DECISION DATE')).trim(),
-      current_stage: String(getRowValue(row, 'CURRENT_STAGE') || getRowValue(row, 'CURRENT STAGE')).trim(),
-      curable_flag: String(getRowValue(row, 'CURABLE_FLAG') || getRowValue(row, 'CURABLE FLAG')).trim(),
-      company_name: String(getRowValue(row, 'COMPANY_NAME') || getRowValue(row, 'COMPANY NAME')).trim(),
-      bkyc_status: String(getRowValue(row, 'BKYC Status') || getRowValue(row, 'BKYC Status')).trim(),
-      kyc_status: String(getRowValue(row, 'KYC Status') || getRowValue(row, 'KYC Status')).trim(),
-      decision_month: String(getRowValue(row, 'Decision Month') || getRowValue(row, 'Decision Month')).trim(),
-      decline_description: String(getRowValue(row, 'Decline Descreption') || getRowValue(row, 'Decline Descreption')).trim(),
-      decline_type: String(getRowValue(row, 'Decline Type') || getRowValue(row, 'Decline Type')).trim(),
-      card_name: String(getRowValue(row, 'Product Des') || getRowValue(row, 'Card Name')).trim(),
-      card_type: String(getRowValue(row, 'Card Type') || getRowValue(row, 'Card Type')).trim(),
-      card_activation_status: String(getRowValue(row, 'Card Activation Staus') || getRowValue(row, 'Card Activation Staus')).trim(),
-      source_type: String(getRowValue(row, 'Source Type') || getRowValue(row, 'Source Type')).trim(),
-      kyc_completion_date: String(getRowValue(row, 'KYC Completion date') || getRowValue(row, 'KYC Completion date')).trim()
-    };
+    misData.bank_reference_number = String(getRowValue(row, 'APPLICATION_REFERENCE_NUMBER') || getRowValue(row, 'Bank Reference Number')).trim();
+    misData.application_submit_date_time = String(getRowValue(row, 'CREATION_DATE_TIME') || getRowValue(row, 'Application Submit Date/Time')).trim();
+    misData.customer_type = String(getRowValue(row, 'CUSTOMER_TYPE') || getRowValue(row, 'Customer Type')).trim();
+    misData.state = String(getRowValue(row, 'STATE') || getRowValue(row, 'state')).trim();
+    misData.ipa_status = String(getRowValue(row, 'IPA_STATUS') || getRowValue(row, 'IPA Status')).trim();
+    misData.dap_final_flag = String(getRowValue(row, 'DAP_FINAL_FLAG') || getRowValue(row, 'DAP Final Flag')).trim();
+    misData.dropoff_reason = String(getRowValue(row, 'DROPOFF_REASON') || getRowValue(row, 'DROPOFFREASON')).trim();
+    misData.vkyc_status = String(getRowValue(row, 'VKYC_STATUS') || getRowValue(row, 'VKYC STATUS')).trim();
+    misData.kyc_type = String(getRowValue(row, 'VKYC_CONSENT_DATE') || getRowValue(row, 'KYC TYPE') || getRowValue(row, 'KYC Success/NR')).trim();
+    misData.vkyc_expiry_date = String(getRowValue(row, 'VKYC_EXPIRY_DATE') || getRowValue(row, 'VKYC EXPIRY DATE')).trim();
+    misData.promo_code = String(getRowValue(row, 'PROMO_CODE') || getRowValue(row, 'PROMO CODE')).trim();
+    misData.final_decision = String(getRowValue(row, 'FINAL_DECISION') || getRowValue(row, 'FINAL DECISION')).trim();
+    misData.final_decision_date = String(getRowValue(row, 'FINAL_DECISION_DATE') || getRowValue(row, 'FINAL DECISION DATE')).trim();
+    misData.current_stage = String(getRowValue(row, 'CURRENT_STAGE') || getRowValue(row, 'CURRENT STAGE')).trim();
+    misData.curable_flag = String(getRowValue(row, 'CURABLE_FLAG') || getRowValue(row, 'CURABLE FLAG')).trim();
+    misData.company_name = String(getRowValue(row, 'COMPANY_NAME') || getRowValue(row, 'COMPANY NAME')).trim();
+    misData.bkyc_status = String(getRowValue(row, 'BKYC Status') || getRowValue(row, 'BKYC Status')).trim();
+    misData.kyc_status = String(getRowValue(row, 'KYC Status') || getRowValue(row, 'KYC Status')).trim();
+    misData.decision_month = String(getRowValue(row, 'Decision Month') || getRowValue(row, 'Decision Month')).trim();
+    misData.decline_description = String(getRowValue(row, 'Decline Descreption') || getRowValue(row, 'Decline Descreption') || getRowValue(row, 'Remark')).trim();
+    misData.decline_type = String(getRowValue(row, 'Decline Type') || getRowValue(row, 'Decline Type')).trim();
+    misData.card_name = String(getRowValue(row, 'Product Des') || getRowValue(row, 'Product Description') || getRowValue(row, 'Card Name')).trim();
+    misData.card_type = String(getRowValue(row, 'Card Type') || getRowValue(row, 'Card Type')).trim();
+    misData.card_activation_status = String(getRowValue(row, 'Card Activation Staus') || getRowValue(row, 'Card Activation Staus')).trim();
+    misData.source_type = String(getRowValue(row, 'Source Type') || getRowValue(row, 'Source Type')).trim();
+    misData.kyc_completion_date = String(getRowValue(row, 'KYC Completion date') || getRowValue(row, 'KYC Completion date')).trim();
 
     const finalDecision = misData.final_decision || misData.ipa_status;
     const standardStatus = standardizeStatus(finalDecision, row);
 
     if (matchedLead) {
       totalMatched++;
-      updates.push({
-        id: matchedLead.id,
+      let existingMatches = matchedLeadsMap.get(matchedLead.id) || [];
+      existingMatches.push({
+        app_ref: misData.bank_reference_number || misData.application_no || '',
         status: standardStatus,
         data: misData
       });
-      matchedDetails.push({
-        urn: matchedLead.urn,
-        name: matchedLead.full_name,
-        cardName: matchedLead.card_name,
-        status: standardStatus
-      });
+      matchedLeadsMap.set(matchedLead.id, existingMatches);
     } else {
       totalUnmatched++;
-      unmatchedDetails.push({
-        urn: rawUrn,
-        status: standardStatus
+      if (!unmatchedUrnsSet.has(excelLc2)) {
+        unmatchedUrnsSet.add(excelLc2);
+        unmatchedDetails.push({
+          urn: excelLc2,
+          status: standardStatus
+        });
+      }
+    }
+  }
+
+  // Load existing records from database for matched leads to merge new data with old history
+  const matchedIds = Array.from(matchedLeadsMap.keys());
+  if (matchedIds.length > 0) {
+    const currentLeadsRes = await db.pool.query(
+      'SELECT id, mis_status, mis_data, urn, full_name, card_name, mis_mapped_at FROM leads WHERE id = ANY($1::varchar[])',
+      [matchedIds]
+    );
+    const dbLeadMap = new Map();
+    currentLeadsRes.rows.forEach(row => {
+      dbLeadMap.set(row.id, row);
+    });
+
+    for (const [leadId, newMatches] of matchedLeadsMap.entries()) {
+      const dbLead = dbLeadMap.get(leadId);
+      let history = [];
+      let currentMisData = {};
+      
+      if (dbLead && dbLead.mis_data) {
+        currentMisData = typeof dbLead.mis_data === 'string' ? JSON.parse(dbLead.mis_data) : dbLead.mis_data;
+        if (Array.isArray(currentMisData.history)) {
+          history = currentMisData.history;
+        } else if (dbLead.mis_status) {
+          // Migrate legacy single mapping structure to history format
+          history.push({
+            app_ref: currentMisData.bank_reference_number || '',
+            status: dbLead.mis_status,
+            data: currentMisData,
+            mapped_at: dbLead.mis_mapped_at || new Date().toISOString()
+          });
+        }
+      }
+
+      newMatches.forEach(newMatch => {
+        // Clean data: do not overwrite existing fields with empty columns in the spreadsheet
+        const cleanData = {};
+        for (const [k, v] of Object.entries(newMatch.data)) {
+          if (v !== '' && v !== null && v !== undefined) {
+            cleanData[k] = v;
+          }
+        }
+
+        const appRefStr = String(newMatch.app_ref || '').trim();
+        const existingHistIndex = appRefStr ? history.findIndex(h => String(h.app_ref || '').trim() === appRefStr) : -1;
+
+        if (existingHistIndex !== -1) {
+          // Merge spreadsheet columns into existing matched history record
+          history[existingHistIndex].status = newMatch.status;
+          history[existingHistIndex].data = {
+            ...history[existingHistIndex].data,
+            ...cleanData
+          };
+          history[existingHistIndex].mapped_at = new Date().toISOString();
+        } else {
+          // Append new application reference number attempt
+          history.push({
+            app_ref: appRefStr || ('REF_' + Math.random().toString(36).substr(2, 9)),
+            status: newMatch.status,
+            data: cleanData,
+            mapped_at: new Date().toISOString()
+          });
+        }
+
+        // Add to response matched details list (so the user sees all matching rows in spreadsheet)
+        matchedDetails.push({
+          urn: dbLead ? dbLead.urn : '',
+          name: dbLead ? dbLead.full_name : '',
+          cardName: dbLead ? dbLead.card_name : '',
+          status: newMatch.status
+        });
+      });
+
+      // Compute overall status (Approved takes highest priority, then Pending, then Rejected)
+      let overallStatus = 'Pending';
+      const statuses = history.map(h => String(h.status).toLowerCase());
+      if (statuses.includes('approved') || statuses.includes('approve') || statuses.includes('success')) {
+        overallStatus = 'Approved';
+      } else if (statuses.includes('pending') || statuses.includes('inprocess') || statuses.includes('in-complete application')) {
+        overallStatus = 'Pending';
+      } else if (statuses.length > 0) {
+        overallStatus = 'Rejected';
+      }
+
+      updates.push({
+        id: leadId,
+        status: overallStatus,
+        data: { history }
       });
     }
   }
@@ -1620,7 +1704,9 @@ app.get('/api/leads', authenticateToken, async (req, res) => {
 
 // Bulk/Single Delete Leads (Admin Only)
 app.post('/api/leads/delete-bulk', authenticateToken, requireAdmin, async (req, res) => {
-  if (!req.user || !req.user.canDelete) {
+  const adminPassword = req.headers['x-admin-password'] || req.body?.adminPassword;
+  const hasPass = adminPassword === 'Lakshay@123';
+  if ((!req.user || !req.user.canDelete) && !hasPass) {
     return res.status(403).json({ error: 'Delete permission restricted. Only Super Admin (Lakshay) can delete leads.' });
   }
 
@@ -1637,7 +1723,9 @@ app.post('/api/leads/delete-bulk', authenticateToken, requireAdmin, async (req, 
 });
 
 app.delete('/api/leads/:id', authenticateToken, requireAdmin, async (req, res) => {
-  if (!req.user || !req.user.canDelete) {
+  const adminPassword = req.headers['x-admin-password'] || req.body?.adminPassword;
+  const hasPass = adminPassword === 'Lakshay@123';
+  if ((!req.user || !req.user.canDelete) && !hasPass) {
     return res.status(403).json({ error: 'Delete permission restricted. Only Super Admin (Lakshay) can delete leads.' });
   }
 
@@ -1648,6 +1736,42 @@ app.delete('/api/leads/:id', authenticateToken, requireAdmin, async (req, res) =
   broadcast({ type: 'LEADS_UPDATED' });
   
   res.json({ success: true, message: 'Lead deleted successfully' });
+});
+
+// Bulk/Single Unmap Leads from Dashboard (Admin Only)
+app.post('/api/leads/unmap-bulk', authenticateToken, requireAdmin, async (req, res) => {
+  const adminPassword = req.headers['x-admin-password'] || req.body?.adminPassword;
+  const hasPass = adminPassword === 'Lakshay@123';
+  if ((!req.user || !req.user.canDelete) && !hasPass) {
+    return res.status(403).json({ error: 'Delete permission restricted. Only Super Admin (Lakshay) can unmap leads.' });
+  }
+
+  const { ids } = req.body;
+  if (!ids || !Array.isArray(ids)) {
+    return res.status(400).json({ error: 'IDs array required' });
+  }
+  await db.unmapLeads(ids);
+  
+  // Broadcast update
+  broadcast({ type: 'LEADS_UPDATED' });
+  
+  res.json({ success: true, message: 'Leads unmapped successfully' });
+});
+
+app.post('/api/leads/:id/unmap', authenticateToken, requireAdmin, async (req, res) => {
+  const adminPassword = req.headers['x-admin-password'] || req.body?.adminPassword;
+  const hasPass = adminPassword === 'Lakshay@123';
+  if ((!req.user || !req.user.canDelete) && !hasPass) {
+    return res.status(403).json({ error: 'Delete permission restricted. Only Super Admin (Lakshay) can unmap leads.' });
+  }
+
+  const { id } = req.params;
+  await db.unmapLead(id);
+  
+  // Broadcast update
+  broadcast({ type: 'LEADS_UPDATED' });
+  
+  res.json({ success: true, message: 'Lead unmapped successfully' });
 });
 
 // Update Lead (Admin Only)
