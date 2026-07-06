@@ -190,6 +190,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   const [dashSearch, setDashSearch] = useState('');
   const [dashFiltersExpanded, setDashFiltersExpanded] = useState(false);
   
+  const [newBankInput, setNewBankInput] = useState('');
   const [newCardForm, setNewCardForm] = useState({ name: '', bank: '', category: 'Offline', ad_id: '', utm_internal: '', description: '', redirect_url_template: '', display_order: 1, active: true, card_locations: [] });
   const [newAgentForm, setNewAgentForm] = useState({ id: '', name: '', phone: '', email: '', username: '', password: '', status: 'active', locations: [] });
   const [newLocName, setNewLocName] = useState('');
@@ -1365,6 +1366,36 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       loadAllAdminData();
     } catch (err) {
       showToast(err.message || 'Failed to save settings.', 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const getBankOptions = () => {
+    if (settings && settings.card_manager_banks) {
+      return settings.card_manager_banks.split(',').map(b => b.trim()).filter(Boolean);
+    }
+    return ['HDFC', 'SBI'];
+  };
+
+  const handleSaveBanks = async (updatedBanks) => {
+    setIsSubmitting(true);
+    try {
+      const banksStr = updatedBanks.join(',');
+      await apiFetch(`${API_URL}/settings`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          card_manager_banks: banksStr
+        })
+      });
+      setSettings(prev => ({ ...prev, card_manager_banks: banksStr }));
+      showToast('Bank options updated successfully.');
+    } catch (err) {
+      showToast(err.message || 'Failed to save bank options.', 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -2878,13 +2909,17 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                     <div className="form-group">
                       <label className="form-label">Bank Name</label>
-                      <input 
-                        type="text" 
-                        className="form-input" 
+                      <select 
+                        className="form-select" 
                         value={editingCard ? editingCard.bank : newCardForm.bank}
                         onChange={(e) => editingCard ? setEditingCard({ ...editingCard, bank: e.target.value }) : setNewCardForm({ ...newCardForm, bank: e.target.value })}
                         required
-                      />
+                      >
+                        <option value="">Select Bank</option>
+                        {getBankOptions().map((bank, i) => (
+                          <option key={i} value={bank}>{bank}</option>
+                        ))}
+                      </select>
                     </div>
                     <div className="form-group">
                       <label className="form-label">Category</label>
@@ -3444,28 +3479,53 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                 </button>
 
                 {canDelete && (
-                  <button
-                    type="button"
-                    onClick={() => setActiveSettingsSubTab('form_builder')}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.75rem',
-                      padding: '0.75rem 1rem',
-                      borderRadius: 'var(--radius-md)',
-                      border: 'none',
-                      background: activeSettingsSubTab === 'form_builder' ? 'rgba(224, 168, 46, 0.15)' : 'transparent',
-                      color: activeSettingsSubTab === 'form_builder' ? 'var(--gold)' : 'hsl(var(--text-secondary))',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s',
-                      textAlign: 'left',
-                      fontWeight: activeSettingsSubTab === 'form_builder' ? 600 : 400
-                    }}
-                    className="settings-menu-item"
-                  >
-                    <QrCode size={16} />
-                    <span>Landing Form Builder</span>
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setActiveSettingsSubTab('form_builder')}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.75rem',
+                        padding: '0.75rem 1rem',
+                        borderRadius: 'var(--radius-md)',
+                        border: 'none',
+                        background: activeSettingsSubTab === 'form_builder' ? 'rgba(224, 168, 46, 0.15)' : 'transparent',
+                        color: activeSettingsSubTab === 'form_builder' ? 'var(--gold)' : 'hsl(var(--text-secondary))',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                        textAlign: 'left',
+                        fontWeight: activeSettingsSubTab === 'form_builder' ? 600 : 400
+                      }}
+                      className="settings-menu-item"
+                    >
+                      <QrCode size={16} />
+                      <span>Landing Form Builder</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setActiveSettingsSubTab('bank_manager')}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.75rem',
+                        padding: '0.75rem 1rem',
+                        borderRadius: 'var(--radius-md)',
+                        border: 'none',
+                        background: activeSettingsSubTab === 'bank_manager' ? 'rgba(224, 168, 46, 0.15)' : 'transparent',
+                        color: activeSettingsSubTab === 'bank_manager' ? 'var(--gold)' : 'hsl(var(--text-secondary))',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                        textAlign: 'left',
+                        fontWeight: activeSettingsSubTab === 'bank_manager' ? 600 : 400
+                      }}
+                      className="settings-menu-item"
+                    >
+                      <CreditCard size={16} />
+                      <span>Bank Manager</span>
+                    </button>
+                  </>
                 )}
               </div>
 
@@ -4150,6 +4210,109 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                     token={token}
                     API_URL={API_URL}
                   />
+                )}
+
+                {activeSettingsSubTab === 'bank_manager' && canDelete && (
+                  <div style={{ textAlign: 'left' }}>
+                    <h3 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '0.5rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.75rem', color: 'var(--gold-deep)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <CreditCard size={20} />
+                      <span>Bank Manager</span>
+                    </h3>
+                    <p style={{ fontSize: '0.82rem', color: 'hsl(var(--text-muted))', marginBottom: '1.5rem' }}>
+                      Configure the list of banks available in the Card Manager dropdown list.
+                    </p>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.5fr', gap: '2rem' }} className="admin-split-grid">
+                      {/* Left: Add Bank form */}
+                      <div className="glass-panel" style={{ padding: '1.5rem', alignSelf: 'start', background: 'var(--paper-2)', border: '1px solid var(--line)' }}>
+                        <h4 style={{ fontSize: '0.92rem', fontWeight: 700, marginBottom: '1rem', color: 'var(--ink)' }}>Add New Bank</h4>
+                        <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+                          <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 600 }}>Bank Name</label>
+                          <input 
+                            type="text" 
+                            className="form-input" 
+                            placeholder="e.g. ICICI, Axis"
+                            value={newBankInput}
+                            onChange={(e) => setNewBankInput(e.target.value)}
+                            style={{ background: 'var(--paper)', fontSize: '0.8rem', padding: '0.45rem 0.6rem' }}
+                          />
+                        </div>
+                        <button 
+                          onClick={() => {
+                            const trimmed = newBankInput.trim();
+                            if (!trimmed) {
+                              showToast('Please enter a valid bank name.', 'error');
+                              return;
+                            }
+                            const current = getBankOptions();
+                            if (current.some(b => b.toLowerCase() === trimmed.toLowerCase())) {
+                              showToast('Bank already exists in the list.', 'error');
+                              return;
+                            }
+                            const updated = [...current, trimmed];
+                            handleSaveBanks(updated);
+                            setNewBankInput('');
+                          }}
+                          className="btn-primary"
+                          style={{ width: '100%', fontSize: '0.8rem', padding: '0.5rem 1rem' }}
+                          disabled={isSubmitting}
+                        >
+                          {isSubmitting ? 'Adding...' : 'Add Bank'}
+                        </button>
+                      </div>
+
+                      {/* Right: Existing Banks List */}
+                      <div className="glass-panel" style={{ padding: '1.5rem', border: '1px solid var(--line)' }}>
+                        <h4 style={{ fontSize: '0.92rem', fontWeight: 700, marginBottom: '1rem', color: 'var(--ink)' }}>Configured Banks</h4>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', maxHeight: '350px', overflowY: 'auto' }}>
+                          {getBankOptions().length === 0 ? (
+                            <div style={{ fontSize: '0.82rem', color: 'hsl(var(--text-muted))', textAlign: 'center', padding: '1.5rem 1rem' }}>
+                              No banks configured. Defaulting to HDFC, SBI.
+                            </div>
+                          ) : (
+                            getBankOptions().map((bank, idx) => (
+                              <div 
+                                key={idx} 
+                                style={{ 
+                                  display: 'flex', 
+                                  justifyContent: 'space-between', 
+                                  alignItems: 'center', 
+                                  padding: '0.6rem 0.85rem', 
+                                  background: 'var(--paper-2)', 
+                                  border: '1px solid var(--line)', 
+                                  borderRadius: 'var(--radius-sm)' 
+                                }}
+                              >
+                                <span style={{ fontWeight: 600, fontSize: '0.82rem', color: 'var(--ink)' }}>{bank}</span>
+                                <button 
+                                  onClick={() => {
+                                    const current = getBankOptions();
+                                    const updated = current.filter((_, i) => i !== idx);
+                                    handleSaveBanks(updated);
+                                  }}
+                                  className="btn-danger-outline"
+                                  style={{ 
+                                    padding: '0.25rem 0.55rem', 
+                                    fontSize: '0.72rem', 
+                                    color: 'var(--err)', 
+                                    background: 'none', 
+                                    border: '1px solid var(--err)', 
+                                    borderRadius: '4px', 
+                                    cursor: 'pointer',
+                                    transition: 'all 0.15s'
+                                  }}
+                                  disabled={isSubmitting}
+                                  title="Remove Bank"
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>

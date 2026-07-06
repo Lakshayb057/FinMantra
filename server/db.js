@@ -413,6 +413,11 @@ async function initPgSchema() {
     if (parseInt(pincodeListCheck.rows[0].count, 10) === 0) {
       await client.query("INSERT INTO settings (key, value) VALUES ('pincode_serviceability_list', '')");
     }
+    const cardBanksCheck = await client.query("SELECT COUNT(*) FROM settings WHERE key = 'card_manager_banks'");
+    if (parseInt(cardBanksCheck.rows[0].count, 10) === 0) {
+      await client.query("INSERT INTO settings (key, value) VALUES ('card_manager_banks', 'HDFC,SBI')");
+    }
+
 
     await client.query('COMMIT');
     console.log('[Database] PostgreSQL tables checked, initialized and seeded.');
@@ -849,7 +854,7 @@ const db = {
 
   async updateSettings(settingsData) {
     for (const [key, value] of Object.entries(settingsData)) {
-      if (value !== undefined && value !== null && String(value).trim() !== '') {
+      if (value !== undefined && value !== null) {
         await pool.query(`
           INSERT INTO settings (key, value) VALUES ($1, $2)
           ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
