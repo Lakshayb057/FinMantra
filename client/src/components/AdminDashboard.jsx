@@ -1401,6 +1401,85 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
     }
   };
 
+  const handleExportMISLeads = (dataToExport) => {
+    if (!dataToExport || dataToExport.length === 0) {
+      showToast('No data available to export.', 'error');
+      return;
+    }
+
+    // Define columns to export
+    const columns = [
+      { header: 'URN', getValue: l => l.urn },
+      { header: 'Client Name', getValue: l => l.full_name },
+      { header: 'Phone', getValue: l => l.phone || 'N/A' },
+      { header: 'Email', getValue: l => l.email || 'N/A' },
+      { header: 'Agent Name', getValue: l => l.agent_name || 'Staff' },
+      { header: 'Mapping Status', getValue: l => l.mis_status },
+      { header: 'Mapping Date', getValue: l => formatDateTime(l.mis_mapped_at) },
+      
+      // MIS details
+      { header: 'Bank Reference Number', getValue: l => l.mis_data?.bank_reference_number || 'N/A' },
+      { header: 'Application Submit Date/Time', getValue: l => formatMISValue(l.mis_data?.application_submit_date_time, 'application_submit_date_time') },
+      { header: 'Customer Type', getValue: l => l.mis_data?.customer_type || 'N/A' },
+      { header: 'State', getValue: l => l.mis_data?.state || 'N/A' },
+      { header: 'IPA Status', getValue: l => l.mis_data?.ipa_status || 'N/A' },
+      { header: 'DAP Final Flag', getValue: l => l.mis_data?.dap_final_flag || 'N/A' },
+      { header: 'Dropoff Reason', getValue: l => l.mis_data?.dropoff_reason || 'N/A' },
+      { header: 'VKYC Status', getValue: l => l.mis_data?.vkyc_status || 'N/A' },
+      { header: 'KYC Type', getValue: l => l.mis_data?.kyc_type || 'N/A' },
+      { header: 'VKYC Expiry Date', getValue: l => l.mis_data?.vkyc_expiry_date || 'N/A' },
+      { header: 'Promo Code', getValue: l => l.mis_data?.promo_code || 'N/A' },
+      { header: 'Final Decision', getValue: l => l.mis_data?.final_decision || 'N/A' },
+      { header: 'Final Decision Date', getValue: l => l.mis_data?.final_decision_date || 'N/A' },
+      { header: 'Current Stage', getValue: l => l.mis_data?.current_stage || 'N/A' },
+      { header: 'Curable Flag', getValue: l => l.mis_data?.curable_flag || 'N/A' },
+      { header: 'Company Name', getValue: l => l.mis_data?.company_name || 'N/A' },
+      { header: 'BKYC Status', getValue: l => l.mis_data?.bkyc_status || 'N/A' },
+      { header: 'KYC Status', getValue: l => l.mis_data?.kyc_status || 'N/A' },
+      { header: 'Decision Month', getValue: l => l.mis_data?.decision_month || 'N/A' },
+      { header: 'Decline Description', getValue: l => l.mis_data?.decline_description || 'N/A' },
+      { header: 'Decline Type', getValue: l => l.mis_data?.decline_type || 'N/A' },
+      { header: 'Card Name', getValue: l => l.mis_data?.card_name || 'N/A' },
+      { header: 'Card Type', getValue: l => l.mis_data?.card_type || 'N/A' },
+      { header: 'Card Activation Status', getValue: l => l.mis_data?.card_activation_status || 'N/A' },
+      { header: 'Source Type', getValue: l => l.mis_data?.source_type || 'N/A' },
+      { header: 'KYC Completion Date', getValue: l => l.mis_data?.kyc_completion_date || 'N/A' }
+    ];
+
+    // Generate CSV contents
+    const headersLine = columns.map(c => `"${c.header.replace(/"/g, '""')}"`).join(',');
+    const rowsLines = dataToExport.map(lead => {
+      return columns.map(c => {
+        const val = String(c.getValue(lead) || '');
+        return `"${val.replace(/"/g, '""')}"`;
+      }).join(',');
+    });
+
+    const csvContent = [headersLine, ...rowsLines].join('\n');
+    const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvContent], { type: 'text/csv;charset=utf-8;' });
+    
+    // Create download link
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    
+    // Make filename include date range if present
+    let dateRangeSuffix = '';
+    if (dashCreatedDate || dashDateTo) {
+      const from = dashCreatedDate ? dashCreatedDate : 'start';
+      const to = dashDateTo ? dashDateTo : 'end';
+      dateRangeSuffix = `_${from}_to_${to}`;
+    }
+    
+    link.href = url;
+    link.setAttribute('download', `mis_mapped_leads${dateRangeSuffix}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+    
+    showToast(`Exported ${dataToExport.length} leads successfully.`, 'success');
+  };
+
   const handleTestWhatsAppMeta = async (testType, targetPhone) => {
     try {
       showToast(`Sending test ${testType.toUpperCase()} to ${targetPhone} via Meta API...`, 'info');
@@ -2779,15 +2858,25 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                     <div className="glass-panel" style={{ padding: '1.5rem' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
                         <h3 style={{ fontSize: '1.2rem', fontWeight: 700, margin: 0 }}>MIS Mapped Leads Log</h3>
-                        {selectedMappedLeads.length > 0 && (
+                        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
                           <button 
-                            onClick={() => triggerDeleteMappedLeads(selectedMappedLeads, 'bulk')} 
-                            className="btn-danger" 
-                            style={{ padding: '0.35rem 0.75rem', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.25rem', background: 'var(--err)', borderColor: 'var(--err)' }}
+                            type="button"
+                            onClick={() => handleExportMISLeads(filtered)} 
+                            className="btn-primary" 
+                            style={{ padding: '0.4rem 0.85rem', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
                           >
-                            <Trash2 size={14} /> Delete Selected ({selectedMappedLeads.length})
+                            <Download size={14} /> Export to Excel
                           </button>
-                        )}
+                          {selectedMappedLeads.length > 0 && (
+                            <button 
+                              onClick={() => triggerDeleteMappedLeads(selectedMappedLeads, 'bulk')} 
+                              className="btn-danger" 
+                              style={{ padding: '0.4rem 0.85rem', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.25rem', background: 'var(--err)', borderColor: 'var(--err)' }}
+                            >
+                              <Trash2 size={14} /> Delete Selected ({selectedMappedLeads.length})
+                            </button>
+                          )}
+                        </div>
                       </div>
                       
                       <div style={{ overflowX: 'auto' }}>
