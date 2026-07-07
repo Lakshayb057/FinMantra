@@ -1,6 +1,35 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { LogIn, User, MapPin, CheckCircle, BarChart3, Plus, LogOut, Sun, Moon } from 'lucide-react';
+import { LogIn, User, MapPin, CheckCircle, BarChart3, Plus, LogOut, Sun, Moon, Copy } from 'lucide-react';
 import { trackLeadSubmission } from '../utils/analytics';
+
+const CopyLinkButton = ({ url }) => {
+  const [copied, setCopied] = useState(false);
+  
+  const handleCopy = () => {
+    navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  
+  if (!url) return null;
+  
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem', background: 'rgba(255, 255, 255, 0.05)', padding: '0.35rem 0.6rem', borderRadius: '4px', maxWidth: '320px' }}>
+      <span style={{ fontSize: '0.72rem', color: 'var(--gold)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }} title={url}>
+        {url}
+      </span>
+      <button
+        type="button"
+        onClick={handleCopy}
+        style={{ background: 'none', border: 'none', color: copied ? 'var(--mint)' : 'var(--gold)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem', padding: 0 }}
+        title="Copy Redirect URL"
+      >
+        <Copy size={12} />
+        {copied && <span style={{ fontSize: '0.65rem', fontWeight: 600 }}>Copied!</span>}
+      </button>
+    </div>
+  );
+};
 
 const formatTimeOnly = (dateStr) => {
   if (!dateStr) return '';
@@ -232,7 +261,7 @@ export default function AgentPortal({ navigateTo, theme, toggleTheme }) {
       
       if (leadsRes.ok) {
         const leadsData = await leadsRes.json();
-        const leadsList = Array.isArray(leadsData) ? leadsData : [];
+        const leadsList = Array.isArray(leadsData) ? leadsData : (leadsData.leads || []);
         // Filter leads submitted by this agent
         const filtered = leadsList.filter(l => l.agent_id === agent?.id);
         setAgentLeads(filtered);
@@ -366,7 +395,7 @@ export default function AgentPortal({ navigateTo, theme, toggleTheme }) {
       const data = await res.json();
 
       if (res.ok) {
-        setLeadSuccess(`Lead registered successfully! Generated URN: ${data.urn}. Redirecting to bank portal...`);
+        setLeadSuccess(`Lead registered successfully! Generated URN: ${data.urn}. The application link has been sent to the client's WhatsApp number.`);
         
         // Trigger browser events (Meta Pixel & GTM)
         trackLeadSubmission({
@@ -389,11 +418,7 @@ export default function AgentPortal({ navigateTo, theme, toggleTheme }) {
 
         // Reload agent performance leads
         fetchMasterData();
-
-        // Automatically redirect agent to bank portal after 1.5s delay
-        setTimeout(() => {
-          window.location.href = data.redirectUrl;
-        }, 1500);
+        setIsSubmitting(false);
       } else {
         setLeadError(data.error || 'Failed to submit lead.');
         setIsSubmitting(false);
@@ -750,9 +775,10 @@ export default function AgentPortal({ navigateTo, theme, toggleTheme }) {
                 <div key={lead.id} className="glass-card" style={{ padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
                     <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>{lead.full_name}</div>
-                    <div style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))' }}>
+                    <div style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', marginBottom: lead.redirect_url ? '4px' : '0' }}>
                       {lead.card_name} {lead.monthly_income ? `• ₹${lead.monthly_income}` : ''} • {lead.city || 'Walk-in'}
                     </div>
+                    {lead.redirect_url && <CopyLinkButton url={lead.redirect_url} />}
                   </div>
                   <div style={{ textAlign: 'right' }}>
                     <span className="badge badge-success" style={{ fontSize: '0.7rem' }}>{lead.urn}</span>
