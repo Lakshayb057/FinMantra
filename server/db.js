@@ -8,6 +8,7 @@ const DEFAULT_CSV_TEMPLATE = JSON.stringify([
   { id: "full_name", header: "Full Name", source: "full_name" },
   { id: "phone", header: "Phone", source: "phone" },
   { id: "email", header: "Email", source: "email" },
+  { id: "pan_no", header: "PAN Number", source: "pan_no" },
   { id: "city", header: "City", source: "city" },
   { id: "employment", header: "Employment", source: "employment" },
   { id: "income_range", header: "Monthly Income", source: "income_range" },
@@ -280,7 +281,29 @@ async function initPgSchema() {
       await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS user_agent TEXT");
       await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS capi_status VARCHAR(50)");
       await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS capi_response JSONB");
+      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS pan_no VARCHAR(50)");
+      await client.query("ALTER TABLE agents ADD COLUMN IF NOT EXISTS assigned_bank VARCHAR(255)");
     } catch (migErr) {}
+
+    try {
+      const formSchemaQuery = await client.query("SELECT value FROM settings WHERE key = 'landing_form_schema'");
+      if (formSchemaQuery.rows.length > 0) {
+        const currentVal = formSchemaQuery.rows[0].value;
+        const currentSchema = typeof currentVal === 'string' ? JSON.parse(currentVal) : currentVal;
+        if (currentSchema && currentSchema.fields && !currentSchema.fields.pan_no) {
+          currentSchema.fields.pan_no = {
+            visible: true,
+            required: true,
+            label: "PAN Card Number",
+            placeholder: "Enter 10-digit PAN Number"
+          };
+          await client.query("UPDATE settings SET value = $1 WHERE key = 'landing_form_schema'", [JSON.stringify(currentSchema)]);
+          console.log('[Database] Migrated existing landing_form_schema with pan_no field.');
+        }
+      }
+    } catch (e) {
+      console.error('[Database] Failed to migrate existing landing_form_schema:', e);
+    }
 
     try {
       await client.query("CREATE INDEX IF NOT EXISTS idx_leads_agent_id ON leads(agent_id)");
@@ -331,7 +354,8 @@ async function initPgSchema() {
           const targetFields = [
             { id: "has_credit_card", header: "Already Has Credit Card?", source: "has_credit_card" },
             { id: "pincode", header: "Residence Pincode", source: "pincode" },
-            { id: "monthly_income", header: "Monthly Income", source: "monthly_income" }
+            { id: "monthly_income", header: "Monthly Income", source: "monthly_income" },
+            { id: "pan_no", header: "PAN Number", source: "pan_no" }
           ];
           for (const target of targetFields) {
             const exists = currentCols.some(col => col.id === target.id || col.source === target.source);
@@ -342,7 +366,7 @@ async function initPgSchema() {
           }
           if (updated) {
             await client.query("UPDATE settings SET value = $1 WHERE key = 'csv_export_template'", [JSON.stringify(currentCols)]);
-            console.log('[Database] Migrated existing csv_export_template with monthly_income, has_credit_card, and pincode columns.');
+            console.log('[Database] Migrated existing csv_export_template with monthly_income, has_credit_card, pincode, and pan_no columns.');
           }
         }
       } catch (e) {
@@ -388,11 +412,17 @@ async function initPgSchema() {
                 { value: "Self Employed (Professional)", enabled: false }
               ]
             },
-            monthly_income: {
+             monthly_income: {
               visible: true,
               required: true,
               label: "Net Monthly Income",
               placeholder: "Net Monthly Income"
+            },
+            pan_no: {
+              visible: true,
+              required: true,
+              label: "PAN Card Number",
+              placeholder: "Enter 10-digit PAN Number"
             },
             pincode: {
               visible: true,
@@ -498,7 +528,7 @@ const db = {
     }
     if (search) {
       params.push(`%${search.trim().toLowerCase()}%`);
-      clauses.push(`(LOWER(full_name) LIKE $${params.length} OR phone LIKE $${params.length} OR LOWER(urn) LIKE $${params.length})`);
+      clauses.push(`(LOWER(full_name) LIKE $${params.length} OR phone LIKE $${params.length} OR LOWER(urn) LIKE $${params.length} OR LOWER(pan_no) LIKE $${params.length})`);
     }
     if (card) {
       params.push(card);
@@ -613,7 +643,6 @@ const db = {
     }
     const urn = `${prefix}${String(sequence).padStart(5, '0')}`;
     const id = 'lead_' + Math.random().toString(36).substr(2, 9);
-    
     await pool.query(
       `INSERT INTO leads (
         id, urn, full_name, phone, email, city, employment, income_range, card_id, card_name, card_bank, 
@@ -622,9 +651,9 @@ const db = {
         gclid, gclsrc, dclid, msclkid, ttclid, twclid, li_fat_id,
         utm_id, utm_creative, utm_keyword, utm_matchtype, utm_network, utm_placement,
         utm_device, utm_location, gbraid, wbraid, landing_page, first_landing_page, referrer, ad_id,
-        utm_params, redirect_url, ip_address, user_agent, capi_status, capi_response, utm_internal, has_credit_card, pincode, monthly_income, created_at
+        utm_params, redirect_url, ip_address, user_agent, capi_status, capi_response, utm_internal, has_credit_card, pincode, monthly_income, pan_no, created_at
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, NOW())`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, NOW())`,
       [
         id, urn, lead.full_name, lead.phone, lead.email, lead.city, lead.employment, lead.income_range,
         lead.card_id, lead.card_name, lead.card_bank, lead.source || 'public', lead.agent_id, lead.agent_name,
@@ -639,7 +668,8 @@ const db = {
         lead.utm_internal || null,
         lead.has_credit_card || null,
         lead.pincode || null,
-        lead.monthly_income || null
+        lead.monthly_income || null,
+        lead.pan_no || null
       ]
     );
     return { id, urn, ...lead, created_at: new Date().toISOString() };
@@ -655,8 +685,8 @@ const db = {
         utm_id = $32, utm_creative = $33, utm_keyword = $34, utm_matchtype = $35, utm_network = $36, utm_placement = $37,
         utm_device = $38, utm_location = $39, gbraid = $40, wbraid = $41, landing_page = $42, first_landing_page = $43, referrer = $44, ad_id = $45,
         utm_params = $46, redirect_url = $47, ip_address = $48, user_agent = $49, capi_status = $50, capi_response = $51, utm_internal = $52,
-        has_credit_card = $53, pincode = $54, monthly_income = $55
-       WHERE id = $56`,
+        has_credit_card = $53, pincode = $54, monthly_income = $55, pan_no = $56
+       WHERE id = $57`,
       [
         lead.full_name, lead.phone, lead.email, lead.city, lead.employment, lead.income_range,
         lead.card_id, lead.card_name, lead.card_bank, lead.source, lead.agent_id, lead.agent_name, lead.agent_location, lead.consent,
@@ -671,6 +701,7 @@ const db = {
         lead.has_credit_card || null,
         lead.pincode || null,
         lead.monthly_income || null,
+        lead.pan_no || null,
         id
       ]
     );
@@ -758,8 +789,8 @@ const db = {
   async addAgent(agent) {
     const locationsJson = JSON.stringify(agent.locations || []);
     await pool.query(
-      'INSERT INTO agents (id, name, phone, email, username, password_hash, status, locations, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())',
-      [agent.id, agent.name, agent.phone || '', agent.email || '', agent.username, agent.password_hash, agent.status || 'active', locationsJson]
+      'INSERT INTO agents (id, name, phone, email, username, password_hash, status, locations, assigned_bank, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())',
+      [agent.id, agent.name, agent.phone || '', agent.email || '', agent.username, agent.password_hash, agent.status || 'active', locationsJson, agent.assigned_bank || null]
     );
     return agent;
   },
@@ -769,7 +800,7 @@ const db = {
     const values = [];
     let idx = 1;
     for (const [key, val] of Object.entries(agentData)) {
-      if (['name', 'phone', 'email', 'username', 'password_hash', 'status'].includes(key)) {
+      if (['name', 'phone', 'email', 'username', 'password_hash', 'status', 'assigned_bank'].includes(key)) {
         fields.push(`${key} = $${idx++}`);
         values.push(val);
       } else if (key === 'locations') {

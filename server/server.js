@@ -581,11 +581,11 @@ app.post('/api/agents/login', loginRateLimiter.middleware(), async (req, res) =>
 
   if (isPasswordValid && agent.status === 'active') {
     loginTracker.recordSuccess(ip, identity);
-    const token = jwt.sign({ id: agent.id, name: agent.name, role: 'agent' }, JWT_SECRET, { expiresIn: '8h' });
+    const token = jwt.sign({ id: agent.id, name: agent.name, role: 'agent', assigned_bank: agent.assigned_bank }, JWT_SECRET, { expiresIn: '8h' });
     return res.json({
       token,
       role: 'agent',
-      agent: { id: agent.id, name: agent.name, email: agent.email, locations: agent.locations }
+      agent: { id: agent.id, name: agent.name, email: agent.email, locations: agent.locations, assigned_bank: agent.assigned_bank }
     });
   }
 
@@ -861,7 +861,8 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
     utm_internal,
     has_credit_card,
     pincode,
-    monthly_income
+    monthly_income,
+    pan_no
   } = req.body;
 
   const trimmedName = full_name ? String(full_name).trim() : '';
@@ -886,6 +887,14 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
   // Validate email: standard regex
   if (!/\S+@\S+\.\S+/.test(trimmedEmail)) {
     return res.status(400).json({ error: 'Please enter a valid email address.' });
+  }
+
+  // Validate PAN format if provided
+  if (pan_no) {
+    const cleanPan = String(pan_no).trim().toUpperCase();
+    if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(cleanPan)) {
+      return res.status(400).json({ error: 'Please enter a valid 10-character PAN number (e.g., ABCDE1234F).' });
+    }
   }
 
   // Validate pincode serviceability rules
@@ -1048,6 +1057,7 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
     has_credit_card: has_credit_card || null,
     pincode: pincode || null,
     monthly_income: monthly_income || null,
+    pan_no: pan_no ? String(pan_no).trim().toUpperCase() : null,
     ip_address: (() => {
       let clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
       if (clientIp.includes(',')) {
@@ -1813,6 +1823,7 @@ app.get('/api/leads/export', authenticateToken, requireAdmin, async (req, res) =
       { id: "full_name", header: "Full Name", source: "full_name" },
       { id: "phone", header: "Phone", source: "phone" },
       { id: "email", header: "Email", source: "email" },
+      { id: "pan_no", header: "PAN Number", source: "pan_no" },
       { id: "city", header: "City", source: "city" },
       { id: "employment", header: "Employment", source: "employment" },
       { id: "income_range", header: "Monthly Income", source: "income_range" },
@@ -2028,7 +2039,7 @@ app.get('/api/agents', authenticateToken, requireAdmin, async (req, res) => {
 
 // Create Agent
 app.post('/api/agents', authenticateToken, requireAdmin, async (req, res) => {
-  const { id, name, phone, email, username, password, status, locations } = req.body;
+  const { id, name, phone, email, username, password, status, locations, assigned_bank } = req.body;
   
   const trimmedId = id ? String(id).trim() : '';
   const trimmedName = name ? String(name).trim() : '';
@@ -2078,7 +2089,8 @@ app.post('/api/agents', authenticateToken, requireAdmin, async (req, res) => {
     username: trimmedUsername,
     password_hash,
     status: status || 'active',
-    locations: locations || []
+    locations: locations || [],
+    assigned_bank: assigned_bank || null
   });
 
   // Broadcast agents change

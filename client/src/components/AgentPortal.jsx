@@ -118,7 +118,7 @@ export default function AgentPortal({ navigateTo, theme, toggleTheme }) {
     phone: '',
     email: '',
     cardId: '',
-    monthly_income: ''
+    pan_no: ''
   });
   
   const [leadError, setLeadError] = useState('');
@@ -131,6 +131,14 @@ export default function AgentPortal({ navigateTo, theme, toggleTheme }) {
     return cards.filter(c => {
       // Hide 'digital' category cards from agents (already filtered, but let's be safe)
       if (c.category?.toLowerCase() === 'digital') return false;
+      
+      // If agent has an assigned bank, only show cards from that bank (case-insensitive)
+      if (agent && agent.assigned_bank) {
+        const agentBank = String(agent.assigned_bank).trim().toLowerCase();
+        const cardBank = String(c.bank).trim().toLowerCase();
+        if (cardBank !== agentBank) return false;
+      }
+
       // If it's an offline card with specific locations assigned,
       // only show it if the agent is logged in to one of those locations.
       if (c.category?.toLowerCase() === 'offline') {
@@ -140,7 +148,7 @@ export default function AgentPortal({ navigateTo, theme, toggleTheme }) {
       }
       return true;
     });
-  }, [cards, agentLocation]);
+  }, [cards, agentLocation, agent]);
   
   const API_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.port === '5173') ? 'http://localhost:5000/api' : '/api';
 
@@ -344,8 +352,13 @@ export default function AgentPortal({ navigateTo, theme, toggleTheme }) {
 
   const handleLeadChange = (e) => {
     const { name, value } = e.target;
-    if (name === 'monthly_income' || name === 'phone') {
-      const cleanVal = value.replace(/\D/g, '');
+    if (name === 'phone') {
+      const cleanVal = value.replace(/\D/g, '').slice(0, 10);
+      setLeadForm(prev => ({ ...prev, [name]: cleanVal }));
+      return;
+    }
+    if (name === 'pan_no') {
+      const cleanVal = value.toUpperCase().slice(0, 10);
       setLeadForm(prev => ({ ...prev, [name]: cleanVal }));
       return;
     }
@@ -357,10 +370,10 @@ export default function AgentPortal({ navigateTo, theme, toggleTheme }) {
     setLeadError('');
     setLeadSuccess('');
 
-    const { fullName, phone, email, cardId, monthly_income } = leadForm;
+    const { fullName, phone, email, cardId, pan_no } = leadForm;
 
-    if (!fullName || !phone || !email || !cardId || !monthly_income) {
-      setLeadError('Please fill in all details, including card selection and monthly income.');
+    if (!fullName || !phone || !email || !cardId || !pan_no) {
+      setLeadError('Please fill in all details, including card selection and PAN number.');
       return;
     }
 
@@ -371,6 +384,12 @@ export default function AgentPortal({ navigateTo, theme, toggleTheme }) {
 
     if (!/\S+@\S+\.\S+/.test(email)) {
       setLeadError('Please enter a valid email address.');
+      return;
+    }
+
+    const cleanPan = pan_no.trim().toUpperCase();
+    if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(cleanPan)) {
+      setLeadError('Please enter a valid 10-character PAN number (e.g., ABCDE1234F).');
       return;
     }
 
@@ -389,7 +408,8 @@ export default function AgentPortal({ navigateTo, theme, toggleTheme }) {
           agent_name: agent?.name,
           agent_location: agentLocation,
           consent: true,
-          monthly_income: monthly_income ? String(monthly_income).trim() : null
+          pan_no: cleanPan,
+          monthly_income: null
         })
       });
       const data = await res.json();
@@ -413,7 +433,7 @@ export default function AgentPortal({ navigateTo, theme, toggleTheme }) {
           phone: '',
           email: '',
           cardId: '',
-          monthly_income: ''
+          pan_no: ''
         });
 
         // Reload agent performance leads
@@ -715,16 +735,17 @@ export default function AgentPortal({ navigateTo, theme, toggleTheme }) {
             </div>
 
             <div className="form-group" style={{ marginBottom: '1.5rem' }}>
-              <label className="form-label">Net Monthly Income (₹)</label>
+              <label className="form-label">PAN Number</label>
               <input 
                 type="text" 
-                name="monthly_income" 
+                name="pan_no" 
                 className="form-input" 
-                placeholder="e.g. 50000"
-                value={leadForm.monthly_income}
+                placeholder="e.g. ABCDE1234F"
+                value={leadForm.pan_no}
                 onChange={handleLeadChange} 
                 required
                 disabled={isSubmitting}
+                style={{ textTransform: 'uppercase' }}
               />
             </div>
 
@@ -776,7 +797,7 @@ export default function AgentPortal({ navigateTo, theme, toggleTheme }) {
                   <div>
                     <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>{lead.full_name}</div>
                     <div style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', marginBottom: lead.redirect_url ? '4px' : '0' }}>
-                      {lead.card_name} {lead.monthly_income ? `• ₹${lead.monthly_income}` : ''} • {lead.city || 'Walk-in'}
+                      {lead.card_name} {lead.pan_no ? `• ${lead.pan_no}` : ''} {lead.monthly_income ? `• ₹${lead.monthly_income}` : ''} • {lead.city || 'Walk-in'}
                     </div>
                     {lead.redirect_url && <CopyLinkButton url={lead.redirect_url} />}
                   </div>

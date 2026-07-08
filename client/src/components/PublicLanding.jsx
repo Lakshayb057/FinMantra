@@ -132,7 +132,8 @@ export default function PublicLanding({ navigateTo, utmParams }) {
     selectedCard: '',
     has_credit_card: '',
     pincode: '',
-    monthly_income: ''
+    monthly_income: '',
+    pan_no: ''
   });
 
   const [errors, setErrors] = useState({});
@@ -504,6 +505,16 @@ export default function PublicLanding({ navigateTo, utmParams }) {
       }
     }
     
+    if (name === 'pan_no') {
+      if (value) {
+        if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(value)) {
+          errorText = 'Invalid PAN card format (e.g. ABCDE1234F).';
+        }
+      } else if (formSchema.fields.pan_no?.required) {
+        errorText = 'This field is required';
+      }
+    }
+    
     if (name === 'pincode') {
       if (value) {
         if (value.length !== 6) {
@@ -532,6 +543,13 @@ export default function PublicLanding({ navigateTo, utmParams }) {
     // Numeric-only restriction for phone, monthly_income, and pincode
     if (name === 'phone' || name === 'monthly_income' || name === 'pincode') {
       const cleanVal = value.replace(/\D/g, '');
+      setFormData(prev => ({ ...prev, [name]: cleanVal }));
+      validateField(name, cleanVal);
+      return;
+    }
+
+    if (name === 'pan_no') {
+      const cleanVal = value.toUpperCase().slice(0, 10);
       setFormData(prev => ({ ...prev, [name]: cleanVal }));
       validateField(name, cleanVal);
       return;
@@ -630,6 +648,19 @@ export default function PublicLanding({ navigateTo, utmParams }) {
             const maxLabel = maxIncome >= 100000 ? (maxIncome / 100000) + ' lakhs' : (maxIncome >= 1000 ? (maxIncome / 1000) + 'k' : maxIncome);
             newErrors.monthly_income = `Salary ranges from ${minLabel} to ${maxLabel}`;
           }
+        }
+      }
+
+      // Validate PAN Number
+      if (formSchema.fields.pan_no && formSchema.fields.pan_no.visible) {
+        const val = formData.pan_no.trim();
+        const isFieldRequired = formSchema.fields.pan_no.required;
+        if (!val) {
+          if (isFieldRequired) {
+            newErrors.pan_no = 'This field is required';
+          }
+        } else if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(val)) {
+          newErrors.pan_no = 'Invalid PAN card format (e.g. ABCDE1234F).';
         }
       }
 
@@ -770,6 +801,7 @@ export default function PublicLanding({ navigateTo, utmParams }) {
             has_credit_card: formData.has_credit_card,
             pincode: formData.pincode,
             monthly_income: formData.monthly_income,
+            pan_no: formData.pan_no ? String(formData.pan_no).trim().toUpperCase() : null,
             source: 'public',
             consent: true,
             ...utmParams,
@@ -1183,6 +1215,23 @@ export default function PublicLanding({ navigateTo, utmParams }) {
                   )}
                 </div>
 
+                {formSchema.fields.pan_no && formSchema.fields.pan_no.visible && (
+                  <div className="form-group" style={{ marginBottom: '0.75rem' }}>
+                    <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
+                      {formSchema.fields.pan_no.label}
+                    </label>
+                    <input
+                      type="text" name="pan_no" className="form-input"
+                      style={{ height: '48px', borderRadius: 'var(--radius-sm)', textTransform: 'uppercase' }}
+                      placeholder={formSchema.fields.pan_no.placeholder || 'e.g. ABCDE1234F'}
+                      value={formData.pan_no} onChange={handleInputChange}
+                      required={formSchema.fields.pan_no.required}
+                      disabled={isSubmitting}
+                    />
+                    {errors.pan_no && <div style={{ color: 'var(--err)', fontSize: '0.75rem', marginTop: '0.25rem' }}>{errors.pan_no}</div>}
+                  </div>
+                )}
+
                 <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '0.75rem', alignItems: 'start' }}>
                   {formSchema.fields.has_credit_card.visible && (
                     <div className="form-group" style={{ marginBottom: 0 }}>
@@ -1512,6 +1561,23 @@ export default function PublicLanding({ navigateTo, utmParams }) {
                     </div>
                   )}
                 </div>
+
+                {formSchema.fields.pan_no && formSchema.fields.pan_no.visible && (
+                  <div className="form-group" style={{ marginBottom: '0.75rem' }}>
+                    <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
+                      {formSchema.fields.pan_no.label}
+                    </label>
+                    <input
+                      type="text" name="pan_no" className="form-input"
+                      style={{ height: '48px', borderRadius: 'var(--radius-sm)', textTransform: 'uppercase' }}
+                      placeholder={formSchema.fields.pan_no.placeholder || 'e.g. ABCDE1234F'}
+                      value={formData.pan_no} onChange={handleInputChange}
+                      required={formSchema.fields.pan_no.required}
+                      disabled={isSubmitting}
+                    />
+                    {errors.pan_no && <div style={{ color: 'var(--err)', fontSize: '0.75rem', marginTop: '0.25rem' }}>{errors.pan_no}</div>}
+                  </div>
+                )}
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '0.75rem', alignItems: 'start' }}>
                   {formSchema.fields.has_credit_card.visible && (

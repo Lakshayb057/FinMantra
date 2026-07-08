@@ -192,7 +192,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   
   const [newBankInput, setNewBankInput] = useState('');
   const [newCardForm, setNewCardForm] = useState({ name: '', bank: '', category: 'Offline', ad_id: '', utm_internal: '', description: '', redirect_url_template: '', display_order: 1, active: true, card_locations: [] });
-  const [newAgentForm, setNewAgentForm] = useState({ id: '', name: '', phone: '', email: '', username: '', password: '', status: 'active', locations: [] });
+  const [newAgentForm, setNewAgentForm] = useState({ id: '', name: '', phone: '', email: '', username: '', password: '', status: 'active', locations: [], assigned_bank: '' });
   const [newLocName, setNewLocName] = useState('');
 
   const [message, setMessage] = useState({ text: '', type: 'success' });
@@ -659,6 +659,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       full_name: lead.full_name || '',
       phone: lead.phone || '',
       email: lead.email || '',
+      pan_no: lead.pan_no || '',
       city: lead.city || '',
       employment: lead.employment || '',
       income_range: lead.income_range || '',
@@ -980,7 +981,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
         })
       });
       showToast('Agent created successfully.');
-      setNewAgentForm({ id: '', name: '', phone: '', email: '', username: '', password: '', status: 'active', locations: [] });
+      setNewAgentForm({ id: '', name: '', phone: '', email: '', username: '', password: '', status: 'active', locations: [], assigned_bank: '' });
       loadAllAdminData();
     } catch (err) {
       showToast(err.message || 'Failed to create agent.', 'error');
@@ -1158,6 +1159,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
     { value: 'full_name', label: 'Full Name' },
     { value: 'phone', label: 'Phone Number' },
     { value: 'email', label: 'Email' },
+    { value: 'pan_no', label: 'PAN Number' },
     { value: 'city', label: 'City' },
     { value: 'employment', label: 'Employment Status' },
     { value: 'income_range', label: 'Monthly Income' },
@@ -1413,6 +1415,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       { header: 'Client Name', getValue: l => l.full_name },
       { header: 'Phone', getValue: l => l.phone || 'N/A' },
       { header: 'Email', getValue: l => l.email || 'N/A' },
+      { header: 'PAN Number', getValue: l => l.pan_no || 'N/A' },
       { header: 'Agent Name', getValue: l => l.agent_name || 'Staff' },
       { header: 'Mapping Status', getValue: l => l.mis_status },
       { header: 'Mapping Date', getValue: l => formatDateTime(l.mis_mapped_at) },
@@ -1985,7 +1988,8 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                       <th>Name</th>
                       <th>WhatsApp No.</th>
                       <th>Card Selection</th>
-                      <th>Email</th>
+                      <th style={{ width: '130px', maxWidth: '130px' }}>Email</th>
+                      <th>PAN No.</th>
                       <th>Employment</th>
                       <th>Already Has Card?</th>
                       <th>Pincode</th>
@@ -2013,7 +2017,8 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                           <td style={{ fontWeight: 600, cursor: 'pointer' }} onClick={() => handleViewLead(l)}>{l.full_name}</td>
                           <td>{l.phone}</td>
                           <td>{l.card_name} <span style={{ color: 'hsl(var(--text-muted))', fontSize: '0.8rem' }}>({l.card_bank})</span></td>
-                          <td>{l.email || '-'}</td>
+                          <td style={{ maxWidth: '130px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={l.email}>{l.email || '-'}</td>
+                          <td><code style={{ fontSize: '0.8rem', color: 'var(--gold-deep)' }}>{l.pan_no || '-'}</code></td>
                           <td>{l.employment || '-'}</td>
                           <td>
                             <span className={`badge ${l.has_credit_card === 'Yes' ? 'badge-success' : 'badge-secondary'}`}>
@@ -3250,6 +3255,20 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                     />
                   </div>
 
+                  <div className="form-group">
+                    <label className="form-label">Assigned Bank (Scheme)</label>
+                    <select 
+                      className="form-select" 
+                      value={editingAgent ? (editingAgent.assigned_bank || '') : (newAgentForm.assigned_bank || '')}
+                      onChange={(e) => editingAgent ? setEditingAgent({ ...editingAgent, assigned_bank: e.target.value || null }) : setNewAgentForm({ ...newAgentForm, assigned_bank: e.target.value || '' })}
+                    >
+                      <option value="">Select Bank (All Cards)</option>
+                      {getBankOptions().map((bank, i) => (
+                        <option key={i} value={bank}>{bank}</option>
+                      ))}
+                    </select>
+                  </div>
+
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                     <div className="form-group">
                       <label className="form-label">Username</label>
@@ -3341,6 +3360,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                         </div>
                         <div style={{ fontSize: '0.75rem', color: 'hsl(var(--secondary))', fontWeight: 500 }}>
                           Locations: {ag.locations && ag.locations.length > 0 ? ag.locations.join(', ') : 'None assigned'}
+                          {ag.assigned_bank && ` • Mapped Bank: ${ag.assigned_bank}`}
                         </div>
                       </div>
                       <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -4759,6 +4779,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                       <div><strong>Name:</strong> {selectedLeadDetails.full_name}</div>
                       <div><strong>Phone:</strong> +91 {selectedLeadDetails.phone}</div>
                       <div><strong>Email:</strong> {selectedLeadDetails.email}</div>
+                      <div><strong>PAN Number:</strong> <code style={{ color: 'var(--gold-deep)', fontWeight: 600 }}>{selectedLeadDetails.pan_no || 'N/A'}</code></div>
                       <div><strong>Employment Type:</strong> {selectedLeadDetails.employment || 'N/A'}</div>
                       <div><strong>Already Has Credit Card?</strong> {selectedLeadDetails.has_credit_card || 'N/A'}</div>
                       <div><strong>Residence Pincode:</strong> <code>{selectedLeadDetails.pincode || 'N/A'}</code></div>
@@ -4907,6 +4928,16 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                           style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} 
                           value={editLeadForm.email} 
                           onChange={(e) => handleEditLeadFormChange('email', e.target.value)} 
+                        />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>PAN Number</label>
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem', textTransform: 'uppercase' }} 
+                          value={editLeadForm.pan_no || ''} 
+                          onChange={(e) => handleEditLeadFormChange('pan_no', e.target.value.toUpperCase().slice(0, 10))} 
                         />
                       </div>
                       <div className="form-group" style={{ marginBottom: 0 }}>
@@ -5456,6 +5487,7 @@ function FormBuilderSettings({ settings, setSettings, showToast, token, API_URL 
           ]
         },
         monthly_income: { visible: true, required: true, label: "Net Monthly Income", placeholder: "Net Monthly Income" },
+        pan_no: { visible: true, required: true, label: "PAN Card Number", placeholder: "Enter 10-digit PAN Number" },
         pincode: { visible: true, required: true, label: "Residence Pincode", placeholder: "Residence Pincode" }
       }
     };
