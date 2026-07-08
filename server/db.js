@@ -278,10 +278,20 @@ async function initPgSchema() {
 
     try {
       await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS ip_address VARCHAR(100)");
+    } catch (migErr) {}
+    try {
       await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS user_agent TEXT");
+    } catch (migErr) {}
+    try {
       await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS capi_status VARCHAR(50)");
+    } catch (migErr) {}
+    try {
       await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS capi_response JSONB");
+    } catch (migErr) {}
+    try {
       await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS pan_no VARCHAR(50)");
+    } catch (migErr) {}
+    try {
       await client.query("ALTER TABLE agents ADD COLUMN IF NOT EXISTS assigned_bank VARCHAR(255)");
     } catch (migErr) {}
 
