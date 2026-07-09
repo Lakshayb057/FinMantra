@@ -5516,28 +5516,48 @@ function FormBuilderSettings({ settings, setSettings, showToast, token, API_URL 
     return ['HDFC', 'SBI'];
   };
 
-  const handleFileUpload = (e, bank) => {
+  const handleFileUpload = async (e, bank) => {
     const file = e.target.files[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const text = event.target.result || '';
-      const parsed = text.match(/\b\d{6}\b/g) || [];
-      if (parsed.length > 0) {
-        const uniquePincodes = Array.from(new Set(parsed)).sort().join(', ');
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    showToast(`Uploading and parsing file for ${bank}...`, 'info');
+
+    try {
+      const res = await fetch(`${API_URL}/pincodes/parse`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to parse file');
+      }
+
+      const data = await res.json();
+      if (data.success && Array.isArray(data.pincodes) && data.pincodes.length > 0) {
         setBankPincodeRules(prev => ({
           ...prev,
           [bank]: {
             mode: 'list',
-            list: uniquePincodes
+            list: data.pincodes.join(', ')
           }
         }));
-        showToast(`Successfully parsed and loaded ${parsed.length} unique pincodes for ${bank}!`, 'success');
+        showToast(`Successfully loaded ${data.pincodes.length} unique pincodes for ${bank}!`, 'success');
       } else {
-        showToast('No valid 6-digit pincodes found in the file.', 'error');
+        showToast(`No valid 6-digit pincodes found in ${file.name}.`, 'error');
       }
-    };
-    reader.readAsText(file);
+    } catch (err) {
+      console.error(err);
+      showToast(err.message, 'error');
+    } finally {
+      e.target.value = '';
+    }
   };
 
   const [saving, setSaving] = useState(false);
@@ -5973,13 +5993,13 @@ function FormBuilderSettings({ settings, setSettings, showToast, token, API_URL 
                           style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem', margin: 0 }}
                           onClick={() => document.getElementById(`pincode-upload-${bank}`).click()}
                         >
-                          Upload Pincode List (.txt, .csv)
+                          Upload Pincode List (.txt, .csv, .xlsx)
                         </button>
                         <input
                           type="file"
                           id={`pincode-upload-${bank}`}
                           style={{ display: 'none' }}
-                          accept=".txt,.csv"
+                          accept=".txt,.csv,.xls,.xlsx"
                           onChange={(e) => handleFileUpload(e, bank)}
                         />
                       </div>

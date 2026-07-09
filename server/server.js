@@ -2306,6 +2306,42 @@ app.put('/api/settings', authenticateToken, requireAdmin, async (req, res) => {
   res.json(updated);
 });
 
+// Parse Pincode File (supports .xlsx, .xls, .csv, .txt)
+app.post('/api/pincodes/parse', authenticateToken, requireAdmin, upload.single('file'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No file uploaded' });
+  }
+
+  try {
+    const filename = req.file.originalname;
+    const ext = filename.split('.').pop().toLowerCase();
+    let pincodes = [];
+
+    if (ext === 'xlsx' || ext === 'xls') {
+      const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
+      workbook.SheetNames.forEach(sheetName => {
+        const sheet = workbook.Sheets[sheetName];
+        const csv = xlsx.utils.sheet_to_csv(sheet);
+        const matches = csv.match(/\b\d{6}\b/g) || [];
+        pincodes.push(...matches);
+      });
+    } else {
+      // Treat as plain text (.txt, .csv)
+      const text = req.file.buffer.toString('utf-8');
+      const matches = text.match(/\b\d{6}\b/g) || [];
+      pincodes.push(...matches);
+    }
+
+    // Deduplicate and sort
+    const uniquePincodes = Array.from(new Set(pincodes)).sort();
+
+    res.json({ success: true, pincodes: uniquePincodes });
+  } catch (err) {
+    console.error('[Pincode Parsing Error]', err);
+    res.status(500).json({ error: 'Failed to parse pincode list file. Make sure it is a valid Excel, CSV, or TXT file.' });
+  }
+});
+
 // Global exception and error handling middleware
 app.use((err, req, res, next) => {
   console.error('[Express Async Error Handler Exception]:', err);
