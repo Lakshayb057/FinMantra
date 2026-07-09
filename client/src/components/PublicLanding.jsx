@@ -325,6 +325,13 @@ export default function PublicLanding({ navigateTo, utmParams }) {
     lookupPincode();
   }, [formData.pincode]);
 
+  // Re-validate pincode immediately if selected card/bank changes
+  useEffect(() => {
+    if (formData.pincode) {
+      validateField('pincode', formData.pincode);
+    }
+  }, [formData.selectedCard]);
+
 
 
   // OTP Resend Timer
@@ -545,8 +552,45 @@ export default function PublicLanding({ navigateTo, utmParams }) {
     
     if (name === 'pincode') {
       if (value) {
-        if (value.length !== 6) {
+        if (value.length !== 6 || !/^\d+$/.test(value)) {
           errorText = 'Pincode must be exactly 6 digits.';
+        } else {
+          // Check global pincode serviceability
+          const pinMode = settings.pincode_serviceability_mode || 'all';
+          const pinListRaw = settings.pincode_serviceability_list || '';
+          if (pinMode !== 'all') {
+            const pinArray = pinListRaw.split(',').map(p => p.trim()).filter(Boolean);
+            const isInList = pinArray.includes(value);
+            if (pinMode === 'whitelist' && !isInList) {
+              errorText = 'Credit card services are not available at your pincode currently.';
+            }
+            if (pinMode === 'blacklist' && isInList) {
+              errorText = 'Credit card services are not available at your pincode currently.';
+            }
+          }
+
+          // Check bank-specific pincode serviceability
+          if (!errorText) {
+            const selectedCardDetails = cards.find(c => c.id === formData.selectedCard);
+            if (selectedCardDetails && selectedCardDetails.bank) {
+              let bankRules = {};
+              try {
+                if (settings.bank_pincode_rules) {
+                  bankRules = typeof settings.bank_pincode_rules === 'string'
+                    ? JSON.parse(settings.bank_pincode_rules)
+                    : settings.bank_pincode_rules;
+                }
+              } catch (err) {}
+
+              const rule = bankRules[selectedCardDetails.bank];
+              if (rule && rule.mode === 'list') {
+                const pinArray = String(rule.list || '').split(',').map(p => p.trim()).filter(Boolean);
+                if (!pinArray.includes(value)) {
+                  errorText = `${selectedCardDetails.bank} cards facilities are currently not available for your location.`;
+                }
+              }
+            }
+          }
         }
       } else if (formSchema.fields.pincode?.required) {
         errorText = 'This field is required';
