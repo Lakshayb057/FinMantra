@@ -961,33 +961,26 @@ const db = {
     // Get all mapped leads
     const mappedLeadsListRes = await pool.query('SELECT * FROM leads WHERE mis_status IS NOT NULL ORDER BY mis_mapped_at DESC');
     
-    // Expand history list in JS
+    // Flatten / clean history list in JS
     const expandedList = [];
     mappedLeadsListRes.rows.forEach(row => {
-      let history = [];
+      let misDataObj = {};
       try {
-        const misDataObj = typeof row.mis_data === 'string' ? JSON.parse(row.mis_data) : (row.mis_data || {});
-        if (Array.isArray(misDataObj.history)) {
-          history = misDataObj.history;
+        misDataObj = typeof row.mis_data === 'string' ? JSON.parse(row.mis_data) : (row.mis_data || {});
+        // Fall back gracefully for legacy history objects: extract the latest entry
+        if (misDataObj && Array.isArray(misDataObj.history) && misDataObj.history.length > 0) {
+          const latest = misDataObj.history[misDataObj.history.length - 1];
+          misDataObj = latest.data || {};
         }
-      } catch (e) {}
-
-      if (history.length > 0) {
-        history.forEach(hist => {
-          expandedList.push({
-            ...row,
-            mis_status: hist.status || row.mis_status,
-            mis_mapped_at: hist.mapped_at || row.mis_mapped_at,
-            mis_data: hist.data || {},
-            utm_params: typeof row.utm_params === 'string' ? JSON.parse(row.utm_params) : (row.utm_params || {})
-          });
-        });
-      } else {
-        expandedList.push({
-          ...row,
-          utm_params: typeof row.utm_params === 'string' ? JSON.parse(row.utm_params) : (row.utm_params || {})
-        });
+      } catch (e) {
+        misDataObj = {};
       }
+
+      expandedList.push({
+        ...row,
+        mis_data: misDataObj,
+        utm_params: typeof row.utm_params === 'string' ? JSON.parse(row.utm_params) : (row.utm_params || {})
+      });
     });
 
     const totalMapped = expandedList.length;

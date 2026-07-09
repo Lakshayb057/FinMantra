@@ -59,14 +59,14 @@ case "$COMMAND" in
         fi
 
         echo ">>> Restarting PM2 Backend..."
-        pm2 restart finmantra-backend
+        pm2 restart finmantra-backend --update-env
         
         echo ">>> Done! Everything is updated and live."
         ;;
         
     restart)
         echo ">>> Restarting backend (PM2)..."
-        pm2 restart finmantra-backend
+        pm2 restart finmantra-backend --update-env
         echo ">>> Restarting Nginx..."
         sudo systemctl restart nginx
         echo ">>> Restart completed."
@@ -103,7 +103,7 @@ case "$COMMAND" in
         sed -i "s|^WA_API_KEY=.*|WA_API_KEY=$ARG2|" "$ENV_FILE"
         
         echo ">>> Restarting backend..."
-        pm2 restart finmantra-backend
+        pm2 restart finmantra-backend --update-env
         echo ">>> Token successfully updated and server restarted!"
         ;;
         

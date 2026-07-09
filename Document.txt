@@ -13,7 +13,7 @@ pm2 restart finmantra_backend
 
 
 AWS Console sign-in URL
-https://306678420994.signin.aws.amazon.com/console
+https://306678420994.signin.aws.amazon.com/consolehttps://306678420994.signin.aws.amazon.com/console
 User name: lakshayb057@gmail.com
 Console password: Lakshay@123
 
@@ -77,3 +77,5 @@ KYC Completion date
 For SBI: https://www.sbicard.com/sprint/c/SimplyClick?ch=edm&GEMID1=edm_others_SimplyClick_ORG&GEMID2=MYMONEYM%5B%5BPRID%5D
 
 07/07/2026 -> on public landing page form add capture pan no. vith proper validation!
+in agent capture pan in place of income
+map the bank with the agents creation

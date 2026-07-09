@@ -1475,8 +1475,42 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
   };
 
   const dbUrnMap = new Map();
+  const dbSuffixMap = new Map(); // Suffix sequence of length >= 7 starting with letter
+  const dbNumericSuffixMap = new Map(); // Numeric suffix of length >= 6 (old pattern)
+
   dbLeads.forEach(lead => {
-    if (lead.canonical) dbUrnMap.set(lead.canonical, lead);
+    if (lead.urn) {
+      const canonical = String(lead.urn).trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+      if (canonical) {
+        dbUrnMap.set(canonical, lead);
+
+        // 1. Suffix sequence match for letter-prefixed sequence (e.g. G0200100)
+        const letterMatch = canonical.match(/[A-Z]\d+$/);
+        if (letterMatch) {
+          const suffix = letterMatch[0];
+          if (suffix.length >= 7) {
+            if (dbSuffixMap.has(suffix)) {
+              dbSuffixMap.set(suffix, 'AMBIGUOUS');
+            } else {
+              dbSuffixMap.set(suffix, lead);
+            }
+          }
+        }
+
+        // 2. Suffix sequence match for purely numeric sequence (e.g. 0630006 for old pattern)
+        const numericMatch = canonical.match(/\d+$/);
+        if (numericMatch) {
+          const numSuffix = numericMatch[0];
+          if (numSuffix.length >= 6) {
+            if (dbNumericSuffixMap.has(numSuffix)) {
+              dbNumericSuffixMap.set(numSuffix, 'AMBIGUOUS');
+            } else {
+              dbNumericSuffixMap.set(numSuffix, lead);
+            }
+          }
+        }
+      }
+    }
   });
 
   let totalMatched = 0;
@@ -1499,29 +1533,48 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
     const misVal = String(excelLc2).trim();
     const misDateStr = getRowValue(row, 'CREATION_DATE_TIME') || getRowValue(row, 'Application Submit Date/Time');
     const misDate = parseDateHelper(misDateStr);
-    const excelName = getRowValue(row, 'CUSTOMER_NAME') || getRowValue(row, 'Customer Name');
 
     let matchedLead = null;
     const cleanExcelLc2 = misVal.toUpperCase().replace(/[^A-Z0-9]/g, '');
 
     if (cleanExcelLc2) {
-      matchedLead = dbLeads.find(l => {
-        const cleanLeadUrn = String(l.urn || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-        if (!cleanLeadUrn) return false;
-
-        // 1. Exact match
-        if (cleanLeadUrn === cleanExcelLc2) return true;
-        // 2. Suffix match where URN ends with Excel value (min 5 characters)
-        if (cleanExcelLc2.length >= 5 && cleanLeadUrn.endsWith(cleanExcelLc2)) return true;
-        // 3. Prefix match where URN starts with Excel value (min 5 characters)
-        if (cleanExcelLc2.length >= 5 && cleanLeadUrn.startsWith(cleanExcelLc2)) return true;
-        // 4. Suffix match where Excel value ends with URN
-        if (cleanLeadUrn.length >= 5 && cleanExcelLc2.endsWith(cleanLeadUrn)) return true;
-        // 5. Reconstructed prefix (e.g. lead is FM2026G0200100 and excel is G0200100)
-        if (cleanExcelLc2.startsWith('G') && cleanLeadUrn === 'FM2026' + cleanExcelLc2) return true;
-
-        return false;
-      });
+      // 1. Try exact canonical match
+      if (dbUrnMap.has(cleanExcelLc2)) {
+        matchedLead = dbUrnMap.get(cleanExcelLc2);
+      }
+      // 2. Try suffix match for new sequence pattern (e.g. G0200100)
+      else if (cleanExcelLc2.length >= 7 && /^[A-Z]\d+$/.test(cleanExcelLc2)) {
+        const candidate = dbSuffixMap.get(cleanExcelLc2);
+        if (candidate && candidate !== 'AMBIGUOUS') {
+          matchedLead = candidate;
+        }
+      }
+      // 3. Try suffix match for old sequence pattern (e.g. 0630006)
+      else if (cleanExcelLc2.length >= 6 && /^\d+$/.test(cleanExcelLc2)) {
+        const candidate = dbNumericSuffixMap.get(cleanExcelLc2);
+        if (candidate && candidate !== 'AMBIGUOUS') {
+          matchedLead = candidate;
+        }
+      }
+      // 4. Try extract suffix from a partial URN format (e.g. FM20260630006)
+      else if (cleanExcelLc2.startsWith('FM') && cleanExcelLc2.length >= 10) {
+        const letterMatch = cleanExcelLc2.match(/[A-Z]\d+$/);
+        if (letterMatch && letterMatch[0].length >= 7) {
+          const candidate = dbSuffixMap.get(letterMatch[0]);
+          if (candidate && candidate !== 'AMBIGUOUS') {
+            matchedLead = candidate;
+          }
+        }
+        if (!matchedLead) {
+          const numericMatch = cleanExcelLc2.match(/\d+$/);
+          if (numericMatch && numericMatch[0].length >= 6) {
+            const candidate = dbNumericSuffixMap.get(numericMatch[0]);
+            if (candidate && candidate !== 'AMBIGUOUS') {
+              matchedLead = candidate;
+            }
+          }
+        }
+      }
     }
 
     const misData = {};
@@ -1561,13 +1614,31 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
 
     if (matchedLead) {
       totalMatched++;
-      let existingMatches = matchedLeadsMap.get(matchedLead.id) || [];
-      existingMatches.push({
-        app_ref: misData.bank_reference_number || misData.application_no || '',
-        status: standardStatus,
-        data: misData
+      
+      const currentEntry = matchedLeadsMap.get(matchedLead.id);
+      let shouldOverwrite = true;
+      if (currentEntry && currentEntry.date && misDate) {
+        shouldOverwrite = misDate.getTime() > currentEntry.date.getTime();
+      }
+      
+      if (shouldOverwrite) {
+        matchedLeadsMap.set(matchedLead.id, {
+          urn: matchedLead.urn,
+          name: matchedLead.full_name,
+          cardName: matchedLead.card_name,
+          status: standardStatus,
+          data: misData,
+          date: misDate
+        });
+      }
+
+      // Add to matchedDetails for frontend listing
+      matchedDetails.push({
+        urn: matchedLead.urn,
+        name: matchedLead.full_name,
+        cardName: matchedLead.card_name,
+        status: standardStatus
       });
-      matchedLeadsMap.set(matchedLead.id, existingMatches);
     } else {
       totalUnmatched++;
       if (!unmatchedUrnsSet.has(excelLc2)) {
@@ -1584,7 +1655,7 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
   const matchedIds = Array.from(matchedLeadsMap.keys());
   if (matchedIds.length > 0) {
     const currentLeadsRes = await db.pool.query(
-      'SELECT id, mis_status, mis_data, urn, full_name, card_name, mis_mapped_at FROM leads WHERE id = ANY($1::varchar[])',
+      'SELECT id, mis_status, mis_data FROM leads WHERE id = ANY($1::varchar[])',
       [matchedIds]
     );
     const dbLeadMap = new Map();
@@ -1592,80 +1663,44 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
       dbLeadMap.set(row.id, row);
     });
 
-    for (const [leadId, newMatches] of matchedLeadsMap.entries()) {
+    for (const [leadId, matchedObj] of matchedLeadsMap.entries()) {
       const dbLead = dbLeadMap.get(leadId);
-      let history = [];
       let currentMisData = {};
-      
       if (dbLead && dbLead.mis_data) {
-        currentMisData = typeof dbLead.mis_data === 'string' ? JSON.parse(dbLead.mis_data) : dbLead.mis_data;
-        if (Array.isArray(currentMisData.history)) {
-          history = currentMisData.history;
-        } else if (dbLead.mis_status) {
-          // Migrate legacy single mapping structure to history format
-          history.push({
-            app_ref: currentMisData.bank_reference_number || '',
-            status: dbLead.mis_status,
-            data: currentMisData,
-            mapped_at: dbLead.mis_mapped_at || new Date().toISOString()
-          });
-        }
-      }
-
-      newMatches.forEach(newMatch => {
-        // Clean data: do not overwrite existing fields with empty columns in the spreadsheet
-        const cleanData = {};
-        for (const [k, v] of Object.entries(newMatch.data)) {
-          if (v !== '' && v !== null && v !== undefined) {
-            cleanData[k] = v;
+        try {
+          const parsed = typeof dbLead.mis_data === 'string' ? JSON.parse(dbLead.mis_data) : dbLead.mis_data;
+          // If it was legacy history structure, extract the latest entry
+          if (parsed && Array.isArray(parsed.history) && parsed.history.length > 0) {
+            const latest = parsed.history[parsed.history.length - 1];
+            currentMisData = latest.data || {};
+          } else {
+            currentMisData = parsed || {};
           }
+        } catch (e) {
+          currentMisData = {};
         }
-
-        const appRefStr = String(newMatch.app_ref || '').trim();
-        const existingHistIndex = appRefStr ? history.findIndex(h => String(h.app_ref || '').trim() === appRefStr) : -1;
-
-        if (existingHistIndex !== -1) {
-          // Merge spreadsheet columns into existing matched history record
-          history[existingHistIndex].status = newMatch.status;
-          history[existingHistIndex].data = {
-            ...history[existingHistIndex].data,
-            ...cleanData
-          };
-          history[existingHistIndex].mapped_at = new Date().toISOString();
-        } else {
-          // Append new application reference number attempt
-          history.push({
-            app_ref: appRefStr || ('REF_' + Math.random().toString(36).substr(2, 9)),
-            status: newMatch.status,
-            data: cleanData,
-            mapped_at: new Date().toISOString()
-          });
-        }
-
-        // Add to response matched details list (so the user sees all matching rows in spreadsheet)
-        matchedDetails.push({
-          urn: dbLead ? dbLead.urn : '',
-          name: dbLead ? dbLead.full_name : '',
-          cardName: dbLead ? dbLead.card_name : '',
-          status: newMatch.status
-        });
-      });
-
-      // Compute overall status (Approved takes highest priority, then Pending, then Rejected)
-      let overallStatus = 'Pending';
-      const statuses = history.map(h => String(h.status).toLowerCase());
-      if (statuses.includes('approved') || statuses.includes('approve') || statuses.includes('success')) {
-        overallStatus = 'Approved';
-      } else if (statuses.includes('pending') || statuses.includes('inprocess') || statuses.includes('in-complete application')) {
-        overallStatus = 'Pending';
-      } else if (statuses.length > 0) {
-        overallStatus = 'Rejected';
       }
+
+      // Merge spreadsheet columns into existing matched records, filtering out empty spreadsheet fields
+      const cleanData = {};
+      for (const [k, v] of Object.entries(matchedObj.data)) {
+        if (v !== '' && v !== null && v !== undefined) {
+          cleanData[k] = v;
+        }
+      }
+
+      const mergedData = {
+        ...currentMisData,
+        ...cleanData
+      };
+
+      // Ensure history field is removed/deleted so it is purely flat data
+      delete mergedData.history;
 
       updates.push({
         id: leadId,
-        status: overallStatus,
-        data: { history }
+        status: matchedObj.status,
+        data: mergedData
       });
     }
   }
