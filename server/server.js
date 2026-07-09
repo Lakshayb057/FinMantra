@@ -990,6 +990,26 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
     }
   }
 
+  // Validate bank-specific pincode serviceability rules
+  if (card && card.bank && pincode) {
+    const bankRulesRaw = dbSettings.bank_pincode_rules || '';
+    if (bankRulesRaw) {
+      try {
+        const bankRules = JSON.parse(bankRulesRaw);
+        const rule = bankRules[card.bank];
+        if (rule && rule.mode === 'list') {
+          const cleanPincode = String(pincode).trim();
+          const pincodeArray = String(rule.list || '').split(',').map(p => p.trim()).filter(Boolean);
+          if (!pincodeArray.includes(cleanPincode)) {
+            return res.status(400).json({ error: `${card.bank} cards facilities are currently not available for your location.` });
+          }
+        }
+      } catch (e) {
+        console.error('[Pincode Validation] Failed to parse bank_pincode_rules:', e);
+      }
+    }
+  }
+
   // If utm_params is not provided, dynamically build it from all req.body keys
   let resolvedUtmParams = utm_params;
   if (source !== 'agent' && !resolvedUtmParams) {

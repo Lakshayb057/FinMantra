@@ -5496,6 +5496,50 @@ function FormBuilderSettings({ settings, setSettings, showToast, token, API_URL 
   const [newOptionVal, setNewOptionVal] = useState('');
   const [pincodeMode, setPincodeMode] = useState(settings.pincode_serviceability_mode || 'all');
   const [pincodeList, setPincodeList] = useState(settings.pincode_serviceability_list || '');
+  const [bankPincodeRules, setBankPincodeRules] = useState(() => {
+    try {
+      if (settings.bank_pincode_rules) {
+        return typeof settings.bank_pincode_rules === 'string'
+          ? JSON.parse(settings.bank_pincode_rules)
+          : settings.bank_pincode_rules;
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return {};
+  });
+
+  const getBankOptions = () => {
+    if (settings && settings.card_manager_banks) {
+      return settings.card_manager_banks.split(',').map(b => b.trim()).filter(Boolean);
+    }
+    return ['HDFC', 'SBI'];
+  };
+
+  const handleFileUpload = (e, bank) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target.result || '';
+      const parsed = text.match(/\b\d{6}\b/g) || [];
+      if (parsed.length > 0) {
+        const uniquePincodes = Array.from(new Set(parsed)).sort().join(', ');
+        setBankPincodeRules(prev => ({
+          ...prev,
+          [bank]: {
+            mode: 'list',
+            list: uniquePincodes
+          }
+        }));
+        showToast(`Successfully parsed and loaded ${parsed.length} unique pincodes for ${bank}!`, 'success');
+      } else {
+        showToast('No valid 6-digit pincodes found in the file.', 'error');
+      }
+    };
+    reader.readAsText(file);
+  };
+
   const [saving, setSaving] = useState(false);
   const [tilt, setTilt] = useState({ x: 0, y: 0 });
 
@@ -5586,7 +5630,8 @@ function FormBuilderSettings({ settings, setSettings, showToast, token, API_URL 
         body: JSON.stringify({
           landing_form_schema: JSON.stringify(schema),
           pincode_serviceability_mode: pincodeMode,
-          pincode_serviceability_list: pincodeList
+          pincode_serviceability_list: pincodeList,
+          bank_pincode_rules: JSON.stringify(bankPincodeRules)
         })
       });
       if (res.ok) {
@@ -5594,7 +5639,8 @@ function FormBuilderSettings({ settings, setSettings, showToast, token, API_URL 
           ...prev,
           landing_form_schema: schema,
           pincode_serviceability_mode: pincodeMode,
-          pincode_serviceability_list: pincodeList
+          pincode_serviceability_list: pincodeList,
+          bank_pincode_rules: bankPincodeRules
         }));
         showToast('Form configuration & pincode serviceability rules saved successfully!', 'success');
       } else {
@@ -5858,6 +5904,90 @@ function FormBuilderSettings({ settings, setSettings, showToast, token, API_URL 
                 </div>
               </div>
             )}
+          </div>
+        </div>
+
+        {/* Bank-Specific Pincode Serviceability Card */}
+        <div className="glass-panel" style={{ padding: '1.25rem', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-md)', marginBottom: '1.5rem' }}>
+          <h4 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--gold)', marginBottom: '0.75rem', borderBottom: '1px dashed var(--border-light)', paddingBottom: '0.5rem' }}>
+            Bank-Specific Pincode Serviceability
+          </h4>
+          <p style={{ fontSize: '0.78rem', color: 'hsl(var(--text-secondary))', marginBottom: '1rem' }}>
+            Set serviceability rules for each bank individually. This applies if a lead applies for a card from that bank (e.g. resolved via UTM Internal).
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            {getBankOptions().map(bank => {
+              const rule = bankPincodeRules[bank] || { mode: 'all', list: '' };
+              return (
+                <div key={bank} style={{ borderBottom: '1px solid var(--border-light)', paddingBottom: '1rem', marginBottom: '0.25rem' }}>
+                  <span style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--gold-deep)', display: 'block', marginBottom: '0.5rem' }}>
+                    {bank} Serviceability
+                  </span>
+                  <div className="form-group" style={{ marginBottom: '0.5rem' }}>
+                    <label className="form-label" style={{ fontSize: '0.75rem' }}>Validation Mode</label>
+                    <select
+                      className="form-select"
+                      style={{ padding: '0.4rem 0.6rem', fontSize: '0.8rem' }}
+                      value={rule.mode}
+                      onChange={(e) => setBankPincodeRules(prev => ({
+                        ...prev,
+                        [bank]: {
+                          ...rule,
+                          mode: e.target.value
+                        }
+                      }))}
+                    >
+                      <option value="all">Serviceable Everywhere (All location)</option>
+                      <option value="list">Serviceable only at specific Pincodes</option>
+                    </select>
+                  </div>
+
+                  {rule.mode === 'list' && (
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>Serviceable Pincodes List</span>
+                        {rule.list && (
+                          <span style={{ color: 'var(--mint)', fontWeight: 600 }}>
+                            {String(rule.list).split(',').filter(Boolean).length} Loaded
+                          </span>
+                        )}
+                      </label>
+                      <textarea
+                        className="form-input"
+                        rows="3"
+                        placeholder="Enter comma-separated 6-digit pincodes..."
+                        value={rule.list || ''}
+                        onChange={(e) => setBankPincodeRules(prev => ({
+                          ...prev,
+                          [bank]: {
+                            ...rule,
+                            list: e.target.value
+                          }
+                        }))}
+                        style={{ fontSize: '0.78rem', fontFamily: 'var(--font-mono)' }}
+                      />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.35rem' }}>
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem', margin: 0 }}
+                          onClick={() => document.getElementById(`pincode-upload-${bank}`).click()}
+                        >
+                          Upload Pincode List (.txt, .csv)
+                        </button>
+                        <input
+                          type="file"
+                          id={`pincode-upload-${bank}`}
+                          style={{ display: 'none' }}
+                          accept=".txt,.csv"
+                          onChange={(e) => handleFileUpload(e, bank)}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
 

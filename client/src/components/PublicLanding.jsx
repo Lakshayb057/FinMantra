@@ -205,7 +205,14 @@ export default function PublicLanding({ navigateTo, utmParams }) {
         initAnalytics(settingsData);
         
         if (cardsList.length > 0) {
-          setFormData(prev => ({ ...prev, selectedCard: cardsList[0].id }));
+          let initialCardId = cardsList[0].id;
+          if (utmParams && utmParams.utm_internal) {
+            const matchedCard = cardsList.find(c => String(c.utm_internal || '').trim().toLowerCase() === String(utmParams.utm_internal).trim().toLowerCase());
+            if (matchedCard) {
+              initialCardId = matchedCard.id;
+            }
+          }
+          setFormData(prev => ({ ...prev, selectedCard: initialCardId }));
         }
       } catch (err) {
         console.error('Error fetching landing page data:', err);
@@ -290,6 +297,27 @@ export default function PublicLanding({ navigateTo, utmParams }) {
           setPincodeError('Invalid Pincode');
         }
       } finally {
+        if (pin.length === 6 && /^\d+$/.test(pin)) {
+          const selectedCardDetails = cards.find(c => c.id === formData.selectedCard);
+          if (selectedCardDetails && selectedCardDetails.bank) {
+            let bankRules = {};
+            try {
+              if (settings.bank_pincode_rules) {
+                bankRules = typeof settings.bank_pincode_rules === 'string'
+                  ? JSON.parse(settings.bank_pincode_rules)
+                  : settings.bank_pincode_rules;
+              }
+            } catch (err) {}
+
+            const rule = bankRules[selectedCardDetails.bank];
+            if (rule && rule.mode === 'list') {
+              const pinArray = String(rule.list || '').split(',').map(p => p.trim()).filter(Boolean);
+              if (!pinArray.includes(pin)) {
+                setPincodeError(`${selectedCardDetails.bank} cards facilities are currently not available for your location.`);
+              }
+            }
+          }
+        }
         setPincodeLoading(false);
       }
     };
@@ -693,6 +721,27 @@ export default function PublicLanding({ navigateTo, utmParams }) {
             }
             if (pinMode === 'blacklist' && isInList) {
               newErrors.pincode = 'Credit card services are not available at your pincode currently.';
+            }
+          }
+
+          // Validate bank-specific pincode rules
+          const selectedCardDetails = cards.find(c => c.id === formData.selectedCard);
+          if (selectedCardDetails && selectedCardDetails.bank) {
+            let bankRules = {};
+            try {
+              if (settings.bank_pincode_rules) {
+                bankRules = typeof settings.bank_pincode_rules === 'string'
+                  ? JSON.parse(settings.bank_pincode_rules)
+                  : settings.bank_pincode_rules;
+              }
+            } catch (err) {}
+
+            const rule = bankRules[selectedCardDetails.bank];
+            if (rule && rule.mode === 'list') {
+              const pinArray = String(rule.list || '').split(',').map(p => p.trim()).filter(Boolean);
+              if (!pinArray.includes(val)) {
+                newErrors.pincode = `${selectedCardDetails.bank} cards facilities are currently not available for your location.`;
+              }
             }
           }
         }
