@@ -2483,6 +2483,79 @@ app.post('/api/whatsapp/test', async (req, res) => {
   }
 });
 
+// --- PINCODE LOOKUP PROXY ---
+app.get('/api/pincode/lookup/:pincode', async (req, res) => {
+  const { pincode } = req.params;
+  const pin = (pincode || '').trim();
+  if (pin.length !== 6 || !/^\d+$/.test(pin)) {
+    return res.status(400).json({ error: 'Invalid pincode format' });
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 7500);
+
+  let resolved = false;
+  let result = null;
+
+  // 1. Try Zippopotam API (highly reliable, globally distributed CDN)
+  try {
+    const zipRes = await fetch(`https://api.zippopotam.us/in/${pin}`, { signal: controller.signal });
+    if (zipRes.ok) {
+      const zipData = await zipRes.json();
+      if (zipData && zipData.places && zipData.places.length > 0) {
+        const state = zipData.places[0].state;
+        const rawPlace = zipData.places[0]['place name'];
+        const district = rawPlace.split('(')[0].trim();
+        const localities = zipData.places.map(p => p['place name'].split('(')[0].trim()).filter((v, i, a) => v && a.indexOf(v) === i);
+        
+        result = {
+          city: district,
+          state: state,
+          localities: localities
+        };
+        resolved = true;
+      }
+    }
+  } catch (zipErr) {
+    console.warn(`[Pincode Proxy] Zippopotam lookup failed for ${pin}:`, zipErr.message);
+  }
+
+  // 2. Try Postal Pincode API
+  if (!resolved) {
+    try {
+      const postRes = await fetch(`https://api.postalpincode.in/pincode/${pin}`, { signal: controller.signal });
+      if (postRes.ok) {
+        const data = await postRes.json();
+        if (data && data[0] && data[0].Status === 'Success') {
+          const postOffices = data[0].PostOffice;
+          if (postOffices && postOffices.length > 0) {
+            const district = postOffices[0].District;
+            const state = postOffices[0].State;
+            const localities = postOffices.map(po => po.Name).filter(Boolean);
+            
+            result = {
+              city: district,
+              state: state,
+              localities: localities
+            };
+            resolved = true;
+          }
+        }
+      }
+    } catch (postErr) {
+      console.error(`[Pincode Proxy] Postal Pincode lookup failed for ${pin}:`, postErr.message);
+    }
+  }
+
+  clearTimeout(timeoutId);
+
+  if (resolved && result) {
+    return res.json(result);
+  } else {
+    return res.status(404).json({ error: 'Pincode not found' });
+  }
+});
+
 // --- SETTINGS MANAGEMENT ---
 
 // Get Settings

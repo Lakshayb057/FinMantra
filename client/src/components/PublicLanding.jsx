@@ -285,98 +285,24 @@ export default function PublicLanding({ navigateTo, utmParams }) {
       setPincodeLocationText('');
 
       try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 7500);
-
-        let resolved = false;
-        
-        // 1. Try Zippopotam API (highly reliable, globally distributed CDN)
-        try {
-          const zipRes = await fetch(`https://api.zippopotam.us/in/${pin}`, { signal: controller.signal });
-          if (zipRes.ok) {
-            const zipData = await zipRes.json();
-            if (zipData && zipData.places && zipData.places.length > 0) {
-              const state = zipData.places[0].state;
-              const rawPlace = zipData.places[0]['place name'];
-              // Extract city by stripping extra info (e.g. "Fatehabad (Hissar)" -> "Fatehabad")
-              const district = rawPlace.split('(')[0].trim();
-              
-              setPincodeLocationText(`${district}, ${state}`);
-              
-              // Map all places to unique locality names
-              const localities = zipData.places.map(p => p['place name'].split('(')[0].trim()).filter((v, i, a) => v && a.indexOf(v) === i);
-              setPincodeLocalities(localities);
-              
-              setFormData(prev => ({ 
-                ...prev, 
-                city: district,
-                address_city: district,
-                address_state: state,
-                address_locality: localities[0] || ''
-              }));
-              resolved = true;
-            }
-          }
-        } catch (zipErr) {
-          console.warn('Zippopotam API failed/timed out, attempting fallback API:', zipErr.message);
+        const res = await fetch(`${API_URL}/pincode/lookup/${pin}`);
+        if (res.ok) {
+          const data = await res.json();
+          setPincodeLocationText(`${data.city}, ${data.state}`);
+          setPincodeLocalities(data.localities);
+          
+          setFormData(prev => ({ 
+            ...prev, 
+            city: data.city,
+            address_city: data.city,
+            address_state: data.state,
+            address_locality: data.localities[0] || ''
+          }));
+        } else {
+          throw new Error('Not found');
         }
-
-        // 2. Try Postal Pincode API if Zippopotam was not successful
-        if (!resolved) {
-          const res = await fetch(`https://api.postalpincode.in/pincode/${pin}`, { signal: controller.signal });
-          if (res.ok) {
-            const data = await res.json();
-            if (data && data[0] && data[0].Status === 'Success') {
-              const postOffices = data[0].PostOffice;
-              if (postOffices && postOffices.length > 0) {
-                const district = postOffices[0].District;
-                const state = postOffices[0].State;
-                setPincodeLocationText(`${district}, ${state}`);
-                
-                const localities = postOffices.map(po => po.Name).filter(Boolean);
-                setPincodeLocalities(localities);
-                
-                setFormData(prev => ({ 
-                  ...prev, 
-                  city: district,
-                  address_city: district,
-                  address_state: state,
-                  address_locality: localities[0] || ''
-                }));
-                resolved = true;
-              }
-            }
-          }
-        }
-
-        clearTimeout(timeoutId);
-
-        if (!resolved) {
-          // Fallback to offline estimator if APIs return no results
-          setPincodeLocalities([]);
-          const fallbackState = getStateFromPincode(pin);
-          if (fallbackState) {
-            setPincodeLocationText(`${fallbackState} (Estimated)`);
-            setFormData(prev => ({ 
-              ...prev, 
-              city: fallbackState,
-              address_city: fallbackState,
-              address_state: fallbackState,
-              address_locality: ''
-            }));
-          } else {
-            setPincodeError('Pincode not found');
-          }
-        }
-
       } catch (e) {
         setPincodeLocalities([]);
-        if (e.name === 'AbortError') {
-          console.warn('Pincode lookup timed out (using offline estimation).');
-        } else {
-          console.error('Failed to look up pincode details', e);
-        }
-        // Offline fallback on error/timeout
         const fallbackState = getStateFromPincode(pin);
         if (fallbackState) {
           setPincodeLocationText(`${fallbackState} (Estimated)`);
@@ -388,7 +314,7 @@ export default function PublicLanding({ navigateTo, utmParams }) {
             address_locality: ''
           }));
         } else {
-          setPincodeError('Invalid Pincode');
+          setPincodeError('Pincode not found');
         }
       } finally {
         if (pin.length === 6 && /^\d+$/.test(pin)) {
