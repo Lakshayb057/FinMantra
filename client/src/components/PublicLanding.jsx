@@ -1063,7 +1063,7 @@ export default function PublicLanding({ navigateTo, utmParams }) {
           timestamp: new Date().getTime()
         };
         sessionStorage.setItem('finmantra_applied_lead', JSON.stringify(cacheData));
-        window.location.href = data.redirectUrl;
+        window.location.replace(data.redirectUrl);
       } else {
         setFormError(data.error || 'Failed to complete application. Please try again.');
       }
@@ -1135,7 +1135,7 @@ export default function PublicLanding({ navigateTo, utmParams }) {
   // Resume Pending Application
   const handleResumeRedirect = () => {
     if (resumeSession) {
-      window.location.href = resumeSession.redirectUrl;
+      window.location.replace(resumeSession.redirectUrl);
     }
   };
 

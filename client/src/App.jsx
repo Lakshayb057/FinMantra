@@ -262,11 +262,7 @@ function ReferralRedirect({ urn }) {
         const data = await res.json();
 
         if (res.ok) {
-          setLeadDetails(data);
-          // Wait exactly 1 second (1000ms) total (to witness the full FinMantra splash screen) before redirecting to bank
-          setTimeout(() => {
-            window.location.href = data.redirectUrl;
-          }, 1000);
+          window.location.replace(data.redirectUrl);
         } else {
           setError(data.error || 'The requested URN reference details do not exist.');
           setLoading(false);
