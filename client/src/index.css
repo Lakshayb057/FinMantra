@@ -1096,3 +1096,36 @@ input:-webkit-autofill:active {
     padding-top: 0.75rem !important;
   }
 }
+
+/* Leads Dashboard responsiveness upgrades */
+@media (max-width: 992px) {
+  .leads-visuals-grid {
+    grid-template-columns: 1fr !important;
+    gap: 1.5rem !important;
+  }
+  .leads-visuals-grid > div {
+    grid-column: span 1 !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .admin-split-grid > div {
+    min-height: auto !important;
+  }
+}
+
+@media (max-width: 576px) {
+  .leads-dashboard-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 1rem !important;
+  }
+  .leads-dashboard-header button {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+  .leads-filter-grid {
+    grid-template-columns: 1fr !important;
+    gap: 0.75rem !important;
+  }
+}

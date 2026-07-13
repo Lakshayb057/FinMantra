@@ -2145,7 +2145,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
           {activeTab === 'leads_dashboard' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', textAlign: 'left' }}>
               {/* Dashboard Header */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }} className="leads-dashboard-header">
                 <div>
                   <h2 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.25rem' }}>Leads Mapping Analytics</h2>
                   <p style={{ color: 'hsl(var(--text-secondary))', fontSize: '0.85rem' }}>
@@ -2238,7 +2238,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                     </div>
 
                     {/* Row 1: Primary filters (always visible) */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem', alignItems: 'end' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem', alignItems: 'end' }} className="leads-filter-grid">
                       <div className="form-group" style={{ marginBottom: 0 }}>
                         <label className="form-label" style={filterLabelStyle}>Date From (MIS)</label>
                         <input type="date" className="form-input" style={filterSelectStyle} value={dashCreatedDate} onChange={(e) => setDashCreatedDate(e.target.value)} />
@@ -2255,7 +2255,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
                     {/* Row 2: Extended filters (collapsible) */}
                     {dashFiltersExpanded && (
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem', alignItems: 'end', marginTop: '0.85rem', paddingTop: '0.85rem', borderTop: '1px solid var(--line)' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem', alignItems: 'end', marginTop: '0.85rem', paddingTop: '0.85rem', borderTop: '1px solid var(--line)' }} className="leads-filter-grid">
                         <FilterSelect label="Card Name" value={dashCardName} onChange={setDashCardName} options={mkOpts('card_name')} placeholder="All Cards" />
                         <FilterSelect label="KYC Type" value={dashKycType} onChange={setDashKycType} options={mkOpts('kyc_type')} placeholder="All KYC" />
                         <FilterSelect label="Customer Type" value={dashCustomerType} onChange={setDashCustomerType} options={mkOpts('customer_type')} placeholder="All Customers" />
@@ -2432,7 +2432,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                     </div>
 
                     {/* 9 VISUALS GRID */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem' }} className="leads-visuals-grid">
                       
                       {/* Visual 1: Funnel Chart */}
                       <div className="glass-panel" style={{ padding: '2rem', gridColumn: 'span 2', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
