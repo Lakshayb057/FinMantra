@@ -286,7 +286,7 @@ export default function PublicLanding({ navigateTo, utmParams }) {
 
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3500);
+        const timeoutId = setTimeout(() => controller.abort(), 7500);
 
         let resolved = false;
         
