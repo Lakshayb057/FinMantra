@@ -730,16 +730,17 @@ a:hover {
 /* Custom Overrides for Admin Top Navbar */
 @media (max-width: 992px) {
   .admin-navbar {
-    flex-direction: column !important;
-    align-items: stretch !important;
-    gap: 1.25rem !important;
-    padding: 1.25rem !important;
+    flex-direction: row !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    gap: 1rem !important;
+    padding: 0.8rem 1.25rem !important;
     position: relative !important;
     top: 0 !important;
   }
 
   .admin-nav-brand {
-    justify-content: center !important;
+    justify-content: flex-start !important;
   }
 
   .admin-nav-tabs {
@@ -937,11 +938,18 @@ input:-webkit-autofill:active {
   }
 }
 
-/* Tablet and iPad overrides for Agent Portal grid */
+/* Tablet and iPad overrides for Agent and Admin Portal grids */
 @media (max-width: 1024px) {
-  .agent-panels-grid {
+  .agent-panels-grid,
+  .admin-split-grid {
     grid-template-columns: 1fr !important;
     gap: 2rem !important;
+  }
+  
+  .admin-split-grid div[style*="display: grid"],
+  .admin-split-grid div[style*="display:grid"] {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
   }
 }
 
@@ -1068,5 +1076,23 @@ input:-webkit-autofill:active {
   .admin-navbar img {
     height: 34px !important;
     width: 34px !important;
+  }
+}
+
+@media (max-width: 600px) {
+  .admin-container .glass-card {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 1rem !important;
+    padding: 1.25rem !important;
+  }
+
+  .admin-container .glass-card > div:last-child {
+    display: flex !important;
+    justify-content: flex-end !important;
+    gap: 0.5rem !important;
+    width: 100% !important;
+    border-top: 1px dashed var(--line) !important;
+    padding-top: 0.75rem !important;
   }
 }
