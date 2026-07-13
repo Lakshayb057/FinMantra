@@ -52,7 +52,11 @@ const DEFAULT_CSV_TEMPLATE = JSON.stringify([
   { id: "redirect_url", header: "Redirect URL", source: "redirect_url" },
   { id: "has_credit_card", header: "Already Has Credit Card?", source: "has_credit_card" },
   { id: "pincode", header: "Residence Pincode", source: "pincode" },
-  { id: "monthly_income", header: "Monthly Income", source: "monthly_income" }
+  { id: "monthly_income", header: "Monthly Income", source: "monthly_income" },
+  { id: "dob", header: "Date of Birth", source: "dob" },
+  { id: "mother_name", header: "Mother's Name", source: "mother_name" },
+  { id: "current_address", header: "Current Address", source: "current_address" },
+  { id: "designation", header: "Designation", source: "designation" }
 ]);
 
 const rawDbUrl = process.env.DATABASE_URL ? process.env.DATABASE_URL.trim().replace(/^["']|["']$/g, '') : '';
@@ -292,6 +296,12 @@ async function initPgSchema() {
       await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS pan_no VARCHAR(50)");
     } catch (migErr) {}
     try {
+      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS dob VARCHAR(50)");
+      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS mother_name VARCHAR(255)");
+      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS current_address TEXT");
+      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS designation VARCHAR(255)");
+    } catch (migErr) {}
+    try {
       await client.query("ALTER TABLE agents ADD COLUMN IF NOT EXISTS assigned_bank VARCHAR(255)");
     } catch (migErr) {}
 
@@ -365,7 +375,11 @@ async function initPgSchema() {
             { id: "has_credit_card", header: "Already Has Credit Card?", source: "has_credit_card" },
             { id: "pincode", header: "Residence Pincode", source: "pincode" },
             { id: "monthly_income", header: "Monthly Income", source: "monthly_income" },
-            { id: "pan_no", header: "PAN Number", source: "pan_no" }
+            { id: "pan_no", header: "PAN Number", source: "pan_no" },
+            { id: "dob", header: "Date of Birth", source: "dob" },
+            { id: "mother_name", header: "Mother's Name", source: "mother_name" },
+            { id: "current_address", header: "Current Address", source: "current_address" },
+            { id: "designation", header: "Designation", source: "designation" }
           ];
           for (const target of targetFields) {
             const exists = currentCols.some(col => col.id === target.id || col.source === target.source);
@@ -661,9 +675,9 @@ const db = {
         gclid, gclsrc, dclid, msclkid, ttclid, twclid, li_fat_id,
         utm_id, utm_creative, utm_keyword, utm_matchtype, utm_network, utm_placement,
         utm_device, utm_location, gbraid, wbraid, landing_page, first_landing_page, referrer, ad_id,
-        utm_params, redirect_url, ip_address, user_agent, capi_status, capi_response, utm_internal, has_credit_card, pincode, monthly_income, pan_no, created_at
+        utm_params, redirect_url, ip_address, user_agent, capi_status, capi_response, utm_internal, has_credit_card, pincode, monthly_income, pan_no, dob, mother_name, current_address, designation, created_at
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, NOW())`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61, $62, NOW())`,
       [
         id, urn, lead.full_name, lead.phone, lead.email, lead.city, lead.employment, lead.income_range,
         lead.card_id, lead.card_name, lead.card_bank, lead.source || 'public', lead.agent_id, lead.agent_name,
@@ -679,7 +693,11 @@ const db = {
         lead.has_credit_card || null,
         lead.pincode || null,
         lead.monthly_income || null,
-        lead.pan_no || null
+        lead.pan_no || null,
+        lead.dob || null,
+        lead.mother_name || null,
+        lead.current_address || null,
+        lead.designation || null
       ]
     );
     return { id, urn, ...lead, created_at: new Date().toISOString() };
@@ -695,8 +713,8 @@ const db = {
         utm_id = $32, utm_creative = $33, utm_keyword = $34, utm_matchtype = $35, utm_network = $36, utm_placement = $37,
         utm_device = $38, utm_location = $39, gbraid = $40, wbraid = $41, landing_page = $42, first_landing_page = $43, referrer = $44, ad_id = $45,
         utm_params = $46, redirect_url = $47, ip_address = $48, user_agent = $49, capi_status = $50, capi_response = $51, utm_internal = $52,
-        has_credit_card = $53, pincode = $54, monthly_income = $55, pan_no = $56
-       WHERE id = $57`,
+        has_credit_card = $53, pincode = $54, monthly_income = $55, pan_no = $56, dob = $57, mother_name = $58, current_address = $59, designation = $60
+       WHERE id = $61`,
       [
         lead.full_name, lead.phone, lead.email, lead.city, lead.employment, lead.income_range,
         lead.card_id, lead.card_name, lead.card_bank, lead.source, lead.agent_id, lead.agent_name, lead.agent_location, lead.consent,
@@ -712,6 +730,10 @@ const db = {
         lead.pincode || null,
         lead.monthly_income || null,
         lead.pan_no || null,
+        lead.dob || null,
+        lead.mother_name || null,
+        lead.current_address || null,
+        lead.designation || null,
         id
       ]
     );

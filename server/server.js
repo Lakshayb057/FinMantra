@@ -862,7 +862,11 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
     has_credit_card,
     pincode,
     monthly_income,
-    pan_no
+    pan_no,
+    dob,
+    mother_name,
+    current_address,
+    designation
   } = req.body;
 
   const trimmedName = full_name ? String(full_name).trim() : '';
@@ -1078,6 +1082,10 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
     pincode: pincode || null,
     monthly_income: monthly_income || null,
     pan_no: pan_no ? String(pan_no).trim().toUpperCase() : null,
+    dob: dob || null,
+    mother_name: mother_name || null,
+    current_address: current_address || null,
+    designation: designation || null,
     ip_address: (() => {
       let clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
       if (clientIp.includes(',')) {
@@ -1146,16 +1154,216 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
   // Real-time broadcast notification of a new lead!
   broadcast({ type: 'LEAD_ADDED', data: newLead });
 
-  // Send WhatsApp Referral Notification with Tracking URL
-  const agentCode = (source === 'agent' && agent_id) ? agent_id : 'public';
+  // Send WhatsApp Referral Notification with Tracking URL only for agents
+  if (source === 'agent') {
+    const agentCode = agent_id || 'active';
+    const dateCode = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD
+    const settings = await db.getSettings();
+    
+    // Resolve base URL based on settings or fallback dynamically
+    let baseUrl = settings.public_site_url ? settings.public_site_url.trim() : '';
+    if (baseUrl) {
+      if (baseUrl.endsWith('/')) {
+        baseUrl = baseUrl.substring(0, baseUrl.length - 1);
+      }
+    } else {
+      const host = req.get('host') || 'localhost:5000';
+      const protocol = req.protocol || 'http';
+      baseUrl = `${protocol}://${host}`;
+      if (host.includes('localhost') || host.includes('127.0.0.1')) {
+        baseUrl = 'http://localhost:5173';
+      }
+    }
+    
+    const referralLink = `${baseUrl}/refer/${agentCode}/${dateCode}/${newLead.urn}`;
+    const cardNameStr = card ? `${card.bank} ${card.name}` : 'FinMantra Partner Bank';
+    const referralMsg = `Hello ${trimmedName}, thank you for choosing FinMantra. You can access your secure bank portal for the ${cardNameStr} application here: ${referralLink}`;
+    const referralTemplateName = settings.wa_referral_template_name || process.env.WA_REFERRAL_TEMPLATE_NAME || 'finmantra_portal';
+    const candidateRefTemplates = [referralTemplateName, 'finmantra_portal', 'finmantra_welcome', 'transactional_link', 'jaspers_market_order_confirmation_v1'].filter((v, i, a) => v && a.indexOf(v) === i);
+    
+    for (const refTName of candidateRefTemplates) {
+      try {
+        let params = [trimmedName, referralLink];
+        if (refTName === 'jaspers_market_order_confirmation_v1') {
+          const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+          params = [trimmedName, referralLink, dateStr];
+        }
+        const result = await sendWhatsAppTemplate(trimmedPhone, refTName, params);
+        if (!result.simulated) {
+          console.log(`[WhatsApp API] Referral template "${refTName}" sent to ${trimmedPhone} via Meta API.`);
+        }
+        break;
+      } catch (err) {
+        console.warn(`[WhatsApp API Warning] Referral template "${refTName}" failed for ${trimmedPhone}: ${err.message}.`);
+        if (err.isAuthError || err.message.includes('Authentication Error') || err.message.includes('Code: 190')) {
+          console.error(`[WhatsApp API CRITICAL] Stopping referral template trials: Meta Access Token is invalid/expired (Code 190).`);
+          break;
+        }
+      }
+    }
+
+    console.log(`=========================================`);
+    console.log(`[WhatsApp Referral Link for ${trimmedPhone}]:`);
+    console.log(referralMsg);
+    console.log(`=========================================`);
+  }
+
+  res.json({
+    success: true,
+    urn: newLead.urn,
+    redirectUrl
+  });
+});
+
+// Update Lead Details from Public Form Step 2 by URN
+app.put('/api/leads/public/urn/:urn', async (req, res) => {
+  const { urn } = req.params;
+  const {
+    employment,
+    monthly_income,
+    designation,
+    pan_no,
+    has_credit_card,
+    pincode,
+    current_address,
+    card_id
+  } = req.body;
+
+  const lead = await db.getLeadByUrn(urn);
+  if (!lead) {
+    return res.status(404).json({ error: 'Lead tracking record not found' });
+  }
+
+  // Validate PAN format if provided
+  if (pan_no) {
+    const cleanPan = String(pan_no).trim().toUpperCase();
+    if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(cleanPan)) {
+      return res.status(400).json({ error: 'Please enter a valid 10-character PAN number (e.g., ABCDE1234F).' });
+    }
+  }
+
+  // Validate pincode serviceability rules
+  const dbSettings = await db.getSettings();
+  const pincodeMode = dbSettings.pincode_serviceability_mode || 'all';
+  const pincodeListRaw = dbSettings.pincode_serviceability_list || '';
+  if (pincodeMode !== 'all' && pincode) {
+    const cleanPincode = String(pincode).trim();
+    const pincodeArray = pincodeListRaw.split(',').map(p => p.trim()).filter(Boolean);
+    const isInList = pincodeArray.includes(cleanPincode);
+    if (pincodeMode === 'whitelist' && !isInList) {
+      return res.status(400).json({ error: 'Credit card services are not available at your pincode currently.' });
+    }
+    if (pincodeMode === 'blacklist' && isInList) {
+      return res.status(400).json({ error: 'Credit card services are not available at your pincode currently.' });
+    }
+  }
+
+  // Update lead object fields
+  if (card_id) {
+    lead.card_id = card_id;
+    const activeCards = await db.getCards(false);
+    const matchedCard = activeCards.find(c => c.id === card_id);
+    if (matchedCard) {
+      lead.card_name = matchedCard.name;
+      lead.card_bank = matchedCard.bank;
+    }
+  }
+  lead.employment = employment || lead.employment;
+  lead.monthly_income = monthly_income || lead.monthly_income;
+  lead.income_range = monthly_income ? `₹${parseInt(monthly_income, 10).toLocaleString('en-IN')}` : lead.income_range;
+  lead.designation = designation || lead.designation;
+  lead.pan_no = pan_no ? String(pan_no).trim().toUpperCase() : lead.pan_no;
+  lead.has_credit_card = has_credit_card || lead.has_credit_card;
+  lead.pincode = pincode || lead.pincode;
+  lead.current_address = current_address || lead.current_address;
+
+  // Re-calculate the redirect URL if there's a card assigned (since monthly_income/pincode might affect it)
+  let card = null;
+  let redirectUrlTemplate = '';
+  if (lead.card_id) {
+    const activeCards = await db.getCards(false);
+    card = activeCards.find(c => c.id === lead.card_id);
+    if (card) {
+      redirectUrlTemplate = card.redirect_url_template || '';
+    }
+  }
+  
+  if (!redirectUrlTemplate) {
+    redirectUrlTemplate = dbSettings.public_redirect_url || '';
+  }
+
+  // Validate bank-specific pincode serviceability rules
+  if (card && card.bank && pincode) {
+    const bankRulesRaw = dbSettings.bank_pincode_rules || '';
+    if (bankRulesRaw) {
+      try {
+        const bankRules = JSON.parse(bankRulesRaw);
+        const rule = bankRules[card.bank];
+        if (rule && rule.mode === 'list') {
+          const cleanPincode = String(pincode).trim();
+          const pincodeArray = String(rule.list || '').split(',').map(p => p.trim()).filter(Boolean);
+          if (!pincodeArray.includes(cleanPincode)) {
+            return res.status(400).json({ error: `${card.bank} cards facilities are currently not available for your location.` });
+          }
+        }
+      } catch (e) {
+        console.error('[Pincode Validation] Failed to parse bank_pincode_rules:', e);
+      }
+    }
+  }
+
+  // Compute final redirect URL
+  const urnFirstVal = urn.length >= 6 ? urn.substring(0, 6) : urn;
+  const urnLastVal = urn.length >= 6 ? urn.substring(6) : '';
+  const agentCodeVal = lead.agent_id || '';
+  
+  let redirectUrl = redirectUrlTemplate;
+  redirectUrl = redirectUrl
+    .replace(/{name}/gi, encodeURIComponent(lead.full_name || ''))
+    .replace(/{phone}/gi, encodeURIComponent(lead.phone || ''))
+    .replace(/{email}/gi, encodeURIComponent(lead.email || ''))
+    .replace(/{urn}/gi, encodeURIComponent(urn))
+    .replace(/{urm}/gi, encodeURIComponent(urn))
+    .replace(/{urn_first}/gi, encodeURIComponent(urnFirstVal))
+    .replace(/{urn_last}/gi, encodeURIComponent(urnLastVal))
+    .replace(/{agent_id}/gi, encodeURIComponent(agentCodeVal))
+    .replace(/{utm_source}/gi, encodeURIComponent(lead.utm_source || ''))
+    .replace(/{utm_medium}/gi, encodeURIComponent(lead.utm_medium || ''))
+    .replace(/{utm_campaign}/gi, encodeURIComponent(lead.utm_campaign || ''))
+    .replace(/{utm_id}/gi, encodeURIComponent(lead.utm_id || ''))
+    .replace(/{utm_term}/gi, encodeURIComponent(lead.utm_term || ''))
+    .replace(/{utm_creative}/gi, encodeURIComponent(lead.utm_creative || ''))
+    .replace(/{ad_id}/gi, encodeURIComponent(lead.ad_id || ''))
+    .replace(/{utm_internal}/gi, encodeURIComponent(lead.utm_internal || ''))
+    .replace(/{utm_content}/gi, encodeURIComponent(lead.utm_content || ''))
+    .replace(/{utm_keyword}/gi, encodeURIComponent(lead.utm_keyword || ''))
+    .replace(/{utm_matchtype}/gi, encodeURIComponent(lead.utm_matchtype || ''))
+    .replace(/{utm_network}/gi, encodeURIComponent(lead.utm_network || ''))
+    .replace(/{utm_placement}/gi, encodeURIComponent(lead.utm_placement || ''))
+    .replace(/{utm_device}/gi, encodeURIComponent(lead.utm_device || ''))
+    .replace(/{utm_location}/gi, encodeURIComponent(lead.utm_location || ''))
+    .replace(/{gbraid}/gi, encodeURIComponent(lead.gbraid || ''))
+    .replace(/{wbraid}/gi, encodeURIComponent(lead.wbraid || ''))
+    .replace(/{landing_page}/gi, encodeURIComponent(lead.landing_page || ''))
+    .replace(/{first_landing_page}/gi, encodeURIComponent(lead.first_landing_page || ''))
+    .replace(/{referrer}/gi, encodeURIComponent(lead.referrer || ''))
+    .replace(/{utm_info}/gi, encodeURIComponent(lead.utm_info || ''))
+    .replace(/{utm_creative_format}/gi, encodeURIComponent(lead.utm_creative_format || ''));
+
+  lead.redirect_url = redirectUrl;
+
+  await db.updateLead(lead.id, lead);
+
+  // Broadcast update
+  broadcast({ type: 'LEAD_UPDATED', data: lead });
+
+  // Send WhatsApp Referral Notification with Tracking URL only when Step 2 is submitted successfully
+  const agentCode = lead.agent_id || 'public';
   const dateCode = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD
   
-  const settings = await db.getSettings();
-  
   // Resolve base URL based on settings or fallback dynamically
-  let baseUrl = settings.public_site_url ? settings.public_site_url.trim() : '';
+  let baseUrl = dbSettings.public_site_url ? dbSettings.public_site_url.trim() : '';
   if (baseUrl) {
-    // Strip trailing slash if present
     if (baseUrl.endsWith('/')) {
       baseUrl = baseUrl.substring(0, baseUrl.length - 1);
     }
@@ -1168,26 +1376,26 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
     }
   }
   
-  const referralLink = `${baseUrl}/refer/${agentCode}/${dateCode}/${newLead.urn}`;
+  const referralLink = `${baseUrl}/refer/${agentCode}/${dateCode}/${lead.urn}`;
   const cardNameStr = card ? `${card.bank} ${card.name}` : 'FinMantra Partner Bank';
-  const referralMsg = `Hello ${trimmedName}, thank you for choosing FinMantra. You can access your secure bank portal for the ${cardNameStr} application here: ${referralLink}`;
-  const referralTemplateName = settings.wa_referral_template_name || process.env.WA_REFERRAL_TEMPLATE_NAME || 'finmantra_portal';
+  const referralMsg = `Hello ${lead.full_name}, thank you for choosing FinMantra. You can access your secure bank portal for the ${cardNameStr} application here: ${referralLink}`;
+  const referralTemplateName = dbSettings.wa_referral_template_name || process.env.WA_REFERRAL_TEMPLATE_NAME || 'finmantra_portal';
   const candidateRefTemplates = [referralTemplateName, 'finmantra_portal', 'finmantra_welcome', 'transactional_link', 'jaspers_market_order_confirmation_v1'].filter((v, i, a) => v && a.indexOf(v) === i);
   
   for (const refTName of candidateRefTemplates) {
     try {
-      let params = [trimmedName, referralLink];
+      let params = [lead.full_name, referralLink];
       if (refTName === 'jaspers_market_order_confirmation_v1') {
         const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-        params = [trimmedName, referralLink, dateStr];
+        params = [lead.full_name, referralLink, dateStr];
       }
-      const result = await sendWhatsAppTemplate(trimmedPhone, refTName, params);
+      const result = await sendWhatsAppTemplate(lead.phone, refTName, params);
       if (!result.simulated) {
-        console.log(`[WhatsApp API] Referral template "${refTName}" sent to ${trimmedPhone} via Meta API.`);
+        console.log(`[WhatsApp API] Referral template "${refTName}" sent to ${lead.phone} via Meta API.`);
       }
       break;
     } catch (err) {
-      console.warn(`[WhatsApp API Warning] Referral template "${refTName}" failed for ${trimmedPhone}: ${err.message}.`);
+      console.warn(`[WhatsApp API Warning] Referral template "${refTName}" failed for ${lead.phone}: ${err.message}.`);
       if (err.isAuthError || err.message.includes('Authentication Error') || err.message.includes('Code: 190')) {
         console.error(`[WhatsApp API CRITICAL] Stopping referral template trials: Meta Access Token is invalid/expired (Code 190).`);
         break;
@@ -1195,15 +1403,14 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
     }
   }
 
-  // Print simulation output to console in all cases for local testing visibility
   console.log(`=========================================`);
-  console.log(`[WhatsApp Referral Link for ${trimmedPhone}]:`);
+  console.log(`[WhatsApp Referral Link for ${lead.phone}]:`);
   console.log(referralMsg);
   console.log(`=========================================`);
 
   res.json({
     success: true,
-    urn: newLead.urn,
+    urn: lead.urn,
     redirectUrl
   });
 });
@@ -1922,6 +2129,10 @@ app.get('/api/leads/export', authenticateToken, requireAdmin, async (req, res) =
       { id: "has_credit_card", header: "Already Has Credit Card?", source: "has_credit_card" },
       { id: "pincode", header: "Residence Pincode", source: "pincode" },
       { id: "monthly_income", header: "Monthly Income", source: "monthly_income" },
+      { id: "dob", header: "Date of Birth", source: "dob" },
+      { id: "mother_name", header: "Mother's Name", source: "mother_name" },
+      { id: "current_address", header: "Current Address", source: "current_address" },
+      { id: "designation", header: "Designation", source: "designation" },
       { id: "redirect_url", header: "Redirect URL", source: "redirect_url" }
     ];
   }

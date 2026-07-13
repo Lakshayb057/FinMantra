@@ -188,6 +188,7 @@ a:hover {
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow);
   padding: 28px;
+  max-width: 100%;
 }
 
 .glass-card {
@@ -197,6 +198,7 @@ a:hover {
   padding: 24px;
   box-shadow: var(--shadow-sm);
   transition: var(--transition-smooth);
+  max-width: 100%;
 }
 
 .glass-card:hover {
@@ -274,6 +276,9 @@ a:hover {
   color: var(--ink);
   padding: 0.5em 0.75em;
   font-size: 0.95rem;
+  max-width: 100% !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
 }
 
 .form-select option:checked,
@@ -717,7 +722,7 @@ a:hover {
 }
 
 .agent-container {
-  padding: 3rem 8%;
+  padding: 1.5rem 8%;
   position: relative;
   z-index: 1;
 }
@@ -764,7 +769,7 @@ a:hover {
 @media (max-width: 768px) {
   .admin-container,
   .agent-container {
-    padding: 1.5rem 1rem !important;
+    padding: 1rem 0.75rem !important;
   }
 
   /* Settings Split Layout Stack */
@@ -896,5 +901,172 @@ input:-webkit-autofill:active {
   transition: background-color 5000s ease-in-out 0s;
 }
 
+/* Phone input with verify button responsive styles */
+.phone-verify-container {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+}
+.phone-input-wrapper {
+  position: relative;
+  flex: 1;
+  width: 100%;
+}
+.phone-verify-button {
+  height: 42px;
+  padding: 0 1.25rem;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  width: auto;
+}
 
+@media (max-width: 600px) {
+  .phone-verify-container {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 6px !important;
+  }
+  .phone-input-wrapper {
+    flex: none !important;
+    width: 100% !important;
+  }
+  .phone-verify-button {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+}
 
+/* Tablet and iPad overrides for Agent Portal grid */
+@media (max-width: 1024px) {
+  .agent-panels-grid {
+    grid-template-columns: 1fr !important;
+    gap: 2rem !important;
+  }
+}
+
+/* Agent Stats Cards Layout */
+.agent-stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+.agent-stat-card {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+}
+.agent-stat-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+.agent-stat-title {
+  font-size: 0.9rem;
+  color: hsl(var(--text-secondary));
+  font-weight: 600;
+}
+.agent-stat-value {
+  font-size: 2rem;
+  font-weight: 800;
+}
+.agent-stat-desc {
+  font-size: 0.8rem;
+  color: hsl(var(--text-muted));
+}
+
+@media (max-width: 600px) {
+  .agent-stats-grid {
+    gap: 0.75rem !important;
+    margin-bottom: 1.0rem !important;
+  }
+  .agent-stat-card {
+    padding: 0.85rem !important;
+  }
+  .agent-stat-title {
+    font-size: 0.7rem !important;
+  }
+  .agent-stat-value {
+    font-size: 1.4rem !important;
+  }
+  .agent-stat-desc {
+    font-size: 0.65rem !important;
+  }
+}
+/* Global vertical spacing compression for Agent Portal forms */
+.agent-container .form-group {
+  margin-bottom: 0.7rem !important;
+}
+.agent-container .form-input,
+.agent-container .form-select {
+  height: 38px !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+.agent-container .form-label {
+  margin-bottom: 0.25rem !important;
+  font-size: 0.82rem !important;
+}
+.agent-container form button {
+  margin-top: 0.25rem !important;
+}
+
+/* Tablet & Mobile Grid Auto-Stacking Overrides */
+@media (max-width: 1024px) {
+  form div[style*="display: grid"], 
+  form div[style*="display:grid"] {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+}
+
+/* Extra Small Screen Optimization (Mobiles: max-width 480px) */
+@media (max-width: 480px) {
+  /* Welcome header text scale */
+  .agent-container h1 {
+    font-size: 1.35rem !important;
+  }
+  .agent-container div[style*="font-size: 0.9rem"] {
+    font-size: 0.76rem !important;
+    gap: 0.6rem !important;
+  }
+
+  /* Step indicator labels */
+  .agent-container span[style*="font-size: 0.75rem"] {
+    font-size: 0.68rem !important;
+  }
+
+  /* Submissions list card layout */
+  .agent-container .glass-card {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 0.75rem !important;
+    padding: 0.85rem !important;
+  }
+  /* Re-align URN & Time values horizontally at the bottom */
+  .agent-container .glass-card > div:last-child {
+    text-align: left !important;
+    width: 100% !important;
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    border-top: 1px dashed var(--line) !important;
+    padding-top: 0.5rem !important;
+    margin-top: 0.25rem !important;
+  }
+  
+  /* Brand layout scale */
+  .admin-nav-brand span {
+    font-size: 1.1rem !important;
+  }
+  .admin-nav-brand span span {
+    font-size: 0.75rem !important;
+  }
+  .admin-navbar img {
+    height: 34px !important;
+    width: 34px !important;
+  }
+}

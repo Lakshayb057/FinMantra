@@ -705,7 +705,11 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       redirect_url: lead.redirect_url || '',
       has_credit_card: lead.has_credit_card || '',
       pincode: lead.pincode || '',
-      monthly_income: lead.monthly_income || ''
+      monthly_income: lead.monthly_income || '',
+      dob: lead.dob || '',
+      mother_name: lead.mother_name || '',
+      current_address: lead.current_address || '',
+      designation: lead.designation || ''
     });
 
     const standardKeys = [
@@ -4781,9 +4785,13 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                       <div><strong>Email:</strong> {selectedLeadDetails.email}</div>
                       <div><strong>PAN Number:</strong> <code style={{ color: 'var(--gold-deep)', fontWeight: 600 }}>{selectedLeadDetails.pan_no || 'N/A'}</code></div>
                       <div><strong>Employment Type:</strong> {selectedLeadDetails.employment || 'N/A'}</div>
+                      <div><strong>Designation:</strong> {selectedLeadDetails.designation || 'N/A'}</div>
                       <div><strong>Already Has Credit Card?</strong> {selectedLeadDetails.has_credit_card || 'N/A'}</div>
                       <div><strong>Residence Pincode:</strong> <code>{selectedLeadDetails.pincode || 'N/A'}</code></div>
                       <div><strong>Net Monthly Income:</strong> {selectedLeadDetails.monthly_income ? `₹${selectedLeadDetails.monthly_income}` : 'N/A'}</div>
+                      <div><strong>Date of Birth:</strong> {selectedLeadDetails.dob || 'N/A'}</div>
+                      <div><strong>Mother's Name:</strong> {selectedLeadDetails.mother_name || 'N/A'}</div>
+                      <div><strong>Current Address:</strong> {selectedLeadDetails.current_address || 'N/A'}</div>
                       <div>
                         <strong>Consent:</strong>{' '}
                         <span style={{ color: selectedLeadDetails.consent ? 'var(--mint)' : 'var(--err)', fontWeight: 600 }}>
@@ -4967,6 +4975,16 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                         </select>
                       </div>
                       <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>Designation</label>
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} 
+                          value={editLeadForm.designation || ''} 
+                          onChange={(e) => handleEditLeadFormChange('designation', e.target.value)} 
+                        />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
                         <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>Already Has Credit Card?</label>
                         <select 
                           className="form-select" 
@@ -4997,6 +5015,35 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                           style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} 
                           value={editLeadForm.monthly_income || ''} 
                           onChange={(e) => handleEditLeadFormChange('monthly_income', e.target.value)} 
+                        />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>Date of Birth</label>
+                        <input 
+                          type="date" 
+                          className="form-input" 
+                          style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} 
+                          value={editLeadForm.dob || ''} 
+                          onChange={(e) => handleEditLeadFormChange('dob', e.target.value)} 
+                        />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>Mother's Name</label>
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} 
+                          value={editLeadForm.mother_name || ''} 
+                          onChange={(e) => handleEditLeadFormChange('mother_name', e.target.value)} 
+                        />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>Current Address</label>
+                        <textarea 
+                          className="form-input" 
+                          style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem', minHeight: '60px', resize: 'vertical' }} 
+                          value={editLeadForm.current_address || ''} 
+                          onChange={(e) => handleEditLeadFormChange('current_address', e.target.value)} 
                         />
                       </div>
                     </div>
