@@ -404,6 +404,11 @@ export default function AgentPortal({ navigateTo, theme, toggleTheme }) {
         setSettings(sData || {});
       }
 
+      if (leadsRes.status === 401 || leadsRes.status === 403) {
+        handleLogout();
+        return;
+      }
+
       if (leadsRes.ok) {
         const leadsData = await leadsRes.json();
         const leadsList = Array.isArray(leadsData) ? leadsData : (leadsData.leads || []);

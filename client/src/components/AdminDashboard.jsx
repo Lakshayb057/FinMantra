@@ -177,7 +177,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   const [dashDateTo, setDashDateTo] = useState('');
   const [dashCardType, setDashCardType] = useState('');
   const [dashState, setDashState] = useState('');
-  const [dashKycType, setDashKycType] = useState('');
+  const [dashKycStatus, setDashKycStatus] = useState('');
   const [dashIpaStatus, setDashIpaStatus] = useState('');
   const [dashFinalDecision, setDashFinalDecision] = useState('');
   const [dashCardName, setDashCardName] = useState('');
@@ -2165,7 +2165,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
               {/* Filters Panel */}
               {(() => {
                 const allLeads = misStats?.mappedLeadsList || [];
-                const activeFilterCount = [dashCreatedDate, dashDateTo, dashCardType, dashState, dashKycType, dashIpaStatus, dashFinalDecision, dashCardName, dashCustomerType, dashCurrentStage, dashCardActivation, dashVkycStatus, dashAgent, dashSourceType, dashSearch].filter(Boolean).length;
+                const activeFilterCount = [dashCreatedDate, dashDateTo, dashCardType, dashState, dashKycStatus, dashIpaStatus, dashFinalDecision, dashCardName, dashCustomerType, dashCurrentStage, dashCardActivation, dashVkycStatus, dashAgent, dashSourceType, dashSearch].filter(Boolean).length;
 
                 const mkOpts = (field) => Array.from(new Set(allLeads.map(l => l.mis_data?.[field]).filter(v => v && String(v).trim()))).sort();
                 const mkAgentOpts = () => Array.from(new Set(allLeads.map(l => l.agent_name).filter(Boolean))).sort();
@@ -2257,7 +2257,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                     {dashFiltersExpanded && (
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem', alignItems: 'end', marginTop: '0.85rem', paddingTop: '0.85rem', borderTop: '1px solid var(--line)' }} className="leads-filter-grid">
                         <FilterSelect label="Card Name" value={dashCardName} onChange={setDashCardName} options={mkOpts('card_name')} placeholder="All Cards" />
-                        <FilterSelect label="KYC Type" value={dashKycType} onChange={setDashKycType} options={mkOpts('kyc_type')} placeholder="All KYC" />
+                        <FilterSelect label="KYC Status" value={dashKycStatus} onChange={setDashKycStatus} options={mkOpts('kyc_status')} placeholder="All KYC" />
                         <FilterSelect label="Customer Type" value={dashCustomerType} onChange={setDashCustomerType} options={mkOpts('customer_type')} placeholder="All Customers" />
                         <FilterSelect label="Current Stage" value={dashCurrentStage} onChange={setDashCurrentStage} options={mkOpts('current_stage')} placeholder="All Stages" />
                         <FilterSelect label="Card Activation" value={dashCardActivation} onChange={setDashCardActivation} options={mkOpts('card_activation_status')} placeholder="All Status" />
@@ -2311,7 +2311,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                   }
                   if (dashCardType && lead.mis_data?.card_type !== dashCardType) return false;
                   if (dashState && lead.mis_data?.state?.toLowerCase() !== dashState.toLowerCase()) return false;
-                  if (dashKycType && lead.mis_data?.kyc_type !== dashKycType) return false;
+                  if (dashKycStatus && lead.mis_data?.kyc_status !== dashKycStatus) return false;
                   if (dashIpaStatus && lead.mis_data?.ipa_status !== dashIpaStatus) return false;
                   if (dashFinalDecision && lead.mis_data?.final_decision !== dashFinalDecision) return false;
                   if (dashCardName && lead.mis_data?.card_name !== dashCardName) return false;
@@ -2360,7 +2360,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
                 const kycDist = {};
                 filtered.forEach(l => {
-                  const k = l.mis_data?.kyc_type || 'Unknown';
+                  const k = l.mis_data?.kyc_status || 'Unknown';
                   kycDist[k] = (kycDist[k] || 0) + 1;
                 });
 
@@ -2555,9 +2555,9 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                         </div>
                       </div>
 
-                      {/* Visual 3: Bar Chart - KYC Type */}
+                      {/* Visual 3: Bar Chart - KYC Status */}
                       <div className="glass-panel" style={{ padding: '1.5rem' }}>
-                        <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>KYC Type Distribution</h4>
+                        <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>KYC Status Distribution</h4>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '180px', overflowY: 'auto' }}>
                           {Object.entries(kycDist).map(([name, val], idx) => {
                             const pct = totalSubmit > 0 ? (val / totalSubmit) * 100 : 0;

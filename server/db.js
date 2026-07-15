@@ -853,6 +853,21 @@ const db = {
     return true;
   },
 
+  async getAgentById(id) {
+    const res = await pool.query('SELECT * FROM agents WHERE id = $1 LIMIT 1', [id]);
+    if (res.rows.length === 0) return null;
+    const row = res.rows[0];
+    return {
+      ...row,
+      locations: typeof row.locations === 'string' ? JSON.parse(row.locations) : (row.locations || [])
+    };
+  },
+
+  async removeAgentBankAssignment(bankName) {
+    await pool.query('UPDATE agents SET assigned_bank = NULL WHERE assigned_bank = $1', [bankName]);
+    return true;
+  },
+
   // --- Locations ---
   async getLocations() {
     const res = await pool.query('SELECT * FROM locations ORDER BY created_at ASC');
@@ -891,7 +906,23 @@ const db = {
   },
 
   async deleteLocation(id) {
-    await pool.query('DELETE FROM locations WHERE id = $1', [id]);
+    const locRes = await pool.query('SELECT name FROM locations WHERE id = $1', [id]);
+    if (locRes.rows.length > 0) {
+      const cityName = locRes.rows[0].name;
+      await pool.query('DELETE FROM locations WHERE id = $1', [id]);
+      await pool.query(`
+        UPDATE agents 
+        SET locations = COALESCE(
+          (
+            SELECT jsonb_agg(elem) 
+            FROM jsonb_array_elements_text(locations) AS elem 
+            WHERE elem <> $1
+          ), 
+          '[]'::jsonb
+        )
+        WHERE locations ? $1
+      `, [cityName]);
+    }
     return true;
   },
 

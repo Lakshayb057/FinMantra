@@ -97,14 +97,10 @@ const LAKSHAY_PASSWORD_HASH = bcrypt.hashSync(LAKSHAY_PASSWORD, 10);
 
 // loginTracker keeps track of login failures for security brute-force prevention
 const loginTracker = {
-  failures: {}, // key: IP or username/role -> { count: N, lockUntil: timestamp }
+  failures: {}, // key: username/role -> { count: N, lockUntil: timestamp }
   
   getLockTimeLeft(ip, identity) {
     const now = Date.now();
-    const ipRecord = this.failures[ip];
-    if (ipRecord && ipRecord.lockUntil > now) {
-      return Math.ceil((ipRecord.lockUntil - now) / 1000); // seconds
-    }
     const identityRecord = this.failures[identity];
     if (identityRecord && identityRecord.lockUntil > now) {
       return Math.ceil((identityRecord.lockUntil - now) / 1000); // seconds
@@ -115,16 +111,6 @@ const loginTracker = {
   recordFailure(ip, identity) {
     const now = Date.now();
     
-    // Record for IP
-    if (!this.failures[ip]) this.failures[ip] = { count: 0, lockUntil: 0 };
-    const ipRec = this.failures[ip];
-    if (ipRec.lockUntil <= now) {
-      ipRec.count += 1;
-      if (ipRec.count >= 3) {
-        ipRec.lockUntil = now + 10 * 60 * 1000; // 10 minutes lock
-      }
-    }
-
     // Record for identity (e.g. username like "agent1" or admin role "admin")
     if (identity) {
       if (!this.failures[identity]) this.failures[identity] = { count: 0, lockUntil: 0 };
@@ -139,19 +125,15 @@ const loginTracker = {
   },
 
   recordSuccess(ip, identity) {
-    delete this.failures[ip];
     if (identity) {
       delete this.failures[identity];
     }
   },
 
   getAttemptsLeft(ip, identity) {
-    const ipRec = this.failures[ip];
     const identRec = identity ? this.failures[identity] : null;
-    const ipCount = ipRec ? ipRec.count : 0;
     const identCount = identRec ? identRec.count : 0;
-    const maxCount = Math.max(ipCount, identCount);
-    return Math.max(0, 3 - maxCount);
+    return Math.max(0, 3 - identCount);
   }
 };
 
@@ -471,8 +453,25 @@ function authenticateToken(req, res, next) {
   const token = authHeader && authHeader.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'Access token required' });
 
-  jwt.verify(token, JWT_SECRET, (err, user) => {
+  jwt.verify(token, JWT_SECRET, async (err, user) => {
     if (err) return res.status(403).json({ error: 'Invalid or expired token' });
+    
+    if (user && user.role === 'agent') {
+      try {
+        const agent = await db.getAgentById(user.id);
+        if (!agent || agent.status !== 'active') {
+          return res.status(403).json({ error: 'Account is deactivated, deleted, or unauthorized.' });
+        }
+        const agentLocs = typeof agent.locations === 'string' ? JSON.parse(agent.locations) : (agent.locations || []);
+        if (!agentLocs || agentLocs.length === 0 || !agent.assigned_bank || agent.assigned_bank.trim() === '') {
+          return res.status(403).json({ error: 'Agent lacks city or bank assignment. Access denied.' });
+        }
+      } catch (dbErr) {
+        console.error('[AUTH] Failed to verify agent in DB', dbErr);
+        return res.status(500).json({ error: 'Authentication internal database error' });
+      }
+    }
+    
     req.user = user;
     next();
   });
@@ -580,6 +579,14 @@ app.post('/api/agents/login', loginRateLimiter.middleware(), async (req, res) =>
   }
 
   if (isPasswordValid && agent.status === 'active') {
+    const agentLocs = typeof agent.locations === 'string' ? JSON.parse(agent.locations) : (agent.locations || []);
+    if (!agentLocs || agentLocs.length === 0) {
+      return res.status(403).json({ error: 'Login blocked. No city has been assigned to your account yet. Please contact the administrator.' });
+    }
+    if (!agent.assigned_bank || agent.assigned_bank.trim() === '') {
+      return res.status(403).json({ error: 'Login blocked. No partner bank has been assigned to your account yet. Please contact the administrator.' });
+    }
+
     loginTracker.recordSuccess(ip, identity);
     const token = jwt.sign({ id: agent.id, name: agent.name, role: 'agent', assigned_bank: agent.assigned_bank }, JWT_SECRET, { expiresIn: '8h' });
     return res.json({
@@ -2573,6 +2580,16 @@ app.put('/api/settings', authenticateToken, requireAdmin, async (req, res) => {
 
   const oldSettings = await db.getSettings();
   const updated = await db.updateSettings(req.body);
+
+  // If card_manager_banks is updated, diff to find deleted banks and clear agent assignments
+  if (req.body.card_manager_banks !== undefined) {
+    const oldBanks = oldSettings.card_manager_banks ? oldSettings.card_manager_banks.split(',').map(b => b.trim()).filter(Boolean) : [];
+    const newBanks = req.body.card_manager_banks ? req.body.card_manager_banks.split(',').map(b => b.trim()).filter(Boolean) : [];
+    const deletedBanks = oldBanks.filter(b => !newBanks.includes(b));
+    for (const bankName of deletedBanks) {
+      await db.removeAgentBankAssignment(bankName);
+    }
+  }
   
   // Toggle Baileys session connection if gateway changed
   if (oldSettings.whatsapp_gateway !== updated.whatsapp_gateway) {
@@ -2586,6 +2603,7 @@ app.put('/api/settings', authenticateToken, requireAdmin, async (req, res) => {
 
   // Broadcast settings change
   broadcast({ type: 'SETTINGS_UPDATED' });
+  broadcast({ type: 'AGENTS_UPDATED' }); // Broadcast agent update since assignments might have changed
   
   res.json(updated);
 });
