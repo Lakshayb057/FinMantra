@@ -990,68 +990,74 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
   if (!card) {
     let matchedCard = null;
     
-    // First, check if there is an active card matching by utm_internal (which carries the assigned card/model name)
-    if (utm_internal) {
-      const activeCards = await db.getCards(false);
-      const altStr = String(utm_internal).trim().toLowerCase();
-      matchedCard = activeCards.find(c => {
-        if (!c.utm_internal) return false;
-        return String(c.utm_internal).trim().toLowerCase() === altStr;
-      });
-      if (matchedCard) {
-        console.log(`[Card Matching] Matched card ${matchedCard.name} (${matchedCard.id}) via utm_internal: ${altStr}`);
-      }
-    }
-
-    // Fallback to check if there is an active card matching by ad_id (to maintain the old functionality)
-    if (!matchedCard && ad_id) {
-      const activeCards = await db.getCards(false);
-      const adIdStr = String(ad_id).trim().toLowerCase();
-      matchedCard = activeCards.find(c => {
-        if (!c.ad_id) return false;
-        const adIdList = String(c.ad_id).split(',').map(s => s.trim().toLowerCase());
-        return adIdList.includes(adIdStr);
-      });
-      if (matchedCard) {
-        console.log(`[Card Matching] Matched card ${matchedCard.name} (${matchedCard.id}) via ad_id: ${adIdStr}`);
-      }
-    }
-
-    // If not matched by ad_id, check if public lead has utm_info matching an active card
-    if (!matchedCard && utm_info) {
-      const activeCards = await db.getCards(false);
-      const infoLower = String(utm_info).trim().toLowerCase();
-      
-      // 1. Exact match on ID, card_ID, or ID suffix
-      matchedCard = activeCards.find(c => {
-        const idLower = String(c.id).toLowerCase();
-        return idLower === infoLower || idLower === `card_${infoLower}` || idLower.endsWith(`_${infoLower}`);
-      });
-      
-      // 2. Match if card name contains utm_info (case-insensitive)
-      if (!matchedCard) {
+    if (source === 'kiwi') {
+      // For kiwi source, match ONLY via utm_internal
+      if (utm_internal) {
+        const activeCards = await db.getCards(false);
+        const altStr = String(utm_internal).trim().toLowerCase();
         matchedCard = activeCards.find(c => {
-          const nameLower = String(c.name).toLowerCase();
-          return nameLower.includes(infoLower);
+          if (!c.utm_internal) return false;
+          return String(c.utm_internal).trim().toLowerCase() === altStr;
         });
+        if (matchedCard) {
+          console.log(`[Card Matching] Matched card ${matchedCard.name} (${matchedCard.id}) for kiwi source via utm_internal: ${altStr}`);
+        }
       }
-
-      // 3. Match if utm_info contains card name (case-insensitive)
-      if (!matchedCard) {
+    } else {
+      // For all other public leads, follow the standard multi-step matching
+      // First, check if there is an active card matching by utm_internal (which carries the assigned card/model name)
+      if (utm_internal) {
+        const activeCards = await db.getCards(false);
+        const altStr = String(utm_internal).trim().toLowerCase();
         matchedCard = activeCards.find(c => {
-          const nameLower = String(c.name).toLowerCase();
-          return infoLower.includes(nameLower);
+          if (!c.utm_internal) return false;
+          return String(c.utm_internal).trim().toLowerCase() === altStr;
         });
+        if (matchedCard) {
+          console.log(`[Card Matching] Matched card ${matchedCard.name} (${matchedCard.id}) via utm_internal: ${altStr}`);
+        }
       }
-    }
 
-    if (!matchedCard && source === 'kiwi') {
-      const activeCards = await db.getCards(false);
-      matchedCard = activeCards.find(c => {
-        return String(c.name).toLowerCase().includes('kiwi') || String(c.id).toLowerCase().includes('kiwi');
-      });
-      if (matchedCard) {
-        console.log(`[Card Matching] Matched card ${matchedCard.name} (${matchedCard.id}) for source: kiwi`);
+      // Fallback to check if there is an active card matching by ad_id (to maintain the old functionality)
+      if (!matchedCard && ad_id) {
+        const activeCards = await db.getCards(false);
+        const adIdStr = String(ad_id).trim().toLowerCase();
+        matchedCard = activeCards.find(c => {
+          if (!c.ad_id) return false;
+          const adIdList = String(c.ad_id).split(',').map(s => s.trim().toLowerCase());
+          return adIdList.includes(adIdStr);
+        });
+        if (matchedCard) {
+          console.log(`[Card Matching] Matched card ${matchedCard.name} (${matchedCard.id}) via ad_id: ${adIdStr}`);
+        }
+      }
+
+      // If not matched by ad_id, check if public lead has utm_info matching an active card
+      if (!matchedCard && utm_info) {
+        const activeCards = await db.getCards(false);
+        const infoLower = String(utm_info).trim().toLowerCase();
+        
+        // 1. Exact match on ID, card_ID, or ID suffix
+        matchedCard = activeCards.find(c => {
+          const idLower = String(c.id).toLowerCase();
+          return idLower === infoLower || idLower === `card_${infoLower}` || idLower.endsWith(`_${infoLower}`);
+        });
+        
+        // 2. Match if card name contains utm_info (case-insensitive)
+        if (!matchedCard) {
+          matchedCard = activeCards.find(c => {
+            const nameLower = String(c.name).toLowerCase();
+            return nameLower.includes(infoLower);
+          });
+        }
+
+        // 3. Match if utm_info contains card name (case-insensitive)
+        if (!matchedCard) {
+          matchedCard = activeCards.find(c => {
+            const nameLower = String(c.name).toLowerCase();
+            return infoLower.includes(nameLower);
+          });
+        }
       }
     }
 
