@@ -131,13 +131,20 @@ export function trackLeadSubmission({ fullName, email, phone, eventId = null, co
  */
 export function resolveRedirectUrl(url) {
   if (url && String(url).startsWith('intent://')) {
-    const isAndroid = /Android/i.test(navigator.userAgent || '');
-    if (!isAndroid) {
+    const userAgent = navigator.userAgent || '';
+    const platform = navigator.platform || '';
+    
+    // Detect desktop environment (even if emulating Android mobile in DevTools)
+    const isDesktop = /Windows|Macintosh|MacIntel|Linux x86_64/i.test(userAgent) || 
+                      /Win32|MacIntel|Win64/i.test(platform);
+    const isAndroid = /Android/i.test(userAgent);
+    
+    if (isDesktop || !isAndroid) {
       const match = String(url).match(/S\.browser_fallback_url=([^;]+)/);
       if (match && match[1]) {
         try {
           const decoded = decodeURIComponent(match[1]);
-          console.log('[Intent Resolver] Non-Android environment detected. Falling back to:', decoded);
+          console.log('[Intent Resolver] Desktop/Non-Android environment detected. Falling back to:', decoded);
           return decoded;
         } catch (e) {
           console.error('[Intent Resolver] Failed to decode fallback URL:', e);
