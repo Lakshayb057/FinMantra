@@ -482,10 +482,6 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
     setIsSubmitting(true);
     try {
       const compiledAddress = `${formData.address_locality || 'N/A'}, ${formData.address_city || 'N/A'}, ${formData.address_state || 'N/A'} - ${formData.pincode}`;
-      
-      // Find Yes Bank Kiwi Card
-      let matchedKiwiCard = cards.find(c => c.id === 'kiwi' || c.name.toLowerCase().includes('kiwi'));
-      const cardIdPayload = matchedKiwiCard ? matchedKiwiCard.id : null;
 
       const res = await fetch(`${API_URL}/leads`, {
         method: 'POST',
@@ -501,7 +497,6 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
           current_address: compiledAddress,
           consent: true,
           source: 'kiwi',
-          card_id: cardIdPayload,
           ...utmParams,
           utm_params: utmParams || null
         })
@@ -528,9 +523,29 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
         };
         sessionStorage.setItem('finmantra_applied_lead', JSON.stringify(cacheData));
 
-        // Inline intent:// URL resolution — extract HTTPS fallback from Android intent scheme
+        // Singular link resolution for non-Android/desktop environments
         let finalUrl = data.redirectUrl;
         console.log('[Kiwi Redirect] Raw redirectUrl from server:', finalUrl);
+
+        const isDesktop = /Windows|Macintosh|MacIntel|Linux x86_64/i.test(navigator.userAgent || '') || 
+                          /Win32|MacIntel|Win64/i.test(navigator.platform || '');
+        const isAndroid = /Android/i.test(navigator.userAgent || '');
+
+        if ((isDesktop || !isAndroid) && finalUrl && finalUrl.includes('sng.link')) {
+          try {
+            console.log('[Kiwi Redirect] Non-Android/Desktop platform with Singular link. Resolving server-side...');
+            const resolveRes = await fetch(`${API_URL}/resolve-singular?url=${encodeURIComponent(finalUrl)}`);
+            const resolveData = await resolveRes.json();
+            if (resolveRes.ok && resolveData.resolvedUrl) {
+              finalUrl = resolveData.resolvedUrl;
+              console.log('[Kiwi Redirect] Server-side resolved URL:', finalUrl);
+            }
+          } catch (resolveErr) {
+            console.error('[Kiwi Redirect] Server-side resolution failed:', resolveErr);
+          }
+        }
+
+        // Fallback intent:// URL resolution
         if (finalUrl && String(finalUrl).startsWith('intent://')) {
           const fbMatch = String(finalUrl).match(/S\.browser_fallback_url=([^;]+)/);
           if (fbMatch && fbMatch[1]) {
@@ -540,8 +555,6 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
             } catch (decodeErr) {
               console.error('[Kiwi Redirect] Failed to decode fallback URL:', decodeErr);
             }
-          } else {
-            console.warn('[Kiwi Redirect] intent:// URL has no S.browser_fallback_url, using as-is');
           }
         }
         console.log('[Kiwi Redirect] Final navigation URL:', finalUrl);

@@ -137,6 +137,36 @@ const loginTracker = {
   }
 };
 
+// Singular link redirection resolver endpoint for non-Android platforms
+app.get('/api/resolve-singular', async (req, res) => {
+  const { url } = req.query;
+  if (!url) {
+    return res.status(400).json({ error: 'Missing url parameter' });
+  }
+  try {
+    const response = await fetch(url, {
+      redirect: 'manual',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36'
+      }
+    });
+    const location = response.headers.get('location');
+    if (location && location.startsWith('intent://')) {
+      const match = location.match(/S\.browser_fallback_url=([^;]+)/);
+      if (match && match[1]) {
+        const decoded = decodeURIComponent(match[1]);
+        console.log(`[Singular Resolver] Resolved intent to fallback web URL: ${decoded}`);
+        return res.json({ resolvedUrl: decoded });
+      }
+    }
+    console.log(`[Singular Resolver] Resolved to location: ${location || url}`);
+    return res.json({ resolvedUrl: location || url });
+  } catch (err) {
+    console.error('[Singular Resolver Error]:', err);
+    return res.json({ resolvedUrl: url });
+  }
+});
+
 // Health Check Endpoint - helps diagnose deployment issues
 app.get('/api/health', async (req, res) => {
   try {
@@ -1012,6 +1042,15 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
           const nameLower = String(c.name).toLowerCase();
           return infoLower.includes(nameLower);
         });
+      }
+    }
+
+    // Fallback for Kiwi source: if no card is matched via UTM parameters, default to the Kiwi card
+    if (!matchedCard && source === 'kiwi') {
+      const activeCards = await db.getCards(false);
+      matchedCard = activeCards.find(c => c.id === 'kiwi' || String(c.id).toLowerCase().includes('kiwi') || String(c.name).toLowerCase().includes('kiwi'));
+      if (matchedCard) {
+        console.log(`[Card Matching] Defaulted to Kiwi card ${matchedCard.name} (${matchedCard.id}) for source 'kiwi'`);
       }
     }
 

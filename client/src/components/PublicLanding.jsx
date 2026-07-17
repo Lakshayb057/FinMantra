@@ -989,8 +989,25 @@ export default function PublicLanding({ navigateTo, utmParams }) {
           timestamp: new Date().getTime()
         };
         sessionStorage.setItem('finmantra_applied_lead', JSON.stringify(cacheData));
-        // Inline intent:// resolution
+        // Singular link resolution for non-Android/desktop environments
         let navUrl = data.redirectUrl;
+        const isDesktop = /Windows|Macintosh|MacIntel|Linux x86_64/i.test(navigator.userAgent || '') || 
+                          /Win32|MacIntel|Win64/i.test(navigator.platform || '');
+        const isAndroid = /Android/i.test(navigator.userAgent || '');
+
+        if ((isDesktop || !isAndroid) && navUrl && navUrl.includes('sng.link')) {
+          try {
+            const resolveRes = await fetch(`${API_URL}/resolve-singular?url=${encodeURIComponent(navUrl)}`);
+            const resolveData = await resolveRes.json();
+            if (resolveRes.ok && resolveData.resolvedUrl) {
+              navUrl = resolveData.resolvedUrl;
+            }
+          } catch (resolveErr) {
+            console.error('[Public Redirect] Server-side resolution failed:', resolveErr);
+          }
+        }
+
+        // Fallback intent:// resolution
         if (navUrl && String(navUrl).startsWith('intent://')) {
           const m = String(navUrl).match(/S\.browser_fallback_url=([^;]+)/);
           if (m && m[1]) { try { navUrl = decodeURIComponent(m[1]); } catch(e){} }
@@ -1065,10 +1082,27 @@ export default function PublicLanding({ navigateTo, utmParams }) {
   };
 
   // Resume Pending Application
-  const handleResumeRedirect = () => {
+  const handleResumeRedirect = async () => {
     if (resumeSession) {
-      // Inline intent:// resolution
+      // Singular link resolution for non-Android/desktop environments
       let navUrl = resumeSession.redirectUrl;
+      const isDesktop = /Windows|Macintosh|MacIntel|Linux x86_64/i.test(navigator.userAgent || '') || 
+                        /Win32|MacIntel|Win64/i.test(navigator.platform || '');
+      const isAndroid = /Android/i.test(navigator.userAgent || '');
+
+      if ((isDesktop || !isAndroid) && navUrl && navUrl.includes('sng.link')) {
+        try {
+          const resolveRes = await fetch(`${API_URL}/resolve-singular?url=${encodeURIComponent(navUrl)}`);
+          const resolveData = await resolveRes.json();
+          if (resolveRes.ok && resolveData.resolvedUrl) {
+            navUrl = resolveData.resolvedUrl;
+          }
+        } catch (resolveErr) {
+          console.error('[Public Resume Redirect] Server-side resolution failed:', resolveErr);
+        }
+      }
+
+      // Fallback intent:// resolution
       if (navUrl && String(navUrl).startsWith('intent://')) {
         const m = String(navUrl).match(/S\.browser_fallback_url=([^;]+)/);
         if (m && m[1]) { try { navUrl = decodeURIComponent(m[1]); } catch(e){} }
