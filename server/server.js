@@ -1175,65 +1175,64 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
   // Real-time broadcast notification of a new lead!
   broadcast({ type: 'LEAD_ADDED', data: newLead });
 
-  // Send WhatsApp Referral Notification with Tracking URL for agent and kiwi sources on creation (asynchronously)
-  if (source === 'agent' || source === 'kiwi') {
-    (async () => {
-      const agentCode = source === 'agent' ? (agent_id || 'active') : 'public';
-      const dateCode = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD
-      const settings = await db.getSettings();
-      
-      // Resolve base URL based on settings or fallback dynamically
-      let baseUrl = settings.public_site_url ? settings.public_site_url.trim() : '';
-      if (baseUrl) {
-        if (baseUrl.endsWith('/')) {
-          baseUrl = baseUrl.substring(0, baseUrl.length - 1);
-        }
-      } else {
-        const host = req.get('host') || 'localhost:5000';
-        const protocol = req.protocol || 'http';
-        baseUrl = `${protocol}://${host}`;
-        if (host.includes('localhost') || host.includes('127.0.0.1')) {
-          baseUrl = 'http://localhost:5173';
-        }
+  // Send WhatsApp Referral Notification with Tracking URL for agent/kiwi sources or Kiwi matched cards on creation
+  const isKiwiCard = card && (card.id === 'card_yomuvufqh' || card.name.toLowerCase().includes('kiwi') || String(card.id).includes('kiwi'));
+  if (source === 'agent' || source === 'kiwi' || isKiwiCard) {
+    const agentCode = source === 'agent' ? (agent_id || 'active') : 'public';
+    const dateCode = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD
+    const settings = await db.getSettings();
+    
+    // Resolve base URL based on settings or fallback dynamically
+    let baseUrl = settings.public_site_url ? settings.public_site_url.trim() : '';
+    if (baseUrl) {
+      if (baseUrl.endsWith('/')) {
+        baseUrl = baseUrl.substring(0, baseUrl.length - 1);
       }
-      
-      let waBaseUrl = baseUrl;
-      if (waBaseUrl.includes('localhost') || waBaseUrl.includes('127.0.0.1')) {
-        waBaseUrl = 'https://finmantra.org';
+    } else {
+      const host = req.get('host') || 'localhost:5000';
+      const protocol = req.protocol || 'http';
+      baseUrl = `${protocol}://${host}`;
+      if (host.includes('localhost') || host.includes('127.0.0.1')) {
+        baseUrl = 'http://localhost:5173';
       }
-      
-      const referralLink = `${waBaseUrl}/refer/${agentCode}/${dateCode}/${newLead.urn}`;
-      const cardNameStr = card ? `${card.bank} ${card.name}` : 'FinMantra Partner Bank';
-      const referralMsg = `Hello ${trimmedName}, thank you for choosing FinMantra. You can access your secure bank portal for the ${cardNameStr} application here: ${referralLink}`;
-      const referralTemplateName = settings.wa_referral_template_name || process.env.WA_REFERRAL_TEMPLATE_NAME || 'finmantra_portal';
-      const candidateRefTemplates = [referralTemplateName, 'finmantra_portal', 'finmantra_welcome', 'transactional_link', 'jaspers_market_order_confirmation_v1'].filter((v, i, a) => v && a.indexOf(v) === i);
-      
-      for (const refTName of candidateRefTemplates) {
-        try {
-          let params = [trimmedName, referralLink];
-          if (refTName === 'jaspers_market_order_confirmation_v1') {
-            const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-            params = [trimmedName, referralLink, dateStr];
-          }
-          const result = await sendWhatsAppTemplate(trimmedPhone, refTName, params);
-          if (!result.simulated) {
-            console.log(`[WhatsApp API] Referral template "${refTName}" sent to ${trimmedPhone} via Meta API.`);
-          }
+    }
+    
+    let waBaseUrl = baseUrl;
+    if (waBaseUrl.includes('localhost') || waBaseUrl.includes('127.0.0.1')) {
+      waBaseUrl = 'https://finmantra.org';
+    }
+    
+    const referralLink = `${waBaseUrl}/refer/${agentCode}/${dateCode}/${newLead.urn}`;
+    const cardNameStr = card ? `${card.bank} ${card.name}` : 'FinMantra Partner Bank';
+    const referralMsg = `Hello ${trimmedName}, thank you for choosing FinMantra. You can access your secure bank portal for the ${cardNameStr} application here: ${referralLink}`;
+    const referralTemplateName = settings.wa_referral_template_name || process.env.WA_REFERRAL_TEMPLATE_NAME || 'finmantra_portal';
+    const candidateRefTemplates = [referralTemplateName, 'finmantra_portal', 'finmantra_welcome', 'transactional_link', 'jaspers_market_order_confirmation_v1'].filter((v, i, a) => v && a.indexOf(v) === i);
+    
+    for (const refTName of candidateRefTemplates) {
+      try {
+        let params = [trimmedName, referralLink];
+        if (refTName === 'jaspers_market_order_confirmation_v1') {
+          const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+          params = [trimmedName, referralLink, dateStr];
+        }
+        const result = await sendWhatsAppTemplate(trimmedPhone, refTName, params);
+        if (!result.simulated) {
+          console.log(`[WhatsApp API] Referral template "${refTName}" sent to ${trimmedPhone} via Meta API.`);
+        }
+        break;
+      } catch (err) {
+        console.warn(`[WhatsApp API Warning] Referral template "${refTName}" failed for ${trimmedPhone}: ${err.message}.`);
+        if (err.isAuthError || err.message.includes('Authentication Error') || err.message.includes('Code: 190')) {
+          console.error(`[WhatsApp API CRITICAL] Stopping referral template trials: Meta Access Token is invalid/expired (Code 190).`);
           break;
-        } catch (err) {
-          console.warn(`[WhatsApp API Warning] Referral template "${refTName}" failed for ${trimmedPhone}: ${err.message}.`);
-          if (err.isAuthError || err.message.includes('Authentication Error') || err.message.includes('Code: 190')) {
-            console.error(`[WhatsApp API CRITICAL] Stopping referral template trials: Meta Access Token is invalid/expired (Code 190).`);
-            break;
-          }
         }
       }
+    }
 
-      console.log(`=========================================`);
-      console.log(`[WhatsApp Referral Link for ${trimmedPhone}]:`);
-      console.log(referralMsg);
-      console.log(`=========================================`);
-    })().catch(err => console.error('[WhatsApp Background Error]:', err));
+    console.log(`=========================================`);
+    console.log(`[WhatsApp Referral Link for ${trimmedPhone}]:`);
+    console.log(referralMsg);
+    console.log(`=========================================`);
   }
 
   res.json({
