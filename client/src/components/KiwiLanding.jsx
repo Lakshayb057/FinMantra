@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowRight, User, Phone, Mail, Calendar, MapPin, CheckCircle, RefreshCw, X, ShieldAlert, Briefcase, ChevronDown, Lock } from 'lucide-react';
+import { trackLeadSubmission, initAnalytics } from '../utils/analytics';
 
 // Offline fallback helper to resolve Indian pincodes to State/Region
 const getStateFromPincode = (pin) => {
@@ -73,6 +74,7 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
         if (res.ok) {
           const data = await res.json();
           setSettings(data || {});
+          initAnalytics(data || {});
         }
       } catch (err) {
         console.error('Failed to load settings:', err);
@@ -507,6 +509,15 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
 
       const data = await res.json();
       if (res.ok) {
+        trackLeadSubmission({
+          fullName: formData.fullName,
+          email: formData.email,
+          phone: formData.phone,
+          eventId: data.urn,
+          contentName: 'Kiwi Lead Submitted',
+          status: 'submitted'
+        });
+
         const cacheData = {
           name: formData.fullName,
           urn: data.urn,
