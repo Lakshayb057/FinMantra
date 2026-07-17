@@ -8,6 +8,7 @@ import ContactPage from './components/ContactPage';
 import PrivacyPolicyPage from './components/PrivacyPolicyPage';
 import TermsPage from './components/TermsPage';
 import KiwiLanding from './components/KiwiLanding';
+import { resolveRedirectUrl } from './utils/analytics';
 // Cookie helper functions
 function setCookie(name, value, days) {
   let expires = "";
@@ -285,7 +286,7 @@ function ReferralRedirect({ urn }) {
         const data = await res.json();
 
         if (res.ok) {
-          window.location.replace(data.redirectUrl);
+          window.location.replace(resolveRedirectUrl(data.redirectUrl));
         } else {
           setError(data.error || 'The requested URN reference details do not exist.');
           setLoading(false);

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ShieldCheck, Zap, HelpCircle, ArrowRight, X, Clock, RefreshCw, Layers, ArrowLeft, User, Phone, Mail, Briefcase, MapPin, ChevronDown, Calendar, Home } from 'lucide-react';
-import { trackLeadSubmission, initAnalytics } from '../utils/analytics';
+import { trackLeadSubmission, initAnalytics, resolveRedirectUrl } from '../utils/analytics';
 
 const COMMON_DESIGNATIONS = [
   "Software Engineer",
@@ -989,7 +989,7 @@ export default function PublicLanding({ navigateTo, utmParams }) {
           timestamp: new Date().getTime()
         };
         sessionStorage.setItem('finmantra_applied_lead', JSON.stringify(cacheData));
-        window.location.replace(data.redirectUrl);
+        window.location.replace(resolveRedirectUrl(data.redirectUrl));
       } else {
         setFormError(data.error || 'Failed to complete application. Please try again.');
       }
@@ -1061,7 +1061,7 @@ export default function PublicLanding({ navigateTo, utmParams }) {
   // Resume Pending Application
   const handleResumeRedirect = () => {
     if (resumeSession) {
-      window.location.replace(resumeSession.redirectUrl);
+      window.location.replace(resolveRedirectUrl(resumeSession.redirectUrl));
     }
   };
 

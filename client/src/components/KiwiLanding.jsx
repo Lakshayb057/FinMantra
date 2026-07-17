@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowRight, User, Phone, Mail, Calendar, MapPin, CheckCircle, RefreshCw, X, ShieldAlert, Briefcase, ChevronDown, Lock } from 'lucide-react';
-import { trackLeadSubmission, initAnalytics } from '../utils/analytics';
+import { trackLeadSubmission, initAnalytics, resolveRedirectUrl } from '../utils/analytics';
 
 // Offline fallback helper to resolve Indian pincodes to State/Region
 const getStateFromPincode = (pin) => {
@@ -527,7 +527,7 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
           timestamp: new Date().getTime()
         };
         sessionStorage.setItem('finmantra_applied_lead', JSON.stringify(cacheData));
-        window.location.replace(data.redirectUrl);
+        window.location.replace(resolveRedirectUrl(data.redirectUrl));
       } else {
         setFormError(data.error || 'Failed to submit application. Please try again.');
       }

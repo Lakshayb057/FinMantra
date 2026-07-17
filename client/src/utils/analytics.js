@@ -124,3 +124,26 @@ export function trackLeadSubmission({ fullName, email, phone, eventId = null, co
     console.error('[GTM dataLayer] Error pushing event:', err);
   }
 }
+
+/**
+ * Resolves redirect URLs that use the custom 'intent://' scheme
+ * for non-Android platforms by extracting the browser fallback URL.
+ */
+export function resolveRedirectUrl(url) {
+  if (url && String(url).startsWith('intent://')) {
+    const isAndroid = /Android/i.test(navigator.userAgent || '');
+    if (!isAndroid) {
+      const match = String(url).match(/S\.browser_fallback_url=([^;]+)/);
+      if (match && match[1]) {
+        try {
+          const decoded = decodeURIComponent(match[1]);
+          console.log('[Intent Resolver] Non-Android environment detected. Falling back to:', decoded);
+          return decoded;
+        } catch (e) {
+          console.error('[Intent Resolver] Failed to decode fallback URL:', e);
+        }
+      }
+    }
+  }
+  return url;
+}
