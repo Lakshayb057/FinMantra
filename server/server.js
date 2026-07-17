@@ -209,6 +209,25 @@ function getSettingVal(settings, key, envKey, defaultVal = null) {
   return defaultVal;
 }
 
+// Helper to resolve Android intent:// scheme URLs to their browser fallback URL.
+// The client browser cannot handle intent:// on desktop/iOS, so we extract the
+// S.browser_fallback_url parameter server-side and return a normal HTTPS URL.
+function resolveIntentUrl(url) {
+  if (url && String(url).startsWith('intent://')) {
+    const match = String(url).match(/S\.browser_fallback_url=([^;]+)/);
+    if (match && match[1]) {
+      try {
+        const decoded = decodeURIComponent(match[1]);
+        console.log(`[Intent Resolver] Resolved intent:// to fallback: ${decoded}`);
+        return decoded;
+      } catch (e) {
+        console.error('[Intent Resolver] Failed to decode fallback URL:', e);
+      }
+    }
+  }
+  return url;
+}
+
 // Helper to format fallback plain text message for Baileys
 function getFallbackText(isOtpAuth, parameters, settings) {
   if (isOtpAuth) {
@@ -1240,7 +1259,7 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
   res.json({
     success: true,
     urn: newLead.urn,
-    redirectUrl
+    redirectUrl: resolveIntentUrl(redirectUrl)
   });
 });
 
@@ -1452,7 +1471,7 @@ app.put('/api/leads/public/urn/:urn', async (req, res) => {
   res.json({
     success: true,
     urn: lead.urn,
-    redirectUrl
+    redirectUrl: resolveIntentUrl(redirectUrl)
   });
 });
 
@@ -1468,7 +1487,7 @@ app.get('/api/leads/urn/:urn', async (req, res) => {
       full_name: lead.full_name,
       card_name: lead.card_name,
       card_bank: lead.card_bank,
-      redirectUrl: lead.redirect_url,
+      redirectUrl: resolveIntentUrl(lead.redirect_url),
       created_at: lead.created_at
     });
   } else {
@@ -1488,7 +1507,7 @@ app.get('/api/leads/urm/:urm', async (req, res) => {
       full_name: lead.full_name,
       card_name: lead.card_name,
       card_bank: lead.card_bank,
-      redirectUrl: lead.redirect_url,
+      redirectUrl: resolveIntentUrl(lead.redirect_url),
       created_at: lead.created_at
     });
   } else {
