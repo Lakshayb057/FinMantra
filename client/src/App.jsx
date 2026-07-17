@@ -35,9 +35,13 @@ export default function App() {
   const [theme, setTheme] = useState(localStorage.getItem('finmantra_theme') || 'light');
   
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
+    if (currentPath.startsWith('/kiwi')) {
+      document.documentElement.setAttribute('data-theme', 'light');
+    } else {
+      document.documentElement.setAttribute('data-theme', theme);
+    }
     localStorage.setItem('finmantra_theme', theme);
-  }, [theme]);
+  }, [theme, currentPath]);
 
   const toggleTheme = () => {
     setTheme(prev => prev === 'light' ? 'dark' : 'light');
@@ -228,8 +232,8 @@ export default function App() {
         </div>
       )}
 
-      {/* Header / Navbar - Hide on admin and agent portals to avoid duplicates */}
-      {currentPath !== '/admin' && currentPath !== '/agent' && (
+      {/* Header / Navbar - Hide on admin, agent portals, and kiwi pages to avoid duplicates */}
+      {currentPath !== '/admin' && currentPath !== '/agent' && !currentPath.startsWith('/kiwi') && (
         <header className="navbar">
           <div className="nav-logo" onClick={() => navigateTo('/')} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}>
             <img src="/logo.jpg" alt="FinMantra Logo" style={{ height: '44px', width: '44px', borderRadius: '10px', objectFit: 'cover', boxShadow: '0 3px 10px rgba(224, 168, 46, 0.3)' }} />
