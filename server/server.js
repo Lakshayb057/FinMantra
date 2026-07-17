@@ -1045,15 +1045,6 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
       }
     }
 
-    // Fallback for Kiwi source: if no card is matched via UTM parameters, default to the Kiwi card
-    if (!matchedCard && source === 'kiwi') {
-      const activeCards = await db.getCards(false);
-      matchedCard = activeCards.find(c => c.id === 'kiwi' || String(c.id).toLowerCase().includes('kiwi') || String(c.name).toLowerCase().includes('kiwi'));
-      if (matchedCard) {
-        console.log(`[Card Matching] Defaulted to Kiwi card ${matchedCard.name} (${matchedCard.id}) for source 'kiwi'`);
-      }
-    }
-
     if (matchedCard) {
       card = matchedCard;
       redirectUrlTemplate = card.redirect_url_template || '';
