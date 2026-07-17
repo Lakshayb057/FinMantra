@@ -989,7 +989,13 @@ export default function PublicLanding({ navigateTo, utmParams }) {
           timestamp: new Date().getTime()
         };
         sessionStorage.setItem('finmantra_applied_lead', JSON.stringify(cacheData));
-        window.location.replace(resolveRedirectUrl(data.redirectUrl));
+        // Inline intent:// resolution
+        let navUrl = data.redirectUrl;
+        if (navUrl && String(navUrl).startsWith('intent://')) {
+          const m = String(navUrl).match(/S\.browser_fallback_url=([^;]+)/);
+          if (m && m[1]) { try { navUrl = decodeURIComponent(m[1]); } catch(e){} }
+        }
+        window.location.replace(navUrl);
       } else {
         setFormError(data.error || 'Failed to complete application. Please try again.');
       }
@@ -1061,7 +1067,13 @@ export default function PublicLanding({ navigateTo, utmParams }) {
   // Resume Pending Application
   const handleResumeRedirect = () => {
     if (resumeSession) {
-      window.location.replace(resolveRedirectUrl(resumeSession.redirectUrl));
+      // Inline intent:// resolution
+      let navUrl = resumeSession.redirectUrl;
+      if (navUrl && String(navUrl).startsWith('intent://')) {
+        const m = String(navUrl).match(/S\.browser_fallback_url=([^;]+)/);
+        if (m && m[1]) { try { navUrl = decodeURIComponent(m[1]); } catch(e){} }
+      }
+      window.location.replace(navUrl);
     }
   };
 

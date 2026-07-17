@@ -527,7 +527,25 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
           timestamp: new Date().getTime()
         };
         sessionStorage.setItem('finmantra_applied_lead', JSON.stringify(cacheData));
-        window.location.replace(resolveRedirectUrl(data.redirectUrl));
+
+        // Inline intent:// URL resolution — extract HTTPS fallback from Android intent scheme
+        let finalUrl = data.redirectUrl;
+        console.log('[Kiwi Redirect] Raw redirectUrl from server:', finalUrl);
+        if (finalUrl && String(finalUrl).startsWith('intent://')) {
+          const fbMatch = String(finalUrl).match(/S\.browser_fallback_url=([^;]+)/);
+          if (fbMatch && fbMatch[1]) {
+            try {
+              finalUrl = decodeURIComponent(fbMatch[1]);
+              console.log('[Kiwi Redirect] Resolved intent:// to HTTPS:', finalUrl);
+            } catch (decodeErr) {
+              console.error('[Kiwi Redirect] Failed to decode fallback URL:', decodeErr);
+            }
+          } else {
+            console.warn('[Kiwi Redirect] intent:// URL has no S.browser_fallback_url, using as-is');
+          }
+        }
+        console.log('[Kiwi Redirect] Final navigation URL:', finalUrl);
+        window.location.replace(finalUrl);
       } else {
         setFormError(data.error || 'Failed to submit application. Please try again.');
       }

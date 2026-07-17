@@ -286,7 +286,13 @@ function ReferralRedirect({ urn }) {
         const data = await res.json();
 
         if (res.ok) {
-          window.location.replace(resolveRedirectUrl(data.redirectUrl));
+          // Inline intent:// resolution
+          let navUrl = data.redirectUrl;
+          if (navUrl && String(navUrl).startsWith('intent://')) {
+            const m = String(navUrl).match(/S\.browser_fallback_url=([^;]+)/);
+            if (m && m[1]) { try { navUrl = decodeURIComponent(m[1]); } catch(e){} }
+          }
+          window.location.replace(navUrl);
         } else {
           setError(data.error || 'The requested URN reference details do not exist.');
           setLoading(false);
