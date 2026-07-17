@@ -1177,7 +1177,9 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
 
   // Send WhatsApp Referral Notification with Tracking URL for agent/kiwi sources or Kiwi matched cards on creation
   const isKiwiCard = card && (card.id === 'card_yomuvufqh' || card.name.toLowerCase().includes('kiwi') || String(card.id).includes('kiwi'));
-  if (source === 'agent' || source === 'kiwi' || isKiwiCard) {
+  const isSingleStepLead = (source === 'agent' || source === 'kiwi' || pan_no || monthly_income || employment || isKiwiCard);
+  if (isSingleStepLead) {
+    console.log(`[WhatsApp Lead Creation] Triggering referral link dispatch for single-step lead: ${trimmedPhone}`);
     const agentCode = source === 'agent' ? (agent_id || 'active') : 'public';
     const dateCode = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD
     const settings = await db.getSettings();
