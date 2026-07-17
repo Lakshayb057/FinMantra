@@ -652,14 +652,63 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
         .kiwi-brand {
           display: flex;
           align-items: center;
-          gap: .5em;
-          font-weight: 700;
-          font-size: 19px;
+          gap: 0.6rem;
         }
-        .kiwi-brand .kiwi-tag {
+        .kiwi-brand-logo {
+          height: 36px;
+          width: 36px;
+          border-radius: 8px;
+          object-fit: cover;
+        }
+        .kiwi-brand-title {
+          font-family: var(--font-heading), sans-serif;
+          font-weight: 800;
+          font-size: 1.3rem;
+          color: var(--ink);
+        }
+        .kiwi-brand-divider {
+          height: 14px;
+          width: 1.5px;
+          background: var(--line);
+          margin: 0 4px;
+        }
+        .kiwi-brand .kiwi-tag, .kiwi-brand-tag {
           font-weight: 400;
           color: var(--mut);
           font-size: 13px;
+        }
+        .kiwi-brand-badge {
+          color: var(--mut);
+          font-size: 11px;
+          background: var(--bg2);
+          padding: 2px 8px;
+          border-radius: 999px;
+          font-weight: 600;
+          white-space: nowrap;
+        }
+        .kiwi-nav-right {
+          display: flex;
+          align-items: center;
+          gap: 22px;
+        }
+        .kiwi-nav-links {
+          display: flex;
+          gap: 20px;
+          font-size: 14.5px;
+          font-weight: 600;
+        }
+        .kiwi-nav-links a {
+          color: var(--cta);
+          text-decoration: none;
+          transition: color 0.15s ease;
+        }
+        .kiwi-nav-links a:hover {
+          color: var(--green);
+        }
+        .kiwi-nav-btn {
+          padding: 9px 16px !important;
+          font-size: 14px !important;
+          box-shadow: 0 8px 16px rgba(15,90,36,.18) !important;
         }
         .kiwi-hero {
           position: relative;
@@ -708,7 +757,13 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
           font-size: 12px;
           flex: none;
         }
-        .kiwi-cardart { position: relative; display: flex; align-items: center; justify-content: flex-start; margin-top: 28px; }
+        .kiwi-cardart { 
+          position: relative; 
+          display: inline-flex; 
+          align-items: center; 
+          justify-content: center; 
+          margin: 28px auto 0 0; 
+        }
         .kiwi-cardart .kiwi-halo {
           position: absolute;
           width: 96%;
@@ -736,7 +791,7 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
           border: 3px solid #EEFFB0;
           box-shadow: 0 12px 22px rgba(15,90,36,.30);
         }
-        .kiwi-coin.c1 { width: 60px; height: 60px; font-size: 18px; left: 60%; top: -6%; }
+        .kiwi-coin.c1 { width: 60px; height: 60px; font-size: 18px; left: 75%; top: -10%; }
         
         .kiwi-formcard {
           background: #fff;
@@ -745,6 +800,8 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
           padding: 26px 26px 24px;
           box-shadow: 0 26px 54px rgba(18,60,29,.14);
           position: relative;
+          max-width: 480px;
+          margin: 0 auto;
         }
         .kiwi-formcard .ff-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
         .kiwi-formcard h2 { font-size: 23px; }
@@ -854,33 +911,7 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
         .kiwi-footer strong { color: #fff; }
         .kiwi-footer .kiwi-disc { border-top: 1px solid rgba(255,255,255,.14); padding-top: 16px; color: #9dbf8b; }
         .kiwi-footer a { color: #DDF3A6; text-decoration: none; }
-        
-        @media (max-width: 860px) {
-          .kiwi-hero-grid {
-            grid-template-columns: 1fr;
-            grid-template-areas: "copy" "form" "visual";
-            padding-top: 22px;
-            padding-bottom: 34px;
-            gap: 14px;
-          }
-          .kiwi-hero p.kiwi-sub { margin-bottom: 6px; }
-          .kiwi-cardart { justify-content: center; margin: 6px 0 2px; }
-          .kiwi-cardart img { width: min(56%, 224px); }
-          .kiwi-cardart .kiwi-halo { width: 70%; height: 64%; left: 15%; }
-          .kiwi-coin.c1 { left: 62%; width: 46px; height: 46px; font-size: 15px; }
-          .kiwi-grid-why { grid-template-columns: 1fr; }
-          .kiwi-neon-grid { grid-template-columns: 1fr; }
-          .kiwi-steps { grid-template-columns: 1fr 1fr; }
-          .kiwi-footer .kiwi-cols { grid-template-columns: 1fr; }
-          .kiwi-section { padding: 44px 0; }
-          .kiwi-nav .kiwi-secure { display: none; }
-          .kiwi-hero .kiwi-ticks { display: none; }
-          .kiwi-hero h1 { font-size: 30px; }
-          .kiwi-hero h1 .kiwi-acc { font-size: 33px; }
-          .kiwi-hero p.kiwi-sub { font-size: 15.5px; margin: 12px 0 4px; }
-          .kiwi-eyebrow { margin-bottom: 14px; font-size: 12.5px; }
-          .kiwi-two { grid-template-columns: 1fr; gap: 8px; }
-        }
+        .kiwi-footer-links { display: flex; gap: 40px; }
         
         .kiwi-otp-modal {
           position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -922,27 +953,174 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
         .kiwi-otp-input:focus {
           border-color: var(--green);
         }
+        .kiwi-otp-actions {
+          display: flex;
+          gap: 10px;
+          margin-top: 15px;
+        }
+
+        /* ---------------------------------------------------- */
+        /* RESPONSIVE MEDIA QUERIES                            */
+        /* ---------------------------------------------------- */
+
+        @media (max-width: 1024px) {
+          .kiwi-brand-tag {
+            display: none;
+          }
+          .kiwi-brand-divider {
+            display: none;
+          }
+        }
+
+        @media (max-width: 991px) {
+          .kiwi-hero-grid {
+            grid-template-columns: 1fr;
+            grid-template-areas: "copy" "form" "visual";
+            padding-top: 24px;
+            padding-bottom: 36px;
+            gap: 20px;
+          }
+          .kiwi-hero-copy {
+            text-align: center;
+            max-width: 600px;
+            margin: 0 auto;
+          }
+          .kiwi-ticks {
+            justify-content: center;
+            text-align: left;
+          }
+          .kiwi-hero p.kiwi-sub { 
+            margin: 12px auto; 
+            max-width: 44ch; 
+          }
+          .kiwi-cardart { 
+            margin: 20px auto 10px auto; 
+          }
+          .kiwi-cardart img { 
+            width: min(70%, 280px); 
+          }
+          .kiwi-cardart .kiwi-halo { 
+            width: 80%; 
+            height: 70%; 
+            left: 10%; 
+          }
+          .kiwi-coin.c1 { 
+            left: 75%; 
+            top: -8%;
+            width: 52px; 
+            height: 52px; 
+            font-size: 16px; 
+          }
+          .kiwi-hero h1 { 
+            font-size: clamp(28px, 6vw, 42px); 
+          }
+          .kiwi-hero h1 .kiwi-acc { 
+            font-size: clamp(31px, 6.4vw, 46px); 
+          }
+          .kiwi-grid-why {
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+          }
+          .kiwi-steps {
+            grid-template-columns: repeat(2, 1fr);
+            gap: 14px;
+          }
+          .kiwi-section {
+            padding: 44px 0;
+          }
+        }
+
+        @media (max-width: 768px) {
+          .kiwi-nav-links {
+            display: none;
+          }
+          .kiwi-brand-badge {
+            display: none;
+          }
+          .kiwi-nav-right {
+            gap: 12px;
+          }
+          .kiwi-nav-btn {
+            padding: 8px 14px !important;
+            font-size: 13px !important;
+          }
+          .kiwi-neon-grid {
+            grid-template-columns: 1fr;
+            max-width: 400px;
+            margin: 32px auto 0;
+          }
+          .kiwi-footer .kiwi-cols {
+            grid-template-columns: 1fr;
+            gap: 20px;
+          }
+          .kiwi-strip .kiwi-wrap {
+            font-size: 12px;
+            gap: 8px 16px;
+            padding: 10px 16px;
+          }
+        }
+
+        @media (max-width: 576px) {
+          .kiwi-grid-why {
+            grid-template-columns: 1fr;
+            gap: 12px;
+          }
+        }
+
+        @media (max-width: 520px) {
+          .kiwi-two {
+            grid-template-columns: 1fr;
+            gap: 8px;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .kiwi-formcard {
+            padding: 20px 16px 16px;
+          }
+          .kiwi-steps {
+            grid-template-columns: 1fr;
+            gap: 12px;
+          }
+          .kiwi-otp-panel {
+            padding: 24px 16px 20px;
+          }
+          .kiwi-footer-links {
+            gap: 20px;
+            justify-content: space-between;
+            width: 100%;
+          }
+        }
+
+        @media (max-width: 360px) {
+          .kiwi-otp-actions {
+            flex-direction: column;
+          }
+          .kiwi-otp-btn-verify, .kiwi-otp-btn-resend {
+            width: 100%;
+          }
+        }
       ` }} />
 
       <div className="kiwi-body">
         {/* Header */}
         <header className="kiwi-header">
           <div className="kiwi-wrap kiwi-nav">
-            <div className="kiwi-brand" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-              <img src="/logo.jpg" alt="FinMantra Logo" style={{ height: '36px', width: '36px', borderRadius: '8px', objectFit: 'cover' }} />
-              <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: '1.3rem', color: 'var(--ink)' }}>FinMantra</span>
-              <span style={{ height: '14px', width: '1.5px', background: 'var(--line)', margin: '0 4px' }}></span>
-              <span className="kiwi-tag" style={{ marginLeft: 0 }}>Kiwi RuPay Credit Card</span>
-              <span style={{ color: 'var(--mut)', fontSize: '11px', background: 'var(--bg2)', padding: '2px 8px', borderRadius: '999px', fontWeight: 600 }}>Cards issued by YES BANK</span>
+            <div className="kiwi-brand">
+              <img src="/logo.jpg" alt="FinMantra Logo" className="kiwi-brand-logo" />
+              <span className="kiwi-brand-title">FinMantra</span>
+              <span className="kiwi-brand-divider"></span>
+              <span className="kiwi-brand-tag">Kiwi RuPay Credit Card</span>
+              <span className="kiwi-brand-badge">Cards issued by YES BANK</span>
             </div>
             
-            <div style={{ display: 'flex', alignItems: 'center', gap: '22px' }}>
-              <div className="kiwi-nav-links" style={{ display: 'flex', gap: '20px', fontSize: '14.5px', fontWeight: 600 }}>
-                <a href="#benefits" style={{ color: 'var(--cta)', textDecoration: 'none' }}>Benefits</a>
-                <a href="#how-it-works" style={{ color: 'var(--cta)', textDecoration: 'none' }}>How it works</a>
-                <a href="#lead" style={{ color: 'var(--cta)', textDecoration: 'none' }}>Apply</a>
+            <div className="kiwi-nav-right">
+              <div className="kiwi-nav-links">
+                <a href="#benefits">Benefits</a>
+                <a href="#how-it-works">How it works</a>
+                <a href="#lead">Apply</a>
               </div>
-              <a href="#lead" className="kiwi-btn" style={{ padding: '9px 16px', fontSize: '14px' }}>
+              <a href="#lead" className="kiwi-btn kiwi-nav-btn">
                 Apply now <span className="kiwi-arw">&rarr;</span>
               </a>
             </div>
@@ -1302,7 +1480,7 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
                   FinMantra is an authorised channel partner facilitating credit card applications. This is a marketing and lead-referral page and is not the card issuer.
                 </p>
               </div>
-              <div style={{ display: 'flex', gap: '40px' }}>
+              <div className="kiwi-footer-links">
                 <div>
                   <strong>Legals</strong>
                   <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -1368,7 +1546,7 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
               </div>
             )}
 
-            <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
+            <div className="kiwi-otp-actions">
               <button 
                 onClick={handleVerifyOtp} 
                 className="kiwi-otp-btn-verify"

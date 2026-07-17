@@ -1045,6 +1045,16 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
       }
     }
 
+    if (!matchedCard && source === 'kiwi') {
+      const activeCards = await db.getCards(false);
+      matchedCard = activeCards.find(c => {
+        return String(c.name).toLowerCase().includes('kiwi') || String(c.id).toLowerCase().includes('kiwi');
+      });
+      if (matchedCard) {
+        console.log(`[Card Matching] Matched card ${matchedCard.name} (${matchedCard.id}) for source: kiwi`);
+      }
+    }
+
     if (matchedCard) {
       card = matchedCard;
       redirectUrlTemplate = card.redirect_url_template || '';
