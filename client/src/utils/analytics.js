@@ -126,29 +126,23 @@ export function trackLeadSubmission({ fullName, email, phone, eventId = null, co
 }
 
 /**
- * Resolves redirect URLs that use the custom 'intent://' scheme
- * for non-Android platforms by extracting the browser fallback URL.
+ * Resolves redirect URLs that use the custom Android 'intent://' scheme
+ * by extracting the browser fallback URL (S.browser_fallback_url).
+ * 
+ * Web browsers cannot handle intent:// via JavaScript window.location —
+ * on real Android, Chrome handles intent links at the OS/navigation layer
+ * before JS runs. So in our JS code, we ALWAYS extract the HTTPS fallback.
  */
 export function resolveRedirectUrl(url) {
   if (url && String(url).startsWith('intent://')) {
-    const userAgent = navigator.userAgent || '';
-    const platform = navigator.platform || '';
-    
-    // Detect desktop environment (even if emulating Android mobile in DevTools)
-    const isDesktop = /Windows|Macintosh|MacIntel|Linux x86_64/i.test(userAgent) || 
-                      /Win32|MacIntel|Win64/i.test(platform);
-    const isAndroid = /Android/i.test(userAgent);
-    
-    if (isDesktop || !isAndroid) {
-      const match = String(url).match(/S\.browser_fallback_url=([^;]+)/);
-      if (match && match[1]) {
-        try {
-          const decoded = decodeURIComponent(match[1]);
-          console.log('[Intent Resolver] Desktop/Non-Android environment detected. Falling back to:', decoded);
-          return decoded;
-        } catch (e) {
-          console.error('[Intent Resolver] Failed to decode fallback URL:', e);
-        }
+    const match = String(url).match(/S\.browser_fallback_url=([^;]+)/);
+    if (match && match[1]) {
+      try {
+        const decoded = decodeURIComponent(match[1]);
+        console.log('[Intent Resolver] Resolved intent:// to HTTPS fallback:', decoded);
+        return decoded;
+      } catch (e) {
+        console.error('[Intent Resolver] Failed to decode fallback URL:', e);
       }
     }
   }
