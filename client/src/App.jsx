@@ -7,6 +7,7 @@ import AboutPage from './components/AboutPage';
 import ContactPage from './components/ContactPage';
 import PrivacyPolicyPage from './components/PrivacyPolicyPage';
 import TermsPage from './components/TermsPage';
+import KiwiLanding from './components/KiwiLanding';
 // Cookie helper functions
 function setCookie(name, value, days) {
   let expires = "";
@@ -140,6 +141,21 @@ export default function App() {
     }
     params.referrer = referrerVal;
 
+    // 4. Parse path-based UTM parameters if present (e.g. /kiwi/utm_source=val&utm_medium=val)
+    const path = window.location.pathname;
+    if (path.startsWith('/kiwi/')) {
+      const rest = path.substring(6); // everything after "/kiwi/"
+      if (rest.includes('=')) {
+        const pairs = rest.split('&');
+        pairs.forEach(pair => {
+          const [k, v] = pair.split('=');
+          if (k && v) {
+            params[k.trim()] = decodeURIComponent(v.trim());
+          }
+        });
+      }
+    }
+
     // Explicitly guarantee utm_source and standard code usage fields exist
     if (!params.utm_source) params.utm_source = searchParams.get('utm_source') || '';
     if (!params.utm_medium) params.utm_medium = searchParams.get('utm_medium') || searchParams.get('utm_medem') || '';
@@ -174,6 +190,9 @@ export default function App() {
       const activeParts = pathParts.filter(Boolean);
       const urn = activeParts[activeParts.length - 1];
       return <ReferralRedirect urn={urn} />;
+    }
+    if (pathParts[1] === 'kiwi') {
+      return <KiwiLanding navigateTo={navigateTo} utmParams={utmParams} />;
     }
     if (currentPath === '/agent') {
       return <AgentPortal navigateTo={navigateTo} theme={theme} toggleTheme={toggleTheme} />;
