@@ -1,5 +1,28 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowRight, User, Phone, Mail, Calendar, MapPin, CheckCircle, RefreshCw, X, ShieldAlert } from 'lucide-react';
+import { ArrowRight, User, Phone, Mail, Calendar, MapPin, CheckCircle, RefreshCw, X, ShieldAlert, Briefcase, ChevronDown, Lock } from 'lucide-react';
+
+const COMMON_DESIGNATIONS = [
+  "Software Engineer",
+  "Manager",
+  "Associate",
+  "Analyst",
+  "Consultant",
+  "Director",
+  "Executive",
+  "Officer",
+  "Engineer",
+  "Architect",
+  "Teacher / Professor",
+  "Doctor",
+  "Chartered Accountant (CA)",
+  "Sales Representative",
+  "HR Specialist",
+  "Proprietor / Owner",
+  "Student",
+  "Retired",
+  "Housewife",
+  "Other"
+];
 
 // Offline fallback helper to resolve Indian pincodes to State/Region
 const getStateFromPincode = (pin) => {
@@ -61,6 +84,12 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
   const [settings, setSettings] = useState({});
   const [cards, setCards] = useState([]);
 
+  // Search/Select Dropdown States & Refs
+  const [employmentDropdownOpen, setEmploymentDropdownOpen] = useState(false);
+  const [designationDropdownOpen, setDesignationDropdownOpen] = useState(false);
+  const empDropdownRef = useRef(null);
+  const designationDropdownRef = useRef(null);
+
   // Pincode Lookup & Serviceability States
   const [pincodeLoading, setPincodeLoading] = useState(false);
   const [pincodeLocationText, setPincodeLocationText] = useState('');
@@ -110,6 +139,20 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
       return () => clearTimeout(timer);
     }
   }, [resendTimer]);
+
+  // Click outside to close dropdowns
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (empDropdownRef.current && !empDropdownRef.current.contains(e.target)) {
+        setEmploymentDropdownOpen(false);
+      }
+      if (designationDropdownRef.current && !designationDropdownRef.current.contains(e.target)) {
+        setDesignationDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Auto-Lookup Pincode API
   useEffect(() => {
@@ -226,6 +269,17 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
       }
     }
 
+    if (name === 'monthly_income') {
+      if (value) {
+        const numeric = parseInt(value, 10);
+        if (isNaN(numeric) || numeric < 1000) {
+          errorText = 'Please enter a valid monthly income.';
+        }
+      } else {
+        errorText = 'Monthly income is required';
+      }
+    }
+
     if (name === 'dob') {
       if (!value) {
         errorText = 'Date of birth is required';
@@ -252,7 +306,7 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
   const handleInputChange = (e) => {
     const { name, value } = e.target;
 
-    if (name === 'phone' || name === 'pincode') {
+    if (name === 'phone' || name === 'pincode' || name === 'monthly_income') {
       const cleanVal = value.replace(/\D/g, '');
       setFormData(prev => ({ ...prev, [name]: cleanVal }));
       validateField(name, cleanVal);
@@ -293,8 +347,8 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
       if (!formData.employment) {
         newErrors.employment = 'Employment Type is required';
       }
-      if (!formData.income) {
-        newErrors.income = 'Monthly Income range is required';
+      if (!formData.monthly_income || parseInt(formData.monthly_income, 10) < 1000) {
+        newErrors.monthly_income = 'Monthly income is required';
       }
       if (!formData.designation || !formData.designation.trim()) {
         newErrors.designation = 'Designation is required';
@@ -472,12 +526,6 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
     try {
       const compiledAddress = `${formData.address_house.trim()}, ${formData.address_street.trim()}${formData.address_locality ? ', ' + formData.address_locality.trim() : ''}, ${formData.address_city.trim()}, ${formData.address_state.trim()} - ${formData.pincode.trim()}`;
       
-      // Map Kiwi dropdown income range to integer monthly_income for validation
-      let resolvedIncomeVal = '35000';
-      if (formData.income.includes('Below')) resolvedIncomeVal = '15000';
-      else if (formData.income.includes('50,000 –')) resolvedIncomeVal = '75000';
-      else if (formData.income.includes('Above')) resolvedIncomeVal = '120000';
-
       // Find Kiwi card if configured
       let matchedKiwiCard = cards.find(c => c.id === 'kiwi' || c.name.toLowerCase().includes('kiwi'));
       const cardIdPayload = matchedKiwiCard ? matchedKiwiCard.id : null;
@@ -487,7 +535,7 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           employment: formData.employment,
-          monthly_income: resolvedIncomeVal,
+          monthly_income: formData.monthly_income,
           designation: formData.designation || null,
           pan_no: formData.pan_no ? String(formData.pan_no).trim().toUpperCase() : null,
           has_credit_card: formData.has_credit_card,
@@ -519,6 +567,27 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
     }
   };
 
+  const formSchema = {
+    fields: {
+      fullName: { visible: true, required: true, label: "Full Name (as per PAN Card)", placeholder: "Enter your full name as per PAN Card" },
+      phone: { visible: true, required: true, label: "Mobile Number", placeholder: "WhatsApp number (10 digits)" },
+      email: { visible: true, required: true, label: "Email address", placeholder: "e.g. name@example.com" },
+      has_credit_card: { visible: true, required: true, label: "Do you already have a credit card?" },
+      employment: {
+        visible: true,
+        required: true,
+        label: "Employment Type",
+        options: [
+          { value: "Salaried", enabled: true },
+          { value: "Self Employed (Business)", enabled: true },
+          { value: "Self Employed (Professional)", enabled: true }
+        ]
+      },
+      monthly_income: { visible: true, required: true, label: "Net Monthly Income", placeholder: "Net Monthly Income" },
+      pincode: { visible: true, required: true, label: "Residence Pincode", placeholder: "Residence Pincode" }
+    }
+  };
+
   return (
     <>
       {/* Styles injected dynamically matching Kiwi Landing design system */}
@@ -541,6 +610,21 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
           background: var(--bg);
           line-height: 1.5;
           -webkit-font-smoothing: antialiased;
+        }
+        .kiwi-body .form-input:focus, .kiwi-body .form-select:focus {
+          border-color: var(--green) !important;
+          box-shadow: 0 0 0 3px rgba(47,164,59,.15) !important;
+        }
+        .kiwi-body .btn-primary {
+          background: var(--cta) !important;
+          color: var(--ctatx) !important;
+          border: none !important;
+          box-shadow: 0 14px 26px rgba(15,90,36,.28) !important;
+          transition: transform .15s ease, box-shadow .15s ease !important;
+        }
+        .kiwi-body .btn-primary:hover {
+          transform: translateY(-2px) !important;
+          box-shadow: 0 18px 32px rgba(15,90,36,.34) !important;
         }
         .kiwi-acc {
           font-family: 'Instrument Serif', Georgia, serif;
@@ -707,34 +791,6 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
         .kiwi-formcard .kiwi-pill { font-size: 12px; font-weight: 700; color: var(--cta); background: #EAF6CF; border-radius: 999px; padding: 5px 11px; }
         .kiwi-formcard .kiwi-fine { color: var(--mut); font-size: 13.5px; margin-bottom: 16px; }
         
-        .kiwi-field { margin-bottom: 13px; }
-        .kiwi-field label { display: block; font-size: 13.5px; font-weight: 600; margin-bottom: 6px; }
-        .kiwi-field input, .kiwi-field select {
-          width: 100%;
-          padding: 13px 14px;
-          border: 1.5px solid var(--line);
-          border-radius: 12px;
-          font-family: inherit;
-          font-size: 16px;
-          color: var(--ink);
-          background: #fff;
-          transition: border-color .15s, box-shadow .15s;
-        }
-        .kiwi-field input:focus, .kiwi-field select:focus {
-          outline: none;
-          border-color: var(--green);
-          box-shadow: 0 0 0 3px rgba(47,164,59,.15);
-        }
-        .kiwi-field.invalid input, .kiwi-field.invalid select { border-color: #b3261e; }
-        .kiwi-field.invalid .kiwi-err { display: block; }
-        .kiwi-err { color: #b3261e; font-size: 12.5px; margin-top: 5px; display: none; }
-        
-        .kiwi-two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-        .kiwi-consent { display: flex; gap: 10px; align-items: flex-start; font-size: 12.5px; color: var(--mut); margin: 4px 0 15px; cursor: pointer; }
-        .kiwi-consent input { margin-top: 3px; }
-        .kiwi-formcard .kiwi-btn { width: 100%; font-size: 18px; padding: 16px; margin-top: 10px; }
-        .kiwi-formcard .kiwi-reassure { text-align: center; font-size: 12.5px; color: var(--mut); margin-top: 12px; }
-        
         .kiwi-strip { background: #0C2E15; color: #CFE7BC; }
         .kiwi-strip .kiwi-wrap { display: flex; flex-wrap: wrap; gap: 10px 28px; justify-content: center; padding: 14px 20px; font-size: 13.5px; }
         .kiwi-strip span { display: inline-flex; align-items: center; gap: 8px; }
@@ -856,7 +912,7 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
         <header className="kiwi-header">
           <div className="kiwi-wrap kiwi-nav">
             <div className="kiwi-brand">
-              <span className="kiwi-dot"></span>kiwi <span className="kiwi-tag">RuPay Credit Card</span>
+              <span className="kiwi-dot"></span>kiwi <span className="kiwi-tag">Credit Card by Yes Bank</span>
             </div>
             <div className="kiwi-secure" style={{ fontSize: '13px', color: 'var(--mut)', display: 'flex', alignItems: 'center', gap: '6px' }}>
               🔒 Secure application
@@ -881,292 +937,529 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
               </div>
             </div>
 
-            {/* FORM CARD */}
+            {/* FORM CARD (Matches Public Landing Wizard Design & Color Scheme Override) */}
             <div className="kiwi-hero-form" id="lead">
               <div className="kiwi-formcard">
-                <div className="ff-top">
-                  <h2>Apply in 2 minutes</h2>
-                  <span className="kiwi-pill">Free to apply</span>
+                <div className="ff-top" style={{ textAlign: 'center', display: 'block', marginBottom: '20px' }}>
+                  <h2 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--ink)' }}>Apply in 2 minutes</h2>
+                  <p style={{ color: 'var(--mut)', fontSize: '0.94rem', marginTop: '4px' }}>
+                    Fill in your details and we'll take you to secure onboarding.
+                  </p>
                 </div>
-                <p className="kiwi-fine">Fill in your details and we'll take you to secure onboarding.</p>
                 
-                {/* 2-Step Indicator */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', background: 'var(--bg2)', padding: '6px 12px', borderRadius: '12px' }}>
-                  <span style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--cta)' }}>Step {formStep} of 2</span>
-                  <span style={{ fontSize: '11px', color: 'var(--cta)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                    {formStep === 1 ? 'Contact Details' : 'More Information'}
-                  </span>
+                {/* 2-Step Progress Indicator (Exactly like Public Landing but Kiwi themed) */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', position: 'relative', padding: '0 8px' }}>
+                  <div style={{ position: 'absolute', top: '15px', left: '16px', right: '16px', height: '2px', background: 'var(--line)', zIndex: 1 }}>
+                    <div style={{ width: formStep === 2 ? '100%' : '0%', height: '100%', background: 'var(--green)', transition: 'width 0.3s ease' }}></div>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 2, position: 'relative' }}>
+                    <div style={{ 
+                      width: '32px', height: '32px', borderRadius: '50%', 
+                      background: formStep >= 1 ? 'var(--green)' : 'var(--panel)', 
+                      border: formStep >= 1 ? '2px solid var(--green)' : '2px solid var(--line)',
+                      color: formStep >= 1 ? '#ffffff' : 'var(--mut)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.85rem',
+                      transition: 'all 0.3s ease',
+                      boxShadow: formStep === 1 ? '0 0 12px rgba(47, 164, 59, 0.3)' : 'none'
+                    }}>1</div>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 600, marginTop: '6px', color: formStep === 1 ? 'var(--cta)' : 'var(--mut)' }}>Contact</span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 2, position: 'relative' }}>
+                    <div style={{ 
+                      width: '32px', height: '32px', borderRadius: '50%', 
+                      background: formStep >= 2 ? 'var(--green)' : 'var(--panel)', 
+                      border: formStep >= 2 ? '2px solid var(--green)' : '2px solid var(--line)',
+                      color: formStep >= 2 ? '#ffffff' : 'var(--mut)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.85rem',
+                      transition: 'all 0.3s ease',
+                      boxShadow: formStep === 2 ? '0 0 12px rgba(47, 164, 59, 0.3)' : 'none'
+                    }}>2</div>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 600, marginTop: '6px', color: formStep === 2 ? 'var(--cta)' : 'var(--mut)' }}>More Info</span>
+                  </div>
                 </div>
 
                 {formError && (
-                  <div style={{ background: '#fdeded', border: '1.5px solid #f5c2c2', padding: '0.75rem 1rem', borderRadius: '12px', color: '#b3261e', fontSize: '0.82rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <div style={{ background: '#fdeded', border: '1.5px solid #f5c2c2', padding: '0.75rem 1rem', borderRadius: '8px', color: '#b3261e', fontSize: '0.82rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <ShieldAlert size={16} /> {formError}
                   </div>
                 )}
 
-                <form onSubmit={handleFormSubmit} noValidate>
-                  {/* STEP 1 FIELDS */}
+                <form onSubmit={handleFormSubmit}>
+                  {/* STEP 1: CONTACT DETAILS */}
                   {formStep === 1 && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      <div className={`kiwi-field ${errors.fullName ? 'invalid' : ''}`}>
-                        <label htmlFor="fullName">Full name *</label>
-                        <input 
-                          id="fullName" 
-                          name="fullName" 
-                          type="text" 
-                          placeholder="As per PAN"
-                          value={formData.fullName}
-                          onChange={handleInputChange}
-                          disabled={isSubmitting}
-                        />
-                        <div className="kiwi-err">{errors.fullName}</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
+                          {formSchema.fields.fullName.label}
+                        </label>
+                        <div style={{ position: 'relative' }}>
+                          <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--mut)', opacity: 0.7, display: 'flex', alignItems: 'center' }}>
+                            <User size={18} />
+                          </span>
+                          <input 
+                            type="text" name="fullName" className="form-input"
+                            style={{ paddingLeft: '2.5rem', height: '42px', borderRadius: '8px' }}
+                            placeholder={formSchema.fields.fullName.placeholder}
+                            value={formData.fullName} onChange={handleInputChange}
+                            required disabled={isSubmitting}
+                          />
+                        </div>
+                        {errors.fullName && <div style={{ color: '#b3261e', fontSize: '0.8rem', marginTop: '0.25rem' }}>{errors.fullName}</div>}
                       </div>
 
-                      <div className="kiwi-two">
-                        <div className={`kiwi-field ${errors.phone ? 'invalid' : ''}`}>
-                          <label htmlFor="phone">Mobile number *</label>
-                          <div style={{ display: 'flex', gap: '6px' }}>
-                            <input 
-                              id="phone" 
-                              name="phone" 
-                              type="tel" 
-                              maxLength="10" 
-                              placeholder="10-digit mobile"
-                              value={formData.phone}
-                              onChange={handleInputChange}
-                              disabled={isSubmitting || isPhoneVerified}
-                              style={{ flex: 1 }}
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
+                          {formSchema.fields.phone.label}
+                        </label>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          <div style={{ position: 'relative', flex: 1 }}>
+                            <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--mut)', opacity: 0.7, display: 'flex', alignItems: 'center' }}>
+                              <Phone size={18} />
+                            </span>
+                            <input
+                              type="tel" name="phone" className="form-input"
+                              style={{ paddingLeft: '2.5rem', height: '42px', borderRadius: '8px' }}
+                              placeholder={formSchema.fields.phone.placeholder}
+                              maxLength="10" value={formData.phone} onChange={handleInputChange}
+                              required disabled={isSubmitting || isPhoneVerified}
                             />
-                            {formData.phone.length === 10 && !errors.phone && (
-                              <button
-                                type="button"
-                                onClick={sendStep1Otp}
-                                className="kiwi-btn"
-                                style={{ 
-                                  padding: '0 15px', 
-                                  height: '48px', 
-                                  fontSize: '12.5px', 
-                                  background: isPhoneVerified ? 'var(--green)' : '#ef4444',
-                                  boxShadow: 'none',
-                                  marginTop: 0,
-                                  borderRadius: '12px',
-                                  color: 'white'
-                                }}
-                                disabled={isSubmitting || isPhoneVerified}
-                              >
-                                {isPhoneVerified ? '✓ Verified' : 'Verify'}
-                              </button>
-                            )}
                           </div>
-                          <div className="kiwi-err">{errors.phone}</div>
+                          {formData.phone.length === 10 && !errors.phone && (
+                            <button
+                              type="button"
+                              onClick={sendStep1Otp}
+                              className="btn-primary"
+                              style={{ 
+                                background: isPhoneVerified ? 'var(--green)' : '#ef4444',
+                                borderColor: isPhoneVerified ? 'var(--green)' : '#ef4444',
+                                color: '#ffffff',
+                                fontWeight: 700,
+                                borderRadius: '8px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.25rem',
+                                padding: '0 1rem',
+                                cursor: isPhoneVerified ? 'default' : 'pointer'
+                              }}
+                              disabled={isSubmitting || isPhoneVerified}
+                            >
+                              {isPhoneVerified ? '✓ Verified' : 'Verify'}
+                            </button>
+                          )}
                         </div>
-
-                        <div className={`kiwi-field ${errors.email ? 'invalid' : ''}`}>
-                          <label htmlFor="email">Email *</label>
-                          <input 
-                            id="email" 
-                            name="email" 
-                            type="email" 
-                            placeholder="you@email.com"
-                            value={formData.email}
-                            onChange={handleInputChange}
-                            disabled={isSubmitting}
-                          />
-                          <div className="kiwi-err">{errors.email}</div>
-                        </div>
+                        {errors.phone && <div style={{ color: '#b3261e', fontSize: '0.75rem', marginTop: '0.25rem' }}>{errors.phone}</div>}
                       </div>
 
-                      <div className="kiwi-two">
-                        <div className={`kiwi-field ${errors.dob ? 'invalid' : ''}`}>
-                          <label htmlFor="dob">Date of Birth *</label>
-                          <input 
-                            id="dob" 
-                            name="dob" 
-                            type="date"
-                            value={formData.dob}
-                            onChange={handleInputChange}
-                            disabled={isSubmitting}
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
+                          {formSchema.fields.email.label}
+                        </label>
+                        <div style={{ position: 'relative' }}>
+                          <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--mut)', opacity: 0.7, display: 'flex', alignItems: 'center' }}>
+                            <Mail size={18} />
+                          </span>
+                          <input
+                            type="email" name="email" className="form-input"
+                            style={{ paddingLeft: '2.5rem', height: '42px', borderRadius: '8px' }}
+                            placeholder={formSchema.fields.email.placeholder}
+                            value={formData.email} onChange={handleInputChange}
+                            required disabled={isSubmitting}
                           />
-                          <div className="kiwi-err">{errors.dob}</div>
+                        </div>
+                        {errors.email && <div style={{ color: '#b3261e', fontSize: '0.75rem', marginTop: '0.25rem' }}>{errors.email}</div>}
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
+                            Date of Birth
+                          </label>
+                          <div style={{ position: 'relative' }}>
+                            <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--mut)', opacity: 0.7, display: 'flex', alignItems: 'center' }}>
+                              <Calendar size={18} />
+                            </span>
+                            <input 
+                              type="date" name="dob" className="form-input"
+                              style={{ paddingLeft: '2.5rem', height: '42px', borderRadius: '8px' }}
+                              value={formData.dob} onChange={handleInputChange}
+                              required disabled={isSubmitting}
+                            />
+                          </div>
+                          {errors.dob && <div style={{ color: '#b3261e', fontSize: '0.8rem', marginTop: '0.25rem' }}>{errors.dob}</div>}
                         </div>
 
-                        <div className={`kiwi-field ${errors.mother_name ? 'invalid' : ''}`}>
-                          <label htmlFor="mother_name">Mother's Name *</label>
-                          <input 
-                            id="mother_name" 
-                            name="mother_name" 
-                            type="text" 
-                            placeholder="Mother's full name"
-                            value={formData.mother_name}
-                            onChange={handleInputChange}
-                            disabled={isSubmitting}
-                          />
-                          <div className="kiwi-err">{errors.mother_name}</div>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
+                            Mother's Name
+                          </label>
+                          <div style={{ position: 'relative' }}>
+                            <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--mut)', opacity: 0.7, display: 'flex', alignItems: 'center' }}>
+                              <User size={18} />
+                            </span>
+                            <input 
+                              type="text" name="mother_name" className="form-input"
+                              style={{ paddingLeft: '2.5rem', height: '42px', borderRadius: '8px' }}
+                              placeholder="Mother's full name"
+                              value={formData.mother_name} onChange={handleInputChange}
+                              required disabled={isSubmitting}
+                            />
+                          </div>
+                          {errors.mother_name && <div style={{ color: '#b3261e', fontSize: '0.8rem', marginTop: '0.25rem' }}>{errors.mother_name}</div>}
                         </div>
                       </div>
 
                       <button 
                         type="button" 
-                        onClick={handleContinueToStep2}
-                        className="kiwi-btn" 
+                        onClick={handleContinueToStep2} 
+                        className="btn-primary" 
+                        style={{ 
+                          width: '100%', 
+                          marginTop: '1rem', 
+                          height: '46px',
+                          borderRadius: '8px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '0.5rem'
+                        }}
                         disabled={isSubmitting}
                       >
-                        {isSubmitting ? 'Registering...' : 'Continue to Next Step'} <span className="kiwi-arw">&rarr;</span>
+                        {isSubmitting ? 'Registering...' : 'Continue to Next Step'} <ArrowRight size={18} />
                       </button>
                     </div>
                   )}
 
-                  {/* STEP 2 FIELDS */}
+                  {/* STEP 2: PROFESSIONAL & FINANCIAL DETAILS */}
                   {formStep === 2 && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      <div className="kiwi-two">
-                        <div className={`kiwi-field ${errors.employment ? 'invalid' : ''}`}>
-                          <label htmlFor="employment">Employment *</label>
-                          <select 
-                            id="employment" 
-                            name="employment"
-                            value={formData.employment}
-                            onChange={handleInputChange}
-                            disabled={isSubmitting}
-                          >
-                            <option value="">Select</option>
-                            <option value="Salaried">Salaried</option>
-                            <option value="Self Employed (Business)">Self-employed</option>
-                          </select>
-                          <div className="kiwi-err">{errors.employment}</div>
-                        </div>
-
-                        <div className={`kiwi-field ${errors.income ? 'invalid' : ''}`}>
-                          <label htmlFor="income">Monthly income *</label>
-                          <select 
-                            id="income" 
-                            name="income"
-                            value={formData.income}
-                            onChange={handleInputChange}
-                            disabled={isSubmitting}
-                          >
-                            <option value="">Select</option>
-                            <option value="Below ₹25,000">Below ₹25,000</option>
-                            <option value="₹25,000 – ₹50,000">₹25,000 – ₹50,000</option>
-                            <option value="₹50,000 – ₹1,00,000">₹50,000 – ₹1,00,000</option>
-                            <option value="Above ₹1,00,000">Above ₹1,00,000</option>
-                          </select>
-                          <div className="kiwi-err">{errors.income}</div>
-                        </div>
-                      </div>
-
-                      <div className="kiwi-two">
-                        <div className={`kiwi-field ${errors.designation ? 'invalid' : ''}`}>
-                          <label htmlFor="designation">Designation *</label>
-                          <input 
-                            id="designation" 
-                            name="designation" 
-                            type="text" 
-                            placeholder="Your job role / title"
-                            value={formData.designation}
-                            onChange={handleInputChange}
-                            disabled={isSubmitting}
-                          />
-                          <div className="kiwi-err">{errors.designation}</div>
-                        </div>
-
-                        <div className={`kiwi-field ${errors.pan_no ? 'invalid' : ''}`}>
-                          <label htmlFor="pan_no">PAN Card Number *</label>
-                          <input 
-                            id="pan_no" 
-                            name="pan_no" 
-                            type="text" 
-                            maxLength="10"
-                            placeholder="10-digit PAN (e.g. ABCDE1234F)"
-                            value={formData.pan_no}
-                            onChange={handleInputChange}
-                            disabled={isSubmitting}
-                          />
-                          <div className="kiwi-err">{errors.pan_no}</div>
-                        </div>
-                      </div>
-
-                      <div className="kiwi-two">
-                        <div className={`kiwi-field ${errors.has_credit_card ? 'invalid' : ''}`}>
-                          <label htmlFor="has_credit_card">Do you have a credit card? *</label>
-                          <select 
-                            id="has_credit_card" 
-                            name="has_credit_card"
-                            value={formData.has_credit_card}
-                            onChange={handleInputChange}
-                            disabled={isSubmitting}
-                          >
-                            <option value="">Select Option</option>
-                            <option value="Yes">Yes</option>
-                            <option value="No">No</option>
-                          </select>
-                          <div className="kiwi-err">{errors.has_credit_card}</div>
-                        </div>
-
-                        <div className={`kiwi-field ${errors.pincode ? 'invalid' : ''}`}>
-                          <label htmlFor="pincode">Residence Pincode *</label>
-                          <input 
-                            id="pincode" 
-                            name="pincode" 
-                            type="text" 
-                            maxLength="6"
-                            placeholder="6-digit pincode"
-                            value={formData.pincode}
-                            onChange={handleInputChange}
-                            disabled={isSubmitting}
-                          />
-                          {pincodeLoading && <div style={{ fontSize: '11px', color: 'var(--green)', marginTop: '4px' }}>Locating...</div>}
-                          {pincodeLocationText && (
-                            <div style={{ fontSize: '11.5px', color: 'var(--green)', marginTop: '4px', fontWeight: 600 }}>
-                              📍 {pincodeLocationText}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                        
+                        {/* Employment Dropdown (Matches Public UI but green colors) */}
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
+                            {formSchema.fields.employment.label}
+                          </label>
+                          <div ref={empDropdownRef} style={{ position: 'relative' }}>
+                            <div
+                              onClick={() => !isSubmitting && setEmploymentDropdownOpen(prev => !prev)}
+                              className="form-input"
+                              style={{
+                                paddingLeft: '2.5rem', paddingRight: '2.5rem',
+                                height: '42px', borderRadius: '8px',
+                                display: 'flex', alignItems: 'center',
+                                cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                                color: formData.employment ? 'var(--ink)' : 'var(--mut)',
+                                userSelect: 'none',
+                                border: '1.5px solid',
+                                borderColor: employmentDropdownOpen ? 'var(--green)' : 'var(--line)',
+                                boxShadow: employmentDropdownOpen ? '0 0 0 3px rgba(47, 164, 59, 0.2)' : undefined
+                              }}
+                            >
+                              <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--mut)', opacity: 0.7, display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
+                                <Briefcase size={18} />
+                              </span>
+                              {formData.employment || 'Select'}
+                              <ChevronDown size={16} style={{
+                                position: 'absolute', right: '0.85rem', top: '50%',
+                                transform: employmentDropdownOpen ? 'translateY(-50%) rotate(180deg)' : 'translateY(-50%)',
+                                transition: 'transform 0.2s ease',
+                                color: 'var(--mut)'
+                              }} />
                             </div>
-                          )}
-                          <div className="kiwi-err">{errors.pincode || pincodeError}</div>
+
+                            {employmentDropdownOpen && (
+                              <div style={{
+                                position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
+                                background: '#ffffff',
+                                border: '1.5px solid var(--line)',
+                                borderRadius: '8px',
+                                boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+                                zIndex: 50,
+                                overflow: 'hidden'
+                              }}>
+                                {(formSchema.fields.employment.options || []).map((opt, idx) => (
+                                  <div
+                                    key={idx}
+                                    onClick={() => {
+                                      setFormData(prev => ({ ...prev, employment: opt.value }));
+                                      setEmploymentDropdownOpen(false);
+                                      validateField('employment', opt.value);
+                                    }}
+                                    style={{
+                                      padding: '0.65rem 1rem',
+                                      fontSize: '0.9rem',
+                                      cursor: 'pointer',
+                                      background: formData.employment === opt.value ? 'rgba(47, 164, 59, 0.12)' : 'transparent',
+                                      color: formData.employment === opt.value ? 'var(--cta)' : 'var(--ink)',
+                                      fontWeight: formData.employment === opt.value ? 700 : 400,
+                                      borderBottom: '1px solid var(--line)'
+                                    }}
+                                    onMouseEnter={e => {
+                                      if (formData.employment !== opt.value) e.currentTarget.style.background = 'var(--bg2)';
+                                    }}
+                                    onMouseLeave={e => {
+                                      if (formData.employment !== opt.value) e.currentTarget.style.background = 'transparent';
+                                    }}
+                                  >
+                                    {opt.value === 'Self Employed (Business)' ? 'Self-employed' : opt.value}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          {errors.employment && <div style={{ color: '#b3261e', fontSize: '0.8rem', marginTop: '0.25rem' }}>{errors.employment}</div>}
+                        </div>
+
+                        {/* Net Monthly Income (Text input) */}
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
+                            {formSchema.fields.monthly_income.label}
+                          </label>
+                          <div style={{ position: 'relative' }}>
+                            <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--mut)', opacity: 0.7, fontWeight: 700, fontSize: '1.05rem', display: 'flex', alignItems: 'center' }}>
+                              ₹
+                            </span>
+                            <input
+                              type="text" name="monthly_income" className="form-input"
+                              style={{ paddingLeft: '2.25rem', height: '42px', borderRadius: '8px' }}
+                              placeholder={formSchema.fields.monthly_income.placeholder}
+                              value={formData.monthly_income} onChange={handleInputChange}
+                              required disabled={isSubmitting}
+                            />
+                          </div>
+                          {errors.monthly_income && <div style={{ color: '#b3261e', fontSize: '0.75rem', marginTop: '0.25rem' }}>{errors.monthly_income}</div>}
+                        </div>
+
+                      </div>
+
+                      {/* Designation Dropdown (Matches Public UI but green colors) */}
+                      <div ref={designationDropdownRef} className="form-group" style={{ marginBottom: 0, position: 'relative' }}>
+                        <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
+                          Designation
+                        </label>
+                        <div style={{ position: 'relative' }}>
+                          <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--mut)', opacity: 0.7, display: 'flex', alignItems: 'center' }}>
+                            <Briefcase size={18} />
+                          </span>
+                          <input 
+                            type="text" name="designation" className="form-input"
+                            style={{ paddingLeft: '2.5rem', height: '42px', borderRadius: '8px' }}
+                            placeholder="Type or select designation"
+                            value={formData.designation} 
+                            onChange={handleInputChange}
+                            onFocus={() => !isSubmitting && setDesignationDropdownOpen(true)}
+                            required disabled={isSubmitting}
+                            autoComplete="off"
+                          />
+                          <ChevronDown size={16} style={{
+                            position: 'absolute', right: '0.85rem', top: '50%',
+                            transform: designationDropdownOpen ? 'translateY(-50%) rotate(180deg)' : 'translateY(-50%)',
+                            transition: 'transform 0.2s ease',
+                            color: 'var(--mut)',
+                            pointerEvents: 'none'
+                          }} />
+                        </div>
+                        
+                        {designationDropdownOpen && (
+                          <div style={{
+                            position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
+                            background: '#ffffff',
+                            border: '1.5px solid var(--line)',
+                            borderRadius: '8px',
+                            boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+                            zIndex: 50,
+                            maxHeight: '200px',
+                            overflowY: 'auto'
+                          }}>
+                            {COMMON_DESIGNATIONS.filter(des => 
+                              des.toLowerCase().includes((formData.designation || '').toLowerCase())
+                            ).length > 0 ? (
+                              COMMON_DESIGNATIONS.filter(des => 
+                                des.toLowerCase().includes((formData.designation || '').toLowerCase())
+                              ).map((opt, idx) => (
+                                <div
+                                  key={idx}
+                                  onClick={() => {
+                                    setFormData(prev => ({ ...prev, designation: opt }));
+                                    setDesignationDropdownOpen(false);
+                                    validateField('designation', opt);
+                                  }}
+                                  style={{
+                                    padding: '0.65rem 1rem',
+                                    fontSize: '0.9rem',
+                                    cursor: 'pointer',
+                                    background: formData.designation === opt ? 'rgba(47, 164, 59, 0.12)' : 'transparent',
+                                    color: formData.designation === opt ? 'var(--cta)' : 'var(--ink)',
+                                    fontWeight: formData.designation === opt ? 700 : 400,
+                                    borderBottom: '1px solid var(--line)'
+                                  }}
+                                  onMouseEnter={e => { 
+                                    if (formData.designation !== opt) e.currentTarget.style.background = 'var(--bg2)'; 
+                                  }}
+                                  onMouseLeave={e => { 
+                                    if (formData.designation !== opt) e.currentTarget.style.background = 'transparent'; 
+                                  }}
+                                >
+                                  {opt}
+                                </div>
+                              ))
+                            ) : (
+                              <div style={{ padding: '0.65rem 1rem', fontSize: '0.9rem', color: 'var(--mut)' }}>
+                                Press enter or continue typing for custom option
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {errors.designation && <div style={{ color: '#b3261e', fontSize: '0.8rem', marginTop: '0.25rem' }}>{errors.designation}</div>}
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
+                            PAN Card Number
+                          </label>
+                          <input 
+                            type="text" name="pan_no" className="form-input"
+                            style={{ height: '42px', borderRadius: '8px' }}
+                            placeholder="e.g. ABCDE1234F"
+                            maxLength="10" value={formData.pan_no} onChange={handleInputChange}
+                            required disabled={isSubmitting}
+                          />
+                          {errors.pan_no && <div style={{ color: '#b3261e', fontSize: '0.75rem', marginTop: '0.25rem' }}>{errors.pan_no}</div>}
+                        </div>
+
+                        {/* Credit Card sliding toggle (Matches Public Gold Toggle but green) */}
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
+                            Do you have a credit card?
+                          </label>
+                          <div
+                            onClick={() => {
+                              if (isSubmitting) return;
+                              const nextCC = formData.has_credit_card === 'Yes' ? 'No' : 'Yes';
+                              setFormData(prev => ({ ...prev, has_credit_card: nextCC }));
+                              validateField('has_credit_card', nextCC);
+                            }}
+                            style={{
+                              position: 'relative',
+                              display: 'flex',
+                              alignItems: 'center',
+                              width: '130px',
+                              height: '42px',
+                              background: 'var(--bg2)',
+                              border: errors.has_credit_card ? '1.5px solid #b3261e' : '1px solid var(--line)',
+                              borderRadius: '8px',
+                              padding: '4px',
+                              cursor: 'pointer',
+                              userSelect: 'none',
+                              marginTop: '0.3rem',
+                              transition: 'all 0.3s ease'
+                            }}
+                          >
+                            {formData.has_credit_card && (
+                              <div style={{
+                                position: 'absolute',
+                                left: formData.has_credit_card === 'Yes' ? 'calc(100% - 63px)' : '4px',
+                                width: '59px',
+                                height: '32px',
+                                background: 'var(--green)',
+                                borderRadius: '6px',
+                                boxShadow: '0 2px 8px rgba(47, 164, 59, 0.35)',
+                                transition: 'left 0.25s cubic-bezier(0.16, 1, 0.3, 1)'
+                              }}></div>
+                            )}
+                            <div style={{
+                              position: 'relative',
+                              zIndex: 2,
+                              display: 'flex',
+                              width: '100%',
+                              height: '100%',
+                              alignItems: 'center',
+                              justifyContent: 'space-around',
+                              fontSize: '0.85rem',
+                              fontWeight: 700
+                            }}>
+                              <span style={{ 
+                                color: formData.has_credit_card === 'No' ? '#ffffff' : 'var(--mut)',
+                                transition: 'color 0.25s ease',
+                                width: '59px',
+                                textAlign: 'center'
+                              }}>No</span>
+                              <span style={{ 
+                                color: formData.has_credit_card === 'Yes' ? '#ffffff' : 'var(--mut)',
+                                transition: 'color 0.25s ease',
+                                width: '59px',
+                                textAlign: 'center'
+                              }}>Yes</span>
+                            </div>
+                          </div>
+                          {errors.has_credit_card && <div style={{ color: '#b3261e', fontSize: '0.7rem', marginTop: '0.25rem' }}>{errors.has_credit_card}</div>}
                         </div>
                       </div>
 
-                      {/* Structured address lines */}
-                      <div style={{ borderTop: '1px dashed var(--line)', paddingTop: '10px', marginTop: '6px' }}>
-                        <div className="kiwi-two">
-                          <div className={`kiwi-field ${errors.address_house ? 'invalid' : ''}`}>
-                            <label htmlFor="address_house">Flat / House No. *</label>
+                      {/* Structured address fields (Exactly like Public Landing UI) */}
+                      <div style={{ borderTop: '1px dashed var(--line)', paddingTop: '1rem', marginTop: '0.5rem' }}>
+                        <h4 style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--green)', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Current Residence Address</h4>
+                        
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.5rem' }}>
+                          <div className="form-group" style={{ marginBottom: 0 }}>
+                            <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>Flat / House No. / Building</label>
                             <input 
-                              id="address_house" 
-                              name="address_house" 
-                              type="text" 
+                              type="text" name="address_house" className="form-input"
+                              style={{ height: '42px', borderRadius: '8px' }}
                               placeholder="Flat/House No., Bldg"
-                              value={formData.address_house}
-                              onChange={handleInputChange}
-                              disabled={isSubmitting}
+                              value={formData.address_house} onChange={handleInputChange}
+                              required disabled={isSubmitting}
                             />
-                            <div className="kiwi-err">{errors.address_house}</div>
+                            {errors.address_house && <div style={{ color: '#b3261e', fontSize: '0.75rem', marginTop: '0.25rem' }}>{errors.address_house}</div>}
                           </div>
-
-                          <div className={`kiwi-field ${errors.address_street ? 'invalid' : ''}`}>
-                            <label htmlFor="address_street">Road / Street *</label>
+                          
+                          <div className="form-group" style={{ marginBottom: 0 }}>
+                            <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>Road / Street / Landmark</label>
                             <input 
-                              id="address_street" 
-                              name="address_street" 
-                              type="text" 
+                              type="text" name="address_street" className="form-input"
+                              style={{ height: '42px', borderRadius: '8px' }}
                               placeholder="Road, Street, Area"
-                              value={formData.address_street}
-                              onChange={handleInputChange}
-                              disabled={isSubmitting}
+                              value={formData.address_street} onChange={handleInputChange}
+                              required disabled={isSubmitting}
                             />
-                            <div className="kiwi-err">{errors.address_street}</div>
+                            {errors.address_street && <div style={{ color: '#b3261e', fontSize: '0.75rem', marginTop: '0.25rem' }}>{errors.address_street}</div>}
                           </div>
                         </div>
 
-                        <div className="kiwi-two">
-                          <div className={`kiwi-field ${errors.address_locality ? 'invalid' : ''}`}>
-                            <label htmlFor="address_locality">Locality / Landmark</label>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.5rem' }}>
+                          <div className="form-group" style={{ marginBottom: 0 }}>
+                            <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>Residence Pincode</label>
+                            <div style={{ position: 'relative' }}>
+                              <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--mut)', opacity: 0.7, display: 'flex', alignItems: 'center' }}>
+                                <MapPin size={18} />
+                              </span>
+                              <input
+                                type="text" name="pincode" className="form-input"
+                                style={{ paddingLeft: '2.5rem', height: '42px', borderRadius: '8px' }}
+                                placeholder="6-digit Pincode"
+                                maxLength="6" value={formData.pincode} onChange={handleInputChange}
+                                required disabled={isSubmitting}
+                              />
+                            </div>
+                            {pincodeLoading && <div style={{ fontSize: '0.7rem', color: 'var(--green)', marginTop: '0.25rem' }}>Verifying...</div>}
+                            {pincodeLocationText && (
+                              <div style={{ fontSize: '0.7rem', color: 'var(--green)', marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.25rem', fontWeight: 600 }}>
+                                <span style={{ display: 'inline-block', width: '5px', height: '5px', borderRadius: '50%', background: 'var(--green)' }}></span>
+                                {pincodeLocationText}
+                              </div>
+                            )}
+                            {(errors.pincode || pincodeError) && <div style={{ fontSize: '0.7rem', color: '#b3261e', marginTop: '0.25rem' }}>{errors.pincode || pincodeError}</div>}
+                          </div>
+
+                          <div className="form-group" style={{ marginBottom: 0 }}>
+                            <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>Locality / Area</label>
                             {pincodeLocalities.length > 0 ? (
                               <select 
-                                id="address_locality" 
-                                name="address_locality"
-                                value={formData.address_locality}
-                                onChange={handleInputChange}
-                                disabled={isSubmitting}
+                                name="address_locality" className="form-input"
+                                style={{ height: '42px', borderRadius: '8px', padding: '0 0.75rem', background: '#ffffff', color: 'var(--ink)', border: '1.5px solid var(--line)' }}
+                                value={formData.address_locality} onChange={handleInputChange}
+                                required disabled={isSubmitting}
                               >
                                 {pincodeLocalities.map((loc, idx) => (
                                   <option key={idx} value={loc}>{loc}</option>
@@ -1174,45 +1467,51 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
                               </select>
                             ) : (
                               <input 
-                                id="address_locality" 
-                                name="address_locality" 
-                                type="text" 
+                                type="text" name="address_locality" className="form-input"
+                                style={{ height: '42px', borderRadius: '8px' }}
                                 placeholder="Locality name"
-                                value={formData.address_locality}
-                                onChange={handleInputChange}
-                                disabled={isSubmitting}
+                                value={formData.address_locality} onChange={handleInputChange}
+                                required disabled={isSubmitting}
                               />
                             )}
-                            <div className="kiwi-err">{errors.address_locality}</div>
+                            {errors.address_locality && <div style={{ color: '#b3261e', fontSize: '0.75rem', marginTop: '0.25rem' }}>{errors.address_locality}</div>}
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.25rem' }}>
+                          <div className="form-group" style={{ marginBottom: 0 }}>
+                            <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>City</label>
+                            <input 
+                              type="text" name="address_city" className="form-input"
+                              style={{ height: '42px', borderRadius: '8px' }}
+                              placeholder="City"
+                              value={formData.address_city} onChange={handleInputChange}
+                              required disabled={isSubmitting}
+                            />
+                            {errors.address_city && <div style={{ color: '#b3261e', fontSize: '0.75rem', marginTop: '0.25rem' }}>{errors.address_city}</div>}
                           </div>
 
-                          <div className="kiwi-two">
-                            <div className={`kiwi-field ${errors.address_city ? 'invalid' : ''}`}>
-                              <label htmlFor="address_city">City</label>
-                              <input 
-                                id="address_city" 
-                                name="address_city" 
-                                type="text" 
-                                placeholder="City"
-                                value={formData.address_city}
-                                onChange={handleInputChange}
-                                disabled={isSubmitting}
-                              />
-                              <div className="kiwi-err">{errors.address_city}</div>
-                            </div>
-                            <div className={`kiwi-field ${errors.address_state ? 'invalid' : ''}`}>
-                              <label htmlFor="address_state">State</label>
-                              <input 
-                                id="address_state" 
-                                name="address_state" 
-                                type="text" 
-                                placeholder="State"
-                                value={formData.address_state}
-                                onChange={handleInputChange}
-                                disabled={isSubmitting}
-                              />
-                              <div className="kiwi-err">{errors.address_state}</div>
-                            </div>
+                          <div className="form-group" style={{ marginBottom: 0 }}>
+                            <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>State</label>
+                            <select 
+                              name="address_state" className="form-input"
+                              style={{ height: '42px', borderRadius: '8px', padding: '0 0.75rem', background: '#ffffff', color: 'var(--ink)', border: '1.5px solid var(--line)' }}
+                              value={formData.address_state} onChange={handleInputChange}
+                              required disabled={isSubmitting}
+                            >
+                              <option value="">Select State</option>
+                              {[
+                                "Andaman and Nicobar Islands", "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar",
+                                "Chandigarh", "Chhattisgarh", "Dadra and Nagar Haveli and Daman and Diu", "Delhi", "Goa",
+                                "Gujarat", "Haryana", "Himachal Pradesh", "Jammu and Kashmir", "Jharkhand", "Karnataka",
+                                "Kerala", "Ladakh", "Lakshadweep", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya",
+                                "Mizoram", "Nagaland", "Odisha", "Puducherry", "Punjab", "Rajasthan", "Sikkim",
+                                "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal"
+                              ].map((st, idx) => (
+                                <option key={idx} value={st}>{st}</option>
+                              ))}
+                            </select>
+                            {errors.address_state && <div style={{ color: '#b3261e', fontSize: '0.75rem', marginTop: '0.25rem' }}>{errors.address_state}</div>}
                           </div>
                         </div>
                       </div>
@@ -1229,14 +1528,14 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
                         <span>I authorise FinMantra and its banking partners to contact me about this application via call, SMS, WhatsApp or email, and I agree to the Terms &amp; Privacy Policy. This overrides any DND registration.</span>
                       </label>
 
-                      <button type="submit" className="kiwi-btn" disabled={isSubmitting}>
+                      <button type="submit" className="btn-primary" style={{ width: '100%', height: '46px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }} disabled={isSubmitting}>
                         {isSubmitting ? (
                           <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             Processing... <RefreshCw size={18} className="spin" />
                           </span>
                         ) : (
                           <>
-                            Apply now <span className="kiwi-arw">&rarr;</span>
+                            Apply now <ArrowRight size={18} />
                           </>
                         )}
                       </button>
@@ -1400,7 +1699,7 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
             <div className="kiwi-cols">
               <div>
                 <div className="kiwi-brand" style={{ fontSize: '18px', fontWeight: 800, marginBottom: '10px' }}>
-                  kiwi <span className="kiwi-tag" style={{ color: '#9dbf8b' }}>RuPay Credit Card</span>
+                  kiwi <span className="kiwi-tag" style={{ color: '#9dbf8b' }}>Credit Card by Yes Bank</span>
                 </div>
                 <p style={{ maxWidth: '40ch', marginBottom: '16px' }}>FinMantra is an authorized partner facilitating secure credit card applications for licensed banking partners.</p>
               </div>
@@ -1422,7 +1721,7 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
               </div>
             </div>
             <div className="kiwi-disc">
-              <p>Disclaimer: Credit card issuance is subject to credit profile checks and sole discretion of banking partners. FinMantra does not charge any application or processing fee.</p>
+              <p>Disclaimer: Credit card issuance is subject to credit profile checks and sole discretion of Yes Bank. FinMantra does not charge any application or processing fee.</p>
               <p style={{ marginTop: '12px', color: '#7a9e69' }}>&copy; {new Date().getFullYear()} FinMantra. All rights reserved.</p>
             </div>
           </div>
@@ -1458,9 +1757,10 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
               </div>
             )}
 
-            <div className="kiwi-field">
+            <div className="form-group">
               <input
                 type="text"
+                className="form-input"
                 maxLength="6"
                 placeholder="Enter 6-digit OTP"
                 value={otpVal}
@@ -1478,18 +1778,18 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
             <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
               <button 
                 onClick={handleVerifyOtp} 
-                className="kiwi-btn" 
-                style={{ flex: 1, height: '44px', fontSize: '14px', padding: 0 }}
+                className="btn-primary" 
+                style={{ flex: 1, height: '44px', fontSize: '14px', padding: 0, borderRadius: '8px' }}
                 disabled={isSubmitting || otpVal.length !== 6}
               >
                 {isSubmitting ? 'Verifying...' : 'Verify OTP'}
               </button>
               <button
                 onClick={handleResendOtp}
-                className="kiwi-btn"
+                className="btn-primary"
                 style={{
-                  flex: 1, height: '44px', fontSize: '14px', padding: 0,
-                  background: 'none', color: 'var(--cta)', border: '1.5px solid var(--line)',
+                  flex: 1, height: '44px', fontSize: '14px', padding: 0, borderRadius: '8px',
+                  background: 'none !important', color: 'var(--cta) !important', border: '1.5px solid var(--line) !important',
                   boxShadow: 'none'
                 }}
                 disabled={resendTimer > 0 || isSubmitting}
