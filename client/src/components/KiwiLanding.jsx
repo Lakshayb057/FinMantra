@@ -911,8 +911,11 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
         {/* kiwi_landing Header */}
         <header className="kiwi-header">
           <div className="kiwi-wrap kiwi-nav">
-            <div className="kiwi-brand">
-              <span className="kiwi-dot"></span>kiwi <span className="kiwi-tag">Credit Card by Yes Bank</span>
+            <div className="kiwi-brand" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+              <img src="/logo.jpg" alt="FinMantra Logo" style={{ height: '36px', width: '36px', borderRadius: '8px', objectFit: 'cover' }} />
+              <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: '1.3rem', color: 'var(--ink)' }}>FinMantra</span>
+              <span style={{ height: '14px', width: '1.5px', background: 'var(--line)', margin: '0 4px' }}></span>
+              <span className="kiwi-tag" style={{ marginLeft: 0 }}>Kiwi Credit Card by Yes Bank</span>
             </div>
             <div className="kiwi-secure" style={{ fontSize: '13px', color: 'var(--mut)', display: 'flex', alignItems: 'center', gap: '6px' }}>
               🔒 Secure application
