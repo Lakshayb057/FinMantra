@@ -82,7 +82,7 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
     };
     const loadCards = async () => {
       try {
-        const res = await fetch(`${API_URL}/cards/active`);
+        const res = await fetch(`${API_URL}/cards`);
         if (res.ok) {
           const data = await res.json();
           setCards(data || []);
