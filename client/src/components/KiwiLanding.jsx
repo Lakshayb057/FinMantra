@@ -1,29 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowRight, User, Phone, Mail, Calendar, MapPin, CheckCircle, RefreshCw, X, ShieldAlert, Briefcase, ChevronDown, Lock } from 'lucide-react';
 
-const COMMON_DESIGNATIONS = [
-  "Software Engineer",
-  "Manager",
-  "Associate",
-  "Analyst",
-  "Consultant",
-  "Director",
-  "Executive",
-  "Officer",
-  "Engineer",
-  "Architect",
-  "Teacher / Professor",
-  "Doctor",
-  "Chartered Accountant (CA)",
-  "Sales Representative",
-  "HR Specialist",
-  "Proprietor / Owner",
-  "Student",
-  "Retired",
-  "Housewife",
-  "Other"
-];
-
 // Offline fallback helper to resolve Indian pincodes to State/Region
 const getStateFromPincode = (pin) => {
   const prefix = String(pin).substring(0, 2);
@@ -52,29 +29,18 @@ const getStateFromPincode = (pin) => {
 export default function KiwiLanding({ navigateTo, utmParams }) {
   const API_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.port === '5173') ? 'http://localhost:5000/api' : '/api';
 
-  const [formStep, setFormStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
-  const [currentUrn, setCurrentUrn] = useState('');
 
   // Form State
   const [formData, setFormData] = useState({
     fullName: '',
     phone: '',
     email: '',
-    city: '',
-    employment: '',
-    income: '',
-    has_credit_card: '',
     pincode: '',
-    monthly_income: '',
     pan_no: '',
-    dob: '',
-    mother_name: '',
-    current_address: '',
-    designation: '',
-    address_house: '',
-    address_street: '',
+    employment: '',
+    monthly_income: '',
     address_locality: '',
     address_city: '',
     address_state: ''
@@ -83,12 +49,6 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
   const [errors, setErrors] = useState({});
   const [settings, setSettings] = useState({});
   const [cards, setCards] = useState([]);
-
-  // Search/Select Dropdown States & Refs
-  const [employmentDropdownOpen, setEmploymentDropdownOpen] = useState(false);
-  const [designationDropdownOpen, setDesignationDropdownOpen] = useState(false);
-  const empDropdownRef = useRef(null);
-  const designationDropdownRef = useRef(null);
 
   // Pincode Lookup & Serviceability States
   const [pincodeLoading, setPincodeLoading] = useState(false);
@@ -101,6 +61,7 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
   const [otpVal, setOtpVal] = useState('');
   const [otpStatus, setOtpStatus] = useState('');
   const [isPhoneVerified, setIsPhoneVerified] = useState(false);
+  const isPhoneVerifiedRef = useRef(false);
   const [resendTimer, setResendTimer] = useState(0);
   const [simulatedOtpText, setSimulatedOtpText] = useState('');
 
@@ -140,21 +101,7 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
     }
   }, [resendTimer]);
 
-  // Click outside to close dropdowns
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (empDropdownRef.current && !empDropdownRef.current.contains(e.target)) {
-        setEmploymentDropdownOpen(false);
-      }
-      if (designationDropdownRef.current && !designationDropdownRef.current.contains(e.target)) {
-        setDesignationDropdownOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  // Auto-Lookup Pincode API
+  // Auto-Lookup Pincode API & serviceability checks
   useEffect(() => {
     const lookupPincode = async () => {
       const pin = formData.pincode.trim();
@@ -170,21 +117,27 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
 
       try {
         const res = await fetch(`${API_URL}/pincode/lookup/${pin}`);
+        let city = '';
+        let state = '';
+        
         if (res.ok) {
           const data = await res.json();
-          setPincodeLocationText(`${data.city}, ${data.state}`);
+          city = data.city || '';
+          state = data.state || '';
+          setPincodeLocationText(`${city}, ${state}`);
           setPincodeLocalities(data.localities || []);
           
           setFormData(prev => ({
             ...prev,
-            address_city: data.city || '',
-            address_state: data.state || '',
+            address_city: city,
+            address_state: state,
             address_locality: data.localities && data.localities.length > 0 ? data.localities[0] : ''
           }));
         } else {
           setPincodeLocalities([]);
           const fallbackState = getStateFromPincode(pin);
           if (fallbackState !== 'Other') {
+            state = fallbackState;
             setPincodeLocationText(`${fallbackState} (Estimated)`);
             setFormData(prev => ({
               ...prev,
@@ -192,7 +145,54 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
             }));
           } else {
             setPincodeError('Pincode not found');
+            setErrors(prev => ({ ...prev, pincode: 'Pincode not found' }));
+            setPincodeLoading(false);
+            return;
           }
+        }
+
+        // Validate serviceability against whitelist/blacklist settings
+        const pinMode = settings.pincode_serviceability_mode || 'all';
+        const pinListRaw = settings.pincode_serviceability_list || '';
+        let errorText = '';
+        if (pinMode !== 'all') {
+          const pinArray = pinListRaw.split(',').map(p => p.trim()).filter(Boolean);
+          const isInList = pinArray.includes(pin);
+          if (pinMode === 'whitelist' && !isInList) {
+            errorText = 'Credit card services are not available at your pincode currently.';
+          }
+          if (pinMode === 'blacklist' && isInList) {
+            errorText = 'Credit card services are not available at your pincode currently.';
+          }
+        }
+
+        // Validate Yes Bank specific rules
+        if (!errorText && settings.bank_pincode_rules) {
+          let bankRules = {};
+          try {
+            bankRules = typeof settings.bank_pincode_rules === 'string'
+              ? JSON.parse(settings.bank_pincode_rules)
+              : settings.bank_pincode_rules;
+          } catch (e) {}
+          const rule = bankRules['Yes Bank'];
+          if (rule && rule.mode === 'list') {
+            const pinArray = String(rule.list || '').split(',').map(p => p.trim()).filter(Boolean);
+            if (!pinArray.includes(pin)) {
+              errorText = 'Yes Bank cards facilities are currently not available for your location.';
+            }
+          }
+        }
+
+        if (errorText) {
+          setPincodeError(errorText);
+          setErrors(prev => ({ ...prev, pincode: errorText }));
+        } else {
+          setPincodeError('');
+          setErrors(prev => {
+            const updated = { ...prev };
+            delete updated.pincode;
+            return updated;
+          });
         }
       } catch (err) {
         console.error('[Pincode Lookup] Error:', err);
@@ -203,7 +203,7 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
     };
 
     lookupPincode();
-  }, [formData.pincode]);
+  }, [formData.pincode, settings]);
 
   // Validate Field function
   const validateField = (name, value) => {
@@ -223,7 +223,7 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
           }
         }
       } else {
-        errorText = 'Full name is required';
+        errorText = 'Please enter your name.';
       }
     }
 
@@ -232,63 +232,54 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
         if (!/^[6-9]/.test(value)) {
           errorText = 'Mobile number should start with 6,7,8,9 only';
         } else if (value.length !== 10) {
-          errorText = 'Mobile number must be exactly 10 digits.';
+          errorText = 'Enter a valid 10-digit mobile.';
         }
       } else {
-        errorText = 'Mobile number is required';
+        errorText = 'Enter a valid 10-digit mobile.';
       }
     }
 
     if (name === 'email') {
       if (value) {
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
-          errorText = 'Please enter valid Email';
+          errorText = 'Enter a valid email.';
         }
       } else {
-        errorText = 'Email is required';
+        errorText = 'Enter a valid email.';
       }
     }
 
     if (name === 'pan_no') {
       if (value) {
         if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(value)) {
-          errorText = 'Invalid PAN card format (e.g. ABCDE1234F).';
+          errorText = 'Enter a valid PAN (e.g. ABCDE1234F).';
         }
       } else {
-        errorText = 'PAN Number is required';
+        errorText = 'Enter a valid PAN (e.g. ABCDE1234F).';
       }
     }
 
     if (name === 'pincode') {
       if (value) {
         if (value.length !== 6 || !/^\d+$/.test(value)) {
-          errorText = 'Pincode must be exactly 6 digits.';
+          errorText = 'Enter a valid 6-digit pincode.';
+        } else if (pincodeError) {
+          errorText = pincodeError;
         }
       } else {
-        errorText = 'Pincode is required';
+        errorText = 'Enter a valid 6-digit pincode.';
+      }
+    }
+
+    if (name === 'employment') {
+      if (!value) {
+        errorText = 'Please select one.';
       }
     }
 
     if (name === 'monthly_income') {
-      if (value) {
-        const numeric = parseInt(value, 10);
-        if (isNaN(numeric) || numeric < 1000) {
-          errorText = 'Please enter a valid monthly income.';
-        }
-      } else {
-        errorText = 'Monthly income is required';
-      }
-    }
-
-    if (name === 'dob') {
       if (!value) {
-        errorText = 'Date of birth is required';
-      }
-    }
-
-    if (name === 'mother_name') {
-      if (!value || value.trim().length < 3) {
-        errorText = "Mother's name is required";
+        errorText = 'Please select your income range.';
       }
     }
 
@@ -305,73 +296,29 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
+    let stateKey = name;
 
-    if (name === 'phone' || name === 'pincode' || name === 'monthly_income') {
-      const cleanVal = value.replace(/\D/g, '');
-      setFormData(prev => ({ ...prev, [name]: cleanVal }));
-      validateField(name, cleanVal);
+    // Map input names from HTML to React state keys
+    if (name === 'full_name') stateKey = 'fullName';
+    if (name === 'mobile') stateKey = 'phone';
+    if (name === 'pan') stateKey = 'pan_no';
+
+    if (stateKey === 'phone' || stateKey === 'pincode') {
+      const cleanVal = value.replace(/\D/g, '').slice(0, stateKey === 'phone' ? 10 : 6);
+      setFormData(prev => ({ ...prev, [stateKey]: cleanVal }));
+      validateField(stateKey, cleanVal);
       return;
     }
 
-    if (name === 'pan_no') {
+    if (stateKey === 'pan_no') {
       const cleanVal = value.toUpperCase().slice(0, 10);
-      setFormData(prev => ({ ...prev, [name]: cleanVal }));
-      validateField(name, cleanVal);
+      setFormData(prev => ({ ...prev, [stateKey]: cleanVal }));
+      validateField(stateKey, cleanVal);
       return;
     }
 
-    setFormData(prev => ({ ...prev, [name]: value }));
-    validateField(name, value);
-  };
-
-  const validateStep = (step) => {
-    const newErrors = {};
-
-    if (step === 1) {
-      if (!formData.fullName || formData.fullName.trim().length < 3) {
-        newErrors.fullName = 'Full Name must be at least 3 characters.';
-      }
-      if (!formData.phone || formData.phone.length !== 10) {
-        newErrors.phone = 'Mobile number must be exactly 10 digits.';
-      }
-      if (!formData.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-        newErrors.email = 'Please enter a valid email.';
-      }
-      if (!formData.dob) {
-        newErrors.dob = 'Date of Birth is required';
-      }
-      if (!formData.mother_name || formData.mother_name.trim().length < 3) {
-        newErrors.mother_name = "Mother's Name is required";
-      }
-    } else {
-      if (!formData.employment) {
-        newErrors.employment = 'Employment Type is required';
-      }
-      if (!formData.monthly_income || parseInt(formData.monthly_income, 10) < 1000) {
-        newErrors.monthly_income = 'Monthly income is required';
-      }
-      if (!formData.designation || !formData.designation.trim()) {
-        newErrors.designation = 'Designation is required';
-      }
-      if (!formData.pan_no || !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(formData.pan_no)) {
-        newErrors.pan_no = 'Invalid PAN card format (e.g. ABCDE1234F)';
-      }
-      if (!formData.has_credit_card) {
-        newErrors.has_credit_card = 'Please select Yes or No';
-      }
-      if (!formData.pincode || formData.pincode.length !== 6) {
-        newErrors.pincode = 'Pincode must be exactly 6 digits.';
-      }
-      if (!formData.address_house || !formData.address_house.trim()) {
-        newErrors.address_house = 'House/Flat No is required';
-      }
-      if (!formData.address_street || !formData.address_street.trim()) {
-        newErrors.address_street = 'Street details are required';
-      }
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    setFormData(prev => ({ ...prev, [stateKey]: value }));
+    validateField(stateKey, value);
   };
 
   // Send Step 1 OTP
@@ -421,11 +368,16 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
 
       if (res.ok) {
         setOtpStatus('Verified successfully!');
+        isPhoneVerifiedRef.current = true;
         setIsPhoneVerified(true);
         setIsSubmitting(false);
         setTimeout(() => {
           setShowOtpModal(false);
           setOtpVal('');
+          // Automatically trigger form submission now that verification is complete
+          setTimeout(() => {
+            handleFormSubmit();
+          }, 100);
         }, 1500);
       } else {
         setOtpStatus(`Verification failed: ${data.error}`);
@@ -465,83 +417,91 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
     }
   };
 
-  // Continue to Step 2
-  const handleContinueToStep2 = async () => {
-    if (!isPhoneVerified) {
-      setFormError('Please verify your contact number with OTP first.');
+  // Final Form Submit (Single-Step)
+  const handleFormSubmit = async (e) => {
+    if (e) e.preventDefault();
+    setFormError('');
+    setPincodeError('');
+
+    // Strict validation on all 7 fields
+    const newErrors = {};
+    if (!formData.fullName || formData.fullName.trim().length < 3) {
+      newErrors.fullName = 'Please enter your name.';
+    } else {
+      const trimmed = formData.fullName.trim();
+      if (!/^[A-Za-z\s]+$/.test(trimmed)) {
+        newErrors.fullName = 'Full Name must contain letters and spaces only.';
+      } else {
+        const words = trimmed.split(/\s+/).filter(Boolean);
+        if (words.length < 2) {
+          newErrors.fullName = 'Please enter your Last Name / Father Name';
+        }
+      }
+    }
+
+    if (!formData.phone || formData.phone.length !== 10 || !/^[6-9]/.test(formData.phone)) {
+      newErrors.phone = 'Enter a valid 10-digit mobile.';
+    }
+
+    if (!formData.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      newErrors.email = 'Enter a valid email.';
+    }
+
+    if (!formData.pincode || formData.pincode.length !== 6 || !/^\d+$/.test(formData.pincode)) {
+      newErrors.pincode = 'Enter a valid 6-digit pincode.';
+    } else if (pincodeError) {
+      newErrors.pincode = pincodeError;
+    }
+
+    if (!formData.pan_no || !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(formData.pan_no)) {
+      newErrors.pan_no = 'Enter a valid PAN (e.g. ABCDE1234F).';
+    }
+
+    if (!formData.employment) {
+      newErrors.employment = 'Please select one.';
+    }
+
+    if (!formData.monthly_income) {
+      newErrors.monthly_income = 'Please select your income range.';
+    }
+
+    setErrors(newErrors);
+    if (Object.keys(newErrors).length > 0) {
+      setFormError('Please correct the highlighted errors before submitting.');
       return;
     }
-    if (!validateStep(1)) return;
+
+    // Trigger phone verification modal if not yet verified
+    if (!isPhoneVerifiedRef.current) {
+      sendStep1Otp();
+      return;
+    }
 
     setIsSubmitting(true);
-    setFormError('');
     try {
-      const leadRes = await fetch(`${API_URL}/leads`, {
+      const compiledAddress = `${formData.address_locality || 'N/A'}, ${formData.address_city || 'N/A'}, ${formData.address_state || 'N/A'} - ${formData.pincode}`;
+      
+      // Find Yes Bank Kiwi Card
+      let matchedKiwiCard = cards.find(c => c.id === 'kiwi' || c.name.toLowerCase().includes('kiwi'));
+      const cardIdPayload = matchedKiwiCard ? matchedKiwiCard.id : null;
+
+      const res = await fetch(`${API_URL}/leads`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           full_name: formData.fullName,
           phone: formData.phone,
           email: formData.email,
-          dob: formData.dob || null,
-          mother_name: formData.mother_name || null,
-          source: 'kiwi',
-          consent: true,
-          ...utmParams,
-          utm_params: utmParams || null
-        })
-      });
-
-      const leadData = await leadRes.json();
-      if (leadRes.ok) {
-        setCurrentUrn(leadData.urn);
-        setFormStep(2);
-      } else {
-        setFormError(leadData.error || 'Failed to register details. Please try again.');
-      }
-    } catch (err) {
-      setFormError('Network error. Unable to contact registration servers.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  // Final Form Submit (Step 2)
-  const handleFormSubmit = async (e) => {
-    if (e) e.preventDefault();
-    setFormError('');
-    setPincodeError('');
-
-    if (formStep === 1) {
-      handleContinueToStep2();
-      return;
-    }
-
-    if (!validateStep(2)) {
-      setFormError('Please correct the highlighted errors before submitting.');
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      const compiledAddress = `${formData.address_house.trim()}, ${formData.address_street.trim()}${formData.address_locality ? ', ' + formData.address_locality.trim() : ''}, ${formData.address_city.trim()}, ${formData.address_state.trim()} - ${formData.pincode.trim()}`;
-      
-      // Find Kiwi card if configured
-      let matchedKiwiCard = cards.find(c => c.id === 'kiwi' || c.name.toLowerCase().includes('kiwi'));
-      const cardIdPayload = matchedKiwiCard ? matchedKiwiCard.id : null;
-
-      const res = await fetch(`${API_URL}/leads/public/urn/${currentUrn}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
           employment: formData.employment,
           monthly_income: formData.monthly_income,
-          designation: formData.designation || null,
           pan_no: formData.pan_no ? String(formData.pan_no).trim().toUpperCase() : null,
-          has_credit_card: formData.has_credit_card,
           pincode: formData.pincode,
           current_address: compiledAddress,
-          card_id: cardIdPayload
+          consent: true,
+          source: 'kiwi',
+          card_id: cardIdPayload,
+          ...utmParams,
+          utm_params: utmParams || null
         })
       });
 
@@ -549,7 +509,7 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
       if (res.ok) {
         const cacheData = {
           name: formData.fullName,
-          urn: currentUrn,
+          urn: data.urn,
           redirectUrl: data.redirectUrl,
           cardName: 'Kiwi Credit Card',
           bank: 'Yes Bank',
@@ -558,33 +518,12 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
         sessionStorage.setItem('finmantra_applied_lead', JSON.stringify(cacheData));
         window.location.replace(data.redirectUrl);
       } else {
-        setFormError(data.error || 'Failed to complete application. Please try again.');
+        setFormError(data.error || 'Failed to submit application. Please try again.');
       }
     } catch (err) {
       setFormError('Network error. Unable to contact servers.');
     } finally {
       setIsSubmitting(false);
-    }
-  };
-
-  const formSchema = {
-    fields: {
-      fullName: { visible: true, required: true, label: "Full Name (as per PAN Card)", placeholder: "Enter your full name as per PAN Card" },
-      phone: { visible: true, required: true, label: "Mobile Number", placeholder: "WhatsApp number (10 digits)" },
-      email: { visible: true, required: true, label: "Email address", placeholder: "e.g. name@example.com" },
-      has_credit_card: { visible: true, required: true, label: "Do you already have a credit card?" },
-      employment: {
-        visible: true,
-        required: true,
-        label: "Employment Type",
-        options: [
-          { value: "Salaried", enabled: true },
-          { value: "Self Employed (Business)", enabled: true },
-          { value: "Self Employed (Professional)", enabled: true }
-        ]
-      },
-      monthly_income: { visible: true, required: true, label: "Net Monthly Income", placeholder: "Net Monthly Income" },
-      pincode: { visible: true, required: true, label: "Residence Pincode", placeholder: "Residence Pincode" }
     }
   };
 
@@ -610,21 +549,6 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
           background: var(--bg);
           line-height: 1.5;
           -webkit-font-smoothing: antialiased;
-        }
-        .kiwi-body .form-input:focus, .kiwi-body .form-select:focus {
-          border-color: var(--green) !important;
-          box-shadow: 0 0 0 3px rgba(47,164,59,.15) !important;
-        }
-        .kiwi-body .btn-primary {
-          background: var(--cta) !important;
-          color: var(--ctatx) !important;
-          border: none !important;
-          box-shadow: 0 14px 26px rgba(15,90,36,.28) !important;
-          transition: transform .15s ease, box-shadow .15s ease !important;
-        }
-        .kiwi-body .btn-primary:hover {
-          transform: translateY(-2px) !important;
-          box-shadow: 0 18px 32px rgba(15,90,36,.34) !important;
         }
         .kiwi-acc {
           font-family: 'Instrument Serif', Georgia, serif;
@@ -681,7 +605,7 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          height: 58px;
+          height: 64px;
         }
         .kiwi-brand {
           display: flex;
@@ -689,12 +613,6 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
           gap: .5em;
           font-weight: 700;
           font-size: 19px;
-        }
-        .kiwi-brand .kiwi-dot {
-          width: 11px;
-          height: 11px;
-          border-radius: 50%;
-          background: var(--green);
         }
         .kiwi-brand .kiwi-tag {
           font-weight: 400;
@@ -731,7 +649,7 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
           border-radius: 999px;
           margin-bottom: 18px;
         }
-        .kiwi-hero h1 { font-size: clamp(34px, 5vw, 58px); }
+        .kiwi-hero h1 { font-size: clamp(34px, 5vw, 58px); line-height: 1.15; }
         .kiwi-hero h1 .kiwi-acc { font-size: clamp(37px, 5.3vw, 63px); }
         .kiwi-hero p.kiwi-sub { font-size: clamp(16px, 2vw, 20px); color: var(--mut); margin: 16px 0 20px; max-width: 34ch; }
         .kiwi-ticks { display: grid; gap: 10px; margin-top: 6px; }
@@ -789,8 +707,23 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
         .kiwi-formcard .ff-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
         .kiwi-formcard h2 { font-size: 23px; }
         .kiwi-formcard .kiwi-pill { font-size: 12px; font-weight: 700; color: var(--cta); background: #EAF6CF; border-radius: 999px; padding: 5px 11px; }
-        .kiwi-formcard .kiwi-fine { color: var(--mut); font-size: 13.5px; margin-bottom: 16px; }
+        .kiwi-formcard .kiwi-fine { color: var(--mut); font-size: 13.5px; margin-bottom: 16px; text-align: left; }
         
+        .kiwi-field { margin-bottom: 13px; text-align: left; }
+        .kiwi-field label { display: block; font-size: 13.5px; font-weight: 600; margin-bottom: 6px; color: var(--ink); }
+        .kiwi-field input, .kiwi-field select {
+          width: 100%; padding: 13px 14px; border: 1.5px solid var(--line); border-radius: 12px;
+          font-family: inherit; font-size: 16px; color: var(--ink); background: #fff; transition: border-color .15s, box-shadow .15s;
+        }
+        .kiwi-field input:focus, .kiwi-field select:focus {
+          outline: none; border-color: var(--green); box-shadow: 0 0 0 3px rgba(47,164,59,.15);
+        }
+        .kiwi-two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .kiwi-consent { display: flex; gap: 10px; align-items: flex-start; font-size: 12.5px; color: var(--mut); margin: 4px 0 15px; text-align: left; cursor: pointer; }
+        .kiwi-consent input { margin-top: 3px; accent-color: var(--green); width: 16px; height: 16px; flex-shrink: 0; }
+        .kiwi-field.invalid input, .kiwi-field.invalid select { border-color: #b3261e; }
+        .kiwi-err { color: #b3261e; font-size: 12.5px; margin-top: 5px; font-weight: 500; display: block; }
+
         .kiwi-strip { background: #0C2E15; color: #CFE7BC; }
         .kiwi-strip .kiwi-wrap { display: flex; flex-wrap: wrap; gap: 10px 28px; justify-content: center; padding: 14px 20px; font-size: 13.5px; }
         .kiwi-strip span { display: inline-flex; align-items: center; gap: 8px; }
@@ -800,14 +733,14 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
         .kiwi-kicker { font-size: 13px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--green); margin-bottom: 12px; }
         .kiwi-h2 { font-size: clamp(26px, 3.6vw, 40px); }
         .kiwi-lead { color: var(--mut); font-size: 17px; max-width: 60ch; margin-top: 10px; }
-        .kiwi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 30px; }
+        .kiwi-grid-why { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 30px; }
         
         .kiwi-card {
           background: var(--panel);
           border: 1px solid var(--line);
           border-radius: 20px;
-          padding: 22px;
-          box-shadow: 0 10px 24px rgba(18,60,29,.05);
+          padding: 24px;
+          box-shadow: 0 10px 24px rgba(18,60,29,.04);
         }
         .kiwi-card .kiwi-ic {
           width: 42px;
@@ -822,26 +755,25 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
           margin-bottom: 13px;
           font-weight: 700;
         }
-        .kiwi-card h3 { font-size: 18px; margin-bottom: 5px; }
+        .kiwi-card h3 { font-size: 18px; margin-bottom: 8px; }
         .kiwi-card p { color: var(--mut); font-size: 14.5px; }
         
-        .kiwi-ladder-sec { background: linear-gradient(180deg, var(--bg), #F2F7E6); }
-        .kiwi-ladder { display: flex; align-items: flex-end; gap: 14px; margin-top: 32px; }
-        .kiwi-rung { flex: 1; display: flex; flex-direction: column; align-items: center; }
-        .kiwi-rung .kiwi-pct { font-size: clamp(28px, 4.6vw, 50px); font-weight: 700; margin-bottom: 10px; }
-        .kiwi-rung .kiwi-bar {
-          width: 78%;
-          border-radius: 16px 16px 0 0;
-          background: linear-gradient(180deg, var(--green), var(--cta));
-          color: var(--ctatx);
-          font-weight: 600;
-          font-size: 13px;
-          padding-top: 12px;
+        .kiwi-neon-sec { background: linear-gradient(180deg, var(--bg), #F2F7E6); }
+        .kiwi-neon-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 32px; }
+        .kiwi-neon-card {
+          background: #ffffff;
+          border: 1px solid var(--line);
+          border-radius: 24px;
+          padding: 30px 24px;
           text-align: center;
+          box-shadow: 0 12px 28px rgba(18,60,29,.05);
+          transition: transform 0.2s;
         }
-        .kiwi-rung .kiwi-sp { font-weight: 700; margin-top: 11px; font-size: 15px; }
-        .kiwi-rung .kiwi-lo { color: var(--green); font-weight: 700; font-size: 12.5px; margin-top: 4px; }
-        .kiwi-qual { margin-top: 18px; font-size: 13.5px; color: var(--mut); }
+        .kiwi-neon-card:hover { transform: translateY(-4px); }
+        .kiwi-neon-rate { font-size: clamp(34px, 4vw, 44px); font-weight: 800; color: var(--green); line-height: 1; }
+        .kiwi-neon-spend { font-weight: 700; margin: 10px 0 4px; font-size: 16px; }
+        .kiwi-neon-benefit { color: var(--mut); font-size: 14px; }
+        .kiwi-qual { margin-top: 22px; font-size: 13.5px; color: var(--mut); line-height: 1.6; }
         
         .kiwi-steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 30px; }
         .kiwi-step { background: var(--panel); border: 1px solid var(--line); border-radius: 20px; padding: 20px; }
@@ -885,44 +817,93 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
           .kiwi-hero-grid {
             grid-template-columns: 1fr;
             grid-template-areas: "copy" "form" "visual";
-            padding-top: 26px;
-            padding-bottom: 36px;
-            gap: 22px;
+            padding-top: 22px;
+            padding-bottom: 34px;
+            gap: 14px;
           }
           .kiwi-hero p.kiwi-sub { margin-bottom: 6px; }
-          .kiwi-cardart { justify-content: center; margin-top: 18px; }
-          .kiwi-cardart img { width: min(78%, 320px); }
-          .kiwi-coin.c1 { left: 64%; }
-          .kiwi-grid { grid-template-columns: 1fr; }
+          .kiwi-cardart { justify-content: center; margin: 6px 0 2px; }
+          .kiwi-cardart img { width: min(56%, 224px); }
+          .kiwi-cardart .kiwi-halo { width: 70%; height: 64%; left: 15%; }
+          .kiwi-coin.c1 { left: 62%; width: 46px; height: 46px; font-size: 15px; }
+          .kiwi-grid-why { grid-template-columns: 1fr; }
+          .kiwi-neon-grid { grid-template-columns: 1fr; }
           .kiwi-steps { grid-template-columns: 1fr 1fr; }
           .kiwi-footer .kiwi-cols { grid-template-columns: 1fr; }
           .kiwi-section { padding: 44px 0; }
-          .kiwi-ladder { gap: 8px; }
           .kiwi-nav .kiwi-secure { display: none; }
           .kiwi-hero .kiwi-ticks { display: none; }
           .kiwi-hero h1 { font-size: 30px; }
           .kiwi-hero h1 .kiwi-acc { font-size: 33px; }
           .kiwi-hero p.kiwi-sub { font-size: 15.5px; margin: 12px 0 4px; }
           .kiwi-eyebrow { margin-bottom: 14px; font-size: 12.5px; }
+          .kiwi-two { grid-template-columns: 1fr; gap: 8px; }
+        }
+        
+        .kiwi-otp-modal {
+          position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+          background: rgba(18, 60, 29, 0.45); backdrop-filter: blur(5px);
+          display: flex; align-items: center; justify-content: center; z-index: 9999;
+        }
+        .kiwi-otp-panel {
+          max-width: 420px; width: 90%; padding: 30px;
+          background: #fff; border: 1px solid var(--line); border-radius: 24px;
+          box-shadow: 0 26px 54px rgba(18,60,29,.14); position: relative; text-align: center;
+        }
+        .kiwi-otp-icon {
+          width: 54px; height: 54px; border-radius: 50%;
+          background: var(--bg2); color: var(--green);
+          display: flex; align-items: center; justify-content: center;
+          font-size: 24px; margin: 0 auto 15px auto;
+        }
+        .kiwi-otp-btn-verify {
+          flex: 1; height: 44px; font-size: 14px; border-radius: 8px; border: none;
+          background: var(--cta); color: var(--ctatx); font-weight: 700; cursor: pointer;
+          transition: background 0.2s;
+        }
+        .kiwi-otp-btn-verify:disabled {
+          background: var(--line); color: var(--mut); cursor: not-allowed;
+        }
+        .kiwi-otp-btn-resend {
+          flex: 1; height: 44px; font-size: 14px; border-radius: 8px;
+          background: transparent; color: var(--cta); border: 1.5px solid var(--line);
+          font-weight: 600; cursor: pointer; transition: background 0.2s;
+        }
+        .kiwi-otp-btn-resend:disabled {
+          color: var(--mut); border-color: var(--line); cursor: not-allowed;
+        }
+        .kiwi-otp-input {
+          width: 100%; padding: 10px; border: 1.5px solid var(--line); border-radius: 12px;
+          text-align: center; letter-spacing: 8px; font-size: 20px; font-weight: 800;
+          color: var(--ink); outline: none; transition: border-color 0.2s;
+        }
+        .kiwi-otp-input:focus {
+          border-color: var(--green);
         }
       ` }} />
 
       <div className="kiwi-body">
-        {/* kiwi_landing Header */}
+        {/* Header */}
         <header className="kiwi-header">
           <div className="kiwi-wrap kiwi-nav">
             <div className="kiwi-brand" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
               <img src="/logo.jpg" alt="FinMantra Logo" style={{ height: '36px', width: '36px', borderRadius: '8px', objectFit: 'cover' }} />
               <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: '1.3rem', color: 'var(--ink)' }}>FinMantra</span>
               <span style={{ height: '14px', width: '1.5px', background: 'var(--line)', margin: '0 4px' }}></span>
-              <span className="kiwi-tag" style={{ marginLeft: 0 }}>Kiwi Credit Card by Yes Bank</span>
+              <span className="kiwi-tag" style={{ marginLeft: 0 }}>Kiwi RuPay Credit Card</span>
+              <span style={{ color: 'var(--mut)', fontSize: '11px', background: 'var(--bg2)', padding: '2px 8px', borderRadius: '999px', fontWeight: 600 }}>Cards issued by YES BANK</span>
             </div>
-            <div className="kiwi-secure" style={{ fontSize: '13px', color: 'var(--mut)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              🔒 Secure application
+            
+            <div style={{ display: 'flex', alignItems: 'center', gap: '22px' }}>
+              <div className="kiwi-nav-links" style={{ display: 'flex', gap: '20px', fontSize: '14.5px', fontWeight: 600 }}>
+                <a href="#benefits" style={{ color: 'var(--cta)', textDecoration: 'none' }}>Benefits</a>
+                <a href="#how-it-works" style={{ color: 'var(--cta)', textDecoration: 'none' }}>How it works</a>
+                <a href="#lead" style={{ color: 'var(--cta)', textDecoration: 'none' }}>Apply</a>
+              </div>
+              <a href="#lead" className="kiwi-btn" style={{ padding: '9px 16px', fontSize: '14px' }}>
+                Apply now <span className="kiwi-arw">&rarr;</span>
+              </a>
             </div>
-            <a href="#lead" className="kiwi-btn" style={{ padding: '9px 16px', fontSize: '14px' }}>
-              Apply now <span className="kiwi-arw">&rarr;</span>
-            </a>
           </div>
         </header>
 
@@ -940,611 +921,161 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
               </div>
             </div>
 
-            {/* FORM CARD (Matches Public Landing Wizard Design & Color Scheme Override) */}
+            {/* FORM CARD */}
             <div className="kiwi-hero-form" id="lead">
               <div className="kiwi-formcard">
-                <div className="ff-top" style={{ textAlign: 'center', display: 'block', marginBottom: '20px' }}>
-                  <h2 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--ink)' }}>Apply in 2 minutes</h2>
-                  <p style={{ color: 'var(--mut)', fontSize: '0.94rem', marginTop: '4px' }}>
-                    Fill in your details and we'll take you to secure onboarding.
-                  </p>
+                <div className="ff-top">
+                  <h2>Apply in 2 minutes</h2>
+                  <span className="kiwi-pill">Free to apply</span>
                 </div>
+                <p className="kiwi-fine">Fill in your details and we'll take you to secure onboarding.</p>
                 
-                {/* 2-Step Progress Indicator (Exactly like Public Landing but Kiwi themed) */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', position: 'relative', padding: '0 8px' }}>
-                  <div style={{ position: 'absolute', top: '15px', left: '16px', right: '16px', height: '2px', background: 'var(--line)', zIndex: 1 }}>
-                    <div style={{ width: formStep === 2 ? '100%' : '0%', height: '100%', background: 'var(--green)', transition: 'width 0.3s ease' }}></div>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 2, position: 'relative' }}>
-                    <div style={{ 
-                      width: '32px', height: '32px', borderRadius: '50%', 
-                      background: formStep >= 1 ? 'var(--green)' : 'var(--panel)', 
-                      border: formStep >= 1 ? '2px solid var(--green)' : '2px solid var(--line)',
-                      color: formStep >= 1 ? '#ffffff' : 'var(--mut)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.85rem',
-                      transition: 'all 0.3s ease',
-                      boxShadow: formStep === 1 ? '0 0 12px rgba(47, 164, 59, 0.3)' : 'none'
-                    }}>1</div>
-                    <span style={{ fontSize: '0.75rem', fontWeight: 600, marginTop: '6px', color: formStep === 1 ? 'var(--cta)' : 'var(--mut)' }}>Contact</span>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 2, position: 'relative' }}>
-                    <div style={{ 
-                      width: '32px', height: '32px', borderRadius: '50%', 
-                      background: formStep >= 2 ? 'var(--green)' : 'var(--panel)', 
-                      border: formStep >= 2 ? '2px solid var(--green)' : '2px solid var(--line)',
-                      color: formStep >= 2 ? '#ffffff' : 'var(--mut)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.85rem',
-                      transition: 'all 0.3s ease',
-                      boxShadow: formStep === 2 ? '0 0 12px rgba(47, 164, 59, 0.3)' : 'none'
-                    }}>2</div>
-                    <span style={{ fontSize: '0.75rem', fontWeight: 600, marginTop: '6px', color: formStep === 2 ? 'var(--cta)' : 'var(--mut)' }}>More Info</span>
-                  </div>
-                </div>
-
                 {formError && (
-                  <div style={{ background: '#fdeded', border: '1.5px solid #f5c2c2', padding: '0.75rem 1rem', borderRadius: '8px', color: '#b3261e', fontSize: '0.82rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <ShieldAlert size={16} /> {formError}
+                  <div style={{ background: '#fdeded', border: '1.5px solid #f5c2c2', padding: '0.75rem 1rem', borderRadius: '8px', color: '#b3261e', fontSize: '0.82rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', textAlign: 'left' }}>
+                    <ShieldAlert size={16} style={{ flexShrink: 0 }} /> {formError}
                   </div>
                 )}
 
-                <form onSubmit={handleFormSubmit}>
-                  {/* STEP 1: CONTACT DETAILS */}
-                  {formStep === 1 && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
-                      <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
-                          {formSchema.fields.fullName.label}
-                        </label>
-                        <div style={{ position: 'relative' }}>
-                          <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--mut)', opacity: 0.7, display: 'flex', alignItems: 'center' }}>
-                            <User size={18} />
-                          </span>
-                          <input 
-                            type="text" name="fullName" className="form-input"
-                            style={{ paddingLeft: '2.5rem', height: '42px', borderRadius: '8px' }}
-                            placeholder={formSchema.fields.fullName.placeholder}
-                            value={formData.fullName} onChange={handleInputChange}
-                            required disabled={isSubmitting}
-                          />
-                        </div>
-                        {errors.fullName && <div style={{ color: '#b3261e', fontSize: '0.8rem', marginTop: '0.25rem' }}>{errors.fullName}</div>}
-                      </div>
+                <form onSubmit={handleFormSubmit} noValidate id="leadForm">
+                  <div className={`kiwi-field ${errors.fullName ? 'invalid' : ''}`}>
+                    <label htmlFor="name">Full name *</label>
+                    <input 
+                      id="name" 
+                      name="full_name" 
+                      type="text" 
+                      autoComplete="name" 
+                      placeholder="As per PAN" 
+                      value={formData.fullName} 
+                      onChange={handleInputChange} 
+                      disabled={isSubmitting} 
+                    />
+                    {errors.fullName && <div className="kiwi-err">{errors.fullName}</div>}
+                  </div>
 
-                      <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
-                          {formSchema.fields.phone.label}
-                        </label>
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                          <div style={{ position: 'relative', flex: 1 }}>
-                            <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--mut)', opacity: 0.7, display: 'flex', alignItems: 'center' }}>
-                              <Phone size={18} />
-                            </span>
-                            <input
-                              type="tel" name="phone" className="form-input"
-                              style={{ paddingLeft: '2.5rem', height: '42px', borderRadius: '8px' }}
-                              placeholder={formSchema.fields.phone.placeholder}
-                              maxLength="10" value={formData.phone} onChange={handleInputChange}
-                              required disabled={isSubmitting || isPhoneVerified}
-                            />
-                          </div>
-                          {formData.phone.length === 10 && !errors.phone && (
-                            <button
-                              type="button"
-                              onClick={sendStep1Otp}
-                              className="btn-primary"
-                              style={{ 
-                                background: isPhoneVerified ? 'var(--green)' : '#ef4444',
-                                borderColor: isPhoneVerified ? 'var(--green)' : '#ef4444',
-                                color: '#ffffff',
-                                fontWeight: 700,
-                                borderRadius: '8px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.25rem',
-                                padding: '0 1rem',
-                                cursor: isPhoneVerified ? 'default' : 'pointer'
-                              }}
-                              disabled={isSubmitting || isPhoneVerified}
-                            >
-                              {isPhoneVerified ? '✓ Verified' : 'Verify'}
-                            </button>
-                          )}
-                        </div>
-                        {errors.phone && <div style={{ color: '#b3261e', fontSize: '0.75rem', marginTop: '0.25rem' }}>{errors.phone}</div>}
-                      </div>
+                  <div className="kiwi-two">
+                    <div className={`kiwi-field ${errors.phone ? 'invalid' : ''}`}>
+                      <label htmlFor="mobile">Whatsapp number *</label>
+                      <input 
+                        id="mobile" 
+                        name="mobile" 
+                        type="tel" 
+                        inputMode="numeric" 
+                        maxLength="10" 
+                        placeholder="10-digit mobile" 
+                        value={formData.phone} 
+                        onChange={handleInputChange} 
+                        disabled={isSubmitting || isPhoneVerified} 
+                      />
+                      {errors.phone && <div className="kiwi-err">{errors.phone}</div>}
+                    </div>
+                    <div className={`kiwi-field ${errors.email ? 'invalid' : ''}`}>
+                      <label htmlFor="email">Email *</label>
+                      <input 
+                        id="email" 
+                        name="email" 
+                        type="email" 
+                        autoComplete="email" 
+                        placeholder="you@email.com" 
+                        value={formData.email} 
+                        onChange={handleInputChange} 
+                        disabled={isSubmitting} 
+                      />
+                      {errors.email && <div className="kiwi-err">{errors.email}</div>}
+                    </div>
+                  </div>
 
-                      <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
-                          {formSchema.fields.email.label}
-                        </label>
-                        <div style={{ position: 'relative' }}>
-                          <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--mut)', opacity: 0.7, display: 'flex', alignItems: 'center' }}>
-                            <Mail size={18} />
-                          </span>
-                          <input
-                            type="email" name="email" className="form-input"
-                            style={{ paddingLeft: '2.5rem', height: '42px', borderRadius: '8px' }}
-                            placeholder={formSchema.fields.email.placeholder}
-                            value={formData.email} onChange={handleInputChange}
-                            required disabled={isSubmitting}
-                          />
+                  <div className="kiwi-two">
+                    <div className={`kiwi-field ${errors.pincode ? 'invalid' : ''}`}>
+                      <label htmlFor="pincode">Pincode *</label>
+                      <input 
+                        id="pincode" 
+                        name="pincode" 
+                        type="tel" 
+                        inputMode="numeric" 
+                        maxLength="6" 
+                        autoComplete="postal-code" 
+                        placeholder="6-digit pincode" 
+                        value={formData.pincode} 
+                        onChange={handleInputChange} 
+                        disabled={isSubmitting} 
+                      />
+                      {pincodeLoading && <div style={{ fontSize: '0.75rem', color: 'var(--green)', marginTop: '4px' }}>Verifying...</div>}
+                      {pincodeLocationText && (
+                        <div style={{ fontSize: '0.75rem', color: 'var(--green)', marginTop: '4px', fontWeight: 600 }}>
+                          📍 {pincodeLocationText}
                         </div>
-                        {errors.email && <div style={{ color: '#b3261e', fontSize: '0.75rem', marginTop: '0.25rem' }}>{errors.email}</div>}
-                      </div>
+                      )}
+                      {errors.pincode && <div className="kiwi-err">{errors.pincode}</div>}
+                    </div>
+                    <div className={`kiwi-field ${errors.pan_no ? 'invalid' : ''}`}>
+                      <label htmlFor="pan">PAN *</label>
+                      <input 
+                        id="pan" 
+                        name="pan" 
+                        type="text" 
+                        maxLength="10" 
+                        autoCapitalize="characters" 
+                        autoComplete="off" 
+                        placeholder="ABCDE1234F" 
+                        value={formData.pan_no} 
+                        onChange={handleInputChange} 
+                        disabled={isSubmitting} 
+                      />
+                      {errors.pan_no && <div className="kiwi-err">{errors.pan_no}</div>}
+                    </div>
+                  </div>
 
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                        <div className="form-group" style={{ marginBottom: 0 }}>
-                          <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
-                            Date of Birth
-                          </label>
-                          <div style={{ position: 'relative' }}>
-                            <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--mut)', opacity: 0.7, display: 'flex', alignItems: 'center' }}>
-                              <Calendar size={18} />
-                            </span>
-                            <input 
-                              type="date" name="dob" className="form-input"
-                              style={{ paddingLeft: '2.5rem', height: '42px', borderRadius: '8px' }}
-                              value={formData.dob} onChange={handleInputChange}
-                              required disabled={isSubmitting}
-                            />
-                          </div>
-                          {errors.dob && <div style={{ color: '#b3261e', fontSize: '0.8rem', marginTop: '0.25rem' }}>{errors.dob}</div>}
-                        </div>
-
-                        <div className="form-group" style={{ marginBottom: 0 }}>
-                          <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
-                            Mother's Name
-                          </label>
-                          <div style={{ position: 'relative' }}>
-                            <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--mut)', opacity: 0.7, display: 'flex', alignItems: 'center' }}>
-                              <User size={18} />
-                            </span>
-                            <input 
-                              type="text" name="mother_name" className="form-input"
-                              style={{ paddingLeft: '2.5rem', height: '42px', borderRadius: '8px' }}
-                              placeholder="Mother's full name"
-                              value={formData.mother_name} onChange={handleInputChange}
-                              required disabled={isSubmitting}
-                            />
-                          </div>
-                          {errors.mother_name && <div style={{ color: '#b3261e', fontSize: '0.8rem', marginTop: '0.25rem' }}>{errors.mother_name}</div>}
-                        </div>
-                      </div>
-
-                      <button 
-                        type="button" 
-                        onClick={handleContinueToStep2} 
-                        className="btn-primary" 
-                        style={{ 
-                          width: '100%', 
-                          marginTop: '1rem', 
-                          height: '46px',
-                          borderRadius: '8px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: '0.5rem'
-                        }}
+                  <div className="kiwi-two">
+                    <div className={`kiwi-field ${errors.employment ? 'invalid' : ''}`}>
+                      <label htmlFor="employment">Employment *</label>
+                      <select 
+                        id="employment" 
+                        name="employment" 
+                        value={formData.employment} 
+                        onChange={handleInputChange} 
                         disabled={isSubmitting}
                       >
-                        {isSubmitting ? 'Registering...' : 'Continue to Next Step'} <ArrowRight size={18} />
-                      </button>
+                        <option value="">Select</option>
+                        <option value="Salaried">Salaried</option>
+                        <option value="Self Employed (Business)">Self-employed</option>
+                      </select>
+                      {errors.employment && <div className="kiwi-err">{errors.employment}</div>}
                     </div>
-                  )}
-
-                  {/* STEP 2: PROFESSIONAL & FINANCIAL DETAILS */}
-                  {formStep === 2 && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                        
-                        {/* Employment Dropdown (Matches Public UI but green colors) */}
-                        <div className="form-group" style={{ marginBottom: 0 }}>
-                          <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
-                            {formSchema.fields.employment.label}
-                          </label>
-                          <div ref={empDropdownRef} style={{ position: 'relative' }}>
-                            <div
-                              onClick={() => !isSubmitting && setEmploymentDropdownOpen(prev => !prev)}
-                              className="form-input"
-                              style={{
-                                paddingLeft: '2.5rem', paddingRight: '2.5rem',
-                                height: '42px', borderRadius: '8px',
-                                display: 'flex', alignItems: 'center',
-                                cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                                color: formData.employment ? 'var(--ink)' : 'var(--mut)',
-                                userSelect: 'none',
-                                border: '1.5px solid',
-                                borderColor: employmentDropdownOpen ? 'var(--green)' : 'var(--line)',
-                                boxShadow: employmentDropdownOpen ? '0 0 0 3px rgba(47, 164, 59, 0.2)' : undefined
-                              }}
-                            >
-                              <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--mut)', opacity: 0.7, display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
-                                <Briefcase size={18} />
-                              </span>
-                              {formData.employment || 'Select'}
-                              <ChevronDown size={16} style={{
-                                position: 'absolute', right: '0.85rem', top: '50%',
-                                transform: employmentDropdownOpen ? 'translateY(-50%) rotate(180deg)' : 'translateY(-50%)',
-                                transition: 'transform 0.2s ease',
-                                color: 'var(--mut)'
-                              }} />
-                            </div>
-
-                            {employmentDropdownOpen && (
-                              <div style={{
-                                position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
-                                background: '#ffffff',
-                                border: '1.5px solid var(--line)',
-                                borderRadius: '8px',
-                                boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-                                zIndex: 50,
-                                overflow: 'hidden'
-                              }}>
-                                {(formSchema.fields.employment.options || []).map((opt, idx) => (
-                                  <div
-                                    key={idx}
-                                    onClick={() => {
-                                      setFormData(prev => ({ ...prev, employment: opt.value }));
-                                      setEmploymentDropdownOpen(false);
-                                      validateField('employment', opt.value);
-                                    }}
-                                    style={{
-                                      padding: '0.65rem 1rem',
-                                      fontSize: '0.9rem',
-                                      cursor: 'pointer',
-                                      background: formData.employment === opt.value ? 'rgba(47, 164, 59, 0.12)' : 'transparent',
-                                      color: formData.employment === opt.value ? 'var(--cta)' : 'var(--ink)',
-                                      fontWeight: formData.employment === opt.value ? 700 : 400,
-                                      borderBottom: '1px solid var(--line)'
-                                    }}
-                                    onMouseEnter={e => {
-                                      if (formData.employment !== opt.value) e.currentTarget.style.background = 'var(--bg2)';
-                                    }}
-                                    onMouseLeave={e => {
-                                      if (formData.employment !== opt.value) e.currentTarget.style.background = 'transparent';
-                                    }}
-                                  >
-                                    {opt.value === 'Self Employed (Business)' ? 'Self-employed' : opt.value}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                          {errors.employment && <div style={{ color: '#b3261e', fontSize: '0.8rem', marginTop: '0.25rem' }}>{errors.employment}</div>}
-                        </div>
-
-                        {/* Net Monthly Income (Text input) */}
-                        <div className="form-group" style={{ marginBottom: 0 }}>
-                          <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
-                            {formSchema.fields.monthly_income.label}
-                          </label>
-                          <div style={{ position: 'relative' }}>
-                            <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--mut)', opacity: 0.7, fontWeight: 700, fontSize: '1.05rem', display: 'flex', alignItems: 'center' }}>
-                              ₹
-                            </span>
-                            <input
-                              type="text" name="monthly_income" className="form-input"
-                              style={{ paddingLeft: '2.25rem', height: '42px', borderRadius: '8px' }}
-                              placeholder={formSchema.fields.monthly_income.placeholder}
-                              value={formData.monthly_income} onChange={handleInputChange}
-                              required disabled={isSubmitting}
-                            />
-                          </div>
-                          {errors.monthly_income && <div style={{ color: '#b3261e', fontSize: '0.75rem', marginTop: '0.25rem' }}>{errors.monthly_income}</div>}
-                        </div>
-
-                      </div>
-
-                      {/* Designation Dropdown (Matches Public UI but green colors) */}
-                      <div ref={designationDropdownRef} className="form-group" style={{ marginBottom: 0, position: 'relative' }}>
-                        <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
-                          Designation
-                        </label>
-                        <div style={{ position: 'relative' }}>
-                          <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--mut)', opacity: 0.7, display: 'flex', alignItems: 'center' }}>
-                            <Briefcase size={18} />
-                          </span>
-                          <input 
-                            type="text" name="designation" className="form-input"
-                            style={{ paddingLeft: '2.5rem', height: '42px', borderRadius: '8px' }}
-                            placeholder="Type or select designation"
-                            value={formData.designation} 
-                            onChange={handleInputChange}
-                            onFocus={() => !isSubmitting && setDesignationDropdownOpen(true)}
-                            required disabled={isSubmitting}
-                            autoComplete="off"
-                          />
-                          <ChevronDown size={16} style={{
-                            position: 'absolute', right: '0.85rem', top: '50%',
-                            transform: designationDropdownOpen ? 'translateY(-50%) rotate(180deg)' : 'translateY(-50%)',
-                            transition: 'transform 0.2s ease',
-                            color: 'var(--mut)',
-                            pointerEvents: 'none'
-                          }} />
-                        </div>
-                        
-                        {designationDropdownOpen && (
-                          <div style={{
-                            position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
-                            background: '#ffffff',
-                            border: '1.5px solid var(--line)',
-                            borderRadius: '8px',
-                            boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-                            zIndex: 50,
-                            maxHeight: '200px',
-                            overflowY: 'auto'
-                          }}>
-                            {COMMON_DESIGNATIONS.filter(des => 
-                              des.toLowerCase().includes((formData.designation || '').toLowerCase())
-                            ).length > 0 ? (
-                              COMMON_DESIGNATIONS.filter(des => 
-                                des.toLowerCase().includes((formData.designation || '').toLowerCase())
-                              ).map((opt, idx) => (
-                                <div
-                                  key={idx}
-                                  onClick={() => {
-                                    setFormData(prev => ({ ...prev, designation: opt }));
-                                    setDesignationDropdownOpen(false);
-                                    validateField('designation', opt);
-                                  }}
-                                  style={{
-                                    padding: '0.65rem 1rem',
-                                    fontSize: '0.9rem',
-                                    cursor: 'pointer',
-                                    background: formData.designation === opt ? 'rgba(47, 164, 59, 0.12)' : 'transparent',
-                                    color: formData.designation === opt ? 'var(--cta)' : 'var(--ink)',
-                                    fontWeight: formData.designation === opt ? 700 : 400,
-                                    borderBottom: '1px solid var(--line)'
-                                  }}
-                                  onMouseEnter={e => { 
-                                    if (formData.designation !== opt) e.currentTarget.style.background = 'var(--bg2)'; 
-                                  }}
-                                  onMouseLeave={e => { 
-                                    if (formData.designation !== opt) e.currentTarget.style.background = 'transparent'; 
-                                  }}
-                                >
-                                  {opt}
-                                </div>
-                              ))
-                            ) : (
-                              <div style={{ padding: '0.65rem 1rem', fontSize: '0.9rem', color: 'var(--mut)' }}>
-                                Press enter or continue typing for custom option
-                              </div>
-                            )}
-                          </div>
-                        )}
-                        {errors.designation && <div style={{ color: '#b3261e', fontSize: '0.8rem', marginTop: '0.25rem' }}>{errors.designation}</div>}
-                      </div>
-
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                        <div className="form-group" style={{ marginBottom: 0 }}>
-                          <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
-                            PAN Card Number
-                          </label>
-                          <input 
-                            type="text" name="pan_no" className="form-input"
-                            style={{ height: '42px', borderRadius: '8px' }}
-                            placeholder="e.g. ABCDE1234F"
-                            maxLength="10" value={formData.pan_no} onChange={handleInputChange}
-                            required disabled={isSubmitting}
-                          />
-                          {errors.pan_no && <div style={{ color: '#b3261e', fontSize: '0.75rem', marginTop: '0.25rem' }}>{errors.pan_no}</div>}
-                        </div>
-
-                        {/* Credit Card sliding toggle (Matches Public Gold Toggle but green) */}
-                        <div className="form-group" style={{ marginBottom: 0 }}>
-                          <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
-                            Do you have a credit card?
-                          </label>
-                          <div
-                            onClick={() => {
-                              if (isSubmitting) return;
-                              const nextCC = formData.has_credit_card === 'Yes' ? 'No' : 'Yes';
-                              setFormData(prev => ({ ...prev, has_credit_card: nextCC }));
-                              validateField('has_credit_card', nextCC);
-                            }}
-                            style={{
-                              position: 'relative',
-                              display: 'flex',
-                              alignItems: 'center',
-                              width: '130px',
-                              height: '42px',
-                              background: 'var(--bg2)',
-                              border: errors.has_credit_card ? '1.5px solid #b3261e' : '1px solid var(--line)',
-                              borderRadius: '8px',
-                              padding: '4px',
-                              cursor: 'pointer',
-                              userSelect: 'none',
-                              marginTop: '0.3rem',
-                              transition: 'all 0.3s ease'
-                            }}
-                          >
-                            {formData.has_credit_card && (
-                              <div style={{
-                                position: 'absolute',
-                                left: formData.has_credit_card === 'Yes' ? 'calc(100% - 63px)' : '4px',
-                                width: '59px',
-                                height: '32px',
-                                background: 'var(--green)',
-                                borderRadius: '6px',
-                                boxShadow: '0 2px 8px rgba(47, 164, 59, 0.35)',
-                                transition: 'left 0.25s cubic-bezier(0.16, 1, 0.3, 1)'
-                              }}></div>
-                            )}
-                            <div style={{
-                              position: 'relative',
-                              zIndex: 2,
-                              display: 'flex',
-                              width: '100%',
-                              height: '100%',
-                              alignItems: 'center',
-                              justifyContent: 'space-around',
-                              fontSize: '0.85rem',
-                              fontWeight: 700
-                            }}>
-                              <span style={{ 
-                                color: formData.has_credit_card === 'No' ? '#ffffff' : 'var(--mut)',
-                                transition: 'color 0.25s ease',
-                                width: '59px',
-                                textAlign: 'center'
-                              }}>No</span>
-                              <span style={{ 
-                                color: formData.has_credit_card === 'Yes' ? '#ffffff' : 'var(--mut)',
-                                transition: 'color 0.25s ease',
-                                width: '59px',
-                                textAlign: 'center'
-                              }}>Yes</span>
-                            </div>
-                          </div>
-                          {errors.has_credit_card && <div style={{ color: '#b3261e', fontSize: '0.7rem', marginTop: '0.25rem' }}>{errors.has_credit_card}</div>}
-                        </div>
-                      </div>
-
-                      {/* Structured address fields (Exactly like Public Landing UI) */}
-                      <div style={{ borderTop: '1px dashed var(--line)', paddingTop: '1rem', marginTop: '0.5rem' }}>
-                        <h4 style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--green)', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Current Residence Address</h4>
-                        
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.5rem' }}>
-                          <div className="form-group" style={{ marginBottom: 0 }}>
-                            <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>Flat / House No. / Building</label>
-                            <input 
-                              type="text" name="address_house" className="form-input"
-                              style={{ height: '42px', borderRadius: '8px' }}
-                              placeholder="Flat/House No., Bldg"
-                              value={formData.address_house} onChange={handleInputChange}
-                              required disabled={isSubmitting}
-                            />
-                            {errors.address_house && <div style={{ color: '#b3261e', fontSize: '0.75rem', marginTop: '0.25rem' }}>{errors.address_house}</div>}
-                          </div>
-                          
-                          <div className="form-group" style={{ marginBottom: 0 }}>
-                            <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>Road / Street / Landmark</label>
-                            <input 
-                              type="text" name="address_street" className="form-input"
-                              style={{ height: '42px', borderRadius: '8px' }}
-                              placeholder="Road, Street, Area"
-                              value={formData.address_street} onChange={handleInputChange}
-                              required disabled={isSubmitting}
-                            />
-                            {errors.address_street && <div style={{ color: '#b3261e', fontSize: '0.75rem', marginTop: '0.25rem' }}>{errors.address_street}</div>}
-                          </div>
-                        </div>
-
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.5rem' }}>
-                          <div className="form-group" style={{ marginBottom: 0 }}>
-                            <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>Residence Pincode</label>
-                            <div style={{ position: 'relative' }}>
-                              <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--mut)', opacity: 0.7, display: 'flex', alignItems: 'center' }}>
-                                <MapPin size={18} />
-                              </span>
-                              <input
-                                type="text" name="pincode" className="form-input"
-                                style={{ paddingLeft: '2.5rem', height: '42px', borderRadius: '8px' }}
-                                placeholder="6-digit Pincode"
-                                maxLength="6" value={formData.pincode} onChange={handleInputChange}
-                                required disabled={isSubmitting}
-                              />
-                            </div>
-                            {pincodeLoading && <div style={{ fontSize: '0.7rem', color: 'var(--green)', marginTop: '0.25rem' }}>Verifying...</div>}
-                            {pincodeLocationText && (
-                              <div style={{ fontSize: '0.7rem', color: 'var(--green)', marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.25rem', fontWeight: 600 }}>
-                                <span style={{ display: 'inline-block', width: '5px', height: '5px', borderRadius: '50%', background: 'var(--green)' }}></span>
-                                {pincodeLocationText}
-                              </div>
-                            )}
-                            {(errors.pincode || pincodeError) && <div style={{ fontSize: '0.7rem', color: '#b3261e', marginTop: '0.25rem' }}>{errors.pincode || pincodeError}</div>}
-                          </div>
-
-                          <div className="form-group" style={{ marginBottom: 0 }}>
-                            <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>Locality / Area</label>
-                            {pincodeLocalities.length > 0 ? (
-                              <select 
-                                name="address_locality" className="form-input"
-                                style={{ height: '42px', borderRadius: '8px', padding: '0 0.75rem', background: '#ffffff', color: 'var(--ink)', border: '1.5px solid var(--line)' }}
-                                value={formData.address_locality} onChange={handleInputChange}
-                                required disabled={isSubmitting}
-                              >
-                                {pincodeLocalities.map((loc, idx) => (
-                                  <option key={idx} value={loc}>{loc}</option>
-                                ))}
-                              </select>
-                            ) : (
-                              <input 
-                                type="text" name="address_locality" className="form-input"
-                                style={{ height: '42px', borderRadius: '8px' }}
-                                placeholder="Locality name"
-                                value={formData.address_locality} onChange={handleInputChange}
-                                required disabled={isSubmitting}
-                              />
-                            )}
-                            {errors.address_locality && <div style={{ color: '#b3261e', fontSize: '0.75rem', marginTop: '0.25rem' }}>{errors.address_locality}</div>}
-                          </div>
-                        </div>
-
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.25rem' }}>
-                          <div className="form-group" style={{ marginBottom: 0 }}>
-                            <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>City</label>
-                            <input 
-                              type="text" name="address_city" className="form-input"
-                              style={{ height: '42px', borderRadius: '8px' }}
-                              placeholder="City"
-                              value={formData.address_city} onChange={handleInputChange}
-                              required disabled={isSubmitting}
-                            />
-                            {errors.address_city && <div style={{ color: '#b3261e', fontSize: '0.75rem', marginTop: '0.25rem' }}>{errors.address_city}</div>}
-                          </div>
-
-                          <div className="form-group" style={{ marginBottom: 0 }}>
-                            <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>State</label>
-                            <select 
-                              name="address_state" className="form-input"
-                              style={{ height: '42px', borderRadius: '8px', padding: '0 0.75rem', background: '#ffffff', color: 'var(--ink)', border: '1.5px solid var(--line)' }}
-                              value={formData.address_state} onChange={handleInputChange}
-                              required disabled={isSubmitting}
-                            >
-                              <option value="">Select State</option>
-                              {[
-                                "Andaman and Nicobar Islands", "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar",
-                                "Chandigarh", "Chhattisgarh", "Dadra and Nagar Haveli and Daman and Diu", "Delhi", "Goa",
-                                "Gujarat", "Haryana", "Himachal Pradesh", "Jammu and Kashmir", "Jharkhand", "Karnataka",
-                                "Kerala", "Ladakh", "Lakshadweep", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya",
-                                "Mizoram", "Nagaland", "Odisha", "Puducherry", "Punjab", "Rajasthan", "Sikkim",
-                                "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal"
-                              ].map((st, idx) => (
-                                <option key={idx} value={st}>{st}</option>
-                              ))}
-                            </select>
-                            {errors.address_state && <div style={{ color: '#b3261e', fontSize: '0.75rem', marginTop: '0.25rem' }}>{errors.address_state}</div>}
-                          </div>
-                        </div>
-                      </div>
-
-                      <label className="kiwi-consent" htmlFor="kiwi-consent-box">
-                        <input 
-                          id="kiwi-consent-box" 
-                          type="checkbox" 
-                          required 
-                          disabled={isSubmitting}
-                          defaultChecked={true}
-                          style={{ accentColor: 'var(--green)', width: '17px', height: '17px', flexShrink: 0 }}
-                        />
-                        <span>I authorise FinMantra and its banking partners to contact me about this application via call, SMS, WhatsApp or email, and I agree to the Terms &amp; Privacy Policy. This overrides any DND registration.</span>
-                      </label>
-
-                      <button type="submit" className="btn-primary" style={{ width: '100%', height: '46px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }} disabled={isSubmitting}>
-                        {isSubmitting ? (
-                          <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            Processing... <RefreshCw size={18} className="spin" />
-                          </span>
-                        ) : (
-                          <>
-                            Apply now <ArrowRight size={18} />
-                          </>
-                        )}
-                      </button>
+                    <div className={`kiwi-field ${errors.monthly_income ? 'invalid' : ''}`}>
+                      <label htmlFor="income">Monthly income *</label>
+                      <select 
+                        id="income" 
+                        name="monthly_income" 
+                        value={formData.monthly_income} 
+                        onChange={handleInputChange} 
+                        disabled={isSubmitting}
+                      >
+                        <option value="">Select</option>
+                        <option value="Below ₹25,000">Below ₹25,000</option>
+                        <option value="₹25,000 – ₹50,000">₹25,000 – ₹50,000</option>
+                        <option value="₹50,000 – ₹1,00,000">₹50,000 – ₹1,00,000</option>
+                        <option value="Above ₹1,0,000">Above ₹1,00,000</option>
+                      </select>
+                      {errors.monthly_income && <div className="kiwi-err">{errors.monthly_income}</div>}
                     </div>
-                  )}
+                  </div>
 
+                  <label className="kiwi-consent">
+                    <input id="consent" type="checkbox" defaultChecked={true} required disabled={isSubmitting} />
+                    <span>I authorise FinMantra and its banking partners to contact me about this application via call, SMS, WhatsApp or email, and I agree to the Terms &amp; Privacy Policy. This overrides any DND registration.</span>
+                  </label>
+
+                  <button type="submit" className="kiwi-btn" disabled={isSubmitting} style={{ width: '100%' }}>
+                    {isSubmitting ? (
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        Processing... <RefreshCw size={18} className="spin" />
+                      </span>
+                    ) : (
+                      <>
+                        Apply now <span className="kiwi-arw">&rarr;</span>
+                      </>
+                    )}
+                  </button>
                   <p className="kiwi-reassure">🔒 Your details are secure · No spam</p>
                 </form>
               </div>
@@ -1566,95 +1097,109 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
         {/* trust strip */}
         <div className="kiwi-strip">
           <div className="kiwi-wrap">
-            <span>🔒 <b>256-bit SSL</b> Encrypted onboarding</span>
-            <span>⚡ <b>Instant Virtual Card</b> within 5 minutes</span>
-            <span>🏦 <b>Approved by RBI</b> regulated Yes Bank partner</span>
+            <span>✓ <b>RuPay on UPI</b> Scan &amp; Pay directly</span>
+            <span>⚡ <b>Instant virtual card</b> Ready in minutes</span>
+            <span>◎ <b>100% digital application</b> No paperwork</span>
           </div>
         </div>
 
         {/* sections */}
-        <section className="kiwi-section">
+        <section className="kiwi-section" id="benefits">
           <div className="kiwi-wrap">
-            <span className="kiwi-kicker">Why Kiwi Credit Card?</span>
-            <h2 className="kiwi-h2">UPI convenience meets credit rewards</h2>
-            <p className="kiwi-lead">No more transferring money to wallets. Just link your Kiwi card on GPay, PhonePe, or Kiwi app and spend directly from your credit line while earning cashbacks.</p>
-            <div className="kiwi-grid">
+            <span className="kiwi-kicker">Why this card</span>
+            <h2 className="kiwi-h2">Made for the way India pays</h2>
+            <p className="kiwi-lead">You already scan to pay dozens of times a week. This card quietly pays you back for it.</p>
+            <div className="kiwi-grid-why">
               <div className="kiwi-card">
-                <div className="kiwi-ic">★</div>
-                <h3>Up to 5% Cashback</h3>
-                <p>Earn high cashbacks on everyday grocery, food, dining and travel payments via UPI.</p>
+                <div className="kiwi-ic">₹</div>
+                <h3>Lifetime free</h3>
+                <p>₹0 joining fee and ₹0 annual fee. No catch, forever.</p>
               </div>
               <div className="kiwi-card">
-                <div className="kiwi-ic">₹0</div>
-                <h3>Lifetime Free Card</h3>
-                <p>No joining fee, no annual fee. Free forever. Truly a zero-maintenance card.</p>
+                <div className="kiwi-ic">↻</div>
+                <h3>1.5% on UPI Scan &amp; Pay</h3>
+                <p>Earn on everyday QR payments, plus 0.5% on online spends. Cashback lands in your account.</p>
+              </div>
+              <div className="kiwi-card">
+                <div className="kiwi-ic">▲</div>
+                <h3>Up to 5% with Kiwi Neon</h3>
+                <p>Optional paid add-on that lifts cashback to 3–5% on annual milestone spends, with lounge access.</p>
               </div>
               <div className="kiwi-card">
                 <div className="kiwi-ic">⚡</div>
-                <h3>Instant Digital Issue</h3>
-                <p>Get your virtual credit card details immediately on approval to start spending online.</p>
+                <h3>Instant virtual card</h3>
+                <p>Apply and get a digital card in minutes — start paying right away.</p>
+              </div>
+              <div className="kiwi-card">
+                <div className="kiwi-ic">◎</div>
+                <h3>Any UPI app</h3>
+                <p>Add it to GPay, PhonePe or Paytm and scan any UPI QR in the country.</p>
+              </div>
+              <div className="kiwi-card">
+                <div className="kiwi-ic">✦</div>
+                <h3>RuPay, on your phone</h3>
+                <p>A full RuPay credit card built for UPI — no plastic needed to get started.</p>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Ladder section */}
-        <section className="kiwi-section kiwi-ladder-sec">
+        {/* Neon Milestone Section */}
+        <section className="kiwi-section kiwi-neon-sec">
           <div className="kiwi-wrap">
-            <span className="kiwi-kicker">Max rewards</span>
-            <h2 className="kiwi-h2">Earning cashback is simple</h2>
-            <p className="kiwi-lead">Unlike other credit cards with complicated reward catalogs, Kiwi pays you back in direct cash on UPI payments.</p>
+            <span className="kiwi-kicker">Kiwi Neon</span>
+            <h2 className="kiwi-h2">Your cashback climbs with you</h2>
+            <p className="kiwi-lead">The more you scan through the year, the higher your rate — plus a domestic lounge visit at each milestone.</p>
             
-            <div className="kiwi-ladder">
-              <div className="kiwi-rung">
-                <span className="kiwi-pct">1%</span>
-                <div className="kiwi-bar" style={{ height: '80px' }}>Standard</div>
-                <span className="kiwi-sp">UPI spends</span>
-                <span className="kiwi-lo">Under ₹5k / mo</span>
+            <div className="kiwi-neon-grid">
+              <div className="kiwi-neon-card">
+                <div className="kiwi-neon-rate">3%</div>
+                <div className="kiwi-neon-spend">₹50K / yr spends</div>
+                <div className="kiwi-neon-benefit">+1 lounge visit</div>
               </div>
-              <div className="kiwi-rung">
-                <span className="kiwi-pct">2%</span>
-                <div className="kiwi-bar" style={{ height: '140px' }}>Tier 2</div>
-                <span className="kiwi-sp">All spends</span>
-                <span className="kiwi-lo">₹5k – ₹15k / mo</span>
+              <div className="kiwi-neon-card">
+                <div className="kiwi-neon-rate">4%</div>
+                <div className="kiwi-neon-spend">₹1L / yr spends</div>
+                <div className="kiwi-neon-benefit">+1 lounge visit</div>
               </div>
-              <div className="kiwi-rung">
-                <span className="kiwi-pct" style={{ color: 'var(--green)' }}>5%</span>
-                <div className="kiwi-bar" style={{ height: '220px', background: 'linear-gradient(180deg, var(--lime), var(--cta))' }}>Super</div>
-                <span className="kiwi-sp">Milestone</span>
-                <span className="kiwi-lo">Above ₹15k / mo</span>
+              <div className="kiwi-neon-card" style={{ border: '1.5px solid var(--green)' }}>
+                <div className="kiwi-neon-rate">5%</div>
+                <div className="kiwi-neon-spend">₹1.5L / yr spends</div>
+                <div className="kiwi-neon-benefit">+1 lounge visit</div>
               </div>
             </div>
             
-            <p className="kiwi-qual">* Rewards are distributed as Kix coins, instantly redeemable for cash back to your bank account.</p>
+            <p className="kiwi-qual">
+              Milestone cashback and lounge access require the optional paid Kiwi Neon membership (₹999 + GST/yr) and apply to eligible annual spends. Base card earns 1.5% on UPI Scan &amp; Pay.
+            </p>
           </div>
         </section>
 
         {/* Steps section */}
-        <section className="kiwi-section">
+        <section className="kiwi-section" id="how-it-works">
           <div className="kiwi-wrap">
-            <span className="kiwi-kicker">How to apply</span>
-            <h2 className="kiwi-h2">Get your virtual card in 4 easy steps</h2>
+            <span className="kiwi-kicker">How it works</span>
+            <h2 className="kiwi-h2">From apply to first scan, in minutes</h2>
             <div className="kiwi-steps">
               <div className="kiwi-step">
                 <div className="kiwi-n">1</div>
-                <h3>Enter Details</h3>
-                <p>Fill in your basic information in the form above securely.</p>
+                <h3>Fill the form</h3>
+                <p>Share a few basic details — about 2 minutes.</p>
               </div>
               <div className="kiwi-step">
                 <div className="kiwi-n">2</div>
-                <h3>Verify Mobile</h3>
-                <p>Verify your contact number with WhatsApp OTP instantaneously.</p>
+                <h3>Complete video KYC</h3>
+                <p>A quick video KYC from your phone. Keep PAN &amp; Aadhaar handy.</p>
               </div>
               <div className="kiwi-step">
                 <div className="kiwi-n">3</div>
-                <h3>Bank KYC</h3>
-                <p>Complete a quick paperless KYC process via the secure portal.</p>
+                <h3>Get your virtual card</h3>
+                <p>On approval, your virtual card is issued instantly in the Kiwi app.</p>
               </div>
               <div className="kiwi-step">
                 <div className="kiwi-n">4</div>
-                <h3>Start Scanning</h3>
-                <p>Link your card on UPI apps and scan QR codes to pay!</p>
+                <h3>Scan &amp; earn</h3>
+                <p>Pay any UPI QR and start earning cashback from day one.</p>
               </div>
             </div>
           </div>
@@ -1663,9 +1208,12 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
         {/* CTA Band */}
         <section className="kiwi-section kiwi-ctaband">
           <div className="kiwi-wrap">
-            <h2>Ready to scan &amp; earn?</h2>
-            <p>Apply now and join over 500,000+ smart UPI users earning cashback on every payment.</p>
-            <a href="#top" className="kiwi-btn">Apply Now <span className="kiwi-arw">&rarr;</span></a>
+            <h2>Ready?</h2>
+            <p>Two minutes to a card that pays you back</p>
+            <p style={{ fontSize: '15px', color: 'var(--mut)', marginTop: '-12px' }}>
+              Lifetime-free, instant virtual card, up to 5% cashback on UPI.
+            </p>
+            <a href="#top" className="kiwi-btn" style={{ marginTop: '10px' }}>Apply now <span className="kiwi-arw">&rarr;</span></a>
           </div>
         </section>
 
@@ -1673,24 +1221,28 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
         <section className="kiwi-section">
           <div className="kiwi-wrap">
             <span className="kiwi-kicker">FAQ</span>
-            <h2 className="kiwi-h2" style={{ textAlign: 'center', marginBottom: '32px' }}>Frequently Asked Questions</h2>
+            <h2 className="kiwi-h2" style={{ textAlign: 'center', marginBottom: '32px' }}>Good questions, straight answers</h2>
             
             <div className="kiwi-faq">
               <details className="kiwi-faq-details">
                 <summary className="kiwi-faq-summary">Is the card really lifetime free?</summary>
-                <p>Yes, the Kiwi Yes Bank credit card has zero joining fee and zero annual/renewal fees for life. There are absolutely no hidden charges.</p>
+                <p>Yes. The YES BANK Kiwi credit card has ₹0 joining fee and ₹0 annual fee for life. There are absolutely no maintenance charges or hidden conditions.</p>
               </details>
               <details className="kiwi-faq-details">
-                <summary className="kiwi-faq-summary">How do I scan and pay using this credit card?</summary>
-                <p>Once approved, link the Kiwi credit card on UPI applications like BHIM, Google Pay, PhonePe, or the Kiwi app. Then, simply scan any merchant QR code and select the credit card as the payment source instead of your bank account.</p>
+                <summary className="kiwi-faq-summary">How much cashback do I earn?</summary>
+                <p>You earn a base rate of 1.5% cashback on all merchant UPI Scan &amp; Pay transactions, and 0.5% on online payments. Spends of up to 5% can be unlocked via the Kiwi Neon milestone program.</p>
               </details>
               <details className="kiwi-faq-details">
-                <summary className="kiwi-faq-summary">What are the eligibility criteria?</summary>
-                <p>Any Indian resident aged 21-60 with a stable salaried or self-employed monthly income is eligible to apply. A good credit score increases approval chances.</p>
+                <summary className="kiwi-faq-summary">How is the card issued?</summary>
+                <p>Upon approval of your application, your virtual credit card details are immediately displayed and activated in the Kiwi mobile application. You can link it on UPI apps to start scanning instantly.</p>
               </details>
               <details className="kiwi-faq-details">
-                <summary className="kiwi-faq-summary">Is PAN number mandatory to apply?</summary>
-                <p>Yes, PAN is mandatory to verify your credit profile with the credit bureau and validate your identity for regulatory compliance.</p>
+                <summary className="kiwi-faq-summary">Who can apply?</summary>
+                <p>Indian citizens aged 21 to 60 with a stable salaried or self-employed monthly source of income can apply. Final approval is subject to credit bureau and issuing bank checks.</p>
+              </details>
+              <details className="kiwi-faq-details">
+                <summary className="kiwi-faq-summary">What do I need for KYC?</summary>
+                <p>You need your physical PAN card, Aadhaar number, and a smartphone with a stable internet connection for the quick, paperless Video KYC step.</p>
               </details>
             </div>
           </div>
@@ -1702,9 +1254,11 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
             <div className="kiwi-cols">
               <div>
                 <div className="kiwi-brand" style={{ fontSize: '18px', fontWeight: 800, marginBottom: '10px' }}>
-                  kiwi <span className="kiwi-tag" style={{ color: '#9dbf8b' }}>Credit Card by Yes Bank</span>
+                  kiwi <span className="kiwi-tag" style={{ color: '#9dbf8b' }}>RuPay Credit Card</span>
                 </div>
-                <p style={{ maxWidth: '40ch', marginBottom: '16px' }}>FinMantra is an authorized partner facilitating secure credit card applications for licensed banking partners.</p>
+                <p style={{ maxWidth: '40ch', marginBottom: '16px' }}>
+                  FinMantra is an authorised channel partner facilitating credit card applications. This is a marketing and lead-referral page and is not the card issuer.
+                </p>
               </div>
               <div style={{ display: 'flex', gap: '40px' }}>
                 <div>
@@ -1715,16 +1269,19 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
                   </div>
                 </div>
                 <div>
-                  <strong>Support</strong>
+                  <strong>Links</strong>
                   <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <a href="/contact" onClick={(e) => { e.preventDefault(); navigateTo('/contact'); }}>Contact Us</a>
-                    <a href="/" onClick={(e) => { e.preventDefault(); navigateTo('/'); }}>Home</a>
+                    <a href="#benefits">Benefits</a>
+                    <a href="#how-it-works">How it works</a>
+                    <a href="#top">Apply</a>
                   </div>
                 </div>
               </div>
             </div>
             <div className="kiwi-disc">
-              <p>Disclaimer: Credit card issuance is subject to credit profile checks and sole discretion of Yes Bank. FinMantra does not charge any application or processing fee.</p>
+              <p>
+                Cards are issued by YES BANK; the Kiwi RuPay Credit Card is a product of Kiwi. Approval of any application is at the sole discretion of the issuing bank and is subject to eligibility, KYC and credit checks — approval is not guaranteed. Cashback of "up to 5%" applies to eligible annual milestone spends under the optional paid Kiwi Neon membership (₹999 + GST/yr); the base card earns 1.5% on UPI Scan & Pay and 0.5% on online spends, and certain categories are excluded. Monthly cashback may be capped as per programme terms. All trademarks and card designs belong to their respective owners. Please read all product terms & conditions before applying.
+              </p>
               <p style={{ marginTop: '12px', color: '#7a9e69' }}>&copy; {new Date().getFullYear()} FinMantra. All rights reserved.</p>
             </div>
           </div>
@@ -1733,19 +1290,10 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
 
       {/* OTP Verification Modal */}
       {showOtpModal && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
-          background: 'rgba(18, 60, 29, 0.45)', backdropFilter: 'blur(5px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999
-        }}>
-          <div className="kiwi-formcard" style={{ maxWidth: '420px', width: '90%', padding: '30px' }}>
+        <div className="kiwi-otp-modal">
+          <div className="kiwi-otp-panel">
             <div style={{ textAlign: 'center' }}>
-              <div style={{
-                width: '54px', height: '54px', borderRadius: '50%',
-                background: 'var(--bg2)', color: 'var(--green)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '24px', margin: '0 auto 15px auto'
-              }}>
+              <div className="kiwi-otp-icon">
                 💬
               </div>
               <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--ink)' }}>Confirm Mobile OTP</h3>
@@ -1763,12 +1311,12 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
             <div className="form-group">
               <input
                 type="text"
-                className="form-input"
+                className="kiwi-otp-input"
                 maxLength="6"
                 placeholder="Enter 6-digit OTP"
                 value={otpVal}
                 onChange={(e) => setOtpVal(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                style={{ textAlign: 'center', letterSpacing: '8px', fontSize: '20px', fontWeight: 800 }}
+                disabled={isSubmitting}
               />
             </div>
 
@@ -1781,20 +1329,14 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
             <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
               <button 
                 onClick={handleVerifyOtp} 
-                className="btn-primary" 
-                style={{ flex: 1, height: '44px', fontSize: '14px', padding: 0, borderRadius: '8px' }}
+                className="kiwi-otp-btn-verify"
                 disabled={isSubmitting || otpVal.length !== 6}
               >
                 {isSubmitting ? 'Verifying...' : 'Verify OTP'}
               </button>
               <button
                 onClick={handleResendOtp}
-                className="btn-primary"
-                style={{
-                  flex: 1, height: '44px', fontSize: '14px', padding: 0, borderRadius: '8px',
-                  background: 'none !important', color: 'var(--cta) !important', border: '1.5px solid var(--line) !important',
-                  boxShadow: 'none'
-                }}
+                className="kiwi-otp-btn-resend"
                 disabled={resendTimer > 0 || isSubmitting}
               >
                 {resendTimer > 0 ? `Resend in ${resendTimer}s` : 'Resend OTP'}

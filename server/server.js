@@ -927,14 +927,18 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
   let card = null;
   let redirectUrlTemplate = '';
 
-  if (source === 'agent' && card_id) {
-    const cards = await db.getCards(true);
+  if (card_id) {
+    const cards = await db.getCards(source === 'agent');
     card = cards.find(c => c.id === card_id);
-    if (!card) {
+    if (!card && source === 'agent') {
       return res.status(404).json({ error: 'Selected credit card not found' });
     }
-    redirectUrlTemplate = card.redirect_url_template || '';
-  } else {
+    if (card) {
+      redirectUrlTemplate = card.redirect_url_template || '';
+    }
+  }
+
+  if (!card) {
     let matchedCard = null;
     
     // First, check if there is an active card matching by utm_internal (which carries the assigned card/model name)
@@ -1043,7 +1047,17 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
     email: trimmedEmail,
     city: city || null,
     employment: employment || null,
-    income_range: source === 'agent' ? income_range : null,
+    income_range: (() => {
+      if (source === 'agent') return income_range || null;
+      if (monthly_income) {
+        const parsed = parseInt(String(monthly_income).replace(/[^\d]/g, ''), 10);
+        if (!isNaN(parsed) && parsed > 0 && !String(monthly_income).includes('–') && !String(monthly_income).includes('-')) {
+          return `₹${parsed.toLocaleString('en-IN')}`;
+        }
+        return monthly_income;
+      }
+      return null;
+    })(),
     card_id: card ? card.id : null,
     card_name: card ? card.name : 'Public Redirection',
     card_bank: card ? card.bank : 'N/A',
@@ -1161,58 +1175,65 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
   // Real-time broadcast notification of a new lead!
   broadcast({ type: 'LEAD_ADDED', data: newLead });
 
-  // Send WhatsApp Referral Notification with Tracking URL only for agents
-  if (source === 'agent') {
-    const agentCode = agent_id || 'active';
-    const dateCode = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD
-    const settings = await db.getSettings();
-    
-    // Resolve base URL based on settings or fallback dynamically
-    let baseUrl = settings.public_site_url ? settings.public_site_url.trim() : '';
-    if (baseUrl) {
-      if (baseUrl.endsWith('/')) {
-        baseUrl = baseUrl.substring(0, baseUrl.length - 1);
-      }
-    } else {
-      const host = req.get('host') || 'localhost:5000';
-      const protocol = req.protocol || 'http';
-      baseUrl = `${protocol}://${host}`;
-      if (host.includes('localhost') || host.includes('127.0.0.1')) {
-        baseUrl = 'http://localhost:5173';
-      }
-    }
-    
-    const referralLink = `${baseUrl}/refer/${agentCode}/${dateCode}/${newLead.urn}`;
-    const cardNameStr = card ? `${card.bank} ${card.name}` : 'FinMantra Partner Bank';
-    const referralMsg = `Hello ${trimmedName}, thank you for choosing FinMantra. You can access your secure bank portal for the ${cardNameStr} application here: ${referralLink}`;
-    const referralTemplateName = settings.wa_referral_template_name || process.env.WA_REFERRAL_TEMPLATE_NAME || 'finmantra_portal';
-    const candidateRefTemplates = [referralTemplateName, 'finmantra_portal', 'finmantra_welcome', 'transactional_link', 'jaspers_market_order_confirmation_v1'].filter((v, i, a) => v && a.indexOf(v) === i);
-    
-    for (const refTName of candidateRefTemplates) {
-      try {
-        let params = [trimmedName, referralLink];
-        if (refTName === 'jaspers_market_order_confirmation_v1') {
-          const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-          params = [trimmedName, referralLink, dateStr];
+  // Send WhatsApp Referral Notification with Tracking URL for agent and kiwi sources on creation (asynchronously)
+  if (source === 'agent' || source === 'kiwi') {
+    (async () => {
+      const agentCode = source === 'agent' ? (agent_id || 'active') : 'public';
+      const dateCode = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD
+      const settings = await db.getSettings();
+      
+      // Resolve base URL based on settings or fallback dynamically
+      let baseUrl = settings.public_site_url ? settings.public_site_url.trim() : '';
+      if (baseUrl) {
+        if (baseUrl.endsWith('/')) {
+          baseUrl = baseUrl.substring(0, baseUrl.length - 1);
         }
-        const result = await sendWhatsAppTemplate(trimmedPhone, refTName, params);
-        if (!result.simulated) {
-          console.log(`[WhatsApp API] Referral template "${refTName}" sent to ${trimmedPhone} via Meta API.`);
+      } else {
+        const host = req.get('host') || 'localhost:5000';
+        const protocol = req.protocol || 'http';
+        baseUrl = `${protocol}://${host}`;
+        if (host.includes('localhost') || host.includes('127.0.0.1')) {
+          baseUrl = 'http://localhost:5173';
         }
-        break;
-      } catch (err) {
-        console.warn(`[WhatsApp API Warning] Referral template "${refTName}" failed for ${trimmedPhone}: ${err.message}.`);
-        if (err.isAuthError || err.message.includes('Authentication Error') || err.message.includes('Code: 190')) {
-          console.error(`[WhatsApp API CRITICAL] Stopping referral template trials: Meta Access Token is invalid/expired (Code 190).`);
+      }
+      
+      let waBaseUrl = baseUrl;
+      if (waBaseUrl.includes('localhost') || waBaseUrl.includes('127.0.0.1')) {
+        waBaseUrl = 'https://finmantra.org';
+      }
+      
+      const referralLink = `${waBaseUrl}/refer/${agentCode}/${dateCode}/${newLead.urn}`;
+      const cardNameStr = card ? `${card.bank} ${card.name}` : 'FinMantra Partner Bank';
+      const referralMsg = `Hello ${trimmedName}, thank you for choosing FinMantra. You can access your secure bank portal for the ${cardNameStr} application here: ${referralLink}`;
+      const referralTemplateName = settings.wa_referral_template_name || process.env.WA_REFERRAL_TEMPLATE_NAME || 'finmantra_portal';
+      const candidateRefTemplates = [referralTemplateName, 'finmantra_portal', 'finmantra_welcome', 'transactional_link', 'jaspers_market_order_confirmation_v1'].filter((v, i, a) => v && a.indexOf(v) === i);
+      
+      for (const refTName of candidateRefTemplates) {
+        try {
+          let params = [trimmedName, referralLink];
+          if (refTName === 'jaspers_market_order_confirmation_v1') {
+            const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            params = [trimmedName, referralLink, dateStr];
+          }
+          const result = await sendWhatsAppTemplate(trimmedPhone, refTName, params);
+          if (!result.simulated) {
+            console.log(`[WhatsApp API] Referral template "${refTName}" sent to ${trimmedPhone} via Meta API.`);
+          }
           break;
+        } catch (err) {
+          console.warn(`[WhatsApp API Warning] Referral template "${refTName}" failed for ${trimmedPhone}: ${err.message}.`);
+          if (err.isAuthError || err.message.includes('Authentication Error') || err.message.includes('Code: 190')) {
+            console.error(`[WhatsApp API CRITICAL] Stopping referral template trials: Meta Access Token is invalid/expired (Code 190).`);
+            break;
+          }
         }
       }
-    }
 
-    console.log(`=========================================`);
-    console.log(`[WhatsApp Referral Link for ${trimmedPhone}]:`);
-    console.log(referralMsg);
-    console.log(`=========================================`);
+      console.log(`=========================================`);
+      console.log(`[WhatsApp Referral Link for ${trimmedPhone}]:`);
+      console.log(referralMsg);
+      console.log(`=========================================`);
+    })().catch(err => console.error('[WhatsApp Background Error]:', err));
   }
 
   res.json({
@@ -1277,7 +1298,14 @@ app.put('/api/leads/public/urn/:urn', async (req, res) => {
   }
   lead.employment = employment || lead.employment;
   lead.monthly_income = monthly_income || lead.monthly_income;
-  lead.income_range = monthly_income ? `₹${parseInt(monthly_income, 10).toLocaleString('en-IN')}` : lead.income_range;
+  if (monthly_income) {
+    const parsed = parseInt(String(monthly_income).replace(/[^\d]/g, ''), 10);
+    if (!isNaN(parsed) && parsed > 0 && !String(monthly_income).includes('–') && !String(monthly_income).includes('-')) {
+      lead.income_range = `₹${parsed.toLocaleString('en-IN')}`;
+    } else {
+      lead.income_range = monthly_income;
+    }
+  }
   lead.designation = designation || lead.designation;
   lead.pan_no = pan_no ? String(pan_no).trim().toUpperCase() : lead.pan_no;
   lead.has_credit_card = has_credit_card || lead.has_credit_card;
@@ -1383,7 +1411,12 @@ app.put('/api/leads/public/urn/:urn', async (req, res) => {
     }
   }
   
-  const referralLink = `${baseUrl}/refer/${agentCode}/${dateCode}/${lead.urn}`;
+  let waBaseUrl = baseUrl;
+  if (waBaseUrl.includes('localhost') || waBaseUrl.includes('127.0.0.1')) {
+    waBaseUrl = 'https://finmantra.org';
+  }
+  
+  const referralLink = `${waBaseUrl}/refer/${agentCode}/${dateCode}/${lead.urn}`;
   const cardNameStr = card ? `${card.bank} ${card.name}` : 'FinMantra Partner Bank';
   const referralMsg = `Hello ${lead.full_name}, thank you for choosing FinMantra. You can access your secure bank portal for the ${cardNameStr} application here: ${referralLink}`;
   const referralTemplateName = dbSettings.wa_referral_template_name || process.env.WA_REFERRAL_TEMPLATE_NAME || 'finmantra_portal';
