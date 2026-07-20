@@ -1950,6 +1950,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                   <option value="public">Public Website</option>
                   <option value="agent">Agent Walk-in</option>
                   <option value="kiwi">Kiwi Page</option>
+                  <option value="simplyclick_sbi">SBI SimplyClick</option>
                 </select>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', width: '100%' }}>
                   <span style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', whiteSpace: 'nowrap' }}>From:</span>
