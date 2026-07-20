@@ -762,13 +762,18 @@ const db = {
 
   // --- Cards ---
   async getCards(includeInactive = false) {
-    const res = includeInactive
-      ? await pool.query('SELECT * FROM cards ORDER BY display_order ASC')
-      : await pool.query('SELECT * FROM cards WHERE active = true ORDER BY display_order ASC');
-    return res.rows.map(row => ({
-      ...row,
-      card_locations: typeof row.card_locations === 'string' ? JSON.parse(row.card_locations) : (row.card_locations || [])
-    }));
+    try {
+      const res = includeInactive
+        ? await pool.query('SELECT * FROM cards ORDER BY display_order ASC')
+        : await pool.query('SELECT * FROM cards WHERE active = true ORDER BY display_order ASC');
+      return res.rows.map(row => ({
+        ...row,
+        card_locations: typeof row.card_locations === 'string' ? JSON.parse(row.card_locations) : (row.card_locations || [])
+      }));
+    } catch (err) {
+      console.error('[DB Error] getCards failed:', err.message);
+      return [];
+    }
   },
 
   async addCard(card) {
@@ -870,8 +875,13 @@ const db = {
 
   // --- Locations ---
   async getLocations() {
-    const res = await pool.query('SELECT * FROM locations ORDER BY created_at ASC');
-    return res.rows;
+    try {
+      const res = await pool.query('SELECT * FROM locations ORDER BY created_at ASC');
+      return res.rows;
+    } catch (err) {
+      console.error('[DB Error] getLocations failed:', err.message);
+      return [];
+    }
   },
 
   async addLocation(loc) {
@@ -928,21 +938,26 @@ const db = {
 
   // --- Settings ---
   async getSettings() {
-    const res = await pool.query('SELECT * FROM settings');
-    const settings = {};
-    res.rows.forEach(row => {
-      const val = row.value ? String(row.value).trim() : '';
-      if (val && val !== 'undefined' && val !== 'null') {
-        settings[row.key] = val;
+    try {
+      const res = await pool.query('SELECT * FROM settings');
+      const settings = {};
+      res.rows.forEach(row => {
+        const val = row.value ? String(row.value).trim() : '';
+        if (val && val !== 'undefined' && val !== 'null') {
+          settings[row.key] = val;
+        }
+      });
+      if (settings.whatsapp_gateway === undefined) {
+        settings.whatsapp_gateway = 'meta';
       }
-    });
-    if (settings.whatsapp_gateway === undefined) {
-      settings.whatsapp_gateway = 'meta';
+      if (settings.csv_export_template === undefined) {
+        settings.csv_export_template = DEFAULT_CSV_TEMPLATE;
+      }
+      return settings;
+    } catch (err) {
+      console.error('[DB Error] getSettings failed:', err.message);
+      return { whatsapp_gateway: 'meta', csv_export_template: DEFAULT_CSV_TEMPLATE };
     }
-    if (settings.csv_export_template === undefined) {
-      settings.csv_export_template = DEFAULT_CSV_TEMPLATE;
-    }
-    return settings;
   },
 
 

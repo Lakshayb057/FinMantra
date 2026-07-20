@@ -2295,8 +2295,13 @@ app.get('/api/leads/export', authenticateToken, requireAdmin, async (req, res) =
 
 // Get active cards for public
 app.get('/api/cards', async (req, res) => {
-  const cards = await db.getCards(false);
-  res.json(cards);
+  try {
+    const cards = await db.getCards(false);
+    res.json(cards || []);
+  } catch (err) {
+    console.error('[API Error] /api/cards:', err.message);
+    res.json([]);
+  }
 });
 
 // Get all cards (Admin Only)
@@ -2666,8 +2671,13 @@ app.get('/api/pincode/lookup/:pincode', async (req, res) => {
 
 // Get Settings
 app.get('/api/settings', async (req, res) => {
-  const settings = await db.getSettings();
-  res.json(settings);
+  try {
+    const settings = await db.getSettings();
+    res.json(settings || {});
+  } catch (err) {
+    console.error('[API Error] /api/settings:', err.message);
+    res.json({});
+  }
 });
 
 // Update Settings (Admin Only)
