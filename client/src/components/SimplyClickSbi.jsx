@@ -1,61 +1,38 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowRight, User, Phone, Mail, Calendar, MapPin, CheckCircle, RefreshCw, X, ShieldAlert, Briefcase, ChevronDown, Lock } from 'lucide-react';
+import { X, Lock } from 'lucide-react';
 import { trackLeadSubmission, initAnalytics } from '../utils/analytics';
-
-// Offline fallback helper to resolve Indian pincodes to State/Region
-const getStateFromPincode = (pin) => {
-  const prefix = String(pin).substring(0, 2);
-  const mapping = {
-    '11': 'Delhi', '12': 'Haryana', '13': 'Haryana', '14': 'Punjab', '15': 'Punjab',
-    '16': 'Chandigarh', '17': 'Himachal Pradesh', '18': 'Jammu and Kashmir', '19': 'Jammu and Kashmir',
-    '20': 'Uttar Pradesh', '21': 'Uttar Pradesh', '22': 'Uttar Pradesh', '23': 'Uttar Pradesh', '24': 'Uttar Pradesh', '25': 'Uttar Pradesh', '26': 'Uttar Pradesh', '27': 'Uttar Pradesh', '28': 'Uttar Pradesh',
-    '30': 'Rajasthan', '31': 'Rajasthan', '32': 'Rajasthan', '33': 'Rajasthan', '34': 'Rajasthan',
-    '36': 'Gujarat', '37': 'Gujarat', '38': 'Gujarat', '39': 'Gujarat',
-    '40': 'Maharashtra', '41': 'Maharashtra', '42': 'Maharashtra', '43': 'Maharashtra', '44': 'Maharashtra',
-    '45': 'Madhya Pradesh', '46': 'Madhya Pradesh', '47': 'Madhya Pradesh', '48': 'Madhya Pradesh',
-    '49': 'Chhattisgarh',
-    '50': 'Telangana', '51': 'Andhra Pradesh', '52': 'Andhra Pradesh', '53': 'Andhra Pradesh',
-    '56': 'Karnataka', '57': 'Karnataka', '58': 'Karnataka', '59': 'Karnataka',
-    '60': 'Tamil Nadu', '61': 'Tamil Nadu', '62': 'Tamil Nadu', '63': 'Tamil Nadu', '64': 'Tamil Nadu',
-    '67': 'Kerala', '68': 'Kerala', '69': 'Kerala',
-    '70': 'West Bengal', '71': 'West Bengal', '72': 'West Bengal', '73': 'West Bengal', '74': 'West Bengal',
-    '75': 'Odisha', '76': 'Odisha', '77': 'Odisha',
-    '78': 'Assam', '79': 'North Eastern States',
-    '80': 'Bihar', '81': 'Bihar', '82': 'Bihar', '83': 'Jharkhand', '84': 'Bihar', '85': 'Bihar',
-    '90': 'Army Post Office'
-  };
-  return mapping[prefix] || 'Other';
-};
 
 export default function SimplyClickSbi({ navigateTo, utmParams }) {
   const API_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.port === '5173') ? 'http://localhost:5000/api' : '/api';
 
+  const [settings, setSettings] = useState({});
+  const [cards, setCards] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formError, setFormError] = useState('');
+  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [redirectUrl, setRedirectUrl] = useState('#');
 
   // Form State
   const [formData, setFormData] = useState({
-    fullName: '',
-    phone: '',
+    pan: '',
+    name: '',
+    dob: '',
+    mother_name: '',
+    mobile: '',
+    address: '',
     email: '',
-    pincode: '',
-    pan_no: '',
-    employment: '',
-    monthly_income: '',
-    address_locality: '',
-    address_city: '',
-    address_state: ''
+    occupation: '',
+    designation: '',
+    company: '',
+    consent: false,
+    pincode: ''
   });
 
   const [errors, setErrors] = useState({});
-  const [settings, setSettings] = useState({});
-  const [cards, setCards] = useState([]);
+  const [formError, setFormError] = useState('');
 
-  // Pincode Lookup & Serviceability States
-  const [pincodeLoading, setPincodeLoading] = useState(false);
-  const [pincodeLocationText, setPincodeLocationText] = useState('');
+  // Pincode serviceability states
   const [pincodeError, setPincodeError] = useState('');
-  const [pincodeLocalities, setPincodeLocalities] = useState([]);
+  const [pincodeLocationText, setPincodeLocationText] = useState('');
 
   // Phone Verification / OTP states
   const [showOtpModal, setShowOtpModal] = useState(false);
@@ -109,12 +86,10 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
       const pin = formData.pincode;
       if (pin.length !== 6) {
         setPincodeLocationText('');
-        setPincodeLocalities([]);
         setPincodeError('');
         return;
       }
 
-      setPincodeLoading(true);
       setPincodeError('');
       try {
         const res = await fetch(`https://api.postalpincode.in/pincode/${pin}`);
@@ -126,20 +101,8 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
               const po = postOffices[0];
               const city = po.District;
               const state = po.State;
-              const locText = `${city}, ${state}`;
-              setPincodeLocationText(locText);
+              setPincodeLocationText(`${city}, ${state}`);
 
-              // Gather unique localities
-              const uniqueLocs = Array.from(new Set(postOffices.map(p => p.Name))).sort();
-              setPincodeLocalities(uniqueLocs);
-
-              setFormData(prev => ({
-                ...prev,
-                address_city: city,
-                address_state: state,
-                address_locality: uniqueLocs[0] || ''
-              }));
-              
               // Validate serviceability
               const matchedSbiCard = cards.find(c => String(c.name).toLowerCase().includes('simplyclick') || String(c.id).toLowerCase().includes('sbi'));
               if (matchedSbiCard && matchedSbiCard.bank) {
@@ -163,142 +126,115 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
           } else {
             setPincodeError('Invalid Pincode. No location found.');
           }
-        } else {
-          setPincodeError('Pincode verification service unavailable.');
         }
       } catch (err) {
-        // Fallback to local resolver if API is blocked/down
-        const resolvedState = getStateFromPincode(pin);
-        if (resolvedState && resolvedState !== 'Other') {
-          setPincodeLocationText(resolvedState);
-          setFormData(prev => ({
-            ...prev,
-            address_city: 'City',
-            address_state: resolvedState,
-            address_locality: 'Locality'
-          }));
-        } else {
-          setPincodeError('Failed to lookup pincode.');
-        }
-      } finally {
-        setPincodeLoading(false);
+        console.error('Failed to lookup pincode:', err);
       }
     };
     lookup();
   }, [formData.pincode, cards, settings]);
 
-  // Input Change handler
+  // Input change cleaner
   const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    let stateKey = name;
+    const { name, value, type, checked } = e.target;
+    let cleanVal = type === 'checkbox' ? checked : value;
 
-    // Map input names from HTML to React state keys
-    if (name === 'full_name') stateKey = 'fullName';
-    if (name === 'mobile') stateKey = 'phone';
-    if (name === 'pan') stateKey = 'pan_no';
-
-    if (stateKey === 'phone' || stateKey === 'pincode') {
-      const cleanVal = value.replace(/\D/g, '').slice(0, stateKey === 'phone' ? 10 : 6);
-      setFormData(prev => ({ ...prev, [stateKey]: cleanVal }));
-      validateField(stateKey, cleanVal);
-      return;
+    if (name === 'pan') {
+      cleanVal = value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
+    } else if (name === 'mobile' || name === 'pincode') {
+      cleanVal = value.replace(/[^0-9]/g, '').slice(0, name === 'mobile' ? 10 : 6);
     }
 
-    if (stateKey === 'pan_no') {
-      const cleanVal = value.toUpperCase().slice(0, 10);
-      setFormData(prev => ({ ...prev, [stateKey]: cleanVal }));
-      validateField(stateKey, cleanVal);
-      return;
-    }
+    setFormData(prev => ({ ...prev, [name]: cleanVal }));
 
-    setFormData(prev => ({ ...prev, [stateKey]: value }));
-    validateField(stateKey, value);
+    // Reset validation state for the field
+    setErrors(prev => {
+      const next = { ...prev };
+      delete next[name];
+      return next;
+    });
   };
 
-  // Validation
-  const validateField = (fieldName, value) => {
-    const newErrors = { ...errors };
-
-    if (fieldName === 'fullName') {
-      if (!value || value.trim().length < 3) {
-        newErrors.fullName = 'Full Name must be at least 3 letters.';
-      } else {
-        const trimmed = value.trim();
-        if (!/^[A-Za-z\s]+$/.test(trimmed)) {
-          newErrors.fullName = 'Full Name must contain letters and spaces only.';
-        } else {
-          const words = trimmed.split(/\s+/).filter(Boolean);
-          if (words.length < 2) {
-            newErrors.fullName = 'Please enter your Last Name / Father Name.';
-          } else {
-            delete newErrors.fullName;
-          }
-        }
-      }
+  // Validate age helper
+  const age = (dobString) => {
+    const today = new Date();
+    const birthDate = new Date(dobString);
+    let currentAge = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      currentAge--;
     }
+    return currentAge;
+  };
 
-    if (fieldName === 'phone') {
-      if (!value || value.length !== 10 || !/^[6-9]/.test(value)) {
-        newErrors.phone = 'Mobile must be a valid 10-digit number starting with 6-9.';
-      } else {
-        delete newErrors.phone;
-      }
+  // Standard validations matching raw HTML
+  const validateForm = () => {
+    const newErrors = {};
+    let isValid = true;
+
+    if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(formData.pan)) {
+      newErrors.pan = true;
+      isValid = false;
     }
-
-    if (fieldName === 'email') {
-      if (!value || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
-        newErrors.email = 'Enter a valid email address.';
-      } else {
-        delete newErrors.email;
-      }
+    if (!formData.name || formData.name.trim().length < 2) {
+      newErrors.name = true;
+      isValid = false;
     }
-
-    if (fieldName === 'pan_no') {
-      if (!value || !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(value)) {
-        newErrors.pan_no = 'Enter a valid 10-character PAN card number.';
-      } else {
-        delete newErrors.pan_no;
-      }
+    const currentAge = formData.dob ? age(formData.dob) : 0;
+    if (!formData.dob || currentAge < 21 || currentAge > 70) {
+      newErrors.dob = true;
+      isValid = false;
     }
-
-    if (fieldName === 'pincode') {
-      if (!value || value.length !== 6) {
-        newErrors.pincode = 'Enter a 6-digit pincode.';
-      } else {
-        delete newErrors.pincode;
-      }
+    if (!formData.mother_name || formData.mother_name.trim().length < 2) {
+      newErrors.mother_name = true;
+      isValid = false;
     }
-
-    if (fieldName === 'employment') {
-      if (!value) {
-        newErrors.employment = 'Select your employment status.';
-      } else {
-        delete newErrors.employment;
-      }
+    if (!/^[6-9][0-9]{9}$/.test(formData.mobile)) {
+      newErrors.mobile = true;
+      isValid = false;
     }
-
-    if (fieldName === 'monthly_income') {
-      if (!value) {
-        newErrors.monthly_income = 'Select your monthly income range.';
-      } else {
-        delete newErrors.monthly_income;
-      }
+    if (!formData.address || formData.address.trim().length < 10) {
+      newErrors.address = true;
+      isValid = false;
+    }
+    if (!formData.pincode || formData.pincode.length !== 6 || pincodeError) {
+      newErrors.pincode = true;
+      isValid = false;
+    }
+    if (!/^[^@\s]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      newErrors.email = true;
+      isValid = false;
+    }
+    if (!formData.occupation) {
+      newErrors.occupation = true;
+      isValid = false;
+    }
+    if (!formData.designation || formData.designation.trim().length < 1) {
+      newErrors.designation = true;
+      isValid = false;
+    }
+    if (!formData.company || formData.company.trim().length < 1) {
+      newErrors.company = true;
+      isValid = false;
+    }
+    if (!formData.consent) {
+      newErrors.consent = true;
+      isValid = false;
     }
 
     setErrors(newErrors);
+    return isValid;
   };
 
   // Send Step 1 OTP
   const sendStep1Otp = async () => {
-    const { phone } = formData;
-    if (phone.length !== 10) return;
     setIsSubmitting(true);
     setFormError('');
     try {
       const res = await fetch(`${API_URL}/otp/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone })
+        body: JSON.stringify({ phone: formData.mobile })
       });
       const data = await res.json();
 
@@ -329,7 +265,7 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
       const res = await fetch(`${API_URL}/otp/verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: formData.phone, otp: otpVal })
+        body: JSON.stringify({ phone: formData.mobile, otp: otpVal })
       });
       const data = await res.json();
 
@@ -341,7 +277,7 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
         setTimeout(() => {
           setShowOtpModal(false);
           setOtpVal('');
-          // Automatically trigger form submission now that verification is complete
+          // Automatically trigger final form submission
           setTimeout(() => {
             handleFormSubmit();
           }, 100);
@@ -365,7 +301,7 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
       const res = await fetch(`${API_URL}/otp/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: formData.phone })
+        body: JSON.stringify({ phone: formData.mobile })
       });
       const data = await res.json();
       if (res.ok) {
@@ -384,61 +320,20 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
     }
   };
 
-  // Final Form Submit (Single-Step)
+  // Final submit handler
   const handleFormSubmit = async (e) => {
     if (e) e.preventDefault();
     setFormError('');
-    setPincodeError('');
 
-    // Strict validation on all 7 fields
-    const newErrors = {};
-    if (!formData.fullName || formData.fullName.trim().length < 3) {
-      newErrors.fullName = 'Please enter your name.';
-    } else {
-      const trimmed = formData.fullName.trim();
-      if (!/^[A-Za-z\s]+$/.test(trimmed)) {
-        newErrors.fullName = 'Full Name must contain letters and spaces only.';
-      } else {
-        const words = trimmed.split(/\s+/).filter(Boolean);
-        if (words.length < 2) {
-          newErrors.fullName = 'Please enter your Last Name / Father Name';
-        }
+    if (!validateForm()) {
+      const firstInvalid = document.querySelector('.field.invalid');
+      if (firstInvalid) {
+        firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
-    }
-
-    if (!formData.phone || formData.phone.length !== 10 || !/^[6-9]/.test(formData.phone)) {
-      newErrors.phone = 'Enter a valid 10-digit mobile.';
-    }
-
-    if (!formData.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = 'Enter a valid email.';
-    }
-
-    if (!formData.pincode || formData.pincode.length !== 6 || !/^\d+$/.test(formData.pincode)) {
-      newErrors.pincode = 'Enter a valid 6-digit pincode.';
-    } else if (pincodeError) {
-      newErrors.pincode = pincodeError;
-    }
-
-    if (!formData.pan_no || !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(formData.pan_no)) {
-      newErrors.pan_no = 'Enter a valid PAN (e.g. ABCDE1234F).';
-    }
-
-    if (!formData.employment) {
-      newErrors.employment = 'Please select one.';
-    }
-
-    if (!formData.monthly_income) {
-      newErrors.monthly_income = 'Please select your income range.';
-    }
-
-    setErrors(newErrors);
-    if (Object.keys(newErrors).length > 0) {
-      setFormError('Please correct the highlighted errors before submitting.');
       return;
     }
 
-    // Trigger phone verification modal if not yet verified
+    // Trigger OTP modal if not yet verified
     if (!isPhoneVerifiedRef.current) {
       sendStep1Otp();
       return;
@@ -446,20 +341,21 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
 
     setIsSubmitting(true);
     try {
-      const compiledAddress = `${formData.address_locality || 'N/A'}, ${formData.address_city || 'N/A'}, ${formData.address_state || 'N/A'} - ${formData.pincode}`;
-
       const res = await fetch(`${API_URL}/leads`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          full_name: formData.fullName,
-          phone: formData.phone,
-          email: formData.email,
-          employment: formData.employment,
-          monthly_income: formData.monthly_income,
-          pan_no: formData.pan_no ? String(formData.pan_no).trim().toUpperCase() : null,
+          full_name: formData.name.trim(),
+          phone: formData.mobile,
+          email: formData.email.trim(),
+          pan_no: formData.pan.toUpperCase(),
+          dob: formData.dob,
+          mother_name: formData.mother_name.trim(),
+          current_address: `${formData.address.trim()} (Pincode: ${formData.pincode})`,
           pincode: formData.pincode,
-          current_address: compiledAddress,
+          employment: formData.occupation,
+          designation: formData.designation.trim(),
+          company: formData.company.trim(),
           consent: true,
           source: 'simplyclick_sbi',
           ...utmParams,
@@ -470,16 +366,16 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
       const data = await res.json();
       if (res.ok) {
         trackLeadSubmission({
-          fullName: formData.fullName,
+          fullName: formData.name,
           email: formData.email,
-          phone: formData.phone,
+          phone: formData.mobile,
           eventId: data.urn,
           contentName: 'SBI SimplyClick Lead Submitted',
           status: 'submitted'
         });
 
         const cacheData = {
-          name: formData.fullName,
+          name: formData.name,
           urn: data.urn,
           redirectUrl: data.redirectUrl,
           cardName: 'SBI SimplyClick Credit Card',
@@ -488,47 +384,48 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
         };
         sessionStorage.setItem('finmantra_applied_lead', JSON.stringify(cacheData));
 
-        // Singular link resolution for non-Android/desktop environments
+        // Singular / Intent URL resolution matching App.jsx logic
         let finalUrl = data.redirectUrl;
-        console.log('[SBI Redirect] Raw redirectUrl from server:', finalUrl);
-
         const isDesktop = /Windows|Macintosh|MacIntel|Linux x86_64/i.test(navigator.userAgent || '') || 
                           /Win32|MacIntel|Win64/i.test(navigator.platform || '');
         const isAndroid = /Android/i.test(navigator.userAgent || '');
 
         if ((isDesktop || !isAndroid) && finalUrl && finalUrl.includes('sng.link')) {
           try {
-            console.log('[SBI Redirect] Non-Android/Desktop platform with Singular link. Resolving server-side...');
             const resolveRes = await fetch(`${API_URL}/resolve-singular?url=${encodeURIComponent(finalUrl)}`);
             const resolveData = await resolveRes.json();
             if (resolveRes.ok && resolveData.resolvedUrl) {
               finalUrl = resolveData.resolvedUrl;
-              console.log('[SBI Redirect] Server-side resolved URL:', finalUrl);
             }
           } catch (resolveErr) {
-            console.error('[SBI Redirect] Server-side resolution failed:', resolveErr);
+            console.error('[SBI Redirect] Server Singular resolution failed:', resolveErr);
           }
         }
 
-        // Fallback intent:// URL resolution
         if (finalUrl && String(finalUrl).startsWith('intent://')) {
           const fbMatch = String(finalUrl).match(/S\.browser_fallback_url=([^;]+)/);
           if (fbMatch && fbMatch[1]) {
             try {
               finalUrl = decodeURIComponent(fbMatch[1]);
-              console.log('[SBI Redirect] Resolved intent:// to HTTPS:', finalUrl);
             } catch (decodeErr) {
-              console.error('[SBI Redirect] Failed to decode fallback URL:', decodeErr);
+              console.error('[SBI Redirect] Fallback decode failed:', decodeErr);
             }
           }
         }
-        console.log('[SBI Redirect] Final navigation URL:', finalUrl);
-        window.location.replace(finalUrl);
+
+        setRedirectUrl(finalUrl);
+        setIsSubmitted(true);
+        setTimeout(() => {
+          const successView = document.getElementById('success');
+          if (successView) {
+            successView.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, 150);
       } else {
-        setFormError(data.error || 'Failed to submit application. Please try again.');
+        setFormError(data.error || 'Failed to submit application. Please check details.');
       }
     } catch (err) {
-      setFormError('Network error. Unable to contact servers.');
+      setFormError('Network error. Unable to contact lead generation server.');
     } finally {
       setIsSubmitting(false);
     }
@@ -536,1416 +433,890 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
 
   return (
     <>
-      {/* Styles injected dynamically matching premium SBI SimplyClick branding */}
       <style dangerouslySetInnerHTML={{ __html: `
-        :root {
-          --bg: #F4F7FC; 
-          --bg2: #EAF0FA; 
-          --panel: #FFFFFF; 
-          --ink: #0D2340; 
-          --mut: #4C6584;
-          --sbi-blue: #0A3F83; 
-          --sbi-light: #00A3E0; 
-          --cta: #0A3F83; 
-          --cta-hover: #072B5C;
-          --ctatx: #FFFFFF; 
-          --orange: #FF8A00;
-          --line: rgba(10,63,131,.12);
-          --radius-sm: 8px;
-          --radius-md: 12px;
-          --radius-lg: 18px;
-          --shadow-sm: 0 2px 8px rgba(10,63,131,0.04);
-          --shadow: 0 8px 24px rgba(10,63,131,0.06);
-          --shadow-lg: 0 16px 40px rgba(10,63,131,0.1);
-          --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&display=swap');
+
+        :root{
+         --wine:#6E2C3E; --wine2:#8A3A50; --oxblood:#431722;
+         --blush:#F3DEDE; --rose:#EAC9CC; --cream:#FBF3EA; --paper:#FCF7F3;
+         --gold:#C79A52; --gold-deep:#8A5A20; --ink:#2A0A14; --line:#E3C9CF;
+         --ok:#2f7d4f; --err:#b23a48;
         }
-        .sbi-body {
-          font-family: 'Outfit', sans-serif;
+        .simplyclick-wrapper {
+          margin: 0;
+          padding: 0;
+          box-sizing: border-box;
+          font-family: 'Outfit', system-ui, sans-serif;
           color: var(--ink);
-          background: var(--bg);
+          background: var(--paper);
           line-height: 1.5;
-          -webkit-font-smoothing: antialiased;
         }
-        .sbi-acc {
-          font-family: 'Outfit', sans-serif;
+        .simplyclick-wrapper html {
+          scroll-behavior: smooth;
+        }
+        .simplyclick-wrapper .eyebrow {
+          font-family: monospace;
+          text-transform: uppercase;
+          letter-spacing: 3px;
+          font-size: 12px;
+        }
+        .simplyclick-wrapper h1,
+        .simplyclick-wrapper h2,
+        .simplyclick-wrapper h3,
+        .simplyclick-wrapper h4 {
+          font-family: 'Bricolage Grotesque', sans-serif;
           font-weight: 700;
-          color: var(--orange);
+          letter-spacing: -1px;
+          line-height: 1.02;
         }
-        .sbi-container {
-          max-width: 1200px;
+        .simplyclick-wrapper a {
+          color: inherit;
+        }
+        .simplyclick-wrapper .wrap {
+          max-width: 1120px;
           margin: 0 auto;
-          padding: 0 1.5rem;
+          padding: 0 22px;
         }
 
-        /* 1. Responsive Header */
-        .sbi-header {
+        /* top bar */
+        .simplyclick-wrapper .topbar {
           position: sticky;
           top: 0;
-          z-index: 100;
-          background: rgba(255, 255, 255, 0.9);
-          backdrop-filter: blur(12px);
+          z-index: 40;
+          background: rgba(252,247,243,0.86);
+          backdrop-filter: blur(10px);
           border-bottom: 1px solid var(--line);
-          padding: 0.85rem 0;
-          transition: var(--transition-smooth);
         }
-        .sbi-header-inner {
+        .simplyclick-wrapper .topbar .row {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          height: 48px;
+          height: 60px;
         }
-        .sbi-logo-section {
-          display: flex;
-          align-items: center;
-          gap: 0.75rem;
-          cursor: pointer;
-        }
-        .sbi-main-logo {
-          height: 38px;
-          width: auto;
-          object-fit: contain;
-          border-radius: var(--radius-sm);
-        }
-        .sbi-logo-separator {
-          width: 1px;
-          height: 24px;
-          background: var(--line);
-        }
-        .sbi-logo-title {
-          font-size: 0.95rem;
-          font-weight: 700;
-          letter-spacing: -0.01em;
-          color: var(--sbi-blue);
-        }
-        .sbi-header-actions {
-          display: flex;
-          align-items: center;
-          gap: 1.5rem;
-        }
-        .sbi-header-compliance {
-          font-size: 0.75rem;
-          font-weight: 500;
-          color: var(--mut);
-          background: var(--bg2);
-          padding: 0.35rem 0.75rem;
-          border-radius: 50px;
-        }
-        .sbi-header-btn {
+        .simplyclick-wrapper .brandtag {
           display: inline-flex;
           align-items: center;
-          gap: 0.5rem;
-          background: var(--cta);
-          color: var(--ctatx);
-          font-size: 0.85rem;
+          gap: 9px;
+          font-family: monospace;
+          font-size: 12px;
+          letter-spacing: 1.5px;
+          border: 1.5px solid var(--wine);
+          color: var(--wine);
+          border-radius: 10px;
+          padding: 7px 12px;
+        }
+        .simplyclick-wrapper .btn {
+          font-family: 'Bricolage Grotesque', sans-serif;
           font-weight: 700;
-          padding: 0.65rem 1.25rem;
-          border-radius: 50px;
           border: none;
           cursor: pointer;
-          transition: var(--transition-smooth);
-          box-shadow: 0 4px 12px rgba(10, 63, 131, 0.15);
-        }
-        .sbi-header-btn:hover {
-          background: var(--cta-hover);
-          transform: translateY(-1px);
-        }
-
-        /* 2. Hero Section */
-        .sbi-hero {
-          padding: 3.5rem 0;
-          background: radial-gradient(circle at top right, rgba(0, 163, 224, 0.05), transparent 60%);
-        }
-        .sbi-hero-grid {
-          display: grid;
-          grid-template-columns: 1.15fr 0.85fr;
-          gap: 3.5rem;
-          align-items: start;
-        }
-        .sbi-hero-copy {
-          padding-top: 1rem;
-        }
-        .sbi-hero-tag {
+          border-radius: 999px;
+          padding: 14px 26px;
+          font-size: 16px;
+          transition: transform .15s ease, box-shadow .15s ease;
+          text-decoration: none;
           display: inline-flex;
           align-items: center;
-          gap: 0.5rem;
-          font-size: 0.78rem;
-          font-weight: 800;
-          letter-spacing: 0.08em;
-          color: var(--sbi-blue);
-          background: rgba(10, 63, 131, 0.08);
-          padding: 0.4rem 0.85rem;
-          border-radius: 50px;
-          margin-bottom: 1.5rem;
-          text-transform: uppercase;
+          gap: 10px;
         }
-        .sbi-hero-title {
-          font-size: clamp(2.3rem, 4.5vw, 3.4rem);
-          font-weight: 800;
-          line-height: 1.15;
-          letter-spacing: -0.03em;
-          color: var(--ink);
-          margin-bottom: 1.25rem;
+        .simplyclick-wrapper .btn-primary {
+          background: var(--wine);
+          color: var(--cream);
+          box-shadow: 0 8px 20px rgba(67,23,34,.28);
         }
-        .sbi-hero-subtitle {
-          font-size: 1.05rem;
-          font-weight: 500;
-          line-height: 1.6;
-          color: var(--mut);
-          margin-bottom: 2rem;
-          max-width: 520px;
+        .simplyclick-wrapper .btn-primary:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 12px 26px rgba(67,23,34,.34);
+        }
+        .simplyclick-wrapper .btn-gold {
+          background: var(--gold);
+          color: var(--oxblood);
+        }
+        .simplyclick-wrapper .btn-sm {
+          padding: 9px 18px;
+          font-size: 14px;
         }
 
-        /* Ticks Block */
-        .sbi-ticks {
-          display: flex;
-          flex-direction: column;
-          gap: 1rem;
-          margin-bottom: 2.5rem;
-        }
-        .sbi-tick-item {
-          display: flex;
-          align-items: flex-start;
-          gap: 0.85rem;
-        }
-        .sbi-tick-icon {
-          flex-shrink: 0;
-          margin-top: 0.15rem;
-          color: var(--sbi-light);
-        }
-        .sbi-tick-text {
-          font-size: 0.95rem;
-          font-weight: 600;
-          color: var(--ink);
-        }
-        .sbi-tick-subtext {
-          display: block;
-          font-size: 0.85rem;
-          font-weight: 500;
-          color: var(--mut);
-          margin-top: 0.15rem;
-        }
-
-        /* Card Art & Coin Wrapping */
-        .sbi-cardart-container {
-          margin-top: 2rem;
-          text-align: left;
-        }
-        .sbi-cardart {
+        /* hero */
+        .simplyclick-wrapper .hero {
           position: relative;
-          display: inline-flex;
-          border-radius: var(--radius-md);
+          overflow: hidden;
+          background: linear-gradient(160deg, var(--blush), var(--rose));
         }
-        .sbi-card-img {
-          width: 320px;
-          height: auto;
-          border-radius: var(--radius-md);
-          box-shadow: var(--shadow-lg);
-          transition: var(--transition-smooth);
-        }
-        .sbi-cardart:hover .sbi-card-img {
-          transform: translateY(-4px) rotate(1deg);
-        }
-        .sbi-coin-badge {
+        .simplyclick-wrapper .hero::before {
+          content: '';
           position: absolute;
-          top: -15px;
-          right: -15px;
-          background: linear-gradient(135deg, #FFB800 0%, #FF8A00 100%);
-          color: #FFFFFF;
-          font-size: 0.78rem;
-          font-weight: 800;
-          padding: 0.5rem 0.85rem;
-          border-radius: 50px;
-          box-shadow: 0 4px 15px rgba(255, 138, 0, 0.4);
-          display: flex;
-          align-items: center;
-          gap: 0.25rem;
-          animation: floatCoin 3s ease-in-out infinite;
+          inset: 0;
+          background-image: radial-gradient(var(--oxblood) 1.2px, transparent 1.3px);
+          background-size: 34px 34px;
+          opacity: .07;
         }
-        @keyframes floatCoin {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-6px); }
-        }
-
-        /* 3. Form Card styling */
-        .sbi-formcard {
-          background: var(--panel);
-          border-radius: var(--radius-lg);
-          box-shadow: var(--shadow-lg);
-          border: 1px solid var(--line);
-          padding: 2.25rem;
-          position: sticky;
-          top: 100px;
-        }
-        .sbi-formcard-hdr {
-          margin-bottom: 1.75rem;
-        }
-        .sbi-formcard-title {
-          font-size: 1.35rem;
-          font-weight: 800;
-          letter-spacing: -0.02em;
-          color: var(--ink);
-          margin-bottom: 0.35rem;
-        }
-        .sbi-formcard-desc {
-          font-size: 0.88rem;
-          font-weight: 500;
-          color: var(--mut);
-        }
-        .sbi-field-group {
-          margin-bottom: 1.25rem;
-        }
-        .sbi-two {
+        .simplyclick-wrapper .hero .grid {
+          position: relative;
           display: grid;
           grid-template-columns: 1fr 1fr;
-          gap: 1rem;
+          gap: 36px;
+          align-items: start;
+          padding: 40px 0 52px;
         }
-        .sbi-label {
-          display: block;
-          font-size: 0.75rem;
-          font-weight: 800;
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-          color: var(--mut);
-          margin-bottom: 0.4rem;
+        .simplyclick-wrapper .hero .pitch {
+          position: sticky;
+          top: 78px;
         }
-        .sbi-input-wrap {
+        .simplyclick-wrapper .hero h1 {
+          font-size: clamp(34px, 4.4vw, 52px);
+          color: var(--oxblood);
+          margin: 12px 0 14px;
+        }
+        .simplyclick-wrapper .hero h1 .g {
+          color: var(--gold-deep);
+        }
+        .simplyclick-wrapper .hero p.lead {
+          font-size: clamp(16px, 2vw, 19px);
+          max-width: 33ch;
+          color: #5a2634;
+        }
+        .simplyclick-wrapper .chips {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 9px;
+          margin: 18px 0 4px;
+        }
+        .simplyclick-wrapper .chip {
+          background: var(--wine);
+          color: var(--cream);
+          font-weight: 700;
+          font-size: 14px;
+          padding: 9px 15px;
+          border-radius: 999px;
+        }
+        .simplyclick-wrapper .chip.alt {
+          background: transparent;
+          color: var(--wine);
+          border: 1.5px solid var(--wine);
+        }
+        .simplyclick-wrapper .cardwrap {
           position: relative;
+          display: flex;
+          justify-content: center;
         }
-        .sbi-input-icon {
+        .simplyclick-wrapper .cardwrap .glow {
           position: absolute;
-          left: 0.95rem;
-          top: 50%;
-          transform: translateY(-50%);
-          color: var(--mut);
-          width: 16px;
-          height: 16px;
-          pointer-events: none;
+          width: 120%;
+          height: 120%;
+          left: -10%;
+          top: -10%;
+          background: radial-gradient(circle at 60% 40%, rgba(255,255,255,.6), transparent 62%);
         }
-        .sbi-input {
-          width: 100%;
-          padding: 0.85rem 1rem 0.85rem 2.6rem;
-          font-size: 0.95rem;
-          font-family: inherit;
-          font-weight: 600;
-          border-radius: var(--radius-sm);
-          border: 1px solid var(--line);
-          background: var(--bg);
-          color: var(--ink);
-          transition: var(--transition-smooth);
+        .simplyclick-wrapper .cardimg {
+          position: relative;
+          width: min(230px, 60%);
+          transform: rotate(-6deg);
+          filter: drop-shadow(0 26px 34px rgba(40,8,18,.45));
         }
-        .sbi-input:focus {
-          outline: none;
-          border-color: var(--sbi-blue);
-          background: #FFFFFF;
-          box-shadow: 0 0 0 4px rgba(10, 63, 131, 0.08);
-        }
-        .sbi-input-hasvalue {
-          border-color: var(--sbi-light);
-        }
-        .sbi-select {
-          padding-right: 2.2rem;
-          appearance: none;
-          cursor: pointer;
-        }
-        .sbi-select-chevron {
+        .simplyclick-wrapper .spark {
           position: absolute;
-          right: 0.95rem;
-          top: 50%;
-          transform: translateY(-50%);
-          color: var(--mut);
-          pointer-events: none;
-          width: 16px;
-          height: 16px;
-        }
-        .sbi-input-err {
-          border-color: #E53E3E;
-          background: #FFF5F5;
-        }
-        .sbi-input-err:focus {
-          border-color: #E53E3E;
-          box-shadow: 0 0 0 4px rgba(229, 62, 62, 0.08);
-        }
-        .sbi-err-msg {
-          font-size: 0.75rem;
-          font-weight: 600;
-          color: #E53E3E;
-          margin-top: 0.35rem;
-          display: block;
+          right: 6%;
+          top: 4%;
+          font-size: 34px;
+          color: var(--gold);
         }
 
-        /* Location Lookup indicators */
-        .sbi-loc-indicator {
-          font-size: 0.78rem;
-          font-weight: 700;
-          color: var(--sbi-blue);
-          margin-top: 0.4rem;
-          display: flex;
-          align-items: center;
-          gap: 0.35rem;
+        /* benefits */
+        .simplyclick-wrapper .benefits {
+          padding: 56px 0;
         }
-        .sbi-spin {
-          animation: spin 1s linear infinite;
+        .simplyclick-wrapper .benefits .eyebrow {
+          color: var(--wine);
         }
-        @keyframes spin {
-          to { transform: rotate(360deg); }
+        .simplyclick-wrapper .benefits h2 {
+          font-size: clamp(26px, 3.4vw, 38px);
+          color: var(--oxblood);
+          margin: 8px 0 26px;
+          max-width: 20ch;
         }
-
-        /* Submit Actions */
-        .sbi-submit-btn {
-          width: 100%;
-          background: var(--cta);
-          color: var(--ctatx);
-          font-size: 1rem;
-          font-weight: 800;
-          padding: 1rem;
-          border-radius: var(--radius-sm);
-          border: none;
-          cursor: pointer;
-          transition: var(--transition-smooth);
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          gap: 0.5rem;
-          box-shadow: 0 4px 15px rgba(10, 63, 131, 0.2);
-        }
-        .sbi-submit-btn:hover:not(:disabled) {
-          background: var(--cta-hover);
-          transform: translateY(-1px);
-        }
-        .sbi-submit-btn:disabled {
-          opacity: 0.65;
-          cursor: not-allowed;
-        }
-        .sbi-consent-strip {
-          font-size: 0.72rem;
-          font-weight: 500;
-          line-height: 1.4;
-          color: var(--mut);
-          text-align: center;
-          margin-top: 1rem;
-        }
-        .sbi-form-general-err {
-          background: #FFF5F5;
-          border: 1px solid #FED7D7;
-          border-radius: var(--radius-sm);
-          padding: 0.75rem 1rem;
-          color: #C53030;
-          font-size: 0.8rem;
-          font-weight: 600;
-          margin-bottom: 1.25rem;
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-        }
-
-        /* 4. Trust Strip */
-        .sbi-trust {
-          background: var(--bg2);
-          border-top: 1px solid var(--line);
-          border-bottom: 1px solid var(--line);
-          padding: 1.5rem 0;
-          margin-top: 1.5rem;
-        }
-        .sbi-trust-grid {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 2rem;
-        }
-        .sbi-trust-item {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 0.85rem;
-          text-align: left;
-        }
-        .sbi-trust-icon {
-          color: var(--sbi-blue);
-          flex-shrink: 0;
-        }
-        .sbi-trust-text {
-          font-size: 0.85rem;
-          font-weight: 700;
-          color: var(--ink);
-          line-height: 1.35;
-        }
-        .sbi-trust-text span {
-          display: block;
-          font-size: 0.78rem;
-          font-weight: 500;
-          color: var(--mut);
-          margin-top: 0.15rem;
-        }
-
-        /* 5. Features Grid */
-        .sbi-section {
-          padding: 5rem 0;
-        }
-        .sbi-sec-hdr {
-          text-align: center;
-          max-width: 600px;
-          margin: 0 auto 3.5rem auto;
-        }
-        .sbi-sec-title {
-          font-size: clamp(1.8rem, 3.5vw, 2.4rem);
-          font-weight: 800;
-          letter-spacing: -0.02em;
-          color: var(--ink);
-          margin-bottom: 0.85rem;
-        }
-        .sbi-sec-subtitle {
-          font-size: 0.95rem;
-          font-weight: 500;
-          color: var(--mut);
-        }
-        .sbi-feat-grid {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 2rem;
-        }
-        .sbi-feat-card {
-          background: #FFFFFF;
-          border: 1px solid var(--line);
-          border-radius: var(--radius-md);
-          padding: 2rem 1.75rem;
-          box-shadow: var(--shadow-sm);
-          transition: var(--transition-smooth);
-        }
-        .sbi-feat-card:hover {
-          transform: translateY(-4px);
-          box-shadow: var(--shadow-lg);
-          border-color: var(--sbi-light);
-        }
-        .sbi-feat-badge {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          width: 48px;
-          height: 48px;
-          border-radius: var(--radius-sm);
-          background: rgba(0, 163, 224, 0.1);
-          color: var(--sbi-light);
-          font-size: 1.5rem;
-          margin-bottom: 1.25rem;
-        }
-        .sbi-feat-name {
-          font-size: 1.15rem;
-          font-weight: 800;
-          color: var(--ink);
-          margin-bottom: 0.65rem;
-        }
-        .sbi-feat-desc {
-          font-size: 0.88rem;
-          font-weight: 500;
-          color: var(--mut);
-          line-height: 1.6;
-        }
-
-        /* 6. Milestones Section */
-        .sbi-milestones {
-          background: #061B35;
-          color: #FFFFFF;
-          padding: 5rem 0;
-        }
-        .sbi-milestones .sbi-sec-title {
-          color: #FFFFFF;
-        }
-        .sbi-milestones .sbi-sec-subtitle {
-          color: rgba(255, 255, 255, 0.7);
-        }
-        .sbi-m-grid {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 2rem;
-          max-width: 1000px;
-          margin: 0 auto;
-        }
-        .sbi-m-card {
-          background: rgba(255, 255, 255, 0.04);
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          border-radius: var(--radius-md);
-          padding: 2.25rem 1.75rem;
-          text-align: center;
-          transition: var(--transition-smooth);
-        }
-        .sbi-m-card:hover {
-          background: rgba(255, 255, 255, 0.06);
-          border-color: var(--sbi-light);
-        }
-        .sbi-m-val {
-          font-size: 2.5rem;
-          font-weight: 800;
-          letter-spacing: -0.02em;
-          color: #FFB800;
-          margin-bottom: 0.5rem;
-        }
-        .sbi-m-lbl {
-          font-size: 0.95rem;
-          font-weight: 700;
-          color: #FFFFFF;
-          margin-bottom: 0.5rem;
-        }
-        .sbi-m-desc {
-          font-size: 0.82rem;
-          font-weight: 500;
-          color: rgba(255, 255, 255, 0.6);
-          line-height: 1.5;
-        }
-
-        /* 7. Steps Section */
-        .sbi-steps-grid {
+        .simplyclick-wrapper .bgrid {
           display: grid;
           grid-template-columns: repeat(4, 1fr);
-          gap: 1.5rem;
+          gap: 16px;
         }
-        .sbi-step-card {
-          position: relative;
-          background: #FFFFFF;
+        .simplyclick-wrapper .bcard {
+          background: #fff;
           border: 1px solid var(--line);
-          border-radius: var(--radius-md);
-          padding: 2rem 1.5rem;
+          border-radius: 18px;
+          padding: 22px;
+        }
+        .simplyclick-wrapper .bcard .n {
+          font-family: 'Bricolage Grotesque', sans-serif;
+          font-weight: 700;
+          font-size: 30px;
+          color: var(--wine);
+        }
+        .simplyclick-wrapper .bcard h3 {
+          font-size: 18px;
+          margin: 6px 0 6px;
+          color: var(--oxblood);
+        }
+        .simplyclick-wrapper .bcard p {
+          font-size: 14px;
+          color: #6a4c53;
+        }
+
+        /* form */
+        .simplyclick-wrapper .apply {
+          padding: 0;
+        }
+        .simplyclick-wrapper .formcard {
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: 22px;
+          box-shadow: 0 24px 50px rgba(67,23,34,.16);
+          overflow: hidden;
+        }
+        .simplyclick-wrapper .formhead {
+          background: var(--wine);
+          color: var(--cream);
+          padding: 20px 24px;
+        }
+        .simplyclick-wrapper .formhead h2 {
+          font-size: 22px;
+        }
+        .simplyclick-wrapper .formhead p {
+          opacity: .9;
+          font-size: 15px;
+          margin-top: 6px;
+        }
+        .simplyclick-wrapper form {
+          padding: 22px 24px 24px;
+        }
+        .simplyclick-wrapper .fgrid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 14px 16px;
+        }
+        .simplyclick-wrapper .field {
+          display: flex;
+          flex-direction: column;
+        }
+        .simplyclick-wrapper .field.full {
+          grid-column: 1 / -1;
+        }
+        .simplyclick-wrapper label {
+          font-family: monospace;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          font-size: 11px;
+          color: var(--wine);
+          margin-bottom: 7px;
+        }
+        .simplyclick-wrapper label .req {
+          color: var(--err);
+        }
+        .simplyclick-wrapper input,
+        .simplyclick-wrapper select,
+        .simplyclick-wrapper textarea {
+          font-family: 'Outfit', sans-serif;
+          font-size: 16px;
+          color: var(--ink);
+          background: var(--paper);
+          border: 1.5px solid var(--line);
+          border-radius: 12px;
+          padding: 13px 14px;
+          width: 100%;
+          transition: border-color .15s, box-shadow .15s;
+        }
+        .simplyclick-wrapper textarea {
+          resize: vertical;
+          min-height: 74px;
+        }
+        .simplyclick-wrapper input:focus,
+        .simplyclick-wrapper select:focus,
+        .simplyclick-wrapper textarea:focus {
+          outline: none;
+          border-color: var(--wine);
+          box-shadow: 0 0 0 3px rgba(110,44,62,.12);
+        }
+        .simplyclick-wrapper .field.invalid input,
+        .simplyclick-wrapper .field.invalid select,
+        .simplyclick-wrapper .field.invalid textarea {
+          border-color: var(--err);
+        }
+        .simplyclick-wrapper .hint {
+          font-size: 12px;
+          color: #8a6a70;
+          margin-top: 5px;
+        }
+        .simplyclick-wrapper .err {
+          font-size: 12px;
+          color: var(--err);
+          margin-top: 5px;
+          display: none;
+        }
+        .simplyclick-wrapper .field.invalid .err {
+          display: block;
+        }
+        .simplyclick-wrapper .pan input {
+          text-transform: uppercase;
+          letter-spacing: 2px;
+        }
+        .simplyclick-wrapper .mob {
+          display: flex;
+          align-items: stretch;
+        }
+        .simplyclick-wrapper .mob .pre {
+          display: flex;
+          align-items: center;
+          padding: 0 12px;
+          border: 1.5px solid var(--line);
+          border-right: none;
+          border-radius: 12px 0 0 12px;
+          background: #F4E9EB;
+          font-size: 16px;
+          color: var(--wine);
+        }
+        .simplyclick-wrapper .mob input {
+          border-radius: 0 12px 12px 0;
+        }
+        .simplyclick-wrapper .consent {
+          grid-column: 1/-1;
+          display: flex;
+          gap: 12px;
+          align-items: flex-start;
+          background: var(--blush);
+          border: 1px solid var(--line);
+          border-radius: 14px;
+          padding: 15px;
+          margin-top: 4px;
+        }
+        .simplyclick-wrapper .consent input {
+          width: 20px;
+          height: 20px;
+          margin-top: 2px;
+          flex: none;
+          accent-color: var(--wine);
+        }
+        .simplyclick-wrapper .consent label {
+          font-family: 'Outfit';
+          text-transform: none;
+          letter-spacing: 0;
+          font-size: 13px;
+          color: #5a2634;
+          line-height: 1.45;
+        }
+        .simplyclick-wrapper .formcol {
+          align-self: start;
+        }
+        .simplyclick-wrapper .securenote {
+          grid-column: 1/-1;
+          font-family: monospace;
+          font-size: 11.5px;
+          color: #7a5560;
+          display: flex;
+          gap: 8px;
+          align-items: center;
+          margin-top: 2px;
+        }
+        .simplyclick-wrapper .submitrow {
+          grid-column: 1/-1;
+          margin-top: 8px;
+        }
+        .simplyclick-wrapper .submitrow .btn {
+          width: 100%;
+          justify-content: center;
+          font-size: 18px;
+          padding: 17px;
+        }
+        .simplyclick-wrapper .hp {
+          position: absolute;
+          left: -9999px;
+        }
+
+        /* success */
+        .simplyclick-wrapper .success {
+          display: none;
+          padding: 40px 30px;
           text-align: center;
         }
-        .sbi-step-num {
-          display: inline-flex;
+        .simplyclick-wrapper .success.show {
+          display: block;
+        }
+        .simplyclick-wrapper .success .tick {
+          width: 64px;
+          height: 64px;
+          border-radius: 50%;
+          background: var(--ok);
+          color: #fff;
+          display: flex;
           align-items: center;
           justify-content: center;
-          width: 34px;
-          height: 34px;
-          border-radius: 50px;
-          background: var(--sbi-blue);
-          color: #FFFFFF;
-          font-size: 0.88rem;
-          font-weight: 800;
-          margin-bottom: 1.25rem;
-          box-shadow: 0 4px 10px rgba(10, 63, 131, 0.2);
+          font-size: 34px;
+          margin: 0 auto 16px;
         }
-        .sbi-step-title {
-          font-size: 0.95rem;
-          font-weight: 800;
-          color: var(--ink);
-          margin-bottom: 0.5rem;
+        .simplyclick-wrapper .success h2 {
+          color: var(--oxblood);
+          font-size: 26px;
         }
-        .sbi-step-desc {
-          font-size: 0.8rem;
-          font-weight: 500;
-          color: var(--mut);
-          line-height: 1.5;
+        .simplyclick-wrapper .success p {
+          color: #6a4c53;
+          max-width: 44ch;
+          margin: 10px auto 22px;
         }
 
-        /* 8. FAQ Section */
-        .sbi-faq-grid {
-          max-width: 800px;
-          margin: 0 auto;
+        /* footer */
+        .simplyclick-wrapper footer {
+          background: var(--oxblood);
+          color: #E9D5D9;
+          padding: 40px 0 46px;
+        }
+        .simplyclick-wrapper footer .disc {
+          font-family: monospace;
+          font-size: 12px;
+          line-height: 1.7;
+          opacity: .85;
+          max-width: 80ch;
+        }
+        .simplyclick-wrapper footer .links {
           display: flex;
-          flex-direction: column;
-          gap: 1rem;
-        }
-        .sbi-faq-item {
-          background: #FFFFFF;
-          border: 1px solid var(--line);
-          border-radius: var(--radius-sm);
-          padding: 1.25rem 1.5rem;
-        }
-        .sbi-faq-q {
-          font-size: 0.98rem;
-          font-weight: 800;
-          color: var(--ink);
-          margin-bottom: 0.5rem;
-        }
-        .sbi-faq-a {
-          font-size: 0.88rem;
-          font-weight: 500;
-          color: var(--mut);
-          line-height: 1.55;
-        }
-
-        /* 9. Footer styling */
-        .sbi-footer {
-          background: #08101C;
-          color: rgba(255, 255, 255, 0.7);
-          padding: 4.5rem 0 3rem 0;
-          border-top: 1px solid rgba(255, 255, 255, 0.08);
-          font-size: 0.85rem;
-          line-height: 1.6;
-        }
-        .sbi-footer-top {
-          display: grid;
-          grid-template-columns: 1.2fr 0.8fr;
-          gap: 4rem;
-          margin-bottom: 3.5rem;
-        }
-        .sbi-footer-brand {
-          max-width: 480px;
-        }
-        .sbi-footer-logo-row {
-          display: flex;
-          align-items: center;
-          gap: 0.75rem;
-          margin-bottom: 1.25rem;
-        }
-        .sbi-footer-logo-title {
-          font-size: 1.1rem;
-          font-weight: 800;
-          color: #FFFFFF;
-          letter-spacing: -0.02em;
-        }
-        .sbi-footer-desc {
-          font-size: 0.82rem;
-          color: rgba(255, 255, 255, 0.5);
-          margin-bottom: 1.5rem;
-        }
-        .sbi-footer-links-col {
-          display: flex;
-          flex-direction: column;
-          gap: 1.5rem;
-          text-align: right;
-        }
-        .sbi-footer-links {
-          display: flex;
-          justify-content: flex-end;
-          gap: 1.5rem;
+          gap: 18px;
           flex-wrap: wrap;
+          margin: 16px 0;
+          font-size: 14px;
         }
-        .sbi-footer-link {
-          color: rgba(255, 255, 255, 0.6);
-          text-decoration: none;
-          font-weight: 600;
-          font-size: 0.82rem;
-          transition: var(--transition-smooth);
-          cursor: pointer;
+        .simplyclick-wrapper footer .links a {
+          opacity: .9;
+          text-decoration: underline;
         }
-        .sbi-footer-link:hover {
-          color: var(--sbi-light);
-        }
-        .sbi-footer-compliance {
-          font-size: 0.72rem;
-          color: rgba(255, 255, 255, 0.4);
-          background: rgba(255, 255, 255, 0.02);
-          padding: 0.75rem 1rem;
-          border-radius: var(--radius-sm);
-          border: 1px solid rgba(255, 255, 255, 0.05);
-        }
-        .sbi-footer-bottom {
-          border-top: 1px solid rgba(255, 255, 255, 0.08);
-          padding-top: 2rem;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          flex-wrap: wrap;
-          gap: 1rem;
-        }
-        .sbi-footer-copy {
-          font-size: 0.78rem;
-          color: rgba(255, 255, 255, 0.4);
-        }
-        .sbi-footer-seal {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          font-size: 0.75rem;
-          font-weight: 700;
-          color: rgba(255, 255, 255, 0.5);
-        }
-        .sbi-footer-seal-icon {
-          color: #10B981;
+        .simplyclick-wrapper footer .note {
+          font-size: 12px;
+          opacity: .7;
+          margin-top: 12px;
         }
 
-        /* 10. OTP Modal Popups */
+        @media (max-width:900px){
+         .simplyclick-wrapper .hero .grid{grid-template-columns:1fr;padding:26px 0 40px;gap:24px;}
+         .simplyclick-wrapper .hero .pitch{position:static;}
+         .simplyclick-wrapper .hero .pitchtop{display:flex;align-items:center;gap:18px;}
+         .simplyclick-wrapper .hero .pitchtop .cardwrap{flex:none;width:120px;} .cardimg{width:120px;}
+         .simplyclick-wrapper .hero h1{font-size:clamp(30px,7vw,40px);}
+         .simplyclick-wrapper .bgrid{grid-template-columns:1fr 1fr;}
+         .simplyclick-wrapper .fgrid{grid-template-columns:1fr 1fr;}
+        }
+        @media (max-width:560px){
+         .simplyclick-wrapper .fgrid{grid-template-columns:1fr;}
+         .simplyclick-wrapper .hero .grid{padding:16px 0 34px;}
+         .simplyclick-wrapper .hero .pitchtop{flex-direction:row;align-items:center;gap:14px;}
+         .simplyclick-wrapper .hero .pitchtop .cardwrap{width:84px;} .cardimg{width:84px;}
+         .simplyclick-wrapper .hero h1{font-size:26px;margin:6px 0;}
+         .simplyclick-wrapper .hero .lead{display:none;}
+         .simplyclick-wrapper .chips{margin:12px 0 2px;gap:7px;} .chip{font-size:12.5px;padding:7px 12px;}
+        }
+        @media (max-width:520px){
+         .simplyclick-wrapper .bgrid{grid-template-columns:1fr;}
+        }
+        @media (prefers-reduced-motion:reduce){
+          .simplyclick-wrapper *{transition:none!important;scroll-behavior:auto;}
+        }
+
+        /* OTP Modal Overlay */
         .sbi-modal-overlay {
           position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          background: rgba(8, 16, 28, 0.6);
-          backdrop-filter: blur(8px);
+          inset: 0;
+          z-index: 100;
+          background: rgba(42, 10, 20, 0.6);
+          backdrop-filter: blur(5px);
           display: flex;
           align-items: center;
           justify-content: center;
-          z-index: 1000;
-          padding: 1.5rem;
+          padding: 20px;
         }
         .sbi-modal-panel {
-          background: #FFFFFF;
-          border-radius: var(--radius-lg);
-          box-shadow: 0 20px 50px rgba(8, 16, 28, 0.3);
+          background: #fff;
           border: 1px solid var(--line);
-          width: 100%;
+          border-radius: 22px;
+          padding: 30px 24px;
           max-width: 440px;
-          padding: 2.25rem 2rem;
+          width: 100%;
+          box-shadow: 0 24px 50px rgba(67,23,34,.25);
           position: relative;
           text-align: center;
-          animation: modalSlideUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-        }
-        @keyframes modalSlideUp {
-          from { transform: translateY(20px); opacity: 0; }
-          to { transform: translateY(0); opacity: 1; }
         }
         .sbi-modal-close {
           position: absolute;
-          top: 1.25rem;
-          right: 1.25rem;
-          background: transparent;
+          top: 16px;
+          right: 16px;
           border: none;
-          color: var(--mut);
+          background: transparent;
           cursor: pointer;
-          transition: var(--transition-smooth);
+          color: var(--wine);
+          padding: 4px;
           border-radius: 50%;
-          padding: 0.25rem;
+          transition: background 0.15s;
+          display: flex;
+          align-items: center;
+          justify-content: center;
         }
         .sbi-modal-close:hover {
-          background: var(--bg);
-          color: var(--ink);
+          background: var(--blush);
         }
         .sbi-modal-icon-row {
           display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          width: 56px;
-          height: 56px;
+          padding: 12px;
+          background: var(--blush);
           border-radius: 50%;
-          background: rgba(0, 163, 224, 0.1);
-          color: var(--sbi-light);
-          font-size: 1.75rem;
-          margin-bottom: 1.25rem;
+          color: var(--wine);
+          margin-bottom: 16px;
         }
         .sbi-modal-title {
-          font-size: 1.25rem;
-          font-weight: 800;
-          color: var(--ink);
-          margin-bottom: 0.5rem;
-          letter-spacing: -0.01em;
+          font-family: 'Bricolage Grotesque', sans-serif;
+          font-size: 22px;
+          color: var(--oxblood);
+          margin-bottom: 8px;
         }
         .sbi-modal-desc {
-          font-size: 0.85rem;
-          font-weight: 500;
+          font-size: 14px;
+          color: #6a4c53;
           line-height: 1.5;
-          color: var(--mut);
-          margin-bottom: 1.5rem;
+          margin-bottom: 20px;
         }
-        .sbi-otp-input {
-          font-size: 1.5rem;
-          font-weight: 800;
+        .sbi-otp-input-field {
           text-align: center;
-          letter-spacing: 0.5em;
-          padding: 0.75rem;
-          border-radius: var(--radius-sm);
-          border: 2px solid var(--line);
-          background: var(--bg);
+          font-size: 24px;
+          letter-spacing: 8px;
+          padding: 10px;
+          margin-bottom: 12px;
+          border-radius: 12px;
+          border: 1.5px solid var(--line);
+          background: var(--paper);
           width: 100%;
-          margin-bottom: 1rem;
-          transition: var(--transition-smooth);
-        }
-        .sbi-otp-input:focus {
-          outline: none;
-          border-color: var(--sbi-blue);
-          background: #FFFFFF;
-          box-shadow: 0 0 0 4px rgba(10, 63, 131, 0.08);
         }
         .sbi-otp-status {
-          font-size: 0.82rem;
-          font-weight: 700;
-          color: var(--sbi-blue);
-          margin-bottom: 1.25rem;
           display: block;
+          font-size: 13px;
+          color: var(--wine);
+          margin-bottom: 14px;
+          font-weight: 500;
         }
         .sbi-otp-actions {
-          display: grid;
-          grid-template-columns: 1.3fr 0.7fr;
-          gap: 0.85rem;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+        .sbi-otp-actions .btn {
+          width: 100%;
+          justify-content: center;
         }
         .sbi-resend-btn {
           background: transparent;
-          border: 1px solid var(--line);
-          border-radius: var(--radius-sm);
-          font-size: 0.82rem;
-          font-weight: 700;
-          color: var(--mut);
+          border: none;
+          color: var(--wine);
           cursor: pointer;
-          transition: var(--transition-smooth);
-        }
-        .sbi-resend-btn:hover:not(:disabled) {
-          background: var(--bg);
-          color: var(--ink);
-          border-color: var(--mut);
+          font-size: 14px;
+          text-decoration: underline;
+          font-weight: 500;
         }
         .sbi-resend-btn:disabled {
-          opacity: 0.55;
+          opacity: 0.6;
           cursor: not-allowed;
-        }
-
-        /* Responsive Breakpoints */
-        @media (max-width: 991px) {
-          .sbi-hero-grid {
-            grid-template-columns: 1fr;
-            gap: 3rem;
-          }
-          .sbi-hero-copy {
-            text-align: center;
-          }
-          .sbi-hero-subtitle {
-            margin: 0 auto 2rem auto;
-          }
-          .sbi-ticks {
-            max-width: 500px;
-            margin: 0 auto 2.5rem auto;
-            text-align: left;
-          }
-          .sbi-cardart-container {
-            text-align: center;
-          }
-          .sbi-formcard {
-            max-width: 480px;
-            margin: 0 auto;
-            position: static;
-          }
-        }
-
-        @media (max-width: 860px) {
-          .sbi-feat-grid {
-            grid-template-columns: repeat(2, 1fr);
-          }
-          .sbi-m-grid {
-            grid-template-columns: repeat(2, 1fr);
-          }
-          .sbi-steps-grid {
-            grid-template-columns: repeat(2, 1fr);
-          }
-        }
-
-        @media (max-width: 768px) {
-          .sbi-header-compliance {
-            display: none;
-          }
-          .sbi-header-logo-separator, .sbi-header-logo-title {
-            display: none;
-          }
-          .sbi-trust-grid {
-            grid-template-columns: 1fr;
-            gap: 1.25rem;
-          }
-          .sbi-trust-item {
-            justify-content: flex-start;
-          }
-          .sbi-footer-top {
-            grid-template-columns: 1fr;
-            gap: 2rem;
-          }
-          .sbi-footer-links-col {
-            text-align: left;
-          }
-          .sbi-footer-links {
-            justify-content: flex-start;
-          }
-        }
-
-        @media (max-width: 520px) {
-          .sbi-feat-grid {
-            grid-template-columns: 1fr;
-          }
-          .sbi-m-grid {
-            grid-template-columns: 1fr;
-            max-width: 360px;
-          }
-          .sbi-steps-grid {
-            grid-template-columns: 1fr;
-            max-width: 360px;
-            margin: 0 auto;
-          }
-          .sbi-two {
-            grid-template-columns: 1fr;
-            gap: 0;
-          }
-          .sbi-formcard {
-            padding: 1.5rem 1.25rem;
-          }
-        }
-
-        @media (max-width: 360px) {
-          .sbi-otp-actions {
-            grid-template-columns: 1fr;
-          }
-          .sbi-resend-btn {
-            padding: 0.85rem;
-          }
-          .sbi-modal-panel {
-            padding: 1.5rem 1rem;
-          }
+          text-decoration: none;
         }
       `}} />
 
-      <div className="sbi-body">
-        {/* 1. Header */}
-        <header className="sbi-header">
-          <div className="sbi-container sbi-header-inner">
-            <div className="sbi-logo-section" onClick={() => navigateTo('/')}>
-              <img src="/logo.jpg" alt="FinMantra Logo" className="sbi-main-logo" />
-              <div className="sbi-logo-separator"></div>
-              <span className="sbi-logo-title">FinMantra</span>
+      <div className="simplyclick-wrapper">
+        <div className="topbar">
+          <div className="wrap row">
+            <span className="brandtag">Authorised DSA &middot; SBI Card</span>
+            <a href="#apply" className="btn btn-primary btn-sm">Apply now</a>
+          </div>
+        </div>
+
+        <header className="hero">
+          <div className="wrap grid">
+            <div className="pitch">
+              <div className="pitchtop">
+                <div style={{ flex: 1 }}>
+                  <span className="eyebrow" style={{ color: 'var(--wine)' }}>SBI SimplyClick Credit Card</span>
+                  <h1>Earn <span className="g">10X rewards</span> every time you shop online.</h1>
+                </div>
+                <div className="cardwrap">
+                  <div className="glow"></div>
+                  <div className="spark">&#10022;</div>
+                  <img className="cardimg" alt="SBI SimplyClick Credit Card" src="/sbi_card.png" />
+                </div>
+              </div>
+              <p className="lead">Get a &#8377;500 Amazon voucher on joining, 10X reward points on top online brands, and a &#8377;499 fee that&#8217;s reversed at &#8377;1 lakh spend.</p>
+              <div className="chips">
+                <span className="chip">&#8377;500 Amazon voucher</span>
+                <span className="chip">10X online rewards</span>
+                <span className="chip alt">Fee reversed at &#8377;1L</span>
+                <span className="chip alt">&#8377;2,000 milestone vouchers</span>
+              </div>
             </div>
-            <div className="sbi-header-actions">
-              <span className="sbi-header-compliance">Authorised referral partner of SBI Card</span>
-              <button 
-                className="sbi-header-btn"
-                onClick={() => {
-                  const formEl = document.getElementById('apply-form');
-                  if (formEl) formEl.scrollIntoView({ behavior: 'smooth' });
-                }}
-              >
-                Apply Now <ArrowRight size={16} />
-              </button>
+
+            <div className="formcol" id="apply">
+              <div className="formcard">
+                <div className="formhead">
+                  <h2>Apply for your SimplyClick Card</h2>
+                  <p>Share your details and our team will help you complete the SBI Card application. Takes about 2 minutes.</p>
+                </div>
+
+                {isSubmitted ? (
+                  <div className="success show" id="success">
+                    <div className="tick">&#10003;</div>
+                    <h2>Thanks, <span id="sname">{formData.name.split(' ')[0] || 'there'}</span>!</h2>
+                    <p>Your details are with our SimplyClick team &mdash; we&#8217;ll be in touch shortly. You can continue to SBI Card&#8217;s secure application now.</p>
+                    <a className="btn btn-gold" id="continuebtn" href={redirectUrl} rel="noopener">Continue to SBI application &rarr;</a>
+                  </div>
+                ) : (
+                  <form id="leadform" onSubmit={handleFormSubmit} noValidate autoComplete="on">
+                    <div className="fgrid">
+                      <div className={`field pan full ${errors.pan ? 'invalid' : ''}`}>
+                        <label htmlFor="pan">PAN number <span className="req">*</span></label>
+                        <input
+                          id="pan"
+                          name="pan"
+                          maxLength="10"
+                          placeholder="ABCDE1234F"
+                          autoComplete="off"
+                          inputMode="text"
+                          aria-describedby="pan_err"
+                          value={formData.pan}
+                          onChange={handleInputChange}
+                        />
+                        <span className="hint">10 characters as printed on your PAN card.</span>
+                        <span className="err" id="pan_err">Enter a valid PAN (e.g. ABCDE1234F).</span>
+                      </div>
+
+                      <div className={`field ${errors.name ? 'invalid' : ''}`}>
+                        <label htmlFor="name">Full name (as on PAN) <span className="req">*</span></label>
+                        <input
+                          id="name"
+                          name="name"
+                          placeholder="Your full name"
+                          autoComplete="name"
+                          value={formData.name}
+                          onChange={handleInputChange}
+                        />
+                        <span className="err">Enter your full name.</span>
+                      </div>
+
+                      <div className={`field ${errors.dob ? 'invalid' : ''}`}>
+                        <label htmlFor="dob">Date of birth <span className="req">*</span></label>
+                        <input
+                          id="dob"
+                          name="dob"
+                          type="date"
+                          autoComplete="bday"
+                          value={formData.dob}
+                          onChange={handleInputChange}
+                        />
+                        <span className="err" id="dob_err">You must be 21&ndash;70 to apply for this card.</span>
+                      </div>
+
+                      <div className={`field ${errors.mother_name ? 'invalid' : ''}`}>
+                        <label htmlFor="mother">Mother&#8217;s name <span className="req">*</span></label>
+                        <input
+                          id="mother"
+                          name="mother_name"
+                          placeholder="Mother&#8217;s full name"
+                          autoComplete="off"
+                          value={formData.mother_name}
+                          onChange={handleInputChange}
+                        />
+                        <span className="err">Enter your mother&#8217;s name.</span>
+                      </div>
+
+                      <div className={`field ${errors.mobile ? 'invalid' : ''}`}>
+                        <label htmlFor="mobile">Mobile number <span className="req">*</span></label>
+                        <div className="mob">
+                          <span className="pre">+91</span>
+                          <input
+                            id="mobile"
+                            name="mobile"
+                            maxLength="10"
+                            placeholder="10-digit mobile"
+                            inputMode="numeric"
+                            autoComplete="tel-national"
+                            value={formData.mobile}
+                            onChange={handleInputChange}
+                          />
+                        </div>
+                        <span className="err" id="mob_err">Enter a valid 10-digit Indian mobile number.</span>
+                      </div>
+
+                      <div className="field full">
+                        <label htmlFor="address">Current address <span className="req">*</span></label>
+                        <textarea
+                          id="address"
+                          name="address"
+                          placeholder="House / flat, street, area, city, state & PIN code"
+                          autoComplete="street-address"
+                          className={errors.address ? 'invalid' : ''}
+                          value={formData.address}
+                          onChange={handleInputChange}
+                        ></textarea>
+                        {errors.address && <span className="err" style={{ display: 'block' }}>Enter your current address (min 10 characters).</span>}
+                      </div>
+
+                      <div className={`field ${errors.email ? 'invalid' : ''}`}>
+                        <label htmlFor="email">Email address <span className="req">*</span></label>
+                        <input
+                          id="email"
+                          name="email"
+                          type="email"
+                          placeholder="you@example.com"
+                          autoComplete="email"
+                          value={formData.email}
+                          onChange={handleInputChange}
+                        />
+                        <span className="err" id="email_err">Enter a valid email address.</span>
+                      </div>
+
+                      <div className={`field ${errors.pincode ? 'invalid' : ''}`}>
+                        <label htmlFor="pincode">Pincode <span className="req">*</span></label>
+                        <input
+                          id="pincode"
+                          name="pincode"
+                          maxLength="6"
+                          placeholder="6-digit pincode"
+                          inputMode="numeric"
+                          value={formData.pincode}
+                          onChange={handleInputChange}
+                        />
+                        <span className="err" id="pincode_err">
+                          {pincodeError || 'Enter a serviceable 6-digit pincode.'}
+                        </span>
+                        {pincodeLocationText && !pincodeError && (
+                          <span style={{ fontSize: '11px', color: 'var(--ok)', marginTop: '4px', fontWeight: 600 }}>
+                            Location: {pincodeLocationText}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className={`field ${errors.occupation ? 'invalid' : ''}`}>
+                        <label htmlFor="occupation">Occupation <span className="req">*</span></label>
+                        <select
+                          id="occupation"
+                          name="occupation"
+                          value={formData.occupation}
+                          onChange={handleInputChange}
+                        >
+                          <option value="" disabled>Select&#8230;</option>
+                          <option value="Salaried">Salaried</option>
+                          <option value="Self-employed professional">Self-employed professional</option>
+                          <option value="Self-employed / Business">Self-employed / Business</option>
+                          <option value="Other">Other</option>
+                        </select>
+                        <span className="err">Select your occupation.</span>
+                      </div>
+
+                      <div className={`field ${errors.designation ? 'invalid' : ''}`}>
+                        <label htmlFor="designation">Designation <span className="req">*</span></label>
+                        <input
+                          id="designation"
+                          name="designation"
+                          placeholder="e.g. Manager"
+                          autoComplete="organization-title"
+                          value={formData.designation}
+                          onChange={handleInputChange}
+                        />
+                        <span className="err">Enter your designation.</span>
+                      </div>
+
+                      <div className={`field ${errors.company ? 'invalid' : ''}`}>
+                        <label htmlFor="company">Company name <span className="req">*</span></label>
+                        <input
+                          id="company"
+                          name="company"
+                          placeholder="Your employer / business name"
+                          autoComplete="organization"
+                          value={formData.company}
+                          onChange={handleInputChange}
+                        />
+                        <span className="err">Enter your company name.</span>
+                      </div>
+
+                      <input className="hp" tabIndex="-1" autoComplete="off" name="website" aria-hidden="true" readOnly />
+
+                      <div className="consent field">
+                        <input
+                          id="consent"
+                          name="consent"
+                          type="checkbox"
+                          checked={formData.consent}
+                          onChange={handleInputChange}
+                        />
+                        <label htmlFor="consent">
+                          I authorise <b>FinMantra</b> (an authorised DSA of SBI Card) to use my details to assist my SBI SimplyClick Credit Card application and to contact me about it. I understand that card issuance and approval are at SBI Card&#8217;s sole discretion, subject to its eligibility criteria. Privacy Policy.
+                        </label>
+                      </div>
+                      <span className="err" id="consent_err" style={{ gridColumn: '1/-1', display: errors.consent ? 'block' : 'none' }}>
+                        Please tick the box to continue.
+                      </span>
+
+                      {formError && (
+                        <div style={{ gridColumn: '1/-1', padding: '12px', background: '#FDF2F2', border: '1px solid #FDE8E8', borderRadius: '12px', color: 'var(--err)', fontSize: '14px', fontWeight: 600 }}>
+                          {formError}
+                        </div>
+                      )}
+
+                      <div className="securenote">&#128274; Sent over a secure connection. We only use your details to assist your application.</div>
+
+                      <div className="submitrow">
+                        <button type="submit" className="btn btn-primary" id="submitbtn" disabled={isSubmitting}>
+                          {isSubmitting ? 'Submitting\u2026' : 'Submit & continue \u2192'}
+                        </button>
+                      </div>
+                    </div>
+                  </form>
+                )}
+              </div>
             </div>
           </div>
         </header>
 
-        {/* 2. Hero Section */}
-        <section className="sbi-hero">
-          <div className="sbi-container sbi-hero-grid">
-            <div className="sbi-hero-copy">
-              <span className="sbi-hero-tag">SBI SimplyClick Credit Card</span>
-              <h1 className="sbi-hero-title">
-                Your online spends, now <span className="sbi-acc">simply rewarding.</span>
-              </h1>
-              <p className="sbi-hero-subtitle">
-                Make online shopping smarter. Get rewarded on all your digital purchases, enjoy premium brand vouchers, and bypass surcharges seamlessly.
-              </p>
-
-              <div className="sbi-ticks">
-                <div className="sbi-tick-item">
-                  <CheckCircle className="sbi-tick-icon" size={20} />
-                  <div>
-                    <span className="sbi-tick-text">10X Reward Points on Online Spends</span>
-                    <span className="sbi-tick-subtext">On top brands: Amazon, BookMyShow, Cleartrip, Netmeds & more</span>
-                  </div>
-                </div>
-                <div className="sbi-tick-item">
-                  <CheckCircle className="sbi-tick-icon" size={20} />
-                  <div>
-                    <span className="sbi-tick-text">₹500 Welcome Gift Voucher</span>
-                    <span className="sbi-tick-subtext">Get an Amazon.in Gift Voucher worth ₹500 on card issuance fee payment</span>
-                  </div>
-                </div>
-                <div className="sbi-tick-item">
-                  <CheckCircle className="sbi-tick-icon" size={20} />
-                  <div>
-                    <span className="sbi-tick-text">₹4,000 Milestone Milestones</span>
-                    <span className="sbi-tick-subtext">Earn ₹2,00,000 Milestone spends gets you ₹2,000 e-gift voucher (or similar)</span>
-                  </div>
-                </div>
+        <section className="benefits">
+          <div className="wrap">
+            <span className="eyebrow">Why this card</span>
+            <h2>Made for people who shop online.</h2>
+            <div className="bgrid">
+              <div className="bcard">
+                <div className="n">10X</div>
+                <h3>Reward points online</h3>
+                <p>On top online partners like Myntra, Swiggy, BookMyShow &amp; Cleartrip. 5X on all other online spends.</p>
               </div>
-
-              <div className="sbi-cardart-container">
-                <div className="sbi-cardart">
-                  <img src="/sbi_card.png" alt="SBI SimplyClick Card Mockup" className="sbi-card-img" />
-                  <span className="sbi-coin-badge">
-                    10X Points
-                  </span>
-                </div>
+              <div className="bcard">
+                <div className="n">&#8377;500</div>
+                <h3>Welcome voucher</h3>
+                <p>An Amazon gift voucher lands when you join and pay the joining fee.</p>
               </div>
-            </div>
-
-            {/* Application Form Card */}
-            <div className="sbi-formcard" id="apply-form">
-              <div className="sbi-formcard-hdr">
-                <h3 className="sbi-formcard-title">Apply in 2 Minutes</h3>
-                <p className="sbi-formcard-desc">No physical documents required. 100% digital check.</p>
+              <div className="bcard">
+                <div className="n">&#8377;0*</div>
+                <h3>Fee that pays back</h3>
+                <p>&#8377;499 annual fee, reversed when your annual spends reach &#8377;1 lakh.</p>
               </div>
-
-              {formError && (
-                <div className="sbi-form-general-err">
-                  <ShieldAlert size={18} />
-                  <span>{formError}</span>
-                </div>
-              )}
-
-              <form onSubmit={handleFormSubmit}>
-                {/* Full Name */}
-                <div className="sbi-field-group">
-                  <label className="sbi-label">Full Name (as on PAN)</label>
-                  <div className="sbi-input-wrap">
-                    <User className="sbi-input-icon" />
-                    <input 
-                      type="text" 
-                      name="full_name"
-                      placeholder="e.g. John Doe"
-                      className={`sbi-input ${formData.fullName ? 'sbi-input-hasvalue' : ''} ${errors.fullName ? 'sbi-input-err' : ''}`}
-                      value={formData.fullName}
-                      onChange={handleInputChange}
-                    />
-                  </div>
-                  {errors.fullName && <span className="sbi-err-msg">{errors.fullName}</span>}
-                </div>
-
-                {/* Mobile & Email */}
-                <div className="sbi-two">
-                  <div className="sbi-field-group">
-                    <label className="sbi-label">WhatsApp Mobile Number</label>
-                    <div className="sbi-input-wrap">
-                      <Phone className="sbi-input-icon" />
-                      <input 
-                        type="tel" 
-                        name="mobile"
-                        placeholder="10-digit number"
-                        className={`sbi-input ${formData.phone ? 'sbi-input-hasvalue' : ''} ${errors.phone ? 'sbi-input-err' : ''}`}
-                        value={formData.phone}
-                        onChange={handleInputChange}
-                      />
-                    </div>
-                    {errors.phone && <span className="sbi-err-msg">{errors.phone}</span>}
-                  </div>
-
-                  <div className="sbi-field-group">
-                    <label className="sbi-label">Email Address</label>
-                    <div className="sbi-input-wrap">
-                      <Mail className="sbi-input-icon" />
-                      <input 
-                        type="email" 
-                        name="email"
-                        placeholder="name@domain.com"
-                        className={`sbi-input ${formData.email ? 'sbi-input-hasvalue' : ''} ${errors.email ? 'sbi-input-err' : ''}`}
-                        value={formData.email}
-                        onChange={handleInputChange}
-                      />
-                    </div>
-                    {errors.email && <span className="sbi-err-msg">{errors.email}</span>}
-                  </div>
-                </div>
-
-                {/* PAN & Pincode */}
-                <div className="sbi-two">
-                  <div className="sbi-field-group">
-                    <label className="sbi-label">PAN Number</label>
-                    <div className="sbi-input-wrap">
-                      <Lock className="sbi-input-icon" />
-                      <input 
-                        type="text" 
-                        name="pan"
-                        placeholder="ABCDE1234F"
-                        className={`sbi-input ${formData.pan_no ? 'sbi-input-hasvalue' : ''} ${errors.pan_no ? 'sbi-input-err' : ''}`}
-                        value={formData.pan_no}
-                        onChange={handleInputChange}
-                      />
-                    </div>
-                    {errors.pan_no && <span className="sbi-err-msg">{errors.pan_no}</span>}
-                  </div>
-
-                  <div className="sbi-field-group">
-                    <label className="sbi-label">Residence Pincode</label>
-                    <div className="sbi-input-wrap">
-                      <MapPin className="sbi-input-icon" />
-                      <input 
-                        type="text" 
-                        name="pincode"
-                        placeholder="e.g. 110001"
-                        className={`sbi-input ${formData.pincode ? 'sbi-input-hasvalue' : ''} ${errors.pincode ? 'sbi-input-err' : ''}`}
-                        value={formData.pincode}
-                        onChange={handleInputChange}
-                      />
-                    </div>
-                    {pincodeLoading && (
-                      <span className="sbi-loc-indicator">
-                        <RefreshCw size={12} className="sbi-spin" /> Fetching location...
-                      </span>
-                    )}
-                    {pincodeLocationText && !pincodeError && (
-                      <span className="sbi-loc-indicator">
-                        📍 {pincodeLocationText}
-                      </span>
-                    )}
-                    {errors.pincode && <span className="sbi-err-msg">{errors.pincode}</span>}
-                  </div>
-                </div>
-
-                {/* Localities dropdown */}
-                {pincodeLocalities.length > 0 && !pincodeError && (
-                  <div className="sbi-field-group">
-                    <label className="sbi-label">Area / Locality</label>
-                    <div className="sbi-input-wrap">
-                      <MapPin className="sbi-input-icon" />
-                      <select 
-                        name="address_locality" 
-                        className="sbi-input sbi-select sbi-input-hasvalue"
-                        value={formData.address_locality}
-                        onChange={handleInputChange}
-                      >
-                        {pincodeLocalities.map((loc, index) => (
-                          <option key={index} value={loc}>{loc}</option>
-                        ))}
-                      </select>
-                      <ChevronDown className="sbi-select-chevron" />
-                    </div>
-                  </div>
-                )}
-
-                {/* Employment & Monthly Income */}
-                <div className="sbi-two">
-                  <div className="sbi-field-group">
-                    <label className="sbi-label">Employment Type</label>
-                    <div className="sbi-input-wrap">
-                      <Briefcase className="sbi-input-icon" />
-                      <select 
-                        name="employment" 
-                        className={`sbi-input sbi-select ${formData.employment ? 'sbi-input-hasvalue' : ''} ${errors.employment ? 'sbi-input-err' : ''}`}
-                        value={formData.employment}
-                        onChange={handleInputChange}
-                      >
-                        <option value="">Select Status</option>
-                        <option value="Salaried">Salaried Employee</option>
-                        <option value="Self Employed">Self Employed / Business</option>
-                        <option value="Other">Retired / Student / Housewife</option>
-                      </select>
-                      <ChevronDown className="sbi-select-chevron" />
-                    </div>
-                    {errors.employment && <span className="sbi-err-msg">{errors.employment}</span>}
-                  </div>
-
-                  <div className="sbi-field-group">
-                    <label className="sbi-label">Monthly Income</label>
-                    <div className="sbi-input-wrap">
-                      <Calendar className="sbi-input-icon" />
-                      <select 
-                        name="monthly_income" 
-                        className={`sbi-input sbi-select ${formData.monthly_income ? 'sbi-input-hasvalue' : ''} ${errors.monthly_income ? 'sbi-input-err' : ''}`}
-                        value={formData.monthly_income}
-                        onChange={handleInputChange}
-                      >
-                        <option value="">Select Income Range</option>
-                        <option value="Under ₹25,000">Under ₹25,000</option>
-                        <option value="₹25,000 - ₹50,000">₹25,000 - ₹50,000</option>
-                        <option value="₹50,000 - ₹1,00,000">₹50,000 - ₹1,00,000</option>
-                        <option value="Above ₹1,00,000">Above ₹1,00,000</option>
-                      </select>
-                      <ChevronDown className="sbi-select-chevron" />
-                    </div>
-                    {errors.monthly_income && <span className="sbi-err-msg">{errors.monthly_income}</span>}
-                  </div>
-                </div>
-
-                {/* Submit button */}
-                <button 
-                  type="submit" 
-                  className="sbi-submit-btn"
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? (
-                    <>
-                      <RefreshCw size={18} className="sbi-spin" /> Verifying...
-                    </>
-                  ) : (
-                    <>
-                      Verify Mobile Number <ArrowRight size={18} />
-                    </>
-                  )}
-                </button>
-
-                <p className="sbi-consent-strip">
-                  By clicking, you consent to share details with FinMantra (Authorised DSA) and receive verification alerts over WhatsApp/SMS.
-                </p>
-              </form>
-            </div>
-          </div>
-        </section>
-
-        {/* 3. Trust Strip */}
-        <section className="sbi-trust">
-          <div className="sbi-container sbi-trust-grid">
-            <div className="sbi-trust-item">
-              <CheckCircle className="sbi-trust-icon" size={24} />
-              <span className="sbi-trust-text">
-                10X Rewards
-                <span>On Online Partner Spends</span>
-              </span>
-            </div>
-            <div className="sbi-trust-item">
-              <CheckCircle className="sbi-trust-icon" size={24} />
-              <span className="sbi-trust-text">
-                ₹500 Welcome Voucher
-                <span>On Amazon.in post card activation</span>
-              </span>
-            </div>
-            <div className="sbi-trust-item">
-              <CheckCircle className="sbi-trust-icon" size={24} />
-              <span className="sbi-trust-text">
-                Zero Physical Paperwork
-                <span>Instantly generated application</span>
-              </span>
-            </div>
-          </div>
-        </section>
-
-        {/* 4. Why SimplyClick Card */}
-        <section className="sbi-section">
-          <div className="sbi-container">
-            <div className="sbi-sec-hdr">
-              <h2 className="sbi-sec-title">SimplyClick Benefits</h2>
-              <p className="sbi-sec-subtitle">A card tailored for digital shopaholics and daily online transaction users.</p>
-            </div>
-
-            <div className="sbi-feat-grid">
-              <div className="sbi-feat-card">
-                <span className="sbi-feat-badge">🛍️</span>
-                <h3 className="sbi-feat-name">E-Shopping Partners</h3>
-                <p className="sbi-feat-desc">
-                  Earn 10X reward points on online shopping portals: Amazon, Cleartrip, Netmeds, Lenskart, BookMyShow, and Apollo.
-                </p>
-              </div>
-
-              <div className="sbi-feat-card">
-                <span className="sbi-feat-badge">🌐</span>
-                <h3 className="sbi-feat-name">Global Spends</h3>
-                <p className="sbi-feat-desc">
-                  Earn 5X reward points on all other online spends, domestic or international. 1X points on regular offline purchases.
-                </p>
-              </div>
-
-              <div className="sbi-feat-card">
-                <span className="sbi-feat-badge">⛽</span>
-                <h3 className="sbi-feat-name">Fuel Waiver</h3>
-                <p className="sbi-feat-desc">
-                  Enjoy 1% fuel surcharge waiver on transactions ranging from ₹500 to ₹3,000 across petrol pumps in India.
-                </p>
+              <div className="bcard">
+                <div className="n">&#8377;2,000</div>
+                <h3>Milestone rewards</h3>
+                <p>E-vouchers when your annual online spends cross &#8377;1L and &#8377;2L.</p>
               </div>
             </div>
           </div>
         </section>
 
-        {/* 5. Milestones */}
-        <section className="sbi-milestones">
-          <div className="sbi-container">
-            <div className="sbi-sec-hdr">
-              <h2 className="sbi-sec-title">Spend Milestones & Waived Fees</h2>
-              <p className="sbi-sec-subtitle">The more you click and spend online, the more you waive and get rewarded.</p>
+        <footer>
+          <div className="wrap">
+            <div className="links">
+              <a href="#">Privacy Policy</a>
+              <a href="#">Terms &amp; Conditions</a>
+              <a href="#apply">Apply</a>
             </div>
-
-            <div className="sbi-m-grid">
-              <div className="sbi-m-card">
-                <div className="sbi-m-val">₹499</div>
-                <div className="sbi-m-lbl">Waived Annual Fee</div>
-                <p className="sbi-m-desc">Reversal of renewal fee of ₹499 when cumulative annual spends touch ₹1,00,000.</p>
-              </div>
-
-              <div className="sbi-m-card">
-                <div className="sbi-m-val">₹2,000</div>
-                <div className="sbi-m-lbl">Cleartrip Gift Voucher</div>
-                <p className="sbi-m-desc">Get an e-gift voucher of ₹2,000 on reaching annual online spends threshold of ₹1,00,000.</p>
-              </div>
-
-              <div className="sbi-m-card">
-                <div className="sbi-m-val">₹2,000</div>
-                <div className="sbi-m-lbl">Cleartrip Gift Voucher</div>
-                <p className="sbi-m-desc">Get an additional e-gift voucher of ₹2,000 on reaching annual online spends threshold of ₹2,00,000.</p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* 6. Step Process */}
-        <section className="sbi-section">
-          <div className="sbi-container">
-            <div className="sbi-sec-hdr">
-              <h2 className="sbi-sec-title">Application Steps</h2>
-              <p className="sbi-sec-subtitle">Get your card approved via our fully-digital referral pipeline in 4 quick phases.</p>
-            </div>
-
-            <div className="sbi-steps-grid">
-              <div className="sbi-step-card">
-                <span className="sbi-step-num">1</span>
-                <h4 className="sbi-step-title">Submit Information</h4>
-                <p className="sbi-step-desc">Fill out your contact details, PAN, and basic employment criteria above.</p>
-              </div>
-
-              <div className="sbi-step-card">
-                <span className="sbi-step-num">2</span>
-                <h4 className="sbi-step-title">Verify WhatsApp OTP</h4>
-                <p className="sbi-step-desc">Enter the authentication code sent to your phone to confirm registration.</p>
-              </div>
-
-              <div className="sbi-step-card">
-                <span className="sbi-step-num">3</span>
-                <h4 className="sbi-step-title">Onward Redirection</h4>
-                <p className="sbi-step-desc">Get securely transferred to SBI Card’s official SPRINT verification system.</p>
-              </div>
-
-              <div className="sbi-step-card">
-                <span className="sbi-step-num">4</span>
-                <h4 className="sbi-step-title">Instant Approval</h4>
-                <p className="sbi-step-desc">Complete e-KYC on the bank portal to generate your virtual card number.</p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* 7. FAQs */}
-        <section className="sbi-section" style={{ background: 'var(--bg2)' }}>
-          <div className="sbi-container">
-            <div className="sbi-sec-hdr">
-              <h2 className="sbi-sec-title">Frequently Asked Questions</h2>
-              <p className="sbi-sec-subtitle">Everything you need to know about the SBI SimplyClick Credit Card.</p>
-            </div>
-
-            <div className="sbi-faq-grid">
-              <div className="sbi-faq-item">
-                <h4 className="sbi-faq-q">What is the annual/joining fee for this card?</h4>
-                <p className="sbi-faq-a">
-                  The joining and renewal fee is ₹499 + GST. However, on payment of the joining fee, you get an Amazon Gift Voucher worth ₹500. The renewal fee is completely waived if your annual spends exceed ₹1,00,000.
-                </p>
-              </div>
-
-              <div className="sbi-faq-item">
-                <h4 className="sbi-faq-q">How does the 10X reward point structure work?</h4>
-                <p className="sbi-faq-a">
-                  You earn 10 reward points for every ₹100 spent online with partner brands (Amazon, BookMyShow, Cleartrip, Netmeds, Apollo, Lenskart). For all other online spends, you earn 5 points per ₹100. Offline spends earn 1 point per ₹100.
-                </p>
-              </div>
-
-              <div className="sbi-faq-item">
-                <h4 className="sbi-faq-q">Is physical document verification needed?</h4>
-                <p className="sbi-faq-a">
-                  No! The application is fully paperless. If your pincode is serviceable, you can complete identity validation via V-KYC (Video-KYC) using your PAN and Aadhaar number instantly.
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* 8. Footer */}
-        <footer className="sbi-footer">
-          <div className="sbi-container">
-            <div className="sbi-footer-top">
-              <div className="sbi-footer-brand">
-                <div className="sbi-footer-logo-row">
-                  <span className="sbi-footer-logo-title">FinMantra</span>
-                </div>
-                <p className="sbi-footer-desc">
-                  FinMantra is an authorised referral partner of top banks and financial institutions in India. We help consumers review and select premium credit cards without charging any fee.
-                </p>
-                <div className="sbi-footer-compliance">
-                  <strong>Corporate details:</strong> FinMantra is a brand operated by <strong>Chaos Design Pvt. Ltd.</strong> We do not issue credit cards or make loan decisions ourselves. All cards are subject to bank terms and policies.
-                </div>
-              </div>
-
-              <div className="sbi-footer-links-col">
-                <div className="sbi-footer-links">
-                  <span className="sbi-footer-link" onClick={() => navigateTo('/about')}>About Us</span>
-                  <span className="sbi-footer-link" onClick={() => navigateTo('/contact')}>Contact Support</span>
-                  <span className="sbi-footer-link" onClick={() => navigateTo('/privacy-policy')}>Privacy Policy</span>
-                  <span className="sbi-footer-link" onClick={() => navigateTo('/terms')}>Terms & Conditions</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="sbi-footer-bottom">
-              <span className="sbi-footer-copy">
-                &copy; {new Date().getFullYear()} FinMantra (Chaos Design Pvt. Ltd.). All rights reserved.
-              </span>
-              <span className="sbi-footer-seal">
-                🛡️ Secure 256-Bit SSL Connection
-              </span>
-            </div>
+            <p className="disc">FinMantra is an authorised DSA of SBI Card. Annual fee &#8377;499 + GST, reversed on annual spend of &#8377;1,00,000. Reward points, partner brands and offers are subject to SBI Card terms and may change. 1 RP = &#8377;0.25. Card issuance and approval are subject to SBI Card&#8217;s eligibility criteria and sole discretion. T&amp;Cs apply.</p>
+            <p className="note">This is a marketing and lead-assistance page operated by FinMantra, an authorised DSA of SBI Card. It is not the official SBI Card website. &#8220;SBI Card&#8221;, &#8220;SimplyClick&#8221; and related marks belong to SBI Cards &amp; Payment Services Ltd.</p>
           </div>
         </footer>
 
-        {/* 9. OTP Verification Modal Overlay */}
+        {/* OTP Verification Modal Overlay */}
         {showOtpModal && (
           <div className="sbi-modal-overlay">
             <div className="sbi-modal-panel">
@@ -1959,7 +1330,7 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
 
               <h4 className="sbi-modal-title">Verify Mobile Number</h4>
               <p className="sbi-modal-desc">
-                We have sent a verification code to <strong>+91 {formData.phone}</strong>. Enter the OTP code to verify and proceed.
+                We have sent a verification code to <strong>+91 {formData.mobile}</strong>. Enter the OTP code to verify and proceed.
               </p>
 
               {simulatedOtpText && (
@@ -1970,17 +1341,17 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
                   fontSize: '0.82rem',
                   fontWeight: 700,
                   padding: '0.6rem 0.85rem',
-                  borderRadius: 'var(--radius-sm)',
+                  borderRadius: '8px',
                   marginBottom: '1rem'
                 }}>
                   [Simulation OTP]: {simulatedOtpText}
                 </div>
               )}
 
-              <input 
-                type="text" 
+              <input
+                type="text"
                 maxLength="6"
-                className="sbi-otp-input"
+                className="sbi-otp-input-field"
                 placeholder="••••••"
                 value={otpVal}
                 onChange={(e) => setOtpVal(e.target.value.replace(/\D/g, '').slice(0, 6))}
@@ -1989,14 +1360,14 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
               {otpStatus && <span className="sbi-otp-status">{otpStatus}</span>}
 
               <div className="sbi-otp-actions">
-                <button 
-                  className="sbi-submit-btn"
+                <button
+                  className="btn btn-primary"
                   onClick={handleVerifyOtp}
                   disabled={isSubmitting || otpVal.length !== 6}
                 >
-                  Verify & Submit
+                  Verify &amp; Submit
                 </button>
-                <button 
+                <button
                   className="sbi-resend-btn"
                   onClick={handleResendOtp}
                   disabled={resendTimer > 0 || isSubmitting}
