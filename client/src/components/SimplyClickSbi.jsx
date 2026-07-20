@@ -103,28 +103,60 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
               const state = po.State;
               setPincodeLocationText(`${city}, ${state}`);
 
-              // Validate serviceability
-              const matchedSbiCard = cards.find(c => String(c.name).toLowerCase().includes('simplyclick') || String(c.id).toLowerCase().includes('sbi'));
-              if (matchedSbiCard && matchedSbiCard.bank) {
-                const bankRulesRaw = settings.bank_pincode_rules || '';
-                if (bankRulesRaw) {
-                  try {
-                    const bankRules = JSON.parse(bankRulesRaw);
-                    const rule = bankRules[matchedSbiCard.bank];
-                    if (rule && rule.mode === 'list') {
-                      const allowedPins = Array.isArray(rule.pincodes) ? rule.pincodes : [];
-                      if (!allowedPins.includes(pin)) {
-                        setPincodeError(`Pincode is not serviceable by ${matchedSbiCard.bank} currently.`);
+              // 1. Validate global pincode serviceability
+              const pinMode = settings.pincode_serviceability_mode || 'all';
+              const pinListRaw = settings.pincode_serviceability_list || '';
+              let errorText = '';
+              if (pinMode !== 'all') {
+                const pinArray = pinListRaw.split(',').map(p => p.trim()).filter(Boolean);
+                const isInList = pinArray.includes(pin);
+                if (pinMode === 'whitelist' && !isInList) {
+                  errorText = 'Credit card services are not available at your pincode currently.';
+                }
+                if (pinMode === 'blacklist' && isInList) {
+                  errorText = 'Credit card services are not available at your pincode currently.';
+                }
+              }
+
+              // 2. Validate bank-specific pincode serviceability for SBI Card
+              if (!errorText) {
+                const matchedSbiCard = cards.find(c => String(c.name).toLowerCase().includes('simplyclick') || String(c.id).toLowerCase().includes('sbi'));
+                if (matchedSbiCard && matchedSbiCard.bank) {
+                  const bankRulesRaw = settings.bank_pincode_rules || '';
+                  if (bankRulesRaw) {
+                    try {
+                      const bankRules = typeof settings.bank_pincode_rules === 'string'
+                        ? JSON.parse(settings.bank_pincode_rules)
+                        : settings.bank_pincode_rules;
+                      const rule = bankRules[matchedSbiCard.bank];
+                      if (rule && rule.mode === 'list') {
+                        const allowedPins = String(rule.list || '').split(',').map(p => p.trim()).filter(Boolean);
+                        if (!allowedPins.includes(pin)) {
+                          errorText = `${matchedSbiCard.bank} cards facilities are currently not available for your location.`;
+                        }
                       }
+                    } catch (e) {
+                      console.error('Failed to parse bank pincode rules:', e);
                     }
-                  } catch (e) {
-                    console.error('Failed to parse bank pincode rules:', e);
                   }
                 }
               }
+
+              if (errorText) {
+                setPincodeError(errorText);
+                setErrors(prev => ({ ...prev, pincode: errorText }));
+              } else {
+                setErrors(prev => {
+                  const next = { ...prev };
+                  delete next.pincode;
+                  return next;
+                });
+              }
             }
           } else {
-            setPincodeError('Invalid Pincode. No location found.');
+            const errTxt = 'Invalid Pincode. No location found.';
+            setPincodeError(errTxt);
+            setErrors(prev => ({ ...prev, pincode: errTxt }));
           }
         }
       } catch (err) {
@@ -146,13 +178,7 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
     }
 
     setFormData(prev => ({ ...prev, [name]: cleanVal }));
-
-    // Reset validation state for the field
-    setErrors(prev => {
-      const next = { ...prev };
-      delete next[name];
-      return next;
-    });
+    validateField(name, cleanVal);
   };
 
   // Validate age helper
@@ -167,62 +193,135 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
     return currentAge;
   };
 
-  // Standard validations matching raw HTML
+  // Field validation matching PublicLanding.jsx
+  const validateField = (name, value) => {
+    let errorText = '';
+
+    if (name === 'pan') {
+      if (!value) {
+        errorText = 'This field is required';
+      } else if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(value)) {
+        errorText = 'Invalid PAN card format (e.g. ABCDE1234F).';
+      }
+    }
+
+    if (name === 'name') {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        errorText = 'This field is required';
+      } else if (!/^[a-zA-Z\s]+$/.test(trimmed)) {
+        errorText = 'Enter your Name as per PAN card';
+      } else {
+        const words = trimmed.split(/\s+/).filter(Boolean);
+        if (words.length < 2) {
+          errorText = 'Please enter your Last Name / Father Name';
+        }
+      }
+    }
+
+    if (name === 'dob') {
+      const currentAge = value ? age(value) : 0;
+      if (!value) {
+        errorText = 'This field is required';
+      } else if (currentAge < 21 || currentAge > 70) {
+        errorText = 'You must be 21–70 to apply for this card.';
+      }
+    }
+
+    if (name === 'mother_name') {
+      if (!value || value.trim().length < 2) {
+        errorText = "Enter your mother's name.";
+      }
+    }
+
+    if (name === 'mobile') {
+      if (!value) {
+        errorText = 'This field is required';
+      } else if (!/^[6-9]/.test(value)) {
+        errorText = 'WhatsApp number should start with 6,7,8,9 only';
+      } else if (value.length !== 10) {
+        errorText = 'WhatsApp number must be exactly 10 digits.';
+      }
+    }
+
+    if (name === 'address') {
+      if (!value || value.trim().length < 10) {
+        errorText = 'Enter your current address (min 10 characters).';
+      }
+    }
+
+    if (name === 'pincode') {
+      if (!value) {
+        errorText = 'This field is required';
+      } else if (value.length !== 6 || !/^\d+$/.test(value)) {
+        errorText = 'Pincode must be exactly 6 digits.';
+      } else if (pincodeError) {
+        errorText = pincodeError;
+      }
+    }
+
+    if (name === 'email') {
+      if (!value) {
+        errorText = 'This field is required';
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+        errorText = 'Please enter valid Email';
+      }
+    }
+
+    if (name === 'occupation') {
+      if (!value) {
+        errorText = 'Select your occupation.';
+      }
+    }
+
+    if (name === 'designation') {
+      if (!value || value.trim().length < 1) {
+        errorText = 'Enter your designation.';
+      }
+    }
+
+    if (name === 'company') {
+      if (!value || value.trim().length < 1) {
+        errorText = 'Enter your company name.';
+      }
+    }
+
+    if (name === 'consent') {
+      if (!value) {
+        errorText = 'Please tick the box to continue.';
+      }
+    }
+
+    setErrors(prev => {
+      const updated = { ...prev };
+      if (errorText) {
+        updated[name] = errorText;
+      } else {
+        delete updated[name];
+      }
+      return updated;
+    });
+
+    return !errorText;
+  };
+
+  // Validate entire form before submission
   const validateForm = () => {
-    const newErrors = {};
     let isValid = true;
+    const fieldsToValidate = [
+      'pan', 'name', 'dob', 'mother_name', 'mobile',
+      'address', 'pincode', 'email', 'occupation',
+      'designation', 'company', 'consent'
+    ];
 
-    if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(formData.pan)) {
-      newErrors.pan = true;
-      isValid = false;
-    }
-    if (!formData.name || formData.name.trim().length < 2) {
-      newErrors.name = true;
-      isValid = false;
-    }
-    const currentAge = formData.dob ? age(formData.dob) : 0;
-    if (!formData.dob || currentAge < 21 || currentAge > 70) {
-      newErrors.dob = true;
-      isValid = false;
-    }
-    if (!formData.mother_name || formData.mother_name.trim().length < 2) {
-      newErrors.mother_name = true;
-      isValid = false;
-    }
-    if (!/^[6-9][0-9]{9}$/.test(formData.mobile)) {
-      newErrors.mobile = true;
-      isValid = false;
-    }
-    if (!formData.address || formData.address.trim().length < 10) {
-      newErrors.address = true;
-      isValid = false;
-    }
-    if (!formData.pincode || formData.pincode.length !== 6 || pincodeError) {
-      newErrors.pincode = true;
-      isValid = false;
-    }
-    if (!/^[^@\s]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = true;
-      isValid = false;
-    }
-    if (!formData.occupation) {
-      newErrors.occupation = true;
-      isValid = false;
-    }
-    if (!formData.designation || formData.designation.trim().length < 1) {
-      newErrors.designation = true;
-      isValid = false;
-    }
-    if (!formData.company || formData.company.trim().length < 1) {
-      newErrors.company = true;
-      isValid = false;
-    }
-    if (!formData.consent) {
-      newErrors.consent = true;
-      isValid = false;
-    }
+    fieldsToValidate.forEach(fieldName => {
+      const val = formData[fieldName];
+      const fieldValid = validateField(fieldName, val);
+      if (!fieldValid) {
+        isValid = false;
+      }
+    });
 
-    setErrors(newErrors);
     return isValid;
   };
 
@@ -1084,7 +1183,7 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
                           onChange={handleInputChange}
                         />
                         <span className="hint">10 characters as printed on your PAN card.</span>
-                        <span className="err" id="pan_err">Enter a valid PAN (e.g. ABCDE1234F).</span>
+                        <span className="err" id="pan_err">{errors.pan || 'Enter a valid PAN (e.g. ABCDE1234F).'}</span>
                       </div>
 
                       <div className={`field ${errors.name ? 'invalid' : ''}`}>
@@ -1097,7 +1196,7 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
                           value={formData.name}
                           onChange={handleInputChange}
                         />
-                        <span className="err">Enter your full name.</span>
+                        <span className="err">{errors.name || 'Enter your full name.'}</span>
                       </div>
 
                       <div className={`field ${errors.dob ? 'invalid' : ''}`}>
@@ -1110,7 +1209,7 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
                           value={formData.dob}
                           onChange={handleInputChange}
                         />
-                        <span className="err" id="dob_err">You must be 21&ndash;70 to apply for this card.</span>
+                        <span className="err" id="dob_err">{errors.dob || 'You must be 21–70 to apply for this card.'}</span>
                       </div>
 
                       <div className={`field ${errors.mother_name ? 'invalid' : ''}`}>
@@ -1123,25 +1222,25 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
                           value={formData.mother_name}
                           onChange={handleInputChange}
                         />
-                        <span className="err">Enter your mother&#8217;s name.</span>
+                        <span className="err">{errors.mother_name || 'Enter your mother&#8217;s name.'}</span>
                       </div>
 
                       <div className={`field ${errors.mobile ? 'invalid' : ''}`}>
-                        <label htmlFor="mobile">Mobile number <span className="req">*</span></label>
+                        <label htmlFor="mobile">WhatsApp number <span className="req">*</span></label>
                         <div className="mob">
                           <span className="pre">+91</span>
                           <input
                             id="mobile"
                             name="mobile"
                             maxLength="10"
-                            placeholder="10-digit mobile"
+                            placeholder="10-digit WhatsApp no."
                             inputMode="numeric"
                             autoComplete="tel-national"
                             value={formData.mobile}
                             onChange={handleInputChange}
                           />
                         </div>
-                        <span className="err" id="mob_err">Enter a valid 10-digit Indian mobile number.</span>
+                        <span className="err" id="mob_err">{errors.mobile || 'Enter a valid 10-digit WhatsApp number.'}</span>
                       </div>
 
                       <div className="field full">
@@ -1155,7 +1254,7 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
                           value={formData.address}
                           onChange={handleInputChange}
                         ></textarea>
-                        {errors.address && <span className="err" style={{ display: 'block' }}>Enter your current address (min 10 characters).</span>}
+                        {errors.address && <span className="err" style={{ display: 'block' }}>{errors.address}</span>}
                       </div>
 
                       <div className={`field ${errors.email ? 'invalid' : ''}`}>
@@ -1169,7 +1268,7 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
                           value={formData.email}
                           onChange={handleInputChange}
                         />
-                        <span className="err" id="email_err">Enter a valid email address.</span>
+                        <span className="err" id="email_err">{errors.email || 'Enter a valid email address.'}</span>
                       </div>
 
                       <div className={`field ${errors.pincode ? 'invalid' : ''}`}>
@@ -1184,7 +1283,7 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
                           onChange={handleInputChange}
                         />
                         <span className="err" id="pincode_err">
-                          {pincodeError || 'Enter a serviceable 6-digit pincode.'}
+                          {errors.pincode || pincodeError || 'Enter a serviceable 6-digit pincode.'}
                         </span>
                         {pincodeLocationText && !pincodeError && (
                           <span style={{ fontSize: '11px', color: 'var(--ok)', marginTop: '4px', fontWeight: 600 }}>
@@ -1207,7 +1306,7 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
                           <option value="Self-employed / Business">Self-employed / Business</option>
                           <option value="Other">Other</option>
                         </select>
-                        <span className="err">Select your occupation.</span>
+                        <span className="err">{errors.occupation || 'Select your occupation.'}</span>
                       </div>
 
                       <div className={`field ${errors.designation ? 'invalid' : ''}`}>
@@ -1220,7 +1319,7 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
                           value={formData.designation}
                           onChange={handleInputChange}
                         />
-                        <span className="err">Enter your designation.</span>
+                        <span className="err">{errors.designation || 'Enter your designation.'}</span>
                       </div>
 
                       <div className={`field ${errors.company ? 'invalid' : ''}`}>
@@ -1233,7 +1332,7 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
                           value={formData.company}
                           onChange={handleInputChange}
                         />
-                        <span className="err">Enter your company name.</span>
+                        <span className="err">{errors.company || 'Enter your company name.'}</span>
                       </div>
 
                       <input className="hp" tabIndex="-1" autoComplete="off" name="website" aria-hidden="true" readOnly />
@@ -1251,7 +1350,7 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
                         </label>
                       </div>
                       <span className="err" id="consent_err" style={{ gridColumn: '1/-1', display: errors.consent ? 'block' : 'none' }}>
-                        Please tick the box to continue.
+                        {errors.consent || 'Please tick the box to continue.'}
                       </span>
 
                       {formError && (
@@ -1312,7 +1411,7 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
               <a href="#apply">Apply</a>
             </div>
             <p className="disc">FinMantra is an authorised DSA of SBI Card. Annual fee &#8377;499 + GST, reversed on annual spend of &#8377;1,00,000. Reward points, partner brands and offers are subject to SBI Card terms and may change. 1 RP = &#8377;0.25. Card issuance and approval are subject to SBI Card&#8217;s eligibility criteria and sole discretion. T&amp;Cs apply.</p>
-            <p className="note">This is a marketing and lead-assistance page operated by FinMantra, an authorised DSA of SBI Card. It is not the official SBI Card website. &#8220;SBI Card&#8221;, &#8220;SimplyClick&#8221; and related marks belong to SBI Cards &amp; Payment Services Ltd.</p>
+            <p className="note">This is a marketing and lead-assistance page operated by FinMantra, an authorised DSA of SBI Card. It is not the official SBI Card website. &ldquo;SBI Card&rdquo;, &ldquo;SimplyClick&rdquo; and related marks belong to SBI Cards &amp; Payment Services Ltd.</p>
           </div>
         </footer>
 
@@ -1328,9 +1427,9 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
                 <Lock size={24} />
               </div>
 
-              <h4 className="sbi-modal-title">Verify Mobile Number</h4>
+              <h4 className="sbi-modal-title">Verify WhatsApp Number</h4>
               <p className="sbi-modal-desc">
-                We have sent a verification code to <strong>+91 {formData.mobile}</strong>. Enter the OTP code to verify and proceed.
+                We have sent a verification code to your WhatsApp number <strong>+91 {formData.mobile}</strong>. Enter the OTP code to verify and proceed.
               </p>
 
               {simulatedOtpText && (
