@@ -1008,6 +1008,9 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
             padding: 6px 12px !important;
             font-size: 11px !important;
             box-shadow: 0 4px 10px rgba(67,23,34,.15) !important;
+            width: auto !important;
+            max-width: fit-content !important;
+            flex: none !important;
           }
           .simplyclick-wrapper .nav-logo img {
             height: 28px !important;
