@@ -13,7 +13,7 @@ pm2 restart finmantra_backend
 
 
 AWS Console sign-in URL
-https://306678420994.signin.aws.amazon.com/consolehttps://306678420994.signin.aws.amazon.com/console
+https://306678420994.signin.aws.amazon.com/console
 User name: lakshayb057@gmail.com
 Console password: Lakshay@123
 

@@ -990,8 +990,8 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
   if (!card) {
     let matchedCard = null;
     
-    if (source === 'kiwi') {
-      // For kiwi source, match ONLY via utm_internal
+    if (source === 'kiwi' || source === 'simplyclick_sbi') {
+      // For kiwi and simplyclick_sbi sources, match ONLY via utm_internal
       if (utm_internal) {
         const activeCards = await db.getCards(false);
         const altStr = String(utm_internal).trim().toLowerCase();
@@ -1240,9 +1240,9 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
   // Real-time broadcast notification of a new lead!
   broadcast({ type: 'LEAD_ADDED', data: newLead });
 
-  // Send WhatsApp Referral Notification with Tracking URL for agent/kiwi sources or Kiwi matched cards on creation
+  // Send WhatsApp Referral Notification with Tracking URL for agent/kiwi/simplyclick_sbi sources or Kiwi matched cards on creation
   const isKiwiCard = card && (card.id === 'card_yomuvufqh' || card.name.toLowerCase().includes('kiwi') || String(card.id).includes('kiwi'));
-  const isSingleStepLead = (source === 'agent' || source === 'kiwi' || pan_no || monthly_income || employment || isKiwiCard);
+  const isSingleStepLead = (source === 'agent' || source === 'kiwi' || source === 'simplyclick_sbi' || pan_no || monthly_income || employment || isKiwiCard);
   if (isSingleStepLead) {
     console.log(`[WhatsApp Lead Creation] Triggering referral link dispatch for single-step lead: ${trimmedPhone}`);
     const agentCode = source === 'agent' ? (agent_id || 'active') : 'public';
