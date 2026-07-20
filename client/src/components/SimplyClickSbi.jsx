@@ -530,10 +530,19 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
         @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&display=swap');
 
         :root{
-         --wine:#6E2C3E; --wine2:#8A3A50; --oxblood:#431722;
-         --blush:#F3DEDE; --rose:#EAC9CC; --cream:#FBF3EA; --paper:#FCF7F3;
-         --gold:#C79A52; --gold-deep:#8A5A20; --ink:#2A0A14; --line:#E3C9CF;
-         --ok:#2f7d4f; --err:#b23a48;
+         --wine:#0A3F83; /* SBI Royal Blue */
+         --wine2:#0072BC; /* Light Blue Accent */
+         --oxblood:#002B5C; /* Deep Corporate Navy */
+         --blush:#E6F2FD; /* Soft Light Blue Tint */
+         --rose:#D4E8FC; /* Deeper Soft Blue Tint */
+         --cream:#FFFFFF; /* White */
+         --paper:#F4F8FD; /* Clean Soft Blue-Grey Background */
+         --gold:#F58220; /* SBI Card Orange Accent */
+         --gold-deep:#D96B00; /* Deep Orange Accent */
+         --ink:#092C4C; /* Deep Navy Text */
+         --line:#CFE2F3; /* Light Blue-Grey Borders */
+         --ok:#2f7d4f; 
+         --err:#b23a48;
         }
         .simplyclick-wrapper {
           margin: 0;
@@ -576,7 +585,7 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
           position: sticky;
           top: 0;
           z-index: 40;
-          background: rgba(252,247,243,0.86);
+          background: rgba(244,248,253,0.86);
           backdrop-filter: blur(10px);
           border-bottom: 1px solid var(--line);
         }
@@ -609,11 +618,11 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
         .simplyclick-wrapper .btn-primary {
           background: var(--wine);
           color: var(--cream);
-          box-shadow: 0 8px 20px rgba(67,23,34,.28);
+          box-shadow: 0 8px 20px rgba(0,43,92,.28);
         }
         .simplyclick-wrapper .btn-primary:hover {
           transform: translateY(-2px);
-          box-shadow: 0 12px 26px rgba(67,23,34,.34);
+          box-shadow: 0 12px 26px rgba(0,43,92,.34);
         }
         .simplyclick-wrapper .btn-gold {
           background: var(--gold);
@@ -661,7 +670,7 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
         .simplyclick-wrapper .hero p.lead {
           font-size: clamp(16px, 2vw, 19px);
           max-width: 33ch;
-          color: #5a2634;
+          color: var(--ink);
         }
         .simplyclick-wrapper .chips {
           display: flex;
@@ -699,7 +708,7 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
           position: relative;
           width: min(230px, 60%);
           transform: rotate(-6deg);
-          filter: drop-shadow(0 26px 34px rgba(40,8,18,.45));
+          filter: drop-shadow(0 26px 34px rgba(0,43,92,.45));
         }
         .simplyclick-wrapper .spark {
           position: absolute;
@@ -746,7 +755,7 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
         }
         .simplyclick-wrapper .bcard p {
           font-size: 14px;
-          color: #6a4c53;
+          color: #4A6882;
         }
 
         /* form */
@@ -757,7 +766,7 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
           background: #fff;
           border: 1px solid var(--line);
           border-radius: 22px;
-          box-shadow: 0 24px 50px rgba(67,23,34,.16);
+          box-shadow: 0 24px 50px rgba(0,43,92,.16);
           overflow: hidden;
         }
         .simplyclick-wrapper .formhead {
@@ -821,7 +830,7 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
         .simplyclick-wrapper textarea:focus {
           outline: none;
           border-color: var(--wine);
-          box-shadow: 0 0 0 3px rgba(110,44,62,.12);
+          box-shadow: 0 0 0 3px rgba(10,63,131,.12);
         }
         .simplyclick-wrapper .field.invalid input,
         .simplyclick-wrapper .field.invalid select,
@@ -830,7 +839,7 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
         }
         .simplyclick-wrapper .hint {
           font-size: 12px;
-          color: #8a6a70;
+          color: #5A7B9A;
           margin-top: 5px;
         }
         .simplyclick-wrapper .err {
@@ -857,7 +866,7 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
           border: 1.5px solid var(--line);
           border-right: none;
           border-radius: 12px 0 0 12px;
-          background: #F4E9EB;
+          background: var(--blush);
           font-size: 16px;
           color: var(--wine);
         }
@@ -887,7 +896,7 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
           text-transform: none;
           letter-spacing: 0;
           font-size: 13px;
-          color: #5a2634;
+          color: var(--ink);
           line-height: 1.45;
         }
         .simplyclick-wrapper .formcol {
@@ -897,7 +906,7 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
           grid-column: 1/-1;
           font-family: monospace;
           font-size: 11.5px;
-          color: #7a5560;
+          color: #4A6882;
           display: flex;
           gap: 8px;
           align-items: center;
@@ -944,7 +953,7 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
           font-size: 26px;
         }
         .simplyclick-wrapper .success p {
-          color: #6a4c53;
+          color: #4A6882;
           max-width: 44ch;
           margin: 10px auto 22px;
         }
@@ -952,7 +961,7 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
         /* footer */
         .simplyclick-wrapper footer {
           background: var(--oxblood);
-          color: #E9D5D9;
+          color: #D4E3F3;
           padding: 40px 0 46px;
         }
         .simplyclick-wrapper footer .disc {
@@ -1033,7 +1042,7 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
           position: fixed;
           inset: 0;
           z-index: 100;
-          background: rgba(42, 10, 20, 0.6);
+          background: rgba(9, 44, 76, 0.6);
           backdrop-filter: blur(5px);
           display: flex;
           align-items: center;
@@ -1047,7 +1056,7 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
           padding: 30px 24px;
           max-width: 440px;
           width: 100%;
-          box-shadow: 0 24px 50px rgba(67,23,34,.25);
+          box-shadow: 0 24px 50px rgba(0,43,92,.25);
           position: relative;
           text-align: center;
         }
@@ -1085,7 +1094,7 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
         }
         .sbi-modal-desc {
           font-size: 14px;
-          color: #6a4c53;
+          color: #4A6882;
           line-height: 1.5;
           margin-bottom: 20px;
         }
