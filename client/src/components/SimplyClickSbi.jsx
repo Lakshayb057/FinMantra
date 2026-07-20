@@ -1005,23 +1005,23 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
             padding: 0 12px !important;
           }
           .simplyclick-wrapper .topbar .btn-sm {
-            padding: 6px 12px !important;
-            font-size: 11px !important;
-            box-shadow: 0 4px 10px rgba(67,23,34,.15) !important;
+            padding: 8px 16px !important;
+            font-size: 13px !important;
+            box-shadow: 0 6px 15px rgba(67,23,34,.20) !important;
             width: auto !important;
             max-width: fit-content !important;
             flex: none !important;
           }
           .simplyclick-wrapper .nav-logo img {
-            height: 28px !important;
-            width: 28px !important;
-            border-radius: 6px !important;
+            height: 38px !important;
+            width: 38px !important;
+            border-radius: 8px !important;
           }
           .simplyclick-wrapper .nav-logo span {
-            font-size: 0.95rem !important;
+            font-size: 1.25rem !important;
           }
           .simplyclick-wrapper .topbar .row {
-            height: 48px !important;
+            height: 56px !important;
           }
         }
         @media (prefers-reduced-motion:reduce){
