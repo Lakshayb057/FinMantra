@@ -512,14 +512,7 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
           }
         }
 
-        setRedirectUrl(finalUrl);
-        setIsSubmitted(true);
-        setTimeout(() => {
-          const successView = document.getElementById('success');
-          if (successView) {
-            successView.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          }
-        }, 150);
+        window.location.replace(finalUrl);
       } else {
         setFormError(data.error || 'Failed to submit application. Please check details.');
       }
