@@ -586,17 +586,11 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
           justify-content: space-between;
           height: 60px;
         }
-        .simplyclick-wrapper .brandtag {
-          display: inline-flex;
-          align-items: center;
-          gap: 9px;
-          font-family: monospace;
-          font-size: 12px;
-          letter-spacing: 1.5px;
-          border: 1.5px solid var(--wine);
-          color: var(--wine);
-          border-radius: 10px;
-          padding: 7px 12px;
+        .simplyclick-wrapper .nav-logo {
+          transition: transform 0.15s ease;
+        }
+        .simplyclick-wrapper .nav-logo:hover {
+          transform: scale(1.02);
         }
         .simplyclick-wrapper .btn {
           font-family: 'Bricolage Grotesque', sans-serif;
@@ -1117,7 +1111,10 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
       <div className="simplyclick-wrapper">
         <div className="topbar">
           <div className="wrap row">
-            <span className="brandtag">Authorised DSA &middot; SBI Card</span>
+            <div className="nav-logo" onClick={() => navigateTo('/')} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}>
+              <img src="/logo.jpg" alt="FinMantra Logo" style={{ height: '40px', width: '40px', borderRadius: '10px', objectFit: 'cover' }} />
+              <span style={{ fontFamily: "'Bricolage Grotesque', sans-serif", fontWeight: 800, fontSize: '1.30rem', letterSpacing: '-0.03em', color: 'var(--wine)' }}>FinMantra</span>
+            </div>
             <a href="#apply" className="btn btn-primary btn-sm">Apply now</a>
           </div>
         </div>
