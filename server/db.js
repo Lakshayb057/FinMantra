@@ -305,6 +305,13 @@ async function initPgSchema() {
       await client.query("ALTER TABLE agents ADD COLUMN IF NOT EXISTS assigned_bank VARCHAR(255)");
     } catch (migErr) {}
 
+    // Performance indexes for dashboard queries
+    try {
+      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_mis_status ON leads (mis_status) WHERE mis_status IS NOT NULL");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_mis_mapped_at ON leads (mis_mapped_at DESC) WHERE mis_status IS NOT NULL");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_created_at ON leads (created_at DESC)");
+    } catch (migErr) {}
+
     try {
       const formSchemaQuery = await client.query("SELECT value FROM settings WHERE key = 'landing_form_schema'");
       if (formSchemaQuery.rows.length > 0) {
@@ -1022,141 +1029,134 @@ const db = {
   },
 
   async getMISStats() {
-    // 1. Total Leads
-    const totalLeadsRes = await pool.query('SELECT COUNT(*) FROM leads');
+    // Run count and mapped leads queries in parallel for speed
+    const [totalLeadsRes, mappedLeadsListRes] = await Promise.all([
+      pool.query('SELECT COUNT(*) FROM leads'),
+      pool.query(`
+        SELECT id, urn, full_name, phone, mis_status, mis_mapped_at, mis_data,
+               agent_name, pincode, card_bank, source
+        FROM leads
+        WHERE mis_status IS NOT NULL
+        ORDER BY mis_mapped_at DESC
+      `)
+    ]);
     const totalLeads = parseInt(totalLeadsRes.rows[0].count, 10);
 
-    // Get all mapped leads
-    const mappedLeadsListRes = await pool.query('SELECT * FROM leads WHERE mis_status IS NOT NULL ORDER BY mis_mapped_at DESC');
-    
     // Flatten / clean history list in JS
-    const expandedList = [];
-    mappedLeadsListRes.rows.forEach(row => {
-      let misDataObj = {};
+    const expandedList = new Array(mappedLeadsListRes.rows.length);
+    for (let i = 0; i < mappedLeadsListRes.rows.length; i++) {
+      const row = mappedLeadsListRes.rows[i];
+      let misDataObj = row.mis_data || {};
       try {
-        misDataObj = typeof row.mis_data === 'string' ? JSON.parse(row.mis_data) : (row.mis_data || {});
+        if (typeof misDataObj === 'string') misDataObj = JSON.parse(misDataObj);
         // Fall back gracefully for legacy history objects: extract the latest entry
         if (misDataObj && Array.isArray(misDataObj.history) && misDataObj.history.length > 0) {
-          const latest = misDataObj.history[misDataObj.history.length - 1];
-          misDataObj = latest.data || {};
+          misDataObj = misDataObj.history[misDataObj.history.length - 1].data || {};
         }
       } catch (e) {
         misDataObj = {};
       }
-
-      expandedList.push({
-        ...row,
-        mis_data: misDataObj,
-        utm_params: typeof row.utm_params === 'string' ? JSON.parse(row.utm_params) : (row.utm_params || {})
-      });
-    });
+      expandedList[i] = {
+        id: row.id, urn: row.urn, full_name: row.full_name, phone: row.phone,
+        mis_status: row.mis_status, mis_mapped_at: row.mis_mapped_at,
+        mis_data: misDataObj, agent_name: row.agent_name,
+        pincode: row.pincode, card_bank: row.card_bank, source: row.source
+      };
+    }
 
     const totalMapped = expandedList.length;
 
-    // 3. Status breakdown
+    // ── SINGLE-PASS: compute ALL distributions, funnel counts, timeline, and status breakdown in one loop ──
     const statusBreakdown = {};
-    expandedList.forEach(r => {
+    const cardDistMap = {};
+    const timelineMap = {};
+    const kycMap = {};
+    const sourceMap = {};
+    const cardTypeMap = {};
+    const custTypeMap = {};
+    const activeStatusMap = {};
+    const pinMap = {};
+    const cardNameMap = {};
+    let funnelIpa = 0, funnelKyc = 0, funnelDecision = 0, funnelActive = 0;
+
+    for (let i = 0; i < expandedList.length; i++) {
+      const r = expandedList[i];
+      const md = r.mis_data || {};
+
+      // Status breakdown
       const status = r.mis_status || 'Unknown';
       statusBreakdown[status] = (statusBreakdown[status] || 0) + 1;
-    });
 
-    // 4. Card name distribution
-    const cardDistMap = {};
-    expandedList.forEach(r => {
-      const cardName = r.mis_data?.card_name || 'Unknown';
+      // Card name distribution
+      const cardName = md.card_name || 'Unknown';
       cardDistMap[cardName] = (cardDistMap[cardName] || 0) + 1;
-    });
-    const cardDistribution = Object.entries(cardDistMap).map(([name, count]) => ({ name, count }));
+      cardNameMap[cardName] = (cardNameMap[cardName] || 0) + 1;
 
-    // 5. Timeline - mapped count over past 15 days
-    const timelineMap = {};
-    expandedList.forEach(r => {
+      // Timeline
       if (r.mis_mapped_at) {
         const dateStr = new Date(r.mis_mapped_at).toISOString().split('T')[0];
         timelineMap[dateStr] = (timelineMap[dateStr] || 0) + 1;
       }
-    });
+
+      // KYC Type
+      const kycType = md.kyc_type || 'Unknown';
+      kycMap[kycType] = (kycMap[kycType] || 0) + 1;
+
+      // Source Type
+      let sourceType = String(md.source_type || '').trim();
+      if (!sourceType || sourceType === '-') sourceType = 'Blank';
+      sourceMap[sourceType] = (sourceMap[sourceType] || 0) + 1;
+
+      // Card Type
+      const cardType = md.card_type || 'Unknown';
+      cardTypeMap[cardType] = (cardTypeMap[cardType] || 0) + 1;
+
+      // Customer Type
+      const custType = md.customer_type || 'Unknown';
+      custTypeMap[custType] = (custTypeMap[custType] || 0) + 1;
+
+      // Activation Status
+      const actStatus = md.card_activation_status || 'Inactive/Unknown';
+      activeStatusMap[actStatus] = (activeStatusMap[actStatus] || 0) + 1;
+
+      // Pincode
+      const pin = md.PIN_CODE || md.pin_code || r.pincode || 'Unknown';
+      pinMap[pin] = (pinMap[pin] || 0) + 1;
+
+      // Funnel: IPA
+      const ipaLower = String(md.ipa_status || '').toLowerCase();
+      if (ipaLower.includes('approve') || ipaLower.includes('success')) funnelIpa++;
+
+      // Funnel: KYC
+      const ksLower = String(md.kyc_status || '').toLowerCase();
+      const vsLower = String(md.vkyc_status || '').toLowerCase();
+      const ktLower = String(md.kyc_type || '').toLowerCase();
+      if (ksLower.includes('success') || ksLower.includes('complete') || vsLower.includes('success') || vsLower.includes('complete') || ksLower.includes('biokyc') || ktLower.includes('biokyc')) funnelKyc++;
+
+      // Funnel: Decision
+      const decLower = String(md.final_decision || '').toLowerCase();
+      if (decLower.includes('approve') || decLower.includes('success')) funnelDecision++;
+
+      // Funnel: Active
+      const actLower = String(md.card_activation_status || '').toLowerCase();
+      if (actLower.includes('active') || actLower === 'yes') funnelActive++;
+    }
+
+    // Build sorted output arrays from the maps
+    const cardDistribution = Object.entries(cardDistMap).map(([name, count]) => ({ name, count }));
     const timeline = Object.entries(timelineMap)
       .map(([date, count]) => ({ date, count }))
       .sort((a, b) => a.date.localeCompare(b.date))
       .slice(-15);
-
-    // 6. KYC Type distribution
-    const kycMap = {};
-    expandedList.forEach(r => {
-      const kycType = r.mis_data?.kyc_type || 'Unknown';
-      kycMap[kycType] = (kycMap[kycType] || 0) + 1;
-    });
     const kycDistribution = Object.entries(kycMap).map(([name, count]) => ({ name, count }));
-
-    // 7. Source Type distribution
-    const sourceMap = {};
-    expandedList.forEach(r => {
-      let sourceType = String(r.mis_data?.source_type || '').trim();
-      if (!sourceType || sourceType === '-') sourceType = 'Blank';
-      sourceMap[sourceType] = (sourceMap[sourceType] || 0) + 1;
-    });
     const sourceDistribution = Object.entries(sourceMap).map(([name, count]) => ({ name, count }));
-
-    // 8. Card Type distribution
-    const cardTypeMap = {};
-    expandedList.forEach(r => {
-      const cardType = r.mis_data?.card_type || 'Unknown';
-      cardTypeMap[cardType] = (cardTypeMap[cardType] || 0) + 1;
-    });
     const cardTypeDistribution = Object.entries(cardTypeMap).map(([name, count]) => ({ name, count }));
-
-    // 9. Customer Type distribution
-    const custTypeMap = {};
-    expandedList.forEach(r => {
-      const custType = r.mis_data?.customer_type || 'Unknown';
-      custTypeMap[custType] = (custTypeMap[custType] || 0) + 1;
-    });
     const customerTypeDistribution = Object.entries(custTypeMap).map(([name, count]) => ({ name, count }));
-
-    // 10. Card Activation Status distribution
-    const activeStatusMap = {};
-    expandedList.forEach(r => {
-      const act = r.mis_data?.card_activation_status || 'Inactive/Unknown';
-      activeStatusMap[act] = (activeStatusMap[act] || 0) + 1;
-    });
     const activationStatusDistribution = Object.entries(activeStatusMap).map(([name, count]) => ({ name, count }));
-
-    // 11. Pincode mapping for Heatmap
-    const pinMap = {};
-    expandedList.forEach(r => {
-      const pin = r.mis_data?.PIN_CODE || r.mis_data?.pin_code || r.pincode || 'Unknown';
-      pinMap[pin] = (pinMap[pin] || 0) + 1;
-    });
     const pincodeHeatmap = Object.entries(pinMap)
       .map(([pincode, count]) => ({ pincode, count }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 100);
-
-    // 12. Full funnel analytics
-    const funnelSubmit = totalLeads;
-    
-    const funnelIpa = expandedList.filter(l => {
-      const ipa = String(l.mis_data?.ipa_status || '').toLowerCase();
-      return ipa.includes('approve') || ipa.includes('success');
-    }).length;
-
-    const funnelKyc = expandedList.filter(l => {
-      const ks = String(l.mis_data?.kyc_status || '').toLowerCase();
-      const vs = String(l.mis_data?.vkyc_status || '').toLowerCase();
-      const kt = String(l.mis_data?.kyc_type || '').toLowerCase();
-      return ks.includes('success') || ks.includes('complete') || vs.includes('success') || vs.includes('complete') || ks.includes('biokyc') || kt.includes('biokyc');
-    }).length;
-
-    const funnelDecision = expandedList.filter(l => {
-      const dec = String(l.mis_data?.final_decision || '').toLowerCase();
-      return dec.includes('approve') || dec.includes('success');
-    }).length;
-
-    const funnelActive = expandedList.filter(l => {
-      const act = String(l.mis_data?.card_activation_status || '').toLowerCase();
-      return act.includes('active') || act === 'yes';
-    }).length;
 
     return {
       totalLeads,
@@ -1172,7 +1172,7 @@ const db = {
       pincodeHeatmap,
       mappedLeadsList: expandedList,
       funnel: {
-        submit: funnelSubmit,
+        submit: totalLeads,
         ipa: funnelIpa,
         kyc: funnelKyc,
         decision: funnelDecision,

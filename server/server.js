@@ -2154,6 +2154,7 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
   // Execute bulk updates in high-performance batch query
   if (updates.length > 0) {
     await db.bulkUpdateLeadMISStatus(updates);
+    invalidateMISCache();
   }
 
   res.json({
@@ -2165,9 +2166,22 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
   });
 });
 
-// GET MIS stats for Dashboard
+// ── MIS Stats Cache (30s TTL) ──
+let misStatsCache = null;
+let misStatsCacheTime = 0;
+const MIS_CACHE_TTL_MS = 30000; // 30 seconds
+
+function invalidateMISCache() { misStatsCache = null; misStatsCacheTime = 0; }
+
+// GET MIS stats for Dashboard (cached)
 app.get('/api/leads/mis-stats', authenticateToken, requireAdmin, async (req, res) => {
+  const now = Date.now();
+  if (misStatsCache && (now - misStatsCacheTime) < MIS_CACHE_TTL_MS) {
+    return res.json(misStatsCache);
+  }
   const stats = await db.getMISStats();
+  misStatsCache = stats;
+  misStatsCacheTime = now;
   res.json(stats);
 });
 
@@ -2208,6 +2222,7 @@ app.post('/api/leads/delete-bulk', authenticateToken, requireAdmin, async (req, 
   await db.deleteLeads(ids);
   
   // Broadcast deletion update
+  invalidateMISCache();
   broadcast({ type: 'LEADS_UPDATED' });
   
   res.json({ success: true, message: 'Leads deleted successfully' });
@@ -2224,6 +2239,7 @@ app.delete('/api/leads/:id', authenticateToken, requireAdmin, async (req, res) =
   await db.deleteLead(id);
   
   // Broadcast deletion update
+  invalidateMISCache();
   broadcast({ type: 'LEADS_UPDATED' });
   
   res.json({ success: true, message: 'Lead deleted successfully' });
@@ -2244,6 +2260,7 @@ app.post('/api/leads/unmap-bulk', authenticateToken, requireAdmin, async (req, r
   await db.unmapLeads(ids);
   
   // Broadcast update
+  invalidateMISCache();
   broadcast({ type: 'LEADS_UPDATED' });
   
   res.json({ success: true, message: 'Leads unmapped successfully' });
@@ -2260,6 +2277,7 @@ app.post('/api/leads/:id/unmap', authenticateToken, requireAdmin, async (req, re
   await db.unmapLead(id);
   
   // Broadcast update
+  invalidateMISCache();
   broadcast({ type: 'LEADS_UPDATED' });
   
   res.json({ success: true, message: 'Lead unmapped successfully' });
@@ -2274,6 +2292,7 @@ app.put('/api/leads/:id', authenticateToken, requireAdmin, async (req, res) => {
     const updated = await db.updateLead(id, leadData);
     
     // Broadcast updates
+    invalidateMISCache();
     broadcast({ type: 'LEADS_UPDATED' });
     
     res.json(updated);
