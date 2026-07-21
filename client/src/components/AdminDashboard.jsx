@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { INDIA_STATES_SVG, aggregateLeadsByState, getHeatColor, pincodeToState } from '../utils/indiaMap.js';
 import { 
   Users, CreditCard, MapPin, Settings as SettingsIcon, ShieldAlert, BarChart3, 
   Trash2, Download, Search, Plus, Edit, Check, X, RefreshCw, AlertCircle,
   QrCode, Smartphone, CheckCircle, Wifi, WifiOff, Eye, EyeOff, MessageSquare, Layers,
-  ArrowUp, ArrowDown, MoreVertical, LogOut, Activity, Sun, Moon,
-  TrendingUp, Upload, CheckCircle2, Filter
+  ArrowUp, ArrowDown, MoreVertical, LogOut, Activity, Sun, Moon, LogIn,
+  TrendingUp, Upload, CheckCircle2, Filter, Database
 } from 'lucide-react';
 
 const formatDateTime = (dateStr) => {
@@ -119,11 +119,12 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   const [timeLeft, setTimeLeft] = useState(0);
   const [adminPasswordInput, setAdminPasswordInput] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  
+
   // Navigation Tabs: 'leads' | 'cards' | 'agents' | 'locations' | 'settings'
   const [activeTab, setActiveTab] = useState('leads');
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [activeSettingsSubTab, setActiveSettingsSubTab] = useState('general');
+  const [showSettingsFlyout, setShowSettingsFlyout] = useState(false);
 
   // Master Data States
   const [leads, setLeads] = useState([]);
@@ -167,12 +168,16 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   const [misStats, setMisStats] = useState(null);
   const [loadingMISStats, setLoadingMISStats] = useState(false);
   const [showUploadMISModal, setShowUploadMISModal] = useState(false);
+  const [selectedBankForMIS, setSelectedBankForMIS] = useState('HDFC Bank');
+  const [bankMisMappings, setBankMisMappings] = useState({});
+  const [selectedBankConfig, setSelectedBankConfig] = useState('YES Bank');
   const [misFile, setMisFile] = useState(null);
   const [misUploadResult, setMisUploadResult] = useState(null);
   const [showMISResultModal, setShowMISResultModal] = useState(false);
   const [selectedMappedLead, setSelectedMappedLead] = useState(null);
   
   // Dashboard Filters
+  const [dashSelectedBank, setDashSelectedBank] = useState('All');
   const [dashCreatedDate, setDashCreatedDate] = useState('');
   const [dashDateTo, setDashDateTo] = useState('');
   const [dashCardType, setDashCardType] = useState('');
@@ -188,8 +193,27 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   const [dashAgent, setDashAgent] = useState('');
   const [dashSourceType, setDashSourceType] = useState('');
   const [dashSearch, setDashSearch] = useState('');
+  const [debouncedDashSearch, setDebouncedDashSearch] = useState('');
   const [dashFiltersExpanded, setDashFiltersExpanded] = useState(false);
-  
+  const [dashPage, setDashPage] = useState(1);
+  const DASH_PAGE_SIZE = 50;
+  const dashSearchTimer = useRef(null);
+
+  // Debounce search input — only recalculate after 300ms of no typing
+  useEffect(() => {
+    if (dashSearchTimer.current) clearTimeout(dashSearchTimer.current);
+    dashSearchTimer.current = setTimeout(() => {
+      setDebouncedDashSearch(dashSearch);
+      setDashPage(1);
+    }, 300);
+    return () => { if (dashSearchTimer.current) clearTimeout(dashSearchTimer.current); };
+  }, [dashSearch]);
+
+  // Reset page to 1 whenever any filter changes
+  useEffect(() => {
+    setDashPage(1);
+  }, [dashCreatedDate, dashDateTo, dashCardType, dashState, dashKycStatus, dashIpaStatus, dashFinalDecision, dashCardName, dashCustomerType, dashCurrentStage, dashCardActivation, dashVkycStatus, dashAgent, dashSourceType, dashSelectedBank]);
+
   const [newBankInput, setNewBankInput] = useState('');
   const [newCardForm, setNewCardForm] = useState({ name: '', bank: '', category: 'Offline', ad_id: '', utm_internal: '', description: '', redirect_url_template: '', display_order: 1, active: true, card_locations: [] });
   const [newAgentForm, setNewAgentForm] = useState({ id: '', name: '', phone: '', email: '', username: '', password: '', status: 'active', locations: [], assigned_bank: '' });
@@ -1378,11 +1402,209 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   };
 
   const getBankOptions = () => {
+    let list = [];
     if (settings && settings.card_manager_banks) {
-      return settings.card_manager_banks.split(',').map(b => b.trim()).filter(Boolean);
+      list = settings.card_manager_banks.split(',').map(b => b.trim()).filter(Boolean);
     }
-    return ['HDFC', 'SBI'];
+    const defaultBanks = ['HDFC Bank', 'YES Bank', 'SBI Bank', 'ICICI Bank', 'Axis Bank'];
+    defaultBanks.forEach(b => {
+      const coreName = b.split(' ')[0].toLowerCase();
+      if (!list.some(existing => existing.toLowerCase().includes(coreName))) {
+        list.push(b);
+      }
+    });
+    return Array.from(new Set(list));
   };
+
+  const getLeadBank = useCallback((lead) => {
+    if (lead.mis_data && lead.mis_data.mis_bank_name) {
+      return lead.mis_data.mis_bank_name;
+    }
+    if (lead.card_name) {
+      const match = cards.find(c => c.name === lead.card_name);
+      if (match && match.bank) return match.bank;
+    }
+    return 'HDFC Bank';
+  }, [cards]);
+
+  // ===== MEMOIZED LEADS DASHBOARD COMPUTATIONS =====
+
+  // 1. Memoize the full leads list reference
+  const allMappedLeads = useMemo(() => misStats?.mappedLeadsList || [], [misStats]);
+
+  // 2. Memoize filter dropdown options (computed once when data changes, not on every filter change)
+  const filterOptions = useMemo(() => {
+    const opts = {};
+    const agentSet = new Set();
+    const fieldSets = {
+      card_type: new Set(), state: new Set(), kyc_status: new Set(),
+      ipa_status: new Set(), final_decision: new Set(), card_name: new Set(),
+      customer_type: new Set(), current_stage: new Set(), card_activation_status: new Set(),
+      vkyc_status: new Set(), source_type: new Set()
+    };
+    for (let i = 0; i < allMappedLeads.length; i++) {
+      const l = allMappedLeads[i];
+      if (l.agent_name) agentSet.add(l.agent_name);
+      const md = l.mis_data;
+      if (md) {
+        for (const field in fieldSets) {
+          const v = md[field];
+          if (v && String(v).trim()) fieldSets[field].add(v);
+        }
+      }
+    }
+    for (const field in fieldSets) {
+      opts[field] = Array.from(fieldSets[field]).sort();
+    }
+    opts.agents = Array.from(agentSet).sort();
+    return opts;
+  }, [allMappedLeads]);
+
+  // 3. Memoize the filtered list — only recompute when data or filters change
+  const filteredMappedLeads = useMemo(() => {
+    const searchLower = debouncedDashSearch ? debouncedDashSearch.toLowerCase() : '';
+    const normSelectedBank = (dashSelectedBank && dashSelectedBank !== 'All') ? dashSelectedBank.toLowerCase().split(' ')[0] : '';
+
+    return allMappedLeads.filter(lead => {
+      if (searchLower) {
+        const urn = String(lead.urn || '').toLowerCase();
+        const name = String(lead.full_name || '').toLowerCase();
+        const bankRef = String(lead.mis_data?.bank_reference_number || '').toLowerCase();
+        if (!urn.includes(searchLower) && !name.includes(searchLower) && !bankRef.includes(searchLower)) return false;
+      }
+      if (dashCreatedDate || dashDateTo) {
+        const submitDateVal = lead.mis_data?.application_submit_date_time || '';
+        if (submitDateVal) {
+          let parsedDate = null;
+          const numVal = parseFloat(submitDateVal);
+          if (!isNaN(numVal) && numVal > 30000 && numVal < 60000) {
+            parsedDate = new Date(Math.round((numVal - 25569) * 86400 * 1000));
+          } else {
+            parsedDate = new Date(submitDateVal);
+          }
+          if (parsedDate && !isNaN(parsedDate.getTime())) {
+            const dateStr = parsedDate.toISOString().split('T')[0];
+            if (dashCreatedDate && dateStr < dashCreatedDate) return false;
+            if (dashDateTo && dateStr > dashDateTo) return false;
+          } else { return false; }
+        } else { return false; }
+      }
+      if (dashCardType && lead.mis_data?.card_type !== dashCardType) return false;
+      if (dashState && lead.mis_data?.state?.toLowerCase() !== dashState.toLowerCase()) return false;
+      if (dashKycStatus && lead.mis_data?.kyc_status !== dashKycStatus) return false;
+      if (dashIpaStatus && lead.mis_data?.ipa_status !== dashIpaStatus) return false;
+      if (dashFinalDecision && lead.mis_data?.final_decision !== dashFinalDecision) return false;
+      if (dashCardName && lead.mis_data?.card_name !== dashCardName) return false;
+      if (dashCustomerType && lead.mis_data?.customer_type !== dashCustomerType) return false;
+      if (dashCurrentStage && lead.mis_data?.current_stage !== dashCurrentStage) return false;
+      if (dashCardActivation && lead.mis_data?.card_activation_status !== dashCardActivation) return false;
+      if (dashVkycStatus && lead.mis_data?.vkyc_status !== dashVkycStatus) return false;
+      if (dashAgent && lead.agent_name !== dashAgent) return false;
+      if (dashSourceType && lead.mis_data?.source_type !== dashSourceType) return false;
+      if (normSelectedBank) {
+        const leadBank = getLeadBank(lead);
+        if (leadBank.toLowerCase().split(' ')[0] !== normSelectedBank) return false;
+      }
+      return true;
+    });
+  }, [allMappedLeads, debouncedDashSearch, dashCreatedDate, dashDateTo, dashCardType, dashState, dashKycStatus, dashIpaStatus, dashFinalDecision, dashCardName, dashCustomerType, dashCurrentStage, dashCardActivation, dashVkycStatus, dashAgent, dashSourceType, dashSelectedBank, getLeadBank]);
+
+  // 4. Single-pass stats computation — replaces 8 forEach + 6 filter calls
+  const dashStats = useMemo(() => {
+    let approvedCount = 0, rejectedCount = 0, pendingCount = 0;
+    let funnelIpa = 0, funnelKyc = 0, funnelDecision = 0, funnelActive = 0;
+    let ipaApproved = 0, ipaDeclined = 0;
+    const kycDist = {}, srcDist = {}, cardTypeDist = {}, custTypeDist = {};
+    const actDist = {}, pinDist = {}, prodDist = {};
+
+    for (let i = 0; i < filteredMappedLeads.length; i++) {
+      const l = filteredMappedLeads[i];
+      const md = l.mis_data || {};
+
+      // Status counts
+      if (l.mis_status === 'Approved') approvedCount++;
+      else if (l.mis_status === 'Rejected') rejectedCount++;
+      else if (l.mis_status === 'Pending') pendingCount++;
+
+      // Funnel counts
+      const ipaLower = String(md.ipa_status || '').toLowerCase();
+      if (ipaLower.includes('approve') || ipaLower.includes('success')) { funnelIpa++; ipaApproved++; }
+      if (ipaLower.includes('decline') || ipaLower.includes('reject') || ipaLower.includes('cancel')) ipaDeclined++;
+
+      const ksLower = String(md.kyc_status || '').toLowerCase();
+      const vsLower = String(md.vkyc_status || '').toLowerCase();
+      const ktLower = String(md.kyc_type || '').toLowerCase();
+      if (ksLower.includes('success') || ksLower.includes('complete') || vsLower.includes('success') || vsLower.includes('complete') || ksLower.includes('biokyc') || ktLower.includes('biokyc')) funnelKyc++;
+
+      const decLower = String(md.final_decision || '').toLowerCase();
+      if (decLower.includes('approve') || decLower.includes('success')) funnelDecision++;
+
+      const actLower = String(md.card_activation_status || '').toLowerCase();
+      if (actLower.includes('active') || actLower === 'yes') funnelActive++;
+
+      // Distributions (single pass)
+      const kycKey = md.kyc_status || 'Unknown';
+      kycDist[kycKey] = (kycDist[kycKey] || 0) + 1;
+
+      let srcKey = String(md.source_type || '').trim();
+      if (!srcKey || srcKey === '-') srcKey = 'Blank';
+      srcDist[srcKey] = (srcDist[srcKey] || 0) + 1;
+
+      const ctKey = md.card_type || 'Unknown';
+      cardTypeDist[ctKey] = (cardTypeDist[ctKey] || 0) + 1;
+
+      const custKey = md.customer_type || 'Unknown';
+      custTypeDist[custKey] = (custTypeDist[custKey] || 0) + 1;
+
+      const actKey = md.card_activation_status || 'Inactive/Unknown';
+      actDist[actKey] = (actDist[actKey] || 0) + 1;
+
+      const pinKey = md.PIN_CODE || md.pin_code || l.pincode || 'Unknown';
+      pinDist[pinKey] = (pinDist[pinKey] || 0) + 1;
+
+      const prodKey = md.card_name || 'Unknown';
+      prodDist[prodKey] = (prodDist[prodKey] || 0) + 1;
+    }
+
+    const totalSubmit = filteredMappedLeads.length;
+    const approvalRate = totalSubmit > 0 ? ((approvedCount / totalSubmit) * 100).toFixed(1) : '0';
+
+    const topPincodes = Object.entries(pinDist)
+      .map(([pincode, count]) => ({ pincode, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 50);
+
+    return {
+      totalSubmit, approvedCount, rejectedCount, pendingCount, approvalRate,
+      funnelIpa, funnelKyc, funnelDecision, funnelActive,
+      ipaApproved, ipaDeclined,
+      kycDist, srcDist, cardTypeDist, custTypeDist, actDist, prodDist, topPincodes
+    };
+  }, [filteredMappedLeads]);
+
+  // 5. Memoize geo/map data separately (heavy computation)
+  const dashGeoData = useMemo(() => {
+    const stateLeadCounts = aggregateLeadsByState(filteredMappedLeads);
+    const maxStateLeads = Math.max(1, ...Object.values(stateLeadCounts));
+    const topStates = Object.entries(stateLeadCounts)
+      .map(([state, count]) => ({ state, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 15);
+    return { stateLeadCounts, maxStateLeads, topStates };
+  }, [filteredMappedLeads]);
+
+  // 6. Paginated table rows
+  const paginatedLeads = useMemo(() => {
+    const start = (dashPage - 1) * DASH_PAGE_SIZE;
+    return filteredMappedLeads.slice(start, start + DASH_PAGE_SIZE);
+  }, [filteredMappedLeads, dashPage]);
+
+  const totalDashPages = useMemo(() => Math.max(1, Math.ceil(filteredMappedLeads.length / DASH_PAGE_SIZE)), [filteredMappedLeads.length]);
+
+  // 7. Active filter count
+  const activeFilterCount = useMemo(() => {
+    return [dashCreatedDate, dashDateTo, dashCardType, dashState, dashKycStatus, dashIpaStatus, dashFinalDecision, dashCardName, dashCustomerType, dashCurrentStage, dashCardActivation, dashVkycStatus, dashAgent, dashSourceType, debouncedDashSearch].filter(Boolean).length + (dashSelectedBank !== 'All' ? 1 : 0);
+  }, [dashCreatedDate, dashDateTo, dashCardType, dashState, dashKycStatus, dashIpaStatus, dashFinalDecision, dashCardName, dashCustomerType, dashCurrentStage, dashCardActivation, dashVkycStatus, dashAgent, dashSourceType, debouncedDashSearch, dashSelectedBank]);
 
   const handleSaveBanks = async (updatedBanks) => {
     setIsSubmitting(true);
@@ -1402,6 +1624,29 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       showToast('Bank options updated successfully.');
     } catch (err) {
       showToast(err.message || 'Failed to save bank options.', 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleSaveBankMisMappings = async (updatedMappings) => {
+    setIsSubmitting(true);
+    try {
+      await apiFetch(`${API_URL}/settings`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          bank_mis_mappings: JSON.stringify(updatedMappings)
+        })
+      });
+      setBankMisMappings(updatedMappings);
+      setSettings(prev => ({ ...prev, bank_mis_mappings: updatedMappings }));
+      showToast('Bank MIS Column Mappings saved successfully!');
+    } catch (err) {
+      showToast(err.message || 'Failed to save Bank MIS Mappings.', 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -1532,79 +1777,111 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
   if (!token) {
     return (
-      <section style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '80vh', padding: '2rem' }}>
-        <div className="glass-panel" style={{ width: '100%', maxWidth: '420px', borderLeft: '3px solid var(--gold)' }}>
-          <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-            <div style={{ width: '60px', height: '60px', background: 'rgba(224, 168, 46, 0.15)', color: 'var(--gold-deep)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem auto', borderRadius: '50%' }}>
-              <ShieldAlert size={30} />
-            </div>
-            <h2 style={{ fontSize: '1.8rem', marginBottom: '0.25rem' }}>Admin Dashboard</h2>
-            <p style={{ color: 'hsl(var(--text-secondary))', fontSize: '0.9rem' }}>Secure administrative gatekeeper portal</p>
-          </div>
+      <div className="split-login-container">
+        {/* Background Video */}
+        <video 
+          autoPlay 
+          loop 
+          muted 
+          playsInline 
+          className="login-bg-video"
+        >
+          <source src="/give_me_the_video_by_removing.mp4" type="video/mp4" />
+        </video>
 
-          <form onSubmit={handleAdminLogin}>
-            <div className="form-group" style={{ marginBottom: '1.5rem' }}>
-              <label className="form-label">Admin Security Password</label>
-              <div style={{ position: 'relative' }}>
-                <input 
-                  type={showPassword ? "text" : "password"} 
-                  className="form-input" 
-                  placeholder="Enter password" 
-                  value={adminPasswordInput} 
-                  onChange={(e) => setAdminPasswordInput(e.target.value)}
-                  style={{ paddingRight: '45px' }}
-                  required 
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  style={{
-                    position: 'absolute',
-                    right: '12px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    color: 'var(--muted)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    padding: 0
-                  }}
-                  title={showPassword ? "Hide Password" : "Show Password"}
-                >
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
-              </div>
+        {/* Left Side - Login Form */}
+        <div className="login-left-side">
+          <div className="login-form-wrapper">
+            <div style={{ textAlign: 'center', marginBottom: '1.75rem' }}>
+              <img 
+                src="/logo.jpg" 
+                alt="FinMantra Logo" 
+                style={{ 
+                  width: '64px', 
+                  height: '64px', 
+                  borderRadius: '16px', 
+                  objectFit: 'cover', 
+                  margin: '0 auto 1.25rem auto', 
+                  display: 'block', 
+                  boxShadow: '0 8px 24px rgba(224, 168, 46, 0.25)',
+                  border: '1.5px solid rgba(224, 168, 46, 0.4)'
+                }} 
+              />
+              <h2 style={{ fontSize: '1.9rem', fontWeight: 800, color: 'var(--ink)', marginBottom: '0.35rem' }}>Admin Dashboard</h2>
+              <p style={{ color: 'hsl(var(--text-secondary))', fontSize: '0.85rem' }}>Secure administrative gatekeeper portal</p>
             </div>
 
-            {authError && (
-              <div style={{ background: 'rgba(209, 67, 67, 0.1)', border: '1px solid rgba(209, 67, 67, 0.2)', padding: '0.75rem 1rem', borderRadius: 'var(--radius-sm)', color: 'var(--err)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>
-                {authError}
+            <form onSubmit={handleAdminLogin}>
+              <input type="text" name="username" value="admin" autoComplete="username" style={{ display: 'none' }} readOnly />
+              <div className="interactive-input-group" style={{ marginBottom: '1.75rem' }}>
+                <label>Admin Security Password</label>
+                <div style={{ position: 'relative' }}>
+                  <input 
+                    type={showPassword ? "text" : "password"} 
+                    className="interactive-input-field" 
+                    placeholder="Enter password" 
+                    value={adminPasswordInput} 
+                    onChange={(e) => setAdminPasswordInput(e.target.value)}
+                    style={{ paddingRight: '45px' }}
+                    autoComplete="current-password"
+                    required 
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    style={{
+                      position: 'absolute',
+                      right: '12px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: 'var(--muted)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: 0
+                    }}
+                    title={showPassword ? "Hide Password" : "Show Password"}
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
               </div>
-            )}
 
-            <button type="submit" className="btn-primary" style={{ width: '100%' }} disabled={loading || timeLeft > 0}>
-              {timeLeft > 0 ? `Blocked (Try again in ${formatTime(timeLeft)})` : (loading ? 'Validating credentials...' : 'Enter Admin Room')}
-            </button>
-          </form>
-          <div style={{ textAlign: 'center', marginTop: '1.5rem' }}>
-            <a href="/" style={{ fontSize: '0.85rem', color: 'var(--gold-deep)', textDecoration: 'none', fontWeight: 600 }}>← Back to home</a>
+              {authError && (
+                <div style={{ background: 'rgba(209, 67, 67, 0.08)', border: '1px solid rgba(209, 67, 67, 0.15)', padding: '0.75rem 1rem', borderRadius: '8px', color: 'var(--err)', fontSize: '0.82rem', marginBottom: '1.25rem' }}>
+                  {authError}
+                </div>
+              )}
+
+              <button type="submit" className="btn-primary login-btn-interactive" disabled={loading || timeLeft > 0}>
+                <span>{timeLeft > 0 ? `Blocked (Try in ${formatTime(timeLeft)})` : (loading ? 'Validating credentials...' : 'Enter Admin Room')}</span>
+                <LogIn size={18} style={{ marginLeft: '0.25rem' }} />
+              </button>
+            </form>
+
+            <div style={{ textAlign: 'center', marginTop: '2rem' }}>
+              <a href="/" style={{ fontSize: '0.85rem', color: 'var(--gold-deep)', textDecoration: 'none', fontWeight: 700 }}>← Back to home</a>
+            </div>
           </div>
         </div>
-      </section>
+
+        {/* Right Side Spacer */}
+        <div className="login-right-side"></div>
+      </div>
     );
   }
 
   return (
-    <div className="admin-container">
+    <div className={`admin-layout ${['leads', 'cards', 'agents', 'locations', 'settings'].includes(activeTab) ? 'desktop-no-scroll-layout' : ''}`} style={{ display: 'flex', width: '100%', background: 'var(--paper)', color: 'var(--ink)', minHeight: '100vh' }}>
       
       {/* Toast Notifications */}
       {message.text && (
         <div style={{ 
           position: 'fixed', 
-          top: '80px', 
+          top: '20px', 
           right: '20px', 
           background: message.type === 'error' ? 'var(--err)' : 'var(--mint)',
           color: 'var(--white)',
@@ -1623,17 +1900,16 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
         </div>
       )}
 
-      {/* Sticky Premium Top Navigation Bar */}
-      <div className="admin-navbar glass-panel" style={{ 
+      {/* Mobile Top Navigation Bar (Active on Mobile <= 768px) */}
+      <div className="admin-mobile-topbar glass-panel" style={{ 
         position: 'sticky', 
-        top: '0.75rem', 
+        top: '0.5rem', 
         zIndex: 1000, 
-        display: 'flex', 
         justifyContent: 'space-between', 
         alignItems: 'center', 
-        padding: '0.9rem 1.75rem', 
-        minHeight: '70px',
-        marginBottom: '2rem',
+        padding: '0.75rem 1.25rem', 
+        minHeight: '60px',
+        margin: '0.5rem 0.5rem 1rem 0.5rem',
         backdropFilter: 'blur(12px)',
         background: 'var(--glass-bg)',
         border: '1px solid var(--line)',
@@ -1641,503 +1917,861 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
         boxShadow: '0 8px 32px 0 rgba(17, 19, 43, 0.08)'
       }}>
         {/* Brand/Title */}
-        <div className="admin-nav-brand" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <img src="/logo.jpg" alt="FinMantra Logo" style={{ height: '40px', width: '40px', borderRadius: '9px', objectFit: 'cover', boxShadow: '0 3px 10px rgba(224, 168, 46, 0.28)' }} />
-          <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: '1.35rem', letterSpacing: '-0.03em', color: 'var(--ink)' }}>
-            FinMantra <span style={{ color: 'var(--gold-deep)', fontWeight: 500, fontSize: '0.9rem' }}>Admin</span>
+        <div className="admin-nav-brand" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+          <img src="/logo.jpg" alt="FinMantra Logo" style={{ height: '34px', width: '34px', borderRadius: '8px', objectFit: 'cover' }} />
+          <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: '1.25rem', letterSpacing: '-0.03em', color: 'var(--ink)' }}>
+            FinMantra <span style={{ color: 'var(--gold-deep)', fontWeight: 500, fontSize: '0.85rem' }}>Admin</span>
           </span>
         </div>
 
-        {/* Central Navigation Tabs (Desktop Only) */}
-        <div className="admin-nav-tabs desktop-only" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-          <button 
-            className={`nav-link ${activeTab === 'leads' ? 'active' : ''}`} 
-            onClick={() => setActiveTab('leads')}
-            style={{ 
-              padding: '0.5rem 0.85rem', 
-              fontSize: '0.85rem', 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '0.4rem', 
-              border: activeTab === 'leads' ? '1px solid var(--line)' : '1px solid transparent', 
-              background: activeTab === 'leads' ? 'var(--paper-2)' : 'transparent', 
-              color: activeTab === 'leads' ? 'var(--ink)' : 'var(--muted)', 
-              cursor: 'pointer', 
-              transition: 'all 0.2s', 
-              borderRadius: 'var(--radius-sm)' 
-            }}
-          >
-            <BarChart3 size={14} /> Leads Repository
-          </button>
-          <button 
-            className={`nav-link ${activeTab === 'leads_dashboard' ? 'active' : ''}`} 
-            onClick={() => setActiveTab('leads_dashboard')}
-            style={{ 
-              padding: '0.5rem 0.85rem', 
-              fontSize: '0.85rem', 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '0.4rem', 
-              border: activeTab === 'leads_dashboard' ? '1px solid var(--line)' : '1px solid transparent', 
-              background: activeTab === 'leads_dashboard' ? 'var(--paper-2)' : 'transparent', 
-              color: activeTab === 'leads_dashboard' ? 'var(--ink)' : 'var(--muted)', 
-              cursor: 'pointer', 
-              transition: 'all 0.2s', 
-              borderRadius: 'var(--radius-sm)' 
-            }}
-          >
-            <TrendingUp size={14} /> Leads Dashboard
-          </button>
-          <button 
-            className={`nav-link ${activeTab === 'cards' ? 'active' : ''}`} 
-            onClick={() => setActiveTab('cards')}
-            style={{ 
-              padding: '0.5rem 0.85rem', 
-              fontSize: '0.85rem', 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '0.4rem', 
-              border: activeTab === 'cards' ? '1px solid var(--line)' : '1px solid transparent', 
-              background: activeTab === 'cards' ? 'var(--paper-2)' : 'transparent', 
-              color: activeTab === 'cards' ? 'var(--ink)' : 'var(--muted)', 
-              cursor: 'pointer', 
-              transition: 'all 0.2s', 
-              borderRadius: 'var(--radius-sm)' 
-            }}
-          >
-            <CreditCard size={14} /> Cards Manager
-          </button>
-          <button 
-            className={`nav-link ${activeTab === 'agents' ? 'active' : ''}`} 
-            onClick={() => setActiveTab('agents')}
-            style={{ 
-              padding: '0.5rem 0.85rem', 
-              fontSize: '0.85rem', 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '0.4rem', 
-              border: activeTab === 'agents' ? '1px solid var(--line)' : '1px solid transparent', 
-              background: activeTab === 'agents' ? 'var(--paper-2)' : 'transparent', 
-              color: activeTab === 'agents' ? 'var(--ink)' : 'var(--muted)', 
-              cursor: 'pointer', 
-              transition: 'all 0.2s', 
-              borderRadius: 'var(--radius-sm)' 
-            }}
-          >
-            <Users size={14} /> Agents Controller
-          </button>
-          <button 
-            className={`nav-link ${activeTab === 'locations' ? 'active' : ''}`} 
-            onClick={() => setActiveTab('locations')}
-            style={{ 
-              padding: '0.5rem 0.85rem', 
-              fontSize: '0.85rem', 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '0.4rem', 
-              border: activeTab === 'locations' ? '1px solid var(--line)' : '1px solid transparent', 
-              background: activeTab === 'locations' ? 'var(--paper-2)' : 'transparent', 
-              color: activeTab === 'locations' ? 'var(--ink)' : 'var(--muted)', 
-              cursor: 'pointer', 
-              transition: 'all 0.2s', 
-              borderRadius: 'var(--radius-sm)' 
-            }}
-          >
-            <MapPin size={14} /> Kiosks & Cities
-          </button>
-          <button 
-            className={`nav-link ${activeTab === 'settings' ? 'active' : ''}`} 
-            onClick={() => setActiveTab('settings')}
-            style={{ 
-              padding: '0.5rem 0.85rem', 
-              fontSize: '0.85rem', 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '0.4rem', 
-              border: activeTab === 'settings' ? '1px solid var(--line)' : '1px solid transparent', 
-              background: activeTab === 'settings' ? 'var(--paper-2)' : 'transparent', 
-              color: activeTab === 'settings' ? 'var(--ink)' : 'var(--muted)', 
-              cursor: 'pointer', 
-              transition: 'all 0.2s', 
-              borderRadius: 'var(--radius-sm)' 
-            }}
-          >
-            <SettingsIcon size={14} /> Settings & API
-          </button>
-        </div>
-
-        {/* Right side controls (Desktop Only) */}
-        <div className="admin-nav-actions desktop-only" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+        {/* Right side controls (Theme toggle + 3-Dot Mobile Menu Button) */}
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
           <button 
             className="theme-toggle-btn" 
             onClick={toggleTheme} 
             title={theme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
-            style={{ padding: '0.45rem', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '34px', width: '34px' }}
+            style={{ padding: '0.4rem', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '34px', width: '34px', borderRadius: '8px' }}
           >
             {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
           </button>
+
           <button 
-            onClick={loadAllAdminData} 
-            className="btn-secondary" 
-            style={{ padding: '0.5rem 0.85rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.25rem', height: '34px', cursor: 'pointer' }}
-            title="Refresh Data"
+            onClick={() => setShowMobileMenu(!showMobileMenu)}
+            style={{
+              background: 'var(--paper)',
+              border: '1px solid var(--line)',
+              borderRadius: '8px',
+              padding: '0.4rem',
+              cursor: 'pointer',
+              color: 'var(--ink)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              height: '34px',
+              width: '34px'
+            }}
           >
-            <RefreshCw size={14} /> Sync
-          </button>
-          <button 
-            onClick={handleLogout} 
-            className="btn-secondary" 
-            style={{ padding: '0.5rem 0.85rem', fontSize: '0.85rem', height: '34px', background: 'rgba(209, 67, 67, 0.1)', color: 'var(--err)', borderColor: 'rgba(209, 67, 67, 0.2)', cursor: 'pointer' }}
-          >
-            Exit
+            <MoreVertical size={20} />
           </button>
         </div>
 
-        {/* Mobile Menu Toggle Button (3-Dot Icon) */}
-        <button 
-          className="mobile-only-btn" 
-          onClick={() => setShowMobileMenu(!showMobileMenu)}
-          style={{
-            background: 'none',
-            border: '1.5px solid var(--line)',
-            borderRadius: 'var(--radius-sm)',
-            padding: '0.45rem',
-            cursor: 'pointer',
-            color: 'var(--muted)',
-            display: 'none' /* Toggle visiblity using media queries */
-          }}
-        >
-          <MoreVertical size={20} />
-        </button>
-
         {/* Mobile Dropdown Overlay Menu */}
         {showMobileMenu && (
-          <div className="mobile-dropdown-menu">
+          <div className="mobile-dropdown-menu" style={{
+            position: 'absolute',
+            top: 'calc(100% + 8px)',
+            right: 0,
+            left: 0,
+            background: 'var(--paper)',
+            border: '1px solid var(--line)',
+            borderRadius: 'var(--radius-md)',
+            boxShadow: '0 12px 36px rgba(0,0,0,0.15)',
+            padding: '0.75rem',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '0.5rem',
+            zIndex: 1100
+          }}>
             <button 
               className={`nav-link ${activeTab === 'leads' ? 'active' : ''}`} 
               onClick={() => { setActiveTab('leads'); setShowMobileMenu(false); }}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.6rem 0.85rem', width: '100%', fontSize: '0.9rem', border: 'none', background: activeTab === 'leads' ? 'var(--paper-2)' : 'transparent', color: activeTab === 'leads' ? 'var(--gold-deep)' : 'var(--ink)', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}
             >
-              <BarChart3 size={14} /> Leads Repository
+              <BarChart3 size={16} /> Leads Repository
             </button>
             <button 
               className={`nav-link ${activeTab === 'leads_dashboard' ? 'active' : ''}`} 
               onClick={() => { setActiveTab('leads_dashboard'); setShowMobileMenu(false); }}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.6rem 0.85rem', width: '100%', fontSize: '0.9rem', border: 'none', background: activeTab === 'leads_dashboard' ? 'var(--paper-2)' : 'transparent', color: activeTab === 'leads_dashboard' ? 'var(--gold-deep)' : 'var(--ink)', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}
             >
-              <TrendingUp size={14} /> Leads Dashboard
+              <TrendingUp size={16} /> Leads Dashboard
             </button>
             <button 
               className={`nav-link ${activeTab === 'cards' ? 'active' : ''}`} 
               onClick={() => { setActiveTab('cards'); setShowMobileMenu(false); }}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.6rem 0.85rem', width: '100%', fontSize: '0.9rem', border: 'none', background: activeTab === 'cards' ? 'var(--paper-2)' : 'transparent', color: activeTab === 'cards' ? 'var(--gold-deep)' : 'var(--ink)', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}
             >
-              <CreditCard size={14} /> Cards Manager
+              <CreditCard size={16} /> Cards Manager
             </button>
             <button 
               className={`nav-link ${activeTab === 'agents' ? 'active' : ''}`} 
               onClick={() => { setActiveTab('agents'); setShowMobileMenu(false); }}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.6rem 0.85rem', width: '100%', fontSize: '0.9rem', border: 'none', background: activeTab === 'agents' ? 'var(--paper-2)' : 'transparent', color: activeTab === 'agents' ? 'var(--gold-deep)' : 'var(--ink)', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}
             >
-              <Users size={14} /> Agents Controller
+              <Users size={16} /> Agents Controller
             </button>
             <button 
               className={`nav-link ${activeTab === 'locations' ? 'active' : ''}`} 
               onClick={() => { setActiveTab('locations'); setShowMobileMenu(false); }}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.6rem 0.85rem', width: '100%', fontSize: '0.9rem', border: 'none', background: activeTab === 'locations' ? 'var(--paper-2)' : 'transparent', color: activeTab === 'locations' ? 'var(--gold-deep)' : 'var(--ink)', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}
             >
-              <MapPin size={14} /> Kiosks & Cities
+              <MapPin size={16} /> Kiosks & Cities
             </button>
             <button 
               className={`nav-link ${activeTab === 'settings' ? 'active' : ''}`} 
               onClick={() => { setActiveTab('settings'); setShowMobileMenu(false); }}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.6rem 0.85rem', width: '100%', fontSize: '0.9rem', border: 'none', background: activeTab === 'settings' ? 'var(--paper-2)' : 'transparent', color: activeTab === 'settings' ? 'var(--gold-deep)' : 'var(--ink)', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}
             >
-              <SettingsIcon size={14} /> Settings & API
+              <SettingsIcon size={16} /> Settings & API
             </button>
             <div style={{ height: '1px', background: 'var(--line)', margin: '0.4rem 0' }} />
             <button 
               onClick={() => { loadAllAdminData(); setShowMobileMenu(false); }} 
               className="btn-secondary" 
-              style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', width: '100%', padding: '0.5rem 0.85rem' }}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%', padding: '0.55rem 0.85rem', fontSize: '0.9rem' }}
             >
-              <RefreshCw size={14} /> Sync Data
+              <RefreshCw size={16} className={loading ? 'spin' : ''} /> Sync Data
             </button>
             <button 
               onClick={() => { handleLogout(); setShowMobileMenu(false); }} 
               className="btn-secondary" 
-              style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', width: '100%', padding: '0.5rem 0.85rem', background: 'rgba(209, 67, 67, 0.1)', color: 'var(--err)', borderColor: 'rgba(209, 67, 67, 0.2)' }}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%', padding: '0.55rem 0.85rem', fontSize: '0.9rem', background: 'rgba(209, 67, 67, 0.1)', color: 'var(--err)', borderColor: 'rgba(209, 67, 67, 0.2)' }}
             >
-              <LogOut size={14} /> Exit
+              <LogOut size={16} /> Exit
             </button>
           </div>
         )}
       </div>
 
-      {/* Welcome Title Block */}
-      {activeTab === 'leads' && (
-        <div style={{ marginBottom: '2.5rem' }}>
-          <h2 style={{ fontSize: '1.75rem', marginBottom: '0.25rem', color: 'var(--text-light)' }}>Admin Control Room</h2>
-          <p style={{ color: 'hsl(var(--text-secondary))', fontSize: '0.9rem' }}>Configure credit cards catalog, dynamic destination links, agents, kiosks and monitor client logs.</p>
-        </div>
-      )}
+      {/* ICON-ONLY VERTICAL SIDEBAR */}
+      <aside className="admin-sidebar" style={{
+        width: '68px',
+        minWidth: '68px',
+        height: '100vh',
+        position: 'sticky',
+        top: 0,
+        left: 0,
+        zIndex: 1000,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '1.25rem 0',
+        background: 'var(--paper-2)',
+        borderRight: '1px solid var(--line)',
+        boxShadow: '2px 0 16px rgba(0,0,0,0.04)',
+        boxSizing: 'border-box'
+      }}>
+        {/* Top: FinMantra Logo */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5rem', width: '100%' }}>
+          <div 
+            onClick={() => navigateTo && navigateTo('/')} 
+            title="FinMantra Admin Portal"
+            style={{ cursor: 'pointer', display: 'flex', justifyContent: 'center' }}
+          >
+            <img src="/logo.jpg" alt="FinMantra Logo" style={{ height: '38px', width: '38px', borderRadius: '10px', objectFit: 'cover', boxShadow: '0 3px 10px rgba(224, 168, 46, 0.3)' }} />
+          </div>
 
-      {/* Metrics Strips */}
-      {activeTab === 'leads' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', marginBottom: '2.5rem' }}>
-          <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '3px solid hsl(var(--primary))' }}>
-            <div style={{ fontSize: '0.85rem', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Total Leads</div>
-            <div style={{ fontSize: '2.2rem', fontWeight: 800, margin: '0.25rem 0' }}>{totalLeadsCount}</div>
-            <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>Registered in Database</div>
+          {/* Nav Icons Group (NO LABELS, ONLY ICONS) */}
+          <nav style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', width: '100%', alignItems: 'center' }}>
+            <button
+              onClick={() => setActiveTab('leads')}
+              title="Leads Repository"
+              className={`sidebar-icon-btn ${activeTab === 'leads' ? 'active' : ''}`}
+              style={{
+                width: '44px',
+                height: '44px',
+                borderRadius: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: activeTab === 'leads' ? '1px solid var(--gold)' : '1px solid transparent',
+                background: activeTab === 'leads' ? 'var(--paper)' : 'transparent',
+                color: activeTab === 'leads' ? 'var(--gold-deep)' : 'var(--muted)',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                boxShadow: activeTab === 'leads' ? '0 4px 12px rgba(224, 168, 46, 0.15)' : 'none'
+              }}
+            >
+              <BarChart3 size={20} />
+            </button>
+
+            <button
+              onClick={() => setActiveTab('leads_dashboard')}
+              title="Leads Dashboard"
+              className={`sidebar-icon-btn ${activeTab === 'leads_dashboard' ? 'active' : ''}`}
+              style={{
+                width: '44px',
+                height: '44px',
+                borderRadius: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: activeTab === 'leads_dashboard' ? '1px solid var(--gold)' : '1px solid transparent',
+                background: activeTab === 'leads_dashboard' ? 'var(--paper)' : 'transparent',
+                color: activeTab === 'leads_dashboard' ? 'var(--gold-deep)' : 'var(--muted)',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                boxShadow: activeTab === 'leads_dashboard' ? '0 4px 12px rgba(224, 168, 46, 0.15)' : 'none'
+              }}
+            >
+              <TrendingUp size={20} />
+            </button>
+
+            <button
+              onClick={() => setActiveTab('cards')}
+              title="Cards Manager"
+              className={`sidebar-icon-btn ${activeTab === 'cards' ? 'active' : ''}`}
+              style={{
+                width: '44px',
+                height: '44px',
+                borderRadius: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: activeTab === 'cards' ? '1px solid var(--gold)' : '1px solid transparent',
+                background: activeTab === 'cards' ? 'var(--paper)' : 'transparent',
+                color: activeTab === 'cards' ? 'var(--gold-deep)' : 'var(--muted)',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                boxShadow: activeTab === 'cards' ? '0 4px 12px rgba(224, 168, 46, 0.15)' : 'none'
+              }}
+            >
+              <CreditCard size={20} />
+            </button>
+
+            <button
+              onClick={() => setActiveTab('agents')}
+              title="Agents Controller"
+              className={`sidebar-icon-btn ${activeTab === 'agents' ? 'active' : ''}`}
+              style={{
+                width: '44px',
+                height: '44px',
+                borderRadius: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: activeTab === 'agents' ? '1px solid var(--gold)' : '1px solid transparent',
+                background: activeTab === 'agents' ? 'var(--paper)' : 'transparent',
+                color: activeTab === 'agents' ? 'var(--gold-deep)' : 'var(--muted)',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                boxShadow: activeTab === 'agents' ? '0 4px 12px rgba(224, 168, 46, 0.15)' : 'none'
+              }}
+            >
+              <Users size={20} />
+            </button>
+
+            <button
+              onClick={() => setActiveTab('locations')}
+              title="Kiosks & Cities"
+              className={`sidebar-icon-btn ${activeTab === 'locations' ? 'active' : ''}`}
+              style={{
+                width: '44px',
+                height: '44px',
+                borderRadius: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: activeTab === 'locations' ? '1px solid var(--gold)' : '1px solid transparent',
+                background: activeTab === 'locations' ? 'var(--paper)' : 'transparent',
+                color: activeTab === 'locations' ? 'var(--gold-deep)' : 'var(--muted)',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                boxShadow: activeTab === 'locations' ? '0 4px 12px rgba(224, 168, 46, 0.15)' : 'none'
+              }}
+            >
+              <MapPin size={20} />
+            </button>
+
+            <div 
+              style={{ position: 'relative' }}
+              onMouseEnter={() => setShowSettingsFlyout(true)}
+              onMouseLeave={() => setShowSettingsFlyout(false)}
+            >
+              <button
+                onClick={() => { setActiveTab('settings'); }}
+                title="Settings & API"
+                className={`sidebar-icon-btn ${activeTab === 'settings' ? 'active' : ''}`}
+                style={{
+                  width: '44px',
+                  height: '44px',
+                  borderRadius: '12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: activeTab === 'settings' ? '1px solid var(--gold)' : '1px solid transparent',
+                  background: activeTab === 'settings' ? 'var(--paper)' : 'transparent',
+                  color: activeTab === 'settings' ? 'var(--gold-deep)' : 'var(--muted)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  boxShadow: activeTab === 'settings' ? '0 4px 12px rgba(224, 168, 46, 0.15)' : 'none'
+                }}
+              >
+                <SettingsIcon size={20} />
+              </button>
+
+              {showSettingsFlyout && (
+                <div style={{
+                  position: 'absolute',
+                  left: '52px',
+                  bottom: '-10px',
+                  width: '210px',
+                  background: 'var(--paper)',
+                  border: '1px solid var(--line)',
+                  borderRadius: '6px',
+                  boxShadow: '0 10px 30px rgba(0,0,0,0.18)',
+                  padding: '0.5rem',
+                  zIndex: 1000,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.2rem'
+                }}>
+
+                  <button 
+                    onClick={() => { setActiveTab('settings'); setActiveSettingsSubTab('general'); setShowSettingsFlyout(false); }}
+                    className="sidebar-flyout-item"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.55rem',
+                      padding: '0.4rem 0.55rem',
+                      borderRadius: '4px',
+                      border: 'none',
+                      background: activeTab === 'settings' && activeSettingsSubTab === 'general' ? 'rgba(224, 168, 46, 0.15)' : 'transparent',
+                      color: activeTab === 'settings' && activeSettingsSubTab === 'general' ? 'var(--gold-deep)' : 'var(--ink)',
+                      fontSize: '0.78rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      transition: 'background 0.15s'
+                    }}
+                  >
+                    <SettingsIcon size={13} /> General & Legal
+                  </button>
+
+                  <button 
+                    onClick={() => { setActiveTab('settings'); setActiveSettingsSubTab('whatsapp_gateway'); setShowSettingsFlyout(false); }}
+                    className="sidebar-flyout-item"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.55rem',
+                      padding: '0.4rem 0.55rem',
+                      borderRadius: '4px',
+                      border: 'none',
+                      background: activeTab === 'settings' && activeSettingsSubTab === 'whatsapp_gateway' ? 'rgba(224, 168, 46, 0.15)' : 'transparent',
+                      color: activeTab === 'settings' && activeSettingsSubTab === 'whatsapp_gateway' ? 'var(--gold-deep)' : 'var(--ink)',
+                      fontSize: '0.78rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      transition: 'background 0.15s'
+                    }}
+                  >
+                    <Layers size={13} /> WhatsApp Gateway
+                  </button>
+
+                  <button 
+                    onClick={() => { setActiveTab('settings'); setActiveSettingsSubTab('meta_api'); setShowSettingsFlyout(false); }}
+                    className="sidebar-flyout-item"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.55rem',
+                      padding: '0.4rem 0.55rem',
+                      borderRadius: '4px',
+                      border: 'none',
+                      background: activeTab === 'settings' && activeSettingsSubTab === 'meta_api' ? 'rgba(224, 168, 46, 0.15)' : 'transparent',
+                      color: activeTab === 'settings' && activeSettingsSubTab === 'meta_api' ? 'var(--gold-deep)' : 'var(--ink)',
+                      fontSize: '0.78rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      transition: 'background 0.15s'
+                    }}
+                  >
+                    <MessageSquare size={13} /> Meta Cloud API
+                  </button>
+
+                  <button 
+                    onClick={() => { setActiveTab('settings'); setActiveSettingsSubTab('baileys'); setShowSettingsFlyout(false); }}
+                    className="sidebar-flyout-item"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.55rem',
+                      padding: '0.4rem 0.55rem',
+                      borderRadius: '4px',
+                      border: 'none',
+                      background: activeTab === 'settings' && activeSettingsSubTab === 'baileys' ? 'rgba(224, 168, 46, 0.15)' : 'transparent',
+                      color: activeTab === 'settings' && activeSettingsSubTab === 'baileys' ? 'var(--gold-deep)' : 'var(--ink)',
+                      fontSize: '0.78rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      transition: 'background 0.15s'
+                    }}
+                  >
+                    <Smartphone size={13} /> Baileys Device
+                  </button>
+
+                  <button 
+                    onClick={() => { setActiveTab('settings'); setActiveSettingsSubTab('csv_export'); setShowSettingsFlyout(false); }}
+                    className="sidebar-flyout-item"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.55rem',
+                      padding: '0.4rem 0.55rem',
+                      borderRadius: '4px',
+                      border: 'none',
+                      background: activeTab === 'settings' && activeSettingsSubTab === 'csv_export' ? 'rgba(224, 168, 46, 0.15)' : 'transparent',
+                      color: activeTab === 'settings' && activeSettingsSubTab === 'csv_export' ? 'var(--gold-deep)' : 'var(--ink)',
+                      fontSize: '0.78rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      transition: 'background 0.15s'
+                    }}
+                  >
+                    <Download size={13} /> CSV Export Mapper
+                  </button>
+
+                  <button 
+                    onClick={() => { setActiveTab('settings'); setActiveSettingsSubTab('tracking_api'); setShowSettingsFlyout(false); }}
+                    className="sidebar-flyout-item"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.55rem',
+                      padding: '0.4rem 0.55rem',
+                      borderRadius: '4px',
+                      border: 'none',
+                      background: activeTab === 'settings' && activeSettingsSubTab === 'tracking_api' ? 'rgba(224, 168, 46, 0.15)' : 'transparent',
+                      color: activeTab === 'settings' && activeSettingsSubTab === 'tracking_api' ? 'var(--gold-deep)' : 'var(--ink)',
+                      fontSize: '0.78rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      transition: 'background 0.15s'
+                    }}
+                  >
+                    <Activity size={13} /> Meta CAPI & GTM
+                  </button>
+
+                  {canDelete && (
+                    <button 
+                      onClick={() => { setActiveTab('settings'); setActiveSettingsSubTab('mis_mapping'); setShowSettingsFlyout(false); }}
+                      className="sidebar-flyout-item"
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.55rem',
+                        padding: '0.4rem 0.55rem',
+                        borderRadius: '4px',
+                        border: 'none',
+                        background: activeTab === 'settings' && activeSettingsSubTab === 'mis_mapping' ? 'rgba(224, 168, 46, 0.15)' : 'transparent',
+                        color: activeTab === 'settings' && activeSettingsSubTab === 'mis_mapping' ? 'var(--gold-deep)' : 'var(--ink)',
+                        fontSize: '0.78rem',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        transition: 'background 0.15s'
+                      }}
+                    >
+                      <Database size={13} /> Bank MIS Mapping
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </nav>
+        </div>
+
+        {/* Bottom Actions Group (NO LABELS, ONLY ICONS) */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', width: '100%', alignItems: 'center' }}>
+          <button 
+            className="sidebar-icon-btn" 
+            onClick={toggleTheme} 
+            title={theme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
+            style={{
+              width: '40px',
+              height: '40px',
+              borderRadius: '10px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              border: '1px solid var(--line)',
+              background: 'var(--paper)',
+              color: 'var(--ink)',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+          </button>
+
+          <button 
+            onClick={loadAllAdminData} 
+            className="sidebar-icon-btn" 
+            title="Sync All Data"
+            style={{
+              width: '40px',
+              height: '40px',
+              borderRadius: '10px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              border: '1px solid var(--line)',
+              background: 'var(--paper)',
+              color: 'var(--ink)',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            <RefreshCw size={18} className={loading ? 'spin' : ''} />
+          </button>
+
+          <button 
+            onClick={handleLogout} 
+            className="sidebar-icon-btn" 
+            title="Logout / Exit Session"
+            style={{
+              width: '40px',
+              height: '40px',
+              borderRadius: '10px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              border: '1px solid rgba(209, 67, 67, 0.2)',
+              background: 'rgba(209, 67, 67, 0.08)',
+              color: 'var(--err)',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            <LogOut size={18} />
+          </button>
+        </div>
+      </aside>
+
+      {/* MAIN CONTENT AREA */}
+      <main className={`admin-main-content ${['leads', 'cards', 'agents', 'locations', 'settings'].includes(activeTab) ? 'desktop-no-scroll-content' : ''}`} style={{ flex: 1, padding: '1rem 1.5rem', minWidth: 0, display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }}>
+        {/* Top Header Strip inside Main Content */}
+        <div className="admin-header-bar" style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center', 
+          marginBottom: '0.85rem',
+          paddingBottom: '0.65rem',
+          borderBottom: '1px solid var(--line)',
+          flexShrink: 0
+        }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.25rem' }}>
+              <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: '1.45rem', color: 'var(--ink)' }}>
+                {activeTab === 'leads' && 'Leads Repository'}
+                {activeTab === 'leads_dashboard' && 'Leads Mapping & Analytics'}
+                {activeTab === 'cards' && 'Cards Catalog Manager'}
+                {activeTab === 'agents' && 'Agents Controller'}
+                {activeTab === 'locations' && 'Kiosks & City Locations'}
+                {activeTab === 'settings' && 'System Settings & API'}
+              </span>
+              <span style={{ 
+                fontSize: '0.7rem', 
+                fontWeight: 700, 
+                color: 'var(--gold-deep)', 
+                background: 'rgba(224, 168, 46, 0.12)', 
+                border: '1px solid rgba(224, 168, 46, 0.25)', 
+                padding: '0.2rem 0.6rem', 
+                borderRadius: '20px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px'
+              }}>
+                FinMantra Admin
+              </span>
+            </div>
+            <p style={{ color: 'var(--muted)', fontSize: '0.85rem', margin: 0 }}>
+              {activeTab === 'leads' && 'View, search, filter, and export all customer leads registered in the database.'}
+              {activeTab === 'leads_dashboard' && 'Visual analytics, conversion funnel, and geographical mapping from bank MIS uploads.'}
+              {activeTab === 'cards' && 'Configure credit card offers, ad tracking parameters, and dynamic partner redirect templates.'}
+              {activeTab === 'agents' && 'Manage field sales agents, login credentials, assigned banks, and kiosk permissions.'}
+              {activeTab === 'locations' && 'Manage operational cities, kiosk centers, and serviceability locations.'}
+              {activeTab === 'settings' && 'Configure WhatsApp API gateways, export templates, security access rules, and system settings.'}
+            </p>
           </div>
-          <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '3px solid hsl(var(--secondary))' }}>
-            <div style={{ fontSize: '0.85rem', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Leads Today</div>
-            <div style={{ fontSize: '2.2rem', fontWeight: 800, margin: '0.25rem 0', color: 'hsl(var(--secondary))' }}>{todaysLeadsCount}</div>
-            <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>Captured since 12:00 AM</div>
-          </div>
-          <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '3px solid var(--gold)' }}>
-            <div style={{ fontSize: '0.85rem', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Active Agents</div>
-            <div style={{ fontSize: '2.2rem', fontWeight: 800, margin: '0.25rem 0', color: 'var(--gold-deep)' }}>{activeAgents.length}</div>
-            <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>Field officers active</div>
-          </div>
-          <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '3px solid hsl(var(--accent-gold))' }}>
-            <div style={{ fontSize: '0.85rem', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Cards Catalog</div>
-            <div style={{ fontSize: '2.2rem', fontWeight: 800, margin: '0.25rem 0', color: 'hsl(var(--accent-gold))' }}>{activeCards.length}</div>
-            <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>Active redirect options</div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', marginLeft: 'auto', flexShrink: 0 }}>
+            {activeTab === 'leads' && (
+              <>
+                {canDelete && selectedLeads.length > 0 && (
+                  <button onClick={handleBulkDeleteLeads} className="btn-secondary" style={{ background: 'rgba(209, 67, 67, 0.15)', color: 'var(--err)', border: '1px solid rgba(209, 67, 67, 0.2)', padding: '0.4rem 0.85rem', fontSize: '0.82rem', height: '34px', borderRadius: '2px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                    <Trash2 size={14} /> Delete ({selectedLeads.length})
+                  </button>
+                )}
+                <button onClick={handleCsvExport} className="btn-primary" style={{ padding: '0.4rem 0.85rem', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', height: '34px', borderRadius: '2px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                  <Download size={14} /> Export to CSV
+                </button>
+                <button onClick={() => setShowUploadMISModal(true)} className="btn-secondary" style={{ padding: '0.4rem 0.85rem', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', height: '34px', borderRadius: '2px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                  <Upload size={14} /> Upload MIS
+                </button>
+              </>
+            )}
+
+            {activeTab === 'leads_dashboard' && (
+              <button 
+                onClick={fetchMISStats} 
+                className="btn-secondary"
+                disabled={loadingMISStats}
+                style={{ 
+                  display: 'inline-flex', 
+                  alignItems: 'center', 
+                  gap: '0.4rem', 
+                  padding: '0.4rem 0.9rem', 
+                  fontSize: '0.82rem',
+                  height: '34px',
+                  borderRadius: '2px',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                <RefreshCw size={14} className={loadingMISStats ? 'spin' : ''} /> Sync Dashboard
+              </button>
+            )}
           </div>
         </div>
-      )}
 
       {/* TAB CONTENT */}
       {loading ? (
         <div style={{ textAlign: 'center', padding: '5rem', color: 'hsl(var(--text-muted))' }}>Syncing database logs...</div>
       ) : (
-        <div>
-          
+        <div style={{ flex: 1, height: '100%', minHeight: 0, overflow: 'hidden' }}>
           {/* LEADS TAB */}
           {activeTab === 'leads' && (
-            <div className="glass-panel">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
-                <h2 style={{ fontSize: '1.3rem' }}>Leads Log ({totalLeadsCount})</h2>
-                <div style={{ display: 'flex', gap: '1rem' }}>
-                  {canDelete && selectedLeads.length > 0 && (
-                    <button onClick={handleBulkDeleteLeads} className="btn-secondary" style={{ background: 'rgba(209, 67, 67, 0.15)', color: 'var(--err)', border: '1px solid rgba(209, 67, 67, 0.2)' }}>
-                      <Trash2 size={16} /> Delete Selected ({selectedLeads.length})
-                    </button>
-                  )}
-                   <button onClick={handleCsvExport} className="btn-primary" style={{ padding: '0.6rem 1.2rem', fontSize: '0.9rem' }}>
-                    <Download size={16} /> Export to CSV
-                  </button>
-                  <button onClick={() => setShowUploadMISModal(true)} className="btn-secondary" style={{ padding: '0.6rem 1.2rem', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                    <Upload size={16} /> Upload MIS
-                  </button>
+            <div className="admin-split-leads desktop-split-container" style={{ display: 'flex', gap: '1.25rem' }}>
+              
+              {/* Left Column: Fixed 4 Square Metric Cards Panel */}
+              <div style={{ width: '150px', minWidth: '150px', display: 'flex', flexDirection: 'column', gap: '0.75rem' }} className="admin-left-metrics">
+                <div className="glass-panel" style={{ width: '150px', height: '150px', borderRadius: 0, padding: '0.85rem', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', borderTop: '4px solid var(--gold-deep)', borderLeft: 'none', boxSizing: 'border-box' }}>
+                  <div style={{ fontSize: '0.72rem', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Total Leads</div>
+                  <div style={{ fontSize: '1.75rem', fontWeight: 800, margin: '0.25rem 0', color: 'var(--ink)' }}>{totalLeadsCount}</div>
+                  <div style={{ fontSize: '0.65rem', color: 'hsl(var(--text-muted))' }}>Registered in DB</div>
+                </div>
+
+                <div className="glass-panel" style={{ width: '150px', height: '150px', borderRadius: 0, padding: '0.85rem', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', borderTop: '4px solid var(--gold-deep)', borderLeft: 'none', boxSizing: 'border-box' }}>
+                  <div style={{ fontSize: '0.72rem', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Leads Today</div>
+                  <div style={{ fontSize: '1.75rem', fontWeight: 800, margin: '0.25rem 0', color: 'var(--gold-deep)' }}>{todaysLeadsCount}</div>
+                  <div style={{ fontSize: '0.65rem', color: 'hsl(var(--text-muted))' }}>Since 12:00 AM</div>
+                </div>
+
+                <div className="glass-panel" style={{ width: '150px', height: '150px', borderRadius: 0, padding: '0.85rem', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', borderTop: '4px solid var(--gold)', borderLeft: 'none', boxSizing: 'border-box' }}>
+                  <div style={{ fontSize: '0.72rem', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Active Agents</div>
+                  <div style={{ fontSize: '1.75rem', fontWeight: 800, margin: '0.25rem 0', color: 'var(--gold-deep)' }}>{activeAgents.length}</div>
+                  <div style={{ fontSize: '0.65rem', color: 'hsl(var(--text-muted))' }}>Field officers active</div>
+                </div>
+
+                <div className="glass-panel" style={{ width: '150px', height: '150px', borderRadius: 0, padding: '0.85rem', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', borderTop: '4px solid hsl(var(--accent-gold))', borderLeft: 'none', boxSizing: 'border-box' }}>
+                  <div style={{ fontSize: '0.72rem', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Cards Catalog</div>
+                  <div style={{ fontSize: '1.75rem', fontWeight: 800, margin: '0.25rem 0', color: 'var(--ink)' }}>{activeCards.length}</div>
+                  <div style={{ fontSize: '0.65rem', color: 'hsl(var(--text-muted))' }}>Active redirect options</div>
                 </div>
               </div>
 
-              {/* Filters */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1.2fr 1.2fr', gap: '1rem', marginBottom: '1.5rem', alignItems: 'center' }} className="filters-strip">
-                <div style={{ position: 'relative' }}>
-                  <Search size={18} style={{ position: 'absolute', top: '14px', left: '15px', color: 'hsl(var(--text-muted))' }} />
-                  <input 
-                    type="text" 
-                    placeholder="Search by name, phone, URN..." 
-                    className="form-input" 
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    style={{ paddingLeft: '45px' }}
-                  />
-                </div>
-                <select className="form-select" value={filterCard} onChange={(e) => setFilterCard(e.target.value)}>
-                  <option value="">Filter by Card</option>
-                  {cards.map(c => <option key={c.id} value={c.id}>{c.bank} {c.name}</option>)}
-                </select>
-                <select className="form-select" value={filterSource} onChange={(e) => setFilterSource(e.target.value)}>
-                  <option value="">Filter by Source</option>
-                  <option value="public">Public Website</option>
-                  <option value="agent">Agent Walk-in</option>
-                  <option value="kiwi">Kiwi Page</option>
-                  <option value="simplyclick_sbi">SBI SimplyClick</option>
-                </select>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', width: '100%' }}>
-                  <span style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', whiteSpace: 'nowrap' }}>From:</span>
-                  <input 
-                    type="date" 
-                    className="form-input" 
-                    value={filterStartDate}
-                    onChange={(e) => setFilterStartDate(e.target.value)}
-                    style={{ fontSize: '0.8rem', padding: '0.5rem' }}
-                  />
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', width: '100%' }}>
-                  <span style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', whiteSpace: 'nowrap' }}>To:</span>
-                  <input 
-                    type="date" 
-                    className="form-input" 
-                    value={filterEndDate}
-                    onChange={(e) => setFilterEndDate(e.target.value)}
-                    style={{ fontSize: '0.8rem', padding: '0.5rem' }}
-                  />
-                </div>
-              </div>
+              {/* Right Column: Leads Log & Scrollable Table Panel */}
+              <div className="glass-panel desktop-panel-fill" style={{ flex: 1, minWidth: 0, padding: '1.25rem' }}>
+                
 
-              {/* Data Table */}
-              <div className="data-table-container">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      {canDelete && (
-                        <th style={{ width: '40px' }}>
-                          <input 
-                            type="checkbox" 
-                            checked={filteredLeads.length > 0 && selectedLeads.length === filteredLeads.length} 
-                            onChange={handleSelectAllLeads}
-                            style={{ accentColor: 'hsl(var(--primary))' }}
-                          />
-                        </th>
-                      )}
-                      <th>URN No.</th>
-                      <th>Date & Time</th>
-                      <th>Name</th>
-                      <th>WhatsApp No.</th>
-                      <th>Card Selection</th>
-                      <th style={{ width: '130px', maxWidth: '130px' }}>Email</th>
-                      <th>PAN No.</th>
-                      <th>Employment</th>
-                      <th>Already Has Card?</th>
-                      <th>Pincode</th>
-                      <th>Monthly Income</th>
-                      <th>Source</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredLeads.length > 0 ? (
-                      filteredLeads.map(l => (
-                        <tr key={l.id}>
-                          {canDelete && (
-                            <td>
-                              <input 
-                                type="checkbox" 
-                                checked={selectedLeads.includes(l.id)} 
-                                onChange={() => handleSelectLead(l.id)}
-                                style={{ accentColor: 'hsl(var(--primary))' }}
-                              />
-                            </td>
-                          )}
-                          <td><span className="badge badge-info" style={{ cursor: 'pointer' }} onClick={() => handleViewLead(l)}>{l.urn}</span></td>
-                          <td>{formatDateTime(l.created_at)}</td>
-                          <td style={{ fontWeight: 600, cursor: 'pointer' }} onClick={() => handleViewLead(l)}>{l.full_name}</td>
-                          <td>{l.phone}</td>
-                          <td>{l.card_name} <span style={{ color: 'hsl(var(--text-muted))', fontSize: '0.8rem' }}>({l.card_bank})</span></td>
-                          <td style={{ maxWidth: '130px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={l.email}>{l.email || '-'}</td>
-                          <td><code style={{ fontSize: '0.8rem', color: 'var(--gold-deep)' }}>{l.pan_no || '-'}</code></td>
-                          <td>{l.employment || '-'}</td>
-                          <td>
-                            <span className={`badge ${l.has_credit_card === 'Yes' ? 'badge-success' : 'badge-secondary'}`}>
-                              {l.has_credit_card || '-'}
-                            </span>
-                          </td>
-                          <td><code>{l.pincode || '-'}</code></td>
-                          <td>{l.monthly_income ? `₹${l.monthly_income}` : '-'}</td>
-                          <td>
-                            <span 
-                              className={`badge ${l.source === 'agent' ? 'badge-warning' : 'badge-success'}`}
-                              title={l.utm_params ? Object.entries(l.utm_params).map(([k, v]) => `${k}: ${v}`).join('\n') : ''}
-                              style={{ cursor: 'pointer' }}
-                              onClick={() => handleViewLead(l)}
-                            >
-                               {l.source === 'agent' 
-                                 ? (l.agent_name || 'Staff') 
-                                 : (l.utm_source 
-                                     ? `PUBLIC (${l.utm_source.toUpperCase()}${l.utm_info ? ' - ' + l.utm_info.toUpperCase() : ''})` 
-                                     : 'PUBLIC')}
-                            </span>
-                          </td>
-                          <td>
-                            <button onClick={() => handleViewLead(l)} style={{ color: 'hsl(var(--primary))', background: 'none', border: 'none', cursor: 'pointer', marginRight: '12px' }} title="View details">
-                              <Eye size={16} />
-                            </button>
+
+                {/* Filters */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1.2fr 1.2fr', gap: '0.75rem', marginBottom: '1rem', alignItems: 'center', flexShrink: 0 }} className="filters-strip">
+                  <div style={{ position: 'relative' }}>
+                    <Search size={16} style={{ position: 'absolute', top: '11px', left: '12px', color: 'hsl(var(--text-muted))' }} />
+                    <input 
+                      type="text" 
+                      placeholder="Search by name, phone, URN..." 
+                      className="form-input" 
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      style={{ paddingLeft: '38px', height: '36px', fontSize: '0.8rem' }}
+                    />
+                  </div>
+                  <select className="form-select" value={filterCard} onChange={(e) => setFilterCard(e.target.value)} style={{ height: '36px', fontSize: '0.8rem' }}>
+                    <option value="">Filter by Card</option>
+                    {cards.map(c => <option key={c.id} value={c.id}>{c.bank} {c.name}</option>)}
+                  </select>
+                  <select className="form-select" value={filterSource} onChange={(e) => setFilterSource(e.target.value)} style={{ height: '36px', fontSize: '0.8rem' }}>
+                    <option value="">Filter by Source</option>
+                    <option value="public">Public Website</option>
+                    <option value="agent">Agent Walk-in</option>
+                    <option value="kiwi">Kiwi Page</option>
+                    <option value="simplyclick_sbi">SBI SimplyClick</option>
+                  </select>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', width: '100%' }}>
+                    <span style={{ fontSize: '0.72rem', color: 'hsl(var(--text-muted))', whiteSpace: 'nowrap' }}>From:</span>
+                    <input 
+                      type="date" 
+                      className="form-input" 
+                      value={filterStartDate}
+                      onChange={(e) => setFilterStartDate(e.target.value)}
+                      style={{ fontSize: '0.75rem', padding: '0.35rem', height: '36px' }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', width: '100%' }}>
+                    <span style={{ fontSize: '0.72rem', color: 'hsl(var(--text-muted))', whiteSpace: 'nowrap' }}>To:</span>
+                    <input 
+                      type="date" 
+                      className="form-input" 
+                      value={filterEndDate}
+                      onChange={(e) => setFilterEndDate(e.target.value)}
+                      style={{ fontSize: '0.75rem', padding: '0.35rem', height: '36px' }}
+                    />
+                  </div>
+                </div>
+
+                {/* Scrollable Table Container */}
+                <div className="data-table-container desktop-scroll-panel" style={{ border: '1px solid var(--line)', borderRadius: 'var(--radius-md)' }}>
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        {canDelete && (
+                          <th style={{ width: '40px' }}>
+                            <input 
+                              type="checkbox" 
+                              checked={filteredLeads.length > 0 && selectedLeads.length === filteredLeads.length} 
+                              onChange={handleSelectAllLeads}
+                              style={{ accentColor: 'hsl(var(--primary))' }}
+                            />
+                          </th>
+                        )}
+                        <th>URN No.</th>
+                        <th>Date & Time</th>
+                        <th>Name</th>
+                        <th>WhatsApp No.</th>
+                        <th>Card Selection</th>
+                        <th style={{ width: '130px', maxWidth: '130px' }}>Email</th>
+                        <th>PAN No.</th>
+                        <th>Employment</th>
+                        <th>Already Has Card?</th>
+                        <th>Pincode</th>
+                        <th>Monthly Income</th>
+                        <th>Source</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredLeads.length > 0 ? (
+                        filteredLeads.map(l => (
+                          <tr key={l.id}>
                             {canDelete && (
-                              <button onClick={() => handleSingleDeleteLead(l.id)} style={{ color: 'var(--err)', background: 'none', border: 'none', cursor: 'pointer' }} title="Delete lead">
-                                <Trash2 size={16} />
-                              </button>
+                              <td>
+                                <input 
+                                  type="checkbox" 
+                                  checked={selectedLeads.includes(l.id)} 
+                                  onChange={() => handleSelectLead(l.id)}
+                                  style={{ accentColor: 'hsl(var(--primary))' }}
+                                />
+                              </td>
                             )}
+                            <td><span className="badge badge-info" style={{ cursor: 'pointer' }} onClick={() => handleViewLead(l)}>{l.urn}</span></td>
+                            <td>{formatDateTime(l.created_at)}</td>
+                            <td style={{ fontWeight: 600, cursor: 'pointer' }} onClick={() => handleViewLead(l)}>{l.full_name}</td>
+                            <td>{l.phone}</td>
+                             <td>{l.card_name} <span style={{ color: 'hsl(var(--text-muted))', fontSize: '0.8rem' }}>({l.card_bank})</span></td>
+                             <td style={{ maxWidth: '130px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={l.email}>{l.email || '-'}</td>
+                             <td><code style={{ fontSize: '0.8rem', color: 'var(--gold-deep)' }}>{l.pan_no || '-'}</code></td>
+                             <td>{l.employment || '-'}</td>
+                             <td>
+                               <span className={`badge ${l.has_credit_card === 'Yes' ? 'badge-success' : 'badge-secondary'}`}>
+                                 {l.has_credit_card || '-'}
+                               </span>
+                             </td>
+                             <td><code>{l.pincode || '-'}</code></td>
+                             <td>{l.monthly_income ? `₹${l.monthly_income}` : '-'}</td>
+                             <td>
+                               <span 
+                                 className={`badge ${l.source === 'agent' ? 'badge-warning' : 'badge-success'}`}
+                                 title={l.utm_params ? Object.entries(l.utm_params).map(([k, v]) => `${k}: ${v}`).join('\n') : ''}
+                                 style={{ cursor: 'pointer' }}
+                                 onClick={() => handleViewLead(l)}
+                               >
+                                  {l.source === 'agent' 
+                                    ? (l.agent_name || 'Staff') 
+                                    : (l.utm_source 
+                                        ? `PUBLIC (${l.utm_source.toUpperCase()}${l.utm_info ? ' - ' + l.utm_info.toUpperCase() : ''})` 
+                                        : 'PUBLIC')}
+                               </span>
+                             </td>
+                            <td>
+                              <button onClick={() => handleViewLead(l)} style={{ color: 'hsl(var(--primary))', background: 'none', border: 'none', cursor: 'pointer', marginRight: '12px' }} title="View details">
+                                <Eye size={16} />
+                              </button>
+                              {canDelete && (
+                                <button onClick={() => handleSingleDeleteLead(l.id)} style={{ color: 'var(--err)', background: 'none', border: 'none', cursor: 'pointer' }} title="Delete lead">
+                                  <Trash2 size={16} />
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={canDelete ? 13 : 12} style={{ textAlign: 'center', padding: '3rem', color: 'hsl(var(--text-muted))' }}>
+                            No leads captured matching current filter query parameters.
                           </td>
                         </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={canDelete ? 13 : 12} style={{ textAlign: 'center', padding: '3rem', color: 'hsl(var(--text-muted))' }}>
-                          No leads captured matching current filter query parameters.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Pagination Controls */}
-              <div style={{ 
-                display: 'flex', 
-                justifyContent: 'space-between', 
-                alignItems: 'center', 
-                marginTop: '1.25rem', 
-                padding: '1rem', 
-                background: 'var(--paper-2)', 
-                border: '1px solid var(--line)', 
-                borderRadius: 'var(--radius-md)',
-                flexWrap: 'wrap',
-                gap: '1rem'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <span style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>Leads per page:</span>
-                  <select 
-                    className="form-select" 
-                    value={leadsPerPage} 
-                    onChange={(e) => {
-                      setLeadsPerPage(parseInt(e.target.value, 10));
-                      setCurrentPage(1);
-                    }}
-                    style={{ width: '80px', padding: '0.25rem 0.5rem', fontSize: '0.85rem', height: '32px' }}
-                  >
-                    <option value={25}>25</option>
-                    <option value={50}>50</option>
-                    <option value={100}>100</option>
-                    <option value={200}>200</option>
-                  </select>
-                </div>
-                
-                <div style={{ fontSize: '0.85rem', color: 'var(--ink)', fontWeight: 600 }}>
-                  Showing {totalLeadsCount > 0 ? (currentPage - 1) * leadsPerPage + 1 : 0} - {Math.min(currentPage * leadsPerPage, totalLeadsCount)} of {totalLeadsCount} leads
+                      )}
+                    </tbody>
+                  </table>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <button 
-                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} 
-                    disabled={currentPage === 1}
-                    className="btn-secondary"
-                    style={{ 
-                      padding: '0.4rem 0.8rem', 
-                      fontSize: '0.8rem', 
-                      height: '32px', 
-                      opacity: currentPage === 1 ? 0.5 : 1,
-                      cursor: currentPage === 1 ? 'not-allowed' : 'pointer'
-                    }}
-                  >
-                    Previous
-                  </button>
-                  <span style={{ fontSize: '0.85rem', color: 'var(--muted)', margin: '0 0.5rem' }}>
-                    Page {currentPage} of {totalPages}
-                  </span>
-                  <button 
-                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} 
-                    disabled={currentPage === totalPages}
-                    className="btn-secondary"
-                    style={{ 
-                      padding: '0.4rem 0.8rem', 
-                      fontSize: '0.8rem', 
-                      height: '32px', 
-                      opacity: currentPage === totalPages ? 0.5 : 1,
-                      cursor: currentPage === totalPages ? 'not-allowed' : 'pointer'
-                    }}
-                  >
-                    Next
-                  </button>
+                {/* Pagination Controls at bottom of Right Panel */}
+                <div style={{ 
+                  display: 'flex', 
+                  justify: 'space-between', 
+                  alignItems: 'center', 
+                  marginTop: '0.75rem', 
+                  padding: '0.6rem 0.85rem', 
+                  background: 'var(--paper-2)', 
+                  border: '1px solid var(--line)', 
+                  borderRadius: 'var(--radius-md)',
+                  flexWrap: 'wrap',
+                  gap: '0.75rem',
+                  flexShrink: 0
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>Per page:</span>
+                    <select 
+                      className="form-select" 
+                      value={leadsPerPage} 
+                      onChange={(e) => {
+                        setLeadsPerPage(parseInt(e.target.value, 10));
+                        setCurrentPage(1);
+                      }}
+                      style={{ width: '75px', padding: '0.2rem 0.4rem', fontSize: '0.8rem', height: '30px' }}
+                    >
+                      <option value={25}>25</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                      <option value={200}>200</option>
+                    </select>
+                  </div>
+                  
+                  <div style={{ fontSize: '0.8rem', color: 'var(--ink)', fontWeight: 600 }}>
+                    {totalLeadsCount > 0 ? (currentPage - 1) * leadsPerPage + 1 : 0} - {Math.min(currentPage * leadsPerPage, totalLeadsCount)} of {totalLeadsCount}
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <button 
+                      onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} 
+                      disabled={currentPage === 1}
+                      className="btn-secondary"
+                      style={{ padding: '0.3rem 0.7rem', fontSize: '0.78rem', height: '30px', opacity: currentPage === 1 ? 0.5 : 1 }}
+                    >
+                      Prev
+                    </button>
+                    <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>{currentPage}/{totalPages}</span>
+                    <button 
+                      onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} 
+                      disabled={currentPage === totalPages}
+                      className="btn-secondary"
+                      style={{ padding: '0.3rem 0.7rem', fontSize: '0.78rem', height: '30px', opacity: currentPage === totalPages ? 0.5 : 1 }}
+                    >
+                      Next
+                    </button>
+                  </div>
                 </div>
+
               </div>
 
             </div>
@@ -2146,50 +2780,12 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
           {/* LEADS DASHBOARD TAB */}
           {activeTab === 'leads_dashboard' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', textAlign: 'left' }}>
-              {/* Dashboard Header */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }} className="leads-dashboard-header">
-                <div>
-                  <h2 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.25rem' }}>Leads Mapping Analytics</h2>
-                  <p style={{ color: 'hsl(var(--text-secondary))', fontSize: '0.85rem' }}>
-                    Visual analytics, funnel conversion, and geographical mapping from bank MIS uploads.
-                  </p>
-                </div>
-                <button 
-                  onClick={fetchMISStats} 
-                  className="btn-secondary"
-                  disabled={loadingMISStats}
-                  style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.6rem 1.2rem', fontSize: '0.9rem' }}
-                >
-                  <RefreshCw size={14} className={loadingMISStats ? 'spin' : ''} /> Sync Dashboard
-                </button>
-              </div>
 
-              {/* Filters Panel */}
-              {(() => {
-                const allLeads = misStats?.mappedLeadsList || [];
-                const activeFilterCount = [dashCreatedDate, dashDateTo, dashCardType, dashState, dashKycStatus, dashIpaStatus, dashFinalDecision, dashCardName, dashCustomerType, dashCurrentStage, dashCardActivation, dashVkycStatus, dashAgent, dashSourceType, dashSearch].filter(Boolean).length;
 
-                const mkOpts = (field) => Array.from(new Set(allLeads.map(l => l.mis_data?.[field]).filter(v => v && String(v).trim()))).sort();
-                const mkAgentOpts = () => Array.from(new Set(allLeads.map(l => l.agent_name).filter(Boolean))).sort();
-
-                const filterSelectStyle = { padding: '0.4rem 0.6rem', fontSize: '0.78rem' };
-                const filterLabelStyle = { fontSize: '0.72rem', marginBottom: '3px', color: 'var(--muted)', fontWeight: 600, letterSpacing: '0.3px' };
-
-                const FilterSelect = ({ label, value, onChange, options, placeholder }) => (
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label" style={filterLabelStyle}>{label}</label>
-                    <select className="form-select" style={filterSelectStyle} value={value} onChange={(e) => onChange(e.target.value)}>
-                      <option value="">{placeholder}</option>
-                      {options.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
-                    </select>
-                  </div>
-                );
-
-                return (
-                  <div className="glass-panel" style={{ padding: '1.25rem 1.5rem', marginBottom: '1.5rem' }}>
-                    {/* Header row */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+              {/* Filters Panel — uses memoized filterOptions & activeFilterCount */}
+              <div className="glass-panel" style={{ padding: '1.25rem 1.5rem', marginBottom: '1.5rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
                         <Filter size={14} style={{ color: 'var(--gold)' }} />
                         <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--ink)' }}>Filters (Dynamic Re-calculation)</span>
                         {activeFilterCount > 0 && (
@@ -2198,29 +2794,46 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                             padding: '0.15rem 0.5rem', borderRadius: '10px', minWidth: '20px', textAlign: 'center'
                           }}>{activeFilterCount}</span>
                         )}
+
+                        <div style={{ display: 'inline-flex', gap: '0.25rem', padding: '2px', background: 'var(--paper-2)', borderRadius: '20px', border: '1px solid var(--line)', marginLeft: '0.5rem', flexWrap: 'wrap' }}>
+                          <button
+                            type="button"
+                            onClick={() => setDashSelectedBank('All')}
+                            style={{
+                              padding: '0.25rem 0.65rem', fontSize: '0.7rem', borderRadius: '12px', border: 'none', cursor: 'pointer', fontWeight: 600,
+                              background: dashSelectedBank === 'All' ? 'var(--gold-deep)' : 'transparent',
+                              color: dashSelectedBank === 'All' ? '#fff' : 'var(--ink)', transition: 'all 0.15s'
+                            }}
+                          >All Banks</button>
+                          {getBankOptions().map((b, idx) => (
+                            <button key={idx} type="button" onClick={() => setDashSelectedBank(b)}
+                              style={{
+                                padding: '0.25rem 0.65rem', fontSize: '0.7rem', borderRadius: '12px', border: 'none', cursor: 'pointer', fontWeight: 600,
+                                background: dashSelectedBank === b ? 'var(--gold-deep)' : 'transparent',
+                                color: dashSelectedBank === b ? '#fff' : 'var(--ink)', transition: 'all 0.15s'
+                              }}
+                            >{b}</button>
+                          ))}
+                        </div>
                       </div>
                       <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                        <button
-                          onClick={() => setDashFiltersExpanded(!dashFiltersExpanded)}
-                          className="btn-secondary"
-                          style={{ padding: '0.35rem 0.75rem', fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}
-                        >
+                        <button onClick={() => setDashFiltersExpanded(!dashFiltersExpanded)} className="btn-secondary"
+                          style={{ padding: '0.35rem 0.75rem', fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                           {dashFiltersExpanded ? 'Less Filters' : 'More Filters'}
                           <span style={{ fontSize: '0.6rem', transform: dashFiltersExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>▼</span>
                         </button>
                         <button
                           onClick={() => {
                             setDashCreatedDate(''); setDashDateTo(''); setDashCardType(''); setDashState('');
-                            setDashKycType(''); setDashIpaStatus(''); setDashFinalDecision(''); setDashCardName('');
+                            setDashKycStatus(''); setDashIpaStatus(''); setDashFinalDecision(''); setDashCardName('');
                             setDashCustomerType(''); setDashCurrentStage(''); setDashCardActivation('');
                             setDashVkycStatus(''); setDashAgent(''); setDashSourceType(''); setDashSearch('');
+                            setDashSelectedBank('All');
                           }}
                           className="btn-secondary"
                           style={{ padding: '0.35rem 0.75rem', fontSize: '0.72rem', opacity: activeFilterCount > 0 ? 1 : 0.5 }}
                           disabled={activeFilterCount === 0}
-                        >
-                          Reset All
-                        </button>
+                        >Reset All</button>
                       </div>
                     </div>
 
@@ -2229,8 +2842,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                       <div style={{ position: 'relative' }}>
                         <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} />
                         <input
-                          type="text"
-                          className="form-input"
+                          type="text" className="form-input"
                           placeholder="Search by URN, Name, or Bank Reference..."
                           value={dashSearch}
                           onChange={(e) => setDashSearch(e.target.value)}
@@ -2239,174 +2851,60 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                       </div>
                     </div>
 
-                    {/* Row 1: Primary filters (always visible) */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem', alignItems: 'end' }} className="leads-filter-grid">
-                      <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label" style={filterLabelStyle}>Date From (MIS)</label>
-                        <input type="date" className="form-input" style={filterSelectStyle} value={dashCreatedDate} onChange={(e) => setDashCreatedDate(e.target.value)} />
-                      </div>
-                      <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label" style={filterLabelStyle}>Date To (MIS)</label>
-                        <input type="date" className="form-input" style={filterSelectStyle} value={dashDateTo} onChange={(e) => setDashDateTo(e.target.value)} />
-                      </div>
-                      <FilterSelect label="Card Type" value={dashCardType} onChange={setDashCardType} options={mkOpts('card_type')} placeholder="All Card Types" />
-                      <FilterSelect label="State" value={dashState} onChange={setDashState} options={mkOpts('state')} placeholder="All States" />
-                      <FilterSelect label="IPA Status" value={dashIpaStatus} onChange={setDashIpaStatus} options={mkOpts('ipa_status')} placeholder="All IPA" />
-                      <FilterSelect label="Final Decision" value={dashFinalDecision} onChange={setDashFinalDecision} options={mkOpts('final_decision')} placeholder="All Decisions" />
-                    </div>
+                    {/* Row 1: Primary filters */}
+                    {(() => {
+                      const fls = { padding: '0.4rem 0.6rem', fontSize: '0.78rem' };
+                      const fll = { fontSize: '0.72rem', marginBottom: '3px', color: 'var(--muted)', fontWeight: 600, letterSpacing: '0.3px' };
+                      const FS = ({ label, value, onChange, options, placeholder }) => (
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label" style={fll}>{label}</label>
+                          <select className="form-select" style={fls} value={value} onChange={(e) => onChange(e.target.value)}>
+                            <option value="">{placeholder}</option>
+                            {options.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
+                          </select>
+                        </div>
+                      );
+                      return (
+                        <>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem', alignItems: 'end' }} className="leads-filter-grid">
+                            <div className="form-group" style={{ marginBottom: 0 }}>
+                              <label className="form-label" style={fll}>Date From (MIS)</label>
+                              <input type="date" className="form-input" style={fls} value={dashCreatedDate} onChange={(e) => setDashCreatedDate(e.target.value)} />
+                            </div>
+                            <div className="form-group" style={{ marginBottom: 0 }}>
+                              <label className="form-label" style={fll}>Date To (MIS)</label>
+                              <input type="date" className="form-input" style={fls} value={dashDateTo} onChange={(e) => setDashDateTo(e.target.value)} />
+                            </div>
+                            <FS label="Card Type" value={dashCardType} onChange={setDashCardType} options={filterOptions.card_type} placeholder="All Card Types" />
+                            <FS label="State" value={dashState} onChange={setDashState} options={filterOptions.state} placeholder="All States" />
+                            <FS label="IPA Status" value={dashIpaStatus} onChange={setDashIpaStatus} options={filterOptions.ipa_status} placeholder="All IPA" />
+                            <FS label="Final Decision" value={dashFinalDecision} onChange={setDashFinalDecision} options={filterOptions.final_decision} placeholder="All Decisions" />
+                          </div>
 
-                    {/* Row 2: Extended filters (collapsible) */}
-                    {dashFiltersExpanded && (
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem', alignItems: 'end', marginTop: '0.85rem', paddingTop: '0.85rem', borderTop: '1px solid var(--line)' }} className="leads-filter-grid">
-                        <FilterSelect label="Card Name" value={dashCardName} onChange={setDashCardName} options={mkOpts('card_name')} placeholder="All Cards" />
-                        <FilterSelect label="KYC Status" value={dashKycStatus} onChange={setDashKycStatus} options={mkOpts('kyc_status')} placeholder="All KYC" />
-                        <FilterSelect label="Customer Type" value={dashCustomerType} onChange={setDashCustomerType} options={mkOpts('customer_type')} placeholder="All Customers" />
-                        <FilterSelect label="Current Stage" value={dashCurrentStage} onChange={setDashCurrentStage} options={mkOpts('current_stage')} placeholder="All Stages" />
-                        <FilterSelect label="Card Activation" value={dashCardActivation} onChange={setDashCardActivation} options={mkOpts('card_activation_status')} placeholder="All Status" />
-                        <FilterSelect label="VKYC Status" value={dashVkycStatus} onChange={setDashVkycStatus} options={mkOpts('vkyc_status')} placeholder="All VKYC" />
-                        <FilterSelect label="Agent" value={dashAgent} onChange={setDashAgent} options={mkAgentOpts()} placeholder="All Agents" />
-                        <FilterSelect label="Source Type" value={dashSourceType} onChange={setDashSourceType} options={mkOpts('source_type')} placeholder="All Sources" />
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
+                          {dashFiltersExpanded && (
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem', alignItems: 'end', marginTop: '0.85rem', paddingTop: '0.85rem', borderTop: '1px solid var(--line)' }} className="leads-filter-grid">
+                              <FS label="Card Name" value={dashCardName} onChange={setDashCardName} options={filterOptions.card_name} placeholder="All Cards" />
+                              <FS label="KYC Status" value={dashKycStatus} onChange={setDashKycStatus} options={filterOptions.kyc_status} placeholder="All KYC" />
+                              <FS label="Customer Type" value={dashCustomerType} onChange={setDashCustomerType} options={filterOptions.customer_type} placeholder="All Customers" />
+                              <FS label="Current Stage" value={dashCurrentStage} onChange={setDashCurrentStage} options={filterOptions.current_stage} placeholder="All Stages" />
+                              <FS label="Card Activation" value={dashCardActivation} onChange={setDashCardActivation} options={filterOptions.card_activation_status} placeholder="All Status" />
+                              <FS label="VKYC Status" value={dashVkycStatus} onChange={setDashVkycStatus} options={filterOptions.vkyc_status} placeholder="All VKYC" />
+                              <FS label="Agent" value={dashAgent} onChange={setDashAgent} options={filterOptions.agents} placeholder="All Agents" />
+                              <FS label="Source Type" value={dashSourceType} onChange={setDashSourceType} options={filterOptions.source_type} placeholder="All Sources" />
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
+              </div>
 
               {loadingMISStats || !misStats ? (
                 <div style={{ textAlign: 'center', padding: '5rem', color: 'hsl(var(--text-muted))' }} className="glass-panel">
                   Loading dashboard charts...
                 </div>
               ) : (() => {
-                const list = misStats.mappedLeadsList || [];
-                const filtered = list.filter(lead => {
-                  // Text search (URN, Name, Bank Ref)
-                  if (dashSearch) {
-                    const s = dashSearch.toLowerCase();
-                    const urn = String(lead.urn || '').toLowerCase();
-                    const name = String(lead.full_name || '').toLowerCase();
-                    const bankRef = String(lead.mis_data?.bank_reference_number || '').toLowerCase();
-                    if (!urn.includes(s) && !name.includes(s) && !bankRef.includes(s)) return false;
-                  }
-
-                  // Date range filter
-                  if (dashCreatedDate || dashDateTo) {
-                    const submitDateVal = lead.mis_data?.application_submit_date_time || '';
-                    if (submitDateVal) {
-                      let parsedDate = null;
-                      const numVal = parseFloat(submitDateVal);
-                      if (!isNaN(numVal) && numVal > 30000 && numVal < 60000) {
-                        parsedDate = new Date(Math.round((numVal - 25569) * 86400 * 1000));
-                      } else {
-                        parsedDate = new Date(submitDateVal);
-                      }
-                      
-                      if (parsedDate && !isNaN(parsedDate.getTime())) {
-                        const dateStr = parsedDate.toISOString().split('T')[0];
-                        if (dashCreatedDate && dateStr < dashCreatedDate) return false;
-                        if (dashDateTo && dateStr > dashDateTo) return false;
-                      } else {
-                        return false;
-                      }
-                    } else {
-                      return false;
-                    }
-                  }
-                  if (dashCardType && lead.mis_data?.card_type !== dashCardType) return false;
-                  if (dashState && lead.mis_data?.state?.toLowerCase() !== dashState.toLowerCase()) return false;
-                  if (dashKycStatus && lead.mis_data?.kyc_status !== dashKycStatus) return false;
-                  if (dashIpaStatus && lead.mis_data?.ipa_status !== dashIpaStatus) return false;
-                  if (dashFinalDecision && lead.mis_data?.final_decision !== dashFinalDecision) return false;
-                  if (dashCardName && lead.mis_data?.card_name !== dashCardName) return false;
-                  if (dashCustomerType && lead.mis_data?.customer_type !== dashCustomerType) return false;
-                  if (dashCurrentStage && lead.mis_data?.current_stage !== dashCurrentStage) return false;
-                  if (dashCardActivation && lead.mis_data?.card_activation_status !== dashCardActivation) return false;
-                  if (dashVkycStatus && lead.mis_data?.vkyc_status !== dashVkycStatus) return false;
-                  if (dashAgent && lead.agent_name !== dashAgent) return false;
-                  if (dashSourceType && lead.mis_data?.source_type !== dashSourceType) return false;
-                  return true;
-                });
-
-                const totalSubmit = filtered.length;
-                const approvedCount = filtered.filter(l => l.mis_status === 'Approved').length;
-                const rejectedCount = filtered.filter(l => l.mis_status === 'Rejected').length;
-                const pendingCount = filtered.filter(l => l.mis_status === 'Pending').length;
-                const approvalRate = totalSubmit > 0 ? ((approvedCount / totalSubmit) * 100).toFixed(1) : '0';
-
-                const funnelIpa = filtered.filter(l => {
-                  const ipa = String(l.mis_data?.ipa_status || '').toLowerCase();
-                  return ipa.includes('approve') || ipa.includes('success');
-                }).length;
-                const funnelKyc = filtered.filter(l => {
-                  const ks = String(l.mis_data?.kyc_status || '').toLowerCase();
-                  const vs = String(l.mis_data?.vkyc_status || '').toLowerCase();
-                  const kt = String(l.mis_data?.kyc_type || '').toLowerCase();
-                  return ks.includes('success') || ks.includes('complete') || vs.includes('success') || vs.includes('complete') || ks.includes('biokyc') || kt.includes('biokyc');
-                }).length;
-                const funnelDecision = filtered.filter(l => {
-                  const dec = String(l.mis_data?.final_decision || '').toLowerCase();
-                  return dec.includes('approve') || dec.includes('success');
-                }).length;
-                const funnelActive = filtered.filter(l => {
-                  const act = String(l.mis_data?.card_activation_status || '').toLowerCase();
-                  return act.includes('active') || act === 'yes';
-                }).length;
-
-                const ipaApproved = filtered.filter(l => {
-                  const ipa = String(l.mis_data?.ipa_status || '').toLowerCase();
-                  return ipa.includes('approve') || ipa.includes('success');
-                }).length;
-                const ipaDeclined = filtered.filter(l => {
-                  const ipa = String(l.mis_data?.ipa_status || '').toLowerCase();
-                  return ipa.includes('decline') || ipa.includes('reject') || ipa.includes('cancel');
-                }).length;
-
-                const kycDist = {};
-                filtered.forEach(l => {
-                  const k = l.mis_data?.kyc_status || 'Unknown';
-                  kycDist[k] = (kycDist[k] || 0) + 1;
-                });
-
-                const srcDist = {};
-                filtered.forEach(l => {
-                  let s = String(l.mis_data?.source_type || '').trim();
-                  if (!s || s === '-') s = 'Blank';
-                  srcDist[s] = (srcDist[s] || 0) + 1;
-                });
-
-                const cardTypeDist = {};
-                filtered.forEach(l => {
-                  const ct = l.mis_data?.card_type || 'Unknown';
-                  cardTypeDist[ct] = (cardTypeDist[ct] || 0) + 1;
-                });
-
-                const custTypeDist = {};
-                filtered.forEach(l => {
-                  const c = l.mis_data?.customer_type || 'Unknown';
-                  custTypeDist[c] = (custTypeDist[c] || 0) + 1;
-                });
-
-                const actDist = {};
-                filtered.forEach(l => {
-                  const a = l.mis_data?.card_activation_status || 'Inactive/Unknown';
-                  actDist[a] = (actDist[a] || 0) + 1;
-                });
-
-                const pinDist = {};
-                filtered.forEach(l => {
-                  const p = l.mis_data?.PIN_CODE || l.mis_data?.pin_code || l.pincode || 'Unknown';
-                  pinDist[p] = (pinDist[p] || 0) + 1;
-                });
-                const topPincodes = Object.entries(pinDist)
-                  .map(([pincode, count]) => ({ pincode, count }))
-                  .sort((a,b) => b.count - a.count)
-                  .slice(0, 50);
-
-                const prodDist = {};
-                filtered.forEach(l => {
-                  const n = l.mis_data?.card_name || 'Unknown';
-                  prodDist[n] = (prodDist[n] || 0) + 1;
-                });
-
+                const { totalSubmit, approvedCount, rejectedCount, pendingCount, approvalRate, funnelIpa, funnelKyc, funnelDecision, funnelActive, ipaApproved, ipaDeclined, kycDist, srcDist, cardTypeDist, custTypeDist, actDist, prodDist, topPincodes } = dashStats;
+                const { stateLeadCounts, maxStateLeads, topStates } = dashGeoData;
                 return (
                   <>
                     {/* KPI SUMMARY CARDS */}
@@ -2434,13 +2932,13 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                     </div>
 
                     {/* 9 VISUALS GRID */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem' }} className="leads-visuals-grid">
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem' }} className="leads-visuals-grid">
                       
                       {/* Visual 1: Funnel Chart */}
                       <div className="glass-panel" style={{ padding: '2rem', gridColumn: 'span 2', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                         <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1.5rem', width: '100%', textAlign: 'left' }}>Conversion Funnel Stages (%)</h4>
                         <div style={{ width: '100%', maxWidth: '600px', display: 'flex', justifyContent: 'center', overflowX: 'auto' }}>
-                          <svg width="600" height="300" viewBox="0 0 600 300" style={{ display: 'block', overflow: 'visible' }}>
+                          <svg width="100%" viewBox="0 0 600 300" style={{ display: 'block', overflow: 'visible' }}>
                             {(() => {
                               const stages = [
                                 { name: 'Total Application Submit', count: totalSubmit, pct: 100, color: 'var(--ink)' },
@@ -2661,186 +3159,175 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                       </div>
 
                       {/* Visual 8: India Map Pincode Heatmap */}
-                      {(() => {
-                        const stateLeadCounts = aggregateLeadsByState(filtered);
-                        const maxStateLeads = Math.max(1, ...Object.values(stateLeadCounts));
-                        const topStates = Object.entries(stateLeadCounts)
-                          .map(([state, count]) => ({ state, count }))
-                          .sort((a, b) => b.count - a.count)
-                          .slice(0, 15);
+                      <div className="glass-panel" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', gridColumn: 'span 2' }}>
+                        <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '0.25rem' }}>Geographic Heatmap — India (Pincode & State Mapping)</h4>
+                        <p style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', marginBottom: '1.5rem' }}>Leads density by Indian state, mapped from residence pincodes and MIS state data.</p>
 
-                        return (
-                          <div className="glass-panel" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', gridColumn: 'span 2' }}>
-                            <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '0.25rem' }}>Geographic Heatmap — India (Pincode & State Mapping)</h4>
-                            <p style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', marginBottom: '1.5rem' }}>Leads density by Indian state, mapped from residence pincodes and MIS state data.</p>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: '2rem' }} className="admin-split-grid">
+                          {/* India SVG Map */}
+                          <div className="india-map-container" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', background: 'var(--paper-2)', borderRadius: '16px', padding: '1.25rem', minHeight: '420px', border: '1px solid var(--line)', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)', position: 'relative' }}>
+                            <svg width="100%" height="100%" viewBox="40 0 460 430" style={{ display: 'block', overflow: 'visible', maxHeight: '400px' }} preserveAspectRatio="xMidYMid meet">
+                              <defs>
+                                <filter id="india-state-glow">
+                                  <feGaussianBlur in="SourceGraphic" stdDeviation="2" />
+                                </filter>
+                                <linearGradient id="indiaHeatGrad" x1="0" y1="0" x2="1" y2="0">
+                                  <stop offset="0%" stopColor="rgba(224, 168, 46, 0.06)" />
+                                  <stop offset="50%" stopColor="rgba(224, 168, 46, 0.50)" />
+                                  <stop offset="100%" stopColor="rgba(198, 138, 18, 0.92)" />
+                                </linearGradient>
+                              </defs>
 
-                            <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: '2rem' }} className="admin-split-grid">
-                              {/* India SVG Map */}
-                              <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', background: 'var(--paper-2)', borderRadius: '16px', padding: '1.25rem', minHeight: '420px', border: '1px solid var(--line)', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)', position: 'relative' }}>
-                                <svg width="100%" height="100%" viewBox="40 0 460 430" style={{ display: 'block', overflow: 'visible', maxHeight: '400px' }} preserveAspectRatio="xMidYMid meet">
-                                  <defs>
-                                    <filter id="india-state-glow">
-                                      <feGaussianBlur in="SourceGraphic" stdDeviation="2" />
-                                    </filter>
-                                    <linearGradient id="indiaHeatGrad" x1="0" y1="0" x2="1" y2="0">
-                                      <stop offset="0%" stopColor="rgba(224, 168, 46, 0.06)" />
-                                      <stop offset="50%" stopColor="rgba(224, 168, 46, 0.50)" />
-                                      <stop offset="100%" stopColor="rgba(198, 138, 18, 0.92)" />
-                                    </linearGradient>
-                                  </defs>
+                              {/* India country boundary outline */}
+                              <path
+                                d="M168,30 L185,22 L210,18 L225,25 L235,15 L260,10 L280,15 L285,30 L275,45 L262,48 L248,78 L262,85 L258,100 L242,108 L265,112 L290,120 L310,135 L330,130 L350,128 L370,120 L385,125 L392,140 L410,60 L435,52 L460,55 L478,65 L475,80 L470,95 L465,108 L455,112 L452,125 L448,112 L455,100 L445,90 L425,85 L400,88 L380,95 L385,100 L395,105 L395,115 L395,130 L400,142 L398,155 L400,165 L408,172 L415,168 L418,155 L418,145 L428,140 L435,148 L432,160 L425,165 L415,140 L420,115 L435,118 L442,130 L435,122 L445,95 L448,105 L388,158 L382,175 L378,195 L375,215 L368,228 L358,232 L350,220 L342,238 L325,248 L308,250 L292,245 L280,235 L280,262 L295,270 L305,285 L310,305 L298,318 L282,325 L268,320 L255,335 L248,355 L238,370 L225,382 L210,388 L195,392 L178,395 L165,398 L158,385 L150,398 L142,408 L135,400 L130,385 L128,368 L132,350 L138,340 L145,332 L130,320 L120,305 L115,288 L112,275 L105,250 L95,240 L80,235 L68,225 L60,210 L55,195 L62,180 L70,168 L95,160 L98,125 L105,110 L130,105 L155,108 L165,40 Z"
+                                fill="none"
+                                stroke="var(--ink)"
+                                strokeWidth="1.5"
+                                strokeLinejoin="round"
+                                opacity="0.15"
+                              />
 
-                                  {/* India country boundary outline */}
-                                  <path
-                                    d="M168,30 L185,22 L210,18 L225,25 L235,15 L260,10 L280,15 L285,30 L275,45 L262,48 L248,78 L262,85 L258,100 L242,108 L265,112 L290,120 L310,135 L330,130 L350,128 L370,120 L385,125 L392,140 L410,60 L435,52 L460,55 L478,65 L475,80 L470,95 L465,108 L455,112 L452,125 L448,112 L455,100 L445,90 L425,85 L400,88 L380,95 L385,100 L395,105 L395,115 L395,130 L400,142 L398,155 L400,165 L408,172 L415,168 L418,155 L418,145 L428,140 L435,148 L432,160 L425,165 L415,140 L420,115 L435,118 L442,130 L435,122 L445,95 L448,105 L388,158 L382,175 L378,195 L375,215 L368,228 L358,232 L350,220 L342,238 L325,248 L308,250 L292,245 L280,235 L280,262 L295,270 L305,285 L310,305 L298,318 L282,325 L268,320 L255,335 L248,355 L238,370 L225,382 L210,388 L195,392 L178,395 L165,398 L158,385 L150,398 L142,408 L135,400 L130,385 L128,368 L132,350 L138,340 L145,332 L130,320 L120,305 L115,288 L112,275 L105,250 L95,240 L80,235 L68,225 L60,210 L55,195 L62,180 L70,168 L95,160 L98,125 L105,110 L130,105 L155,108 L165,40 Z"
-                                    fill="none"
-                                    stroke="var(--ink)"
-                                    strokeWidth="1.5"
-                                    strokeLinejoin="round"
-                                    opacity="0.15"
-                                  />
+                              {/* Render each state */}
+                              {Object.entries(INDIA_STATES_SVG).map(([stateName, stateData]) => {
+                                const count = stateLeadCounts[stateName] || 0;
+                                const fillColor = getHeatColor(count, maxStateLeads);
+                                const isActive = count > 0;
+                                return (
+                                  <g key={stateName} style={{ cursor: isActive ? 'pointer' : 'default' }}>
+                                    <path
+                                      d={stateData.path}
+                                      fill={fillColor}
+                                      stroke="var(--line)"
+                                      strokeWidth="0.8"
+                                      strokeLinejoin="round"
+                                      style={{ transition: 'fill 0.3s ease, stroke-width 0.2s ease' }}
+                                      onMouseEnter={(e) => {
+                                        e.target.style.strokeWidth = '2';
+                                        e.target.style.stroke = 'var(--gold)';
+                                        const tooltip = document.getElementById('india-map-tooltip');
+                                        if (tooltip) {
+                                          tooltip.textContent = `${stateName}: ${count} Lead${count !== 1 ? 's' : ''}`;
+                                          tooltip.style.opacity = '1';
+                                          tooltip.style.transform = 'translateY(0)';
+                                        }
+                                      }}
+                                      onMouseLeave={(e) => {
+                                        e.target.style.strokeWidth = '0.8';
+                                        e.target.style.stroke = 'var(--line)';
+                                        const tooltip = document.getElementById('india-map-tooltip');
+                                        if (tooltip) {
+                                          tooltip.style.opacity = '0';
+                                          tooltip.style.transform = 'translateY(4px)';
+                                        }
+                                      }}
+                                    />
+                                    {/* Pulsing dot for active states */}
+                                    {isActive && count >= (maxStateLeads * 0.15) && (
+                                      <>
+                                        <circle cx={stateData.cx} cy={stateData.cy} r="3" fill="var(--gold)" opacity="0.9">
+                                          <animate attributeName="r" values="3;7;3" dur="2.5s" repeatCount="indefinite" />
+                                          <animate attributeName="opacity" values="0.9;0.15;0.9" dur="2.5s" repeatCount="indefinite" />
+                                        </circle>
+                                        <circle cx={stateData.cx} cy={stateData.cy} r="2" fill="var(--paper)" stroke="var(--gold-deep)" strokeWidth="0.8" />
+                                      </>
+                                    )}
+                                  </g>
+                                );
+                              })}
 
-                                  {/* Render each state */}
-                                  {Object.entries(INDIA_STATES_SVG).map(([stateName, stateData]) => {
-                                    const count = stateLeadCounts[stateName] || 0;
-                                    const fillColor = getHeatColor(count, maxStateLeads);
-                                    const isActive = count > 0;
+                              {/* Legend bar */}
+                              <rect x="60" y="405" width="160" height="8" rx="4" fill="url(#indiaHeatGrad)" />
+                              <text x="60" y="422" fontSize="7" fill="hsl(var(--text-muted))">0</text>
+                              <text x="136" y="422" fontSize="7" fill="hsl(var(--text-muted))" textAnchor="middle">Leads</text>
+                              <text x="220" y="422" fontSize="7" fill="hsl(var(--text-muted))" textAnchor="end">{maxStateLeads}</text>
+                            </svg>
+
+                            {/* Floating tooltip */}
+                            <div
+                              id="india-map-tooltip"
+                              style={{
+                                position: 'absolute', bottom: '12px', left: '50%', transform: 'translateX(-50%) translateY(4px)',
+                                background: 'var(--paper)', border: '1px solid var(--line)', borderRadius: '8px',
+                                padding: '0.4rem 0.8rem', fontSize: '0.75rem', fontWeight: 700, color: 'var(--ink)',
+                                boxShadow: '0 4px 12px rgba(0,0,0,0.08)', opacity: 0, transition: 'opacity 0.2s, transform 0.2s',
+                                pointerEvents: 'none', whiteSpace: 'nowrap', zIndex: 10
+                              }}
+                            />
+                          </div>
+
+                          {/* Right panel: Top States + Top Pincodes */}
+                          <div style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                            {/* Top States */}
+                            <div>
+                              <h5 style={{ fontSize: '0.8rem', fontWeight: 700, marginBottom: '0.75rem', color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                <MapPin size={13} /> Top States
+                              </h5>
+                              <div style={{ maxHeight: '180px', overflowY: 'auto', paddingRight: '0.25rem' }}>
+                                {topStates.length === 0 ? (
+                                  <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', padding: '1.5rem 1rem', textAlign: 'center', background: 'var(--paper-2)', borderRadius: '12px' }}>
+                                    No state data available
+                                  </div>
+                                ) : (
+                                  topStates.map((item, idx) => {
+                                    const maxCount = Math.max(1, topStates[0]?.count || 1);
+                                    const pct = (item.count / maxCount) * 100;
                                     return (
-                                      <g key={stateName} style={{ cursor: isActive ? 'pointer' : 'default' }}>
-                                        <path
-                                          d={stateData.path}
-                                          fill={fillColor}
-                                          stroke="var(--line)"
-                                          strokeWidth="0.8"
-                                          strokeLinejoin="round"
-                                          style={{ transition: 'fill 0.3s ease, stroke-width 0.2s ease' }}
-                                          onMouseEnter={(e) => {
-                                            e.target.style.strokeWidth = '2';
-                                            e.target.style.stroke = 'var(--gold)';
-                                            const tooltip = document.getElementById('india-map-tooltip');
-                                            if (tooltip) {
-                                              tooltip.textContent = `${stateName}: ${count} Lead${count !== 1 ? 's' : ''}`;
-                                              tooltip.style.opacity = '1';
-                                              tooltip.style.transform = 'translateY(0)';
-                                            }
-                                          }}
-                                          onMouseLeave={(e) => {
-                                            e.target.style.strokeWidth = '0.8';
-                                            e.target.style.stroke = 'var(--line)';
-                                            const tooltip = document.getElementById('india-map-tooltip');
-                                            if (tooltip) {
-                                              tooltip.style.opacity = '0';
-                                              tooltip.style.transform = 'translateY(4px)';
-                                            }
-                                          }}
-                                        />
-                                        {/* Pulsing dot for active states */}
-                                        {isActive && count >= (maxStateLeads * 0.15) && (
-                                          <>
-                                            <circle cx={stateData.cx} cy={stateData.cy} r="3" fill="var(--gold)" opacity="0.9">
-                                              <animate attributeName="r" values="3;7;3" dur="2.5s" repeatCount="indefinite" />
-                                              <animate attributeName="opacity" values="0.9;0.15;0.9" dur="2.5s" repeatCount="indefinite" />
-                                            </circle>
-                                            <circle cx={stateData.cx} cy={stateData.cy} r="2" fill="var(--paper)" stroke="var(--gold-deep)" strokeWidth="0.8" />
-                                          </>
-                                        )}
-                                      </g>
+                                      <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', padding: '0.5rem 0.65rem', background: 'var(--paper-2)', borderRadius: '10px', marginBottom: '0.4rem', border: '1px solid var(--line)' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem', fontWeight: 700 }}>
+                                          <span style={{ color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                            <span style={{ height: '8px', width: '8px', borderRadius: '2px', background: getHeatColor(item.count, maxStateLeads), border: '1px solid var(--gold)' }} />
+                                            {item.state}
+                                          </span>
+                                          <span style={{ color: 'var(--gold-deep)', fontFamily: 'var(--font-mono)' }}>{item.count}</span>
+                                        </div>
+                                        <div style={{ height: '5px', background: 'var(--line)', borderRadius: '3px', overflow: 'hidden' }}>
+                                          <div style={{ height: '100%', width: `${pct}%`, background: 'var(--gold)', borderRadius: '3px', transition: 'width 0.5s ease-out' }} />
+                                        </div>
+                                      </div>
                                     );
-                                  })}
-
-                                  {/* Legend bar */}
-                                  <rect x="60" y="405" width="160" height="8" rx="4" fill="url(#indiaHeatGrad)" />
-                                  <text x="60" y="422" fontSize="7" fill="hsl(var(--text-muted))">0</text>
-                                  <text x="136" y="422" fontSize="7" fill="hsl(var(--text-muted))" textAnchor="middle">Leads</text>
-                                  <text x="220" y="422" fontSize="7" fill="hsl(var(--text-muted))" textAnchor="end">{maxStateLeads}</text>
-                                </svg>
-
-                                {/* Floating tooltip */}
-                                <div
-                                  id="india-map-tooltip"
-                                  style={{
-                                    position: 'absolute', bottom: '12px', left: '50%', transform: 'translateX(-50%) translateY(4px)',
-                                    background: 'var(--paper)', border: '1px solid var(--line)', borderRadius: '8px',
-                                    padding: '0.4rem 0.8rem', fontSize: '0.75rem', fontWeight: 700, color: 'var(--ink)',
-                                    boxShadow: '0 4px 12px rgba(0,0,0,0.08)', opacity: 0, transition: 'opacity 0.2s, transform 0.2s',
-                                    pointerEvents: 'none', whiteSpace: 'nowrap', zIndex: 10
-                                  }}
-                                />
+                                  })
+                                )}
                               </div>
+                            </div>
 
-                              {/* Right panel: Top States + Top Pincodes */}
-                              <div style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                                {/* Top States */}
-                                <div>
-                                  <h5 style={{ fontSize: '0.8rem', fontWeight: 700, marginBottom: '0.75rem', color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                    <MapPin size={13} /> Top States
-                                  </h5>
-                                  <div style={{ maxHeight: '180px', overflowY: 'auto', paddingRight: '0.25rem' }}>
-                                    {topStates.length === 0 ? (
-                                      <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', padding: '1.5rem 1rem', textAlign: 'center', background: 'var(--paper-2)', borderRadius: '12px' }}>
-                                        No state data available
-                                      </div>
-                                    ) : (
-                                      topStates.map((item, idx) => {
-                                        const maxCount = Math.max(1, topStates[0]?.count || 1);
-                                        const pct = (item.count / maxCount) * 100;
-                                        return (
-                                          <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', padding: '0.5rem 0.65rem', background: 'var(--paper-2)', borderRadius: '10px', marginBottom: '0.4rem', border: '1px solid var(--line)' }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem', fontWeight: 700 }}>
-                                              <span style={{ color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                                                <span style={{ height: '8px', width: '8px', borderRadius: '2px', background: getHeatColor(item.count, maxStateLeads), border: '1px solid var(--gold)' }} />
-                                                {item.state}
-                                              </span>
-                                              <span style={{ color: 'var(--gold-deep)', fontFamily: 'var(--font-mono)' }}>{item.count}</span>
-                                            </div>
-                                            <div style={{ height: '5px', background: 'var(--line)', borderRadius: '3px', overflow: 'hidden' }}>
-                                              <div style={{ height: '100%', width: `${pct}%`, background: 'var(--gold)', borderRadius: '3px', transition: 'width 0.5s ease-out' }} />
-                                            </div>
-                                          </div>
-                                        );
-                                      })
-                                    )}
+                            {/* Top Pincodes */}
+                            <div>
+                              <h5 style={{ fontSize: '0.8rem', fontWeight: 700, marginBottom: '0.75rem', color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                <Activity size={13} /> Top Pincodes
+                              </h5>
+                              <div style={{ maxHeight: '180px', overflowY: 'auto', paddingRight: '0.25rem' }}>
+                                {topPincodes.length === 0 ? (
+                                  <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', padding: '1.5rem 1rem', textAlign: 'center', background: 'var(--paper-2)', borderRadius: '12px' }}>
+                                    No active pincodes found
                                   </div>
-                                </div>
-
-                                {/* Top Pincodes */}
-                                <div>
-                                  <h5 style={{ fontSize: '0.8rem', fontWeight: 700, marginBottom: '0.75rem', color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                    <Activity size={13} /> Top Pincodes
-                                  </h5>
-                                  <div style={{ maxHeight: '180px', overflowY: 'auto', paddingRight: '0.25rem' }}>
-                                    {topPincodes.length === 0 ? (
-                                      <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', padding: '1.5rem 1rem', textAlign: 'center', background: 'var(--paper-2)', borderRadius: '12px' }}>
-                                        No active pincodes found
+                                ) : (
+                                  topPincodes.slice(0, 20).map((item, idx) => {
+                                    const maxCount = Math.max(1, topPincodes[0]?.count || 1);
+                                    const pct = (item.count / maxCount) * 100;
+                                    const mappedState = pincodeToState(item.pincode);
+                                    return (
+                                      <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', padding: '0.5rem 0.65rem', background: 'var(--paper-2)', borderRadius: '10px', marginBottom: '0.4rem', border: '1px solid var(--line)' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem', fontWeight: 700 }}>
+                                          <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                            <span style={{ height: '6px', width: '6px', borderRadius: '50%', background: 'var(--gold)' }} />
+                                            {item.pincode}
+                                            {mappedState && <span style={{ fontFamily: 'inherit', fontSize: '0.65rem', color: 'hsl(var(--text-muted))', fontWeight: 500 }}>({mappedState})</span>}
+                                          </span>
+                                          <span style={{ color: 'var(--gold-deep)' }}>{item.count}</span>
+                                        </div>
+                                        <div style={{ height: '5px', background: 'var(--line)', borderRadius: '3px', overflow: 'hidden' }}>
+                                          <div style={{ height: '100%', width: `${pct}%`, background: 'var(--gold)', borderRadius: '3px', transition: 'width 0.5s ease-out' }} />
+                                        </div>
                                       </div>
-                                    ) : (
-                                      topPincodes.slice(0, 20).map((item, idx) => {
-                                        const maxCount = Math.max(1, topPincodes[0]?.count || 1);
-                                        const pct = (item.count / maxCount) * 100;
-                                        const mappedState = pincodeToState(item.pincode);
-                                        return (
-                                          <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', padding: '0.5rem 0.65rem', background: 'var(--paper-2)', borderRadius: '10px', marginBottom: '0.4rem', border: '1px solid var(--line)' }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem', fontWeight: 700 }}>
-                                              <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                                                <span style={{ height: '6px', width: '6px', borderRadius: '50%', background: 'var(--gold)' }} />
-                                                {item.pincode}
-                                                {mappedState && <span style={{ fontFamily: 'inherit', fontSize: '0.65rem', color: 'hsl(var(--text-muted))', fontWeight: 500 }}>({mappedState})</span>}
-                                              </span>
-                                              <span style={{ color: 'var(--gold-deep)' }}>{item.count}</span>
-                                            </div>
-                                            <div style={{ height: '5px', background: 'var(--line)', borderRadius: '3px', overflow: 'hidden' }}>
-                                              <div style={{ height: '100%', width: `${pct}%`, background: 'var(--gold)', borderRadius: '3px', transition: 'width 0.5s ease-out' }} />
-                                            </div>
-                                          </div>
-                                        );
-                                      })
-                                    )}
-                                  </div>
-                                </div>
+                                    );
+                                  })
+                                )}
                               </div>
                             </div>
                           </div>
-                        );
-                      })()}
+                        </div>
+                      </div>
 
                       {/* Visual 9: Product Des / Card Name */}
                       <div className="glass-panel" style={{ padding: '1.5rem', gridColumn: 'span 2' }}>
@@ -2872,7 +3359,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
                           <button 
                             type="button"
-                            onClick={() => handleExportMISLeads(filtered)} 
+                            onClick={() => handleExportMISLeads(filteredMappedLeads)} 
                             className="btn-primary" 
                             style={{ padding: '0.4rem 0.85rem', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
                           >
@@ -2897,8 +3384,8 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                               <th style={{ width: '40px', padding: '0.75rem', textAlign: 'center' }}>
                                 <input 
                                   type="checkbox"
-                                  checked={filtered.length > 0 && selectedMappedLeads.length === filtered.length}
-                                  onChange={() => handleSelectAllMappedLeads(filtered)}
+                                  checked={filteredMappedLeads.length > 0 && selectedMappedLeads.length === filteredMappedLeads.length}
+                                  onChange={() => handleSelectAllMappedLeads(filteredMappedLeads)}
                                   style={{ cursor: 'pointer' }}
                                 />
                               </th>
@@ -2913,15 +3400,15 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                             </tr>
                           </thead>
                           <tbody>
-                            {filtered.length === 0 ? (
+                            {filteredMappedLeads.length === 0 ? (
                               <tr>
                                 <td colSpan="9" style={{ textAlign: 'center', padding: '3rem', color: 'hsl(var(--text-muted))' }}>
                                   No mapped leads match the current filters.
                                 </td>
                               </tr>
                             ) : (
-                              filtered.map((lead, idx) => (
-                                <tr key={idx} style={{ borderBottom: '1px solid var(--line)', transition: 'background 0.2s' }}>
+                              paginatedLeads.map((lead, idx) => (
+                                <tr key={lead.id || idx} style={{ borderBottom: '1px solid var(--line)', transition: 'background 0.2s' }}>
                                   <td style={{ padding: '0.75rem', textAlign: 'center' }}>
                                     <input 
                                       type="checkbox"
@@ -2977,6 +3464,38 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                           </tbody>
                         </table>
                       </div>
+
+                      {/* Pagination Controls */}
+                      {filteredMappedLeads.length > DASH_PAGE_SIZE && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid var(--line)', flexWrap: 'wrap', gap: '0.75rem' }}>
+                          <div style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>
+                            Showing {((dashPage - 1) * DASH_PAGE_SIZE) + 1} to {Math.min(dashPage * DASH_PAGE_SIZE, filteredMappedLeads.length)} of {filteredMappedLeads.length} leads
+                          </div>
+                          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                            <button
+                              type="button"
+                              onClick={() => setDashPage(p => Math.max(1, p - 1))}
+                              disabled={dashPage === 1}
+                              className="btn-secondary"
+                              style={{ padding: '0.35rem 0.75rem', fontSize: '0.75rem', opacity: dashPage === 1 ? 0.5 : 1 }}
+                            >
+                              Previous
+                            </button>
+                            <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--ink)', padding: '0 0.5rem' }}>
+                              Page {dashPage} of {totalDashPages}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setDashPage(p => Math.min(totalDashPages, p + 1))}
+                              disabled={dashPage === totalDashPages}
+                              className="btn-secondary"
+                              style={{ padding: '0.35rem 0.75rem', fontSize: '0.75rem', opacity: dashPage === totalDashPages ? 0.5 : 1 }}
+                            >
+                              Next
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </>
                 );
@@ -2986,7 +3505,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
           {/* CARDS TAB */}
           {activeTab === 'cards' && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '2rem', alignItems: 'start' }} className="admin-split-grid">
+            <div className="admin-split-grid desktop-split-container" style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '1.5rem', alignItems: 'start' }}>
               
               {/* Card Editor / Creator */}
               <div className="glass-panel">
@@ -3161,11 +3680,11 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
               </div>
 
               {/* Cards Inventory */}
-              <div className="glass-panel">
-                <h3 style={{ fontSize: '1.2rem', marginBottom: '1.5rem' }}>Cards Catalog ({cards.length})</h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div className="glass-panel desktop-panel-fill" style={{ padding: '1.25rem', boxSizing: 'border-box' }}>
+                <h3 style={{ fontSize: '1.2rem', marginBottom: '1.25rem', flexShrink: 0 }}>Cards Catalog ({cards.length})</h3>
+                <div className="desktop-scroll-panel" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', paddingRight: '0.35rem' }}>
                   {cards.map(card => (
-                    <div key={card.id} className="glass-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div key={card.id} className="glass-card admin-card-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                           <h4 style={{ fontWeight: 700 }}>{card.name}</h4>
@@ -3208,7 +3727,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
           {/* AGENTS TAB */}
           {activeTab === 'agents' && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '2rem', alignItems: 'start' }} className="admin-split-grid">
+            <div className="admin-split-grid desktop-split-container" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '1.5rem', alignItems: 'start' }}>
               
               {/* Agent Form */}
               <div className="glass-panel">
@@ -3295,6 +3814,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                         value={editingAgent ? (editingAgent.password || '') : newAgentForm.password}
                         onChange={(e) => editingAgent ? setEditingAgent({ ...editingAgent, password: e.target.value }) : setNewAgentForm({ ...newAgentForm, password: e.target.value })}
                         required={!editingAgent}
+                        autoComplete="new-password"
                       />
                     </div>
                   </div>
@@ -3349,11 +3869,11 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
               </div>
 
               {/* Agent Roster */}
-              <div className="glass-panel">
-                <h3 style={{ fontSize: '1.2rem', marginBottom: '1.5rem' }}>Registered Agents ({agents.length})</h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
+              <div className="glass-panel desktop-panel-fill" style={{ padding: '1.25rem', boxSizing: 'border-box' }}>
+                <h3 style={{ fontSize: '1.2rem', marginBottom: '1.25rem', flexShrink: 0 }}>Registered Agents ({agents.length})</h3>
+                <div className="desktop-scroll-panel" style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem', paddingRight: '0.35rem' }}>
                   {agents.map(ag => (
-                    <div key={ag.id} className="glass-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div key={ag.id} className="glass-card admin-card-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                           <h4 style={{ fontWeight: 700 }}>{ag.name}</h4>
@@ -3387,55 +3907,221 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
           {/* LOCATIONS TAB */}
           {activeTab === 'locations' && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '2rem', alignItems: 'start' }} className="admin-split-grid">
+            <div className="admin-split-grid desktop-split-container" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.5fr', gap: '1.75rem' }}>
               
-              {/* Location Creator */}
-              <div className="glass-panel">
-                <h3 style={{ fontSize: '1.2rem', marginBottom: '1.5rem' }}>Create Location / Kiosk</h3>
-                <form onSubmit={handleCreateLocation}>
-                  <div className="form-group" style={{ marginBottom: '1.5rem' }}>
-                    <label className="form-label">Location Identifier Name</label>
-                    <input 
-                      type="text" 
-                      className="form-input" 
-                      placeholder="e.g. Mumbai Airport Kiosk" 
-                      value={newLocName}
-                      onChange={(e) => setNewLocName(e.target.value)}
-                      required 
-                    />
+              {/* Left Column: Location Creator (Top) & Locations Catalog (Bottom) */}
+              <div className="desktop-panel-fill" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                {/* Location Creator */}
+                <div className="glass-panel" style={{ padding: '1.5rem', flexShrink: 0, borderTop: '3px solid var(--gold-deep)' }}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--ink)', fontWeight: 700 }}>
+                    <MapPin size={20} style={{ color: 'var(--gold-deep)' }} />
+                    <span>Create Location / Kiosk</span>
+                  </h3>
+                  <form onSubmit={handleCreateLocation}>
+                    <div className="form-group" style={{ marginBottom: '1.15rem' }}>
+                      <label className="form-label" style={{ fontSize: '0.76rem', fontWeight: 600, color: 'var(--muted)', letterSpacing: '0.3px', textTransform: 'uppercase', marginBottom: '6px' }}>Location Identifier Name</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        placeholder="e.g. Mumbai Airport Kiosk" 
+                        value={newLocName}
+                        onChange={(e) => setNewLocName(e.target.value)}
+                        required 
+                        style={{ fontSize: '0.85rem', padding: '0.55rem 0.75rem', borderRadius: '4px' }}
+                      />
+                    </div>
+                    <button type="submit" className="btn-primary" style={{ width: '100%', fontSize: '0.85rem', padding: '0.6rem', borderRadius: '4px', letterSpacing: '0.3px' }} disabled={isSubmitting}>
+                      {isSubmitting ? 'Creating...' : 'Add Location Master Entry'}
+                    </button>
+                  </form>
+                </div>
+
+                {/* Locations Catalog */}
+                <div className="glass-panel desktop-panel-fill" style={{ flex: 1, padding: '1.5rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexShrink: 0 }}>
+                    <h3 style={{ fontSize: '1.15rem', color: 'var(--ink)', fontWeight: 700 }}>Locations Catalog</h3>
+                    <span style={{ background: 'rgba(224, 168, 46, 0.12)', color: 'var(--gold-deep)', padding: '0.15rem 0.6rem', borderRadius: '12px', fontSize: '0.72rem', fontWeight: 800 }}>
+                      {locations.length} ACTIVE
+                    </span>
                   </div>
-                   <button type="submit" className="btn-primary" style={{ width: '100%' }} disabled={isSubmitting}>
-                     {isSubmitting ? 'Creating...' : 'Add Location Master Entry'}
-                   </button>
-                </form>
+                  <div className="desktop-scroll-panel" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', paddingRight: '0.25rem' }}>
+                    {locations.length === 0 ? (
+                      <div style={{ textAlign: 'center', padding: '2rem 1rem', color: 'var(--muted)', fontSize: '0.85rem' }}>No locations added yet.</div>
+                    ) : (
+                      locations.map(loc => (
+                        <div key={loc.id} className="glass-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.85rem 1.15rem', borderLeft: '4px solid var(--gold)', background: 'var(--paper-2)', transition: 'transform 0.15s ease' }}>
+                          <div>
+                            <span style={{ fontWeight: 700, fontSize: '0.92rem', color: 'var(--ink)' }}>{loc.name}</span>
+                            <div style={{ fontSize: '0.72rem', color: 'hsl(var(--text-muted))', marginTop: '0.25rem' }}>
+                              Registered: {loc.created_at ? loc.created_at.slice(0, 10) : 'N/A'}
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                            <button 
+                              onClick={() => handleToggleLocActive(loc)} 
+                              className="btn-secondary" 
+                              style={{ 
+                                padding: '0.25rem 0.65rem', 
+                                fontSize: '0.72rem', 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                gap: '0.25rem', 
+                                borderRadius: '4px',
+                                background: loc.active ? 'rgba(22, 163, 123, 0.08)' : 'rgba(224, 168, 46, 0.08)',
+                                borderColor: loc.active ? 'rgba(22, 163, 123, 0.25)' : 'rgba(224, 168, 46, 0.25)', 
+                                color: loc.active ? 'var(--mint)' : 'var(--gold-deep)',
+                                fontWeight: 700
+                              }}
+                            >
+                              {loc.active ? 'Active' : 'Inactive'}
+                            </button>
+                            <button 
+                              onClick={() => handleDeleteLoc(loc.id)} 
+                              style={{ 
+                                color: 'var(--err)', 
+                                background: 'rgba(209, 67, 67, 0.08)', 
+                                border: '1px solid rgba(209, 67, 67, 0.15)', 
+                                padding: '0.35rem', 
+                                borderRadius: '4px', 
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                              }}
+                              title="Delete location"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
               </div>
 
-              {/* Location Catalog */}
-              <div className="glass-panel">
-                <h3 style={{ fontSize: '1.2rem', marginBottom: '1.5rem' }}>Locations Catalog ({locations.length})</h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                  {locations.map(loc => (
-                    <div key={loc.id} className="glass-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.5rem' }}>
-                      <div>
-                        <span style={{ fontWeight: 600, fontSize: '1rem' }}>{loc.name}</span>
-                        <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', marginTop: '0.25rem' }}>
-                          Registered: {loc.created_at ? loc.created_at.slice(0, 10) : ''}
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                        <button 
-                          onClick={() => handleToggleLocActive(loc)} 
-                          className="btn-secondary" 
-                          style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.25rem', borderColor: loc.active ? 'hsla(145, 80%, 45%, 0.3)' : 'hsla(42, 95%, 55%, 0.3)', color: loc.active ? 'hsl(var(--accent-green))' : 'hsl(var(--accent-gold))' }}
-                        >
-                          {loc.active ? 'Active' : 'Inactive'}
-                        </button>
-                        <button onClick={() => handleDeleteLoc(loc.id)} style={{ color: 'var(--err)', background: 'none', border: 'none', cursor: 'pointer' }}>
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
+              {/* Right Column: Bank Manager */}
+              <div className="glass-panel desktop-panel-fill" style={{ gap: '1.25rem', padding: '1.5rem', boxSizing: 'border-box', borderTop: '3px solid var(--gold-deep)' }}>
+                <div style={{ flexShrink: 0 }}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--gold-deep)', fontWeight: 700 }}>
+                    <CreditCard size={20} />
+                    <span>Bank Manager</span>
+                  </h3>
+                  <p style={{ fontSize: '0.8rem', color: 'var(--muted)', margin: 0 }}>
+                    Configure partner bank choices available across credit card catalog dropdowns.
+                  </p>
+                </div>
+
+                <div className="desktop-split-container admin-split-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1.25fr', gap: '1.5rem', alignItems: 'stretch', marginTop: '0.25rem' }}>
+                  {/* Left sub-column: Add Bank Form */}
+                  <div style={{ background: 'var(--paper-2)', padding: '1.25rem', borderRadius: '6px', border: '1px solid var(--line)', display: 'flex', flexDirection: 'column', gap: '1rem', alignSelf: 'start' }}>
+                    <div>
+                      <h4 style={{ fontSize: '0.88rem', fontWeight: 700, marginBottom: '0.25rem', color: 'var(--ink)' }}>Add New Bank</h4>
+                      <p style={{ fontSize: '0.72rem', color: 'var(--muted)', margin: 0 }}>Create a new custom partner bank record.</p>
                     </div>
-                  ))}
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--muted)', letterSpacing: '0.3px', textTransform: 'uppercase', marginBottom: '5px' }}>Bank Name</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        placeholder="e.g. ICICI, Axis"
+                        value={newBankInput}
+                        onChange={(e) => setNewBankInput(e.target.value)}
+                        style={{ background: 'var(--paper)', fontSize: '0.82rem', padding: '0.5rem 0.65rem', borderRadius: '4px' }}
+                      />
+                    </div>
+                    <button 
+                      onClick={() => {
+                        const trimmed = newBankInput.trim();
+                        if (!trimmed) {
+                          showToast('Please enter a valid bank name.', 'error');
+                          return;
+                        }
+                        const current = getBankOptions();
+                        if (current.some(b => b.toLowerCase() === trimmed.toLowerCase())) {
+                          showToast('Bank already exists in the list.', 'error');
+                          return;
+                        }
+                        const updated = [...current, trimmed];
+                        handleSaveBanks(updated);
+                        setNewBankInput('');
+                      }}
+                      className="btn-primary"
+                      style={{ width: '100%', fontSize: '0.8rem', padding: '0.55rem', borderRadius: '4px' }}
+                      disabled={isSubmitting}
+                    >
+                      {isSubmitting ? 'Adding...' : 'Add Bank'}
+                    </button>
+                  </div>
+
+                  {/* Right sub-column: Configured Banks List */}
+                  <div className="desktop-panel-fill" style={{ gap: '0.85rem' }}>
+                    <h4 style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--ink)', flexShrink: 0 }}>Configured Banks</h4>
+                    <div className="desktop-scroll-panel" style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', paddingRight: '0.2rem' }}>
+                      {getBankOptions().length === 0 ? (
+                        <div style={{ fontSize: '0.8rem', color: 'hsl(var(--text-muted))', textAlign: 'center', padding: '2rem 1rem' }}>
+                          No banks configured. Defaulting to HDFC, SBI.
+                        </div>
+                      ) : (
+                        getBankOptions().map((bank, idx) => (
+                          <div 
+                            key={idx} 
+                            style={{ 
+                              display: 'flex', 
+                              justifyContent: 'space-between', 
+                              alignItems: 'center', 
+                              padding: '0.65rem 0.85rem', 
+                              background: 'var(--paper-2)', 
+                              border: '1px solid var(--line)', 
+                              borderLeft: '4px solid var(--gold-deep)',
+                              borderRadius: '4px',
+                              transition: 'transform 0.15s ease'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                              <span style={{ 
+                                display: 'inline-flex', 
+                                alignItems: 'center', 
+                                justifyContent: 'center', 
+                                width: '26px', 
+                                height: '26px', 
+                                borderRadius: '50%', 
+                                background: 'var(--gold-deep)', 
+                                color: '#fff', 
+                                fontSize: '0.78rem', 
+                                fontWeight: 800 
+                              }}>
+                                {bank.slice(0, 1).toUpperCase()}
+                              </span>
+                              <span style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--ink)' }}>{bank}</span>
+                            </div>
+                            <button 
+                              onClick={() => {
+                                const current = getBankOptions();
+                                const updated = current.filter((_, i) => i !== idx);
+                                handleSaveBanks(updated);
+                              }}
+                              style={{ 
+                                padding: '0.25rem 0.55rem', 
+                                fontSize: '0.7rem', 
+                                color: 'var(--err)', 
+                                background: 'rgba(209, 67, 67, 0.08)', 
+                                border: '1px solid rgba(209, 67, 67, 0.15)', 
+                                borderRadius: '4px', 
+                                cursor: 'pointer',
+                                fontWeight: 600,
+                                transition: 'all 0.15s'
+                              }}
+                              disabled={isSubmitting}
+                              title="Remove Bank"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -3444,209 +4130,134 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
           {/* SETTINGS TAB */}
           {activeTab === 'settings' && (
-            <div className="settings-split-grid" style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: '2rem', alignItems: 'start', minHeight: '600px' }}>
-              {/* Sidebar Menu */}
-              <div className="glass-panel" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-md)' }}>
-                <div style={{ padding: '0.5rem 0.75rem', marginBottom: '0.75rem' }}>
-                  <h4 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--gold-deep)', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <SettingsIcon size={18} />
-                    <span>Settings & API</span>
-                  </h4>
-                  <span style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>Configure your system</span>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setActiveSettingsSubTab('general')}
+            <div className="desktop-panel-fill" style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              {/* Settings sub-tabs bar (scrollable on mobile) */}
+              <div className="settings-sub-nav" style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', paddingBottom: '0.5rem', WebkitOverflowScrolling: 'touch' }}>
+                <button 
+                  onClick={() => setActiveSettingsSubTab('general')} 
                   style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.75rem',
-                    padding: '0.75rem 1rem',
-                    borderRadius: 'var(--radius-md)',
-                    border: 'none',
-                    background: activeSettingsSubTab === 'general' ? 'rgba(224, 168, 46, 0.15)' : 'transparent',
-                    color: activeSettingsSubTab === 'general' ? 'var(--gold)' : 'hsl(var(--text-secondary))',
+                    padding: '0.5rem 1rem',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    borderRadius: '6px',
+                    border: '1px solid var(--line)',
                     cursor: 'pointer',
+                    whiteSpace: 'nowrap',
                     transition: 'all 0.2s',
-                    textAlign: 'left',
-                    fontWeight: activeSettingsSubTab === 'general' ? 600 : 400
+                    background: activeSettingsSubTab === 'general' ? 'var(--gold-deep)' : 'var(--paper-2)',
+                    color: activeSettingsSubTab === 'general' ? '#fff' : 'var(--ink)'
                   }}
-                  className="settings-menu-item"
                 >
-                  <SettingsIcon size={16} />
-                  <span>General & Legal</span>
+                  General
                 </button>
-
-                <button
-                  type="button"
-                  onClick={() => setActiveSettingsSubTab('whatsapp_gateway')}
+                <button 
+                  onClick={() => setActiveSettingsSubTab('whatsapp_gateway')} 
                   style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.75rem',
-                    padding: '0.75rem 1rem',
-                    borderRadius: 'var(--radius-md)',
-                    border: 'none',
-                    background: activeSettingsSubTab === 'whatsapp_gateway' ? 'rgba(224, 168, 46, 0.15)' : 'transparent',
-                    color: activeSettingsSubTab === 'whatsapp_gateway' ? 'var(--gold)' : 'hsl(var(--text-secondary))',
+                    padding: '0.5rem 1rem',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    borderRadius: '6px',
+                    border: '1px solid var(--line)',
                     cursor: 'pointer',
+                    whiteSpace: 'nowrap',
                     transition: 'all 0.2s',
-                    textAlign: 'left',
-                    fontWeight: activeSettingsSubTab === 'whatsapp_gateway' ? 600 : 400
+                    background: activeSettingsSubTab === 'whatsapp_gateway' ? 'var(--gold-deep)' : 'var(--paper-2)',
+                    color: activeSettingsSubTab === 'whatsapp_gateway' ? '#fff' : 'var(--ink)'
                   }}
-                  className="settings-menu-item"
                 >
-                  <Layers size={16} />
-                  <span>WhatsApp Gateway</span>
+                  WhatsApp Link
                 </button>
-
-                <button
-                  type="button"
-                  onClick={() => setActiveSettingsSubTab('meta_api')}
+                <button 
+                  onClick={() => setActiveSettingsSubTab('meta_api')} 
                   style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.75rem',
-                    padding: '0.75rem 1rem',
-                    borderRadius: 'var(--radius-md)',
-                    border: 'none',
-                    background: activeSettingsSubTab === 'meta_api' ? 'rgba(224, 168, 46, 0.15)' : 'transparent',
-                    color: activeSettingsSubTab === 'meta_api' ? 'var(--gold)' : 'hsl(var(--text-secondary))',
+                    padding: '0.5rem 1rem',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    borderRadius: '6px',
+                    border: '1px solid var(--line)',
                     cursor: 'pointer',
+                    whiteSpace: 'nowrap',
                     transition: 'all 0.2s',
-                    textAlign: 'left',
-                    fontWeight: activeSettingsSubTab === 'meta_api' ? 600 : 400
+                    background: activeSettingsSubTab === 'meta_api' ? 'var(--gold-deep)' : 'var(--paper-2)',
+                    color: activeSettingsSubTab === 'meta_api' ? '#fff' : 'var(--ink)'
                   }}
-                  className="settings-menu-item"
                 >
-                  <MessageSquare size={16} />
-                  <span>Meta Cloud API</span>
+                  Meta Cloud API
                 </button>
-
-                <button
-                  type="button"
-                  onClick={() => setActiveSettingsSubTab('baileys')}
+                <button 
+                  onClick={() => setActiveSettingsSubTab('baileys')} 
                   style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.75rem',
-                    padding: '0.75rem 1rem',
-                    borderRadius: 'var(--radius-md)',
-                    border: 'none',
-                    background: activeSettingsSubTab === 'baileys' ? 'rgba(224, 168, 46, 0.15)' : 'transparent',
-                    color: activeSettingsSubTab === 'baileys' ? 'var(--gold)' : 'hsl(var(--text-secondary))',
+                    padding: '0.5rem 1rem',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    borderRadius: '6px',
+                    border: '1px solid var(--line)',
                     cursor: 'pointer',
+                    whiteSpace: 'nowrap',
                     transition: 'all 0.2s',
-                    textAlign: 'left',
-                    fontWeight: activeSettingsSubTab === 'baileys' ? 600 : 400
+                    background: activeSettingsSubTab === 'baileys' ? 'var(--gold-deep)' : 'var(--paper-2)',
+                    color: activeSettingsSubTab === 'baileys' ? '#fff' : 'var(--ink)'
                   }}
-                  className="settings-menu-item"
                 >
-                  <Smartphone size={16} />
-                  <span>Baileys Device</span>
+                  Baileys Node API
                 </button>
-
-                <button
-                  type="button"
-                  onClick={() => setActiveSettingsSubTab('csv_export')}
+                <button 
+                  onClick={() => setActiveSettingsSubTab('csv_export')} 
                   style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.75rem',
-                    padding: '0.75rem 1rem',
-                    borderRadius: 'var(--radius-md)',
-                    border: 'none',
-                    background: activeSettingsSubTab === 'csv_export' ? 'rgba(224, 168, 46, 0.15)' : 'transparent',
-                    color: activeSettingsSubTab === 'csv_export' ? 'var(--gold)' : 'hsl(var(--text-secondary))',
+                    padding: '0.5rem 1rem',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    borderRadius: '6px',
+                    border: '1px solid var(--line)',
                     cursor: 'pointer',
+                    whiteSpace: 'nowrap',
                     transition: 'all 0.2s',
-                    textAlign: 'left',
-                    fontWeight: activeSettingsSubTab === 'csv_export' ? 600 : 400
+                    background: activeSettingsSubTab === 'csv_export' ? 'var(--gold-deep)' : 'var(--paper-2)',
+                    color: activeSettingsSubTab === 'csv_export' ? '#fff' : 'var(--ink)'
                   }}
-                  className="settings-menu-item"
                 >
-                  <Download size={16} />
-                  <span>CSV Export Mapper</span>
+                  Excel Template
                 </button>
-
-                <button
-                  type="button"
-                  onClick={() => setActiveSettingsSubTab('tracking_api')}
+                <button 
+                  onClick={() => setActiveSettingsSubTab('tracking_api')} 
                   style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.75rem',
-                    padding: '0.75rem 1rem',
-                    borderRadius: 'var(--radius-md)',
-                    border: 'none',
-                    background: activeSettingsSubTab === 'tracking_api' ? 'rgba(224, 168, 46, 0.15)' : 'transparent',
-                    color: activeSettingsSubTab === 'tracking_api' ? 'var(--gold)' : 'hsl(var(--text-secondary))',
+                    padding: '0.5rem 1rem',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    borderRadius: '6px',
+                    border: '1px solid var(--line)',
                     cursor: 'pointer',
+                    whiteSpace: 'nowrap',
                     transition: 'all 0.2s',
-                    textAlign: 'left',
-                    fontWeight: activeSettingsSubTab === 'tracking_api' ? 600 : 400
+                    background: activeSettingsSubTab === 'tracking_api' ? 'var(--gold-deep)' : 'var(--paper-2)',
+                    color: activeSettingsSubTab === 'tracking_api' ? '#fff' : 'var(--ink)'
                   }}
-                  className="settings-menu-item"
                 >
-                  <Activity size={16} />
-                  <span>Meta CAPI & GTM</span>
+                  Lead Status API
                 </button>
-
                 {canDelete && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => setActiveSettingsSubTab('form_builder')}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.75rem',
-                        padding: '0.75rem 1rem',
-                        borderRadius: 'var(--radius-md)',
-                        border: 'none',
-                        background: activeSettingsSubTab === 'form_builder' ? 'rgba(224, 168, 46, 0.15)' : 'transparent',
-                        color: activeSettingsSubTab === 'form_builder' ? 'var(--gold)' : 'hsl(var(--text-secondary))',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s',
-                        textAlign: 'left',
-                        fontWeight: activeSettingsSubTab === 'form_builder' ? 600 : 400
-                      }}
-                      className="settings-menu-item"
-                    >
-                      <QrCode size={16} />
-                      <span>Landing Form Builder</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setActiveSettingsSubTab('bank_manager')}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.75rem',
-                        padding: '0.75rem 1rem',
-                        borderRadius: 'var(--radius-md)',
-                        border: 'none',
-                        background: activeSettingsSubTab === 'bank_manager' ? 'rgba(224, 168, 46, 0.15)' : 'transparent',
-                        color: activeSettingsSubTab === 'bank_manager' ? 'var(--gold)' : 'hsl(var(--text-secondary))',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s',
-                        textAlign: 'left',
-                        fontWeight: activeSettingsSubTab === 'bank_manager' ? 600 : 400
-                      }}
-                      className="settings-menu-item"
-                    >
-                      <CreditCard size={16} />
-                      <span>Bank Manager</span>
-                    </button>
-                  </>
+                  <button 
+                    onClick={() => setActiveSettingsSubTab('mis_mapping')} 
+                    style={{
+                      padding: '0.5rem 1rem',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      borderRadius: '6px',
+                      border: '1px solid var(--line)',
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                      transition: 'all 0.2s',
+                      background: activeSettingsSubTab === 'mis_mapping' ? 'var(--gold-deep)' : 'var(--paper-2)',
+                      color: activeSettingsSubTab === 'mis_mapping' ? '#fff' : 'var(--ink)'
+                    }}
+                  >
+                    Bank MIS Mapping
+                  </button>
                 )}
               </div>
 
-
               {/* Settings Sub-Tab Contents */}
-              <div className="glass-panel" style={{ flex: 1, padding: '2rem', minWidth: 0 }}>
+              <div className="glass-panel desktop-scroll-panel" style={{ width: '100%', padding: '2rem', boxSizing: 'border-box' }}>
                 {activeSettingsSubTab === 'general' && (
                   <form onSubmit={handleUpdateSettings}>
                     <h3 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.75rem', color: 'var(--gold-deep)' }}>
@@ -4317,114 +4928,264 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                   </form>
                 )}
 
-                {activeSettingsSubTab === 'form_builder' && canDelete && (
-                  <FormBuilderSettings 
-                    settings={settings}
-                    setSettings={setSettings}
-                    showToast={showToast}
-                    token={token}
-                    API_URL={API_URL}
-                  />
-                )}
-
-                {activeSettingsSubTab === 'bank_manager' && canDelete && (
-                  <div style={{ textAlign: 'left' }}>
-                    <h3 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '0.5rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.75rem', color: 'var(--gold-deep)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <CreditCard size={20} />
-                      <span>Bank Manager</span>
+                {canDelete && activeSettingsSubTab === 'mis_mapping' && (
+                  <div>
+                    <h3 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.75rem', color: 'var(--gold-deep)' }}>
+                      <Database size={20} />
+                      <span>Bank MIS Column Mapping Rules & URN Character Settings</span>
                     </h3>
-                    <p style={{ fontSize: '0.82rem', color: 'hsl(var(--text-muted))', marginBottom: '1.5rem' }}>
-                      Configure the list of banks available in the Card Manager dropdown list.
+                    <p style={{ fontSize: '0.82rem', color: 'var(--muted)', marginBottom: '1.5rem' }}>
+                      Configure custom MIS parsing rules, URN character extraction columns (e.g. <code>contant</code> for YES Bank), and field mappings for each partner bank.
                     </p>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.5fr', gap: '2rem' }} className="admin-split-grid">
-                      {/* Left: Add Bank form */}
-                      <div className="glass-panel" style={{ padding: '1.5rem', alignSelf: 'start', background: 'var(--paper-2)', border: '1px solid var(--line)' }}>
-                        <h4 style={{ fontSize: '0.92rem', fontWeight: 700, marginBottom: '1rem', color: 'var(--ink)' }}>Add New Bank</h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                      <div className="glass-card" style={{ padding: '1.25rem' }}>
                         <div className="form-group" style={{ marginBottom: '1.25rem' }}>
-                          <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 600 }}>Bank Name</label>
-                          <input 
-                            type="text" 
-                            className="form-input" 
-                            placeholder="e.g. ICICI, Axis"
-                            value={newBankInput}
-                            onChange={(e) => setNewBankInput(e.target.value)}
-                            style={{ background: 'var(--paper)', fontSize: '0.8rem', padding: '0.45rem 0.6rem' }}
-                          />
+                          <label className="form-label" style={{ fontWeight: 700 }}>Select Bank to Configure</label>
+                          <select 
+                            className="form-select"
+                            value={selectedBankConfig}
+                            onChange={(e) => setSelectedBankConfig(e.target.value)}
+                            style={{ width: '100%', maxWidth: '320px' }}
+                          >
+                            {getBankOptions().map((b, i) => (
+                              <option key={i} value={b}>{b}</option>
+                            ))}
+                          </select>
                         </div>
-                        <button 
-                          onClick={() => {
-                            const trimmed = newBankInput.trim();
-                            if (!trimmed) {
-                              showToast('Please enter a valid bank name.', 'error');
-                              return;
-                            }
-                            const current = getBankOptions();
-                            if (current.some(b => b.toLowerCase() === trimmed.toLowerCase())) {
-                              showToast('Bank already exists in the list.', 'error');
-                              return;
-                            }
-                            const updated = [...current, trimmed];
-                            handleSaveBanks(updated);
-                            setNewBankInput('');
-                          }}
-                          className="btn-primary"
-                          style={{ width: '100%', fontSize: '0.8rem', padding: '0.5rem 1rem' }}
-                          disabled={isSubmitting}
-                        >
-                          {isSubmitting ? 'Adding...' : 'Add Bank'}
-                        </button>
-                      </div>
 
-                      {/* Right: Existing Banks List */}
-                      <div className="glass-panel" style={{ padding: '1.5rem', border: '1px solid var(--line)' }}>
-                        <h4 style={{ fontSize: '0.92rem', fontWeight: 700, marginBottom: '1rem', color: 'var(--ink)' }}>Configured Banks</h4>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', maxHeight: '350px', overflowY: 'auto' }}>
-                          {getBankOptions().length === 0 ? (
-                            <div style={{ fontSize: '0.82rem', color: 'hsl(var(--text-muted))', textAlign: 'center', padding: '1.5rem 1rem' }}>
-                              No banks configured. Defaulting to HDFC, SBI.
-                            </div>
-                          ) : (
-                            getBankOptions().map((bank, idx) => (
-                              <div 
-                                key={idx} 
-                                style={{ 
-                                  display: 'flex', 
-                                  justifyContent: 'space-between', 
-                                  alignItems: 'center', 
-                                  padding: '0.6rem 0.85rem', 
-                                  background: 'var(--paper-2)', 
-                                  border: '1px solid var(--line)', 
-                                  borderRadius: 'var(--radius-sm)' 
-                                }}
-                              >
-                                <span style={{ fontWeight: 600, fontSize: '0.82rem', color: 'var(--ink)' }}>{bank}</span>
+                        {(() => {
+                          const currentCfg = bankMisMappings[selectedBankConfig] || {
+                            urn_column: selectedBankConfig.toLowerCase().includes('yes') ? 'contant' : 'APPLICATION_REFERENCE_NUMBER',
+                            extraction_mode: selectedBankConfig.toLowerCase().includes('yes') ? 'extract_urn' : 'exact',
+                            regex_pattern: 'FM\\d{4}[A-Z]\\d{7}',
+                            field_mappings: {
+                              final_decision: 'FINAL_DECISION',
+                              decline_description: 'Decline Descreption',
+                              card_name: 'Product Description',
+                              state: 'STATE',
+                              customer_type: 'CUSTOMER_TYPE',
+                              bank_reference_number: 'bank_reference_number'
+                            }
+                          };
+
+                          const updateCurrentCfg = (field, val) => {
+                            const updated = {
+                              ...bankMisMappings,
+                              [selectedBankConfig]: {
+                                ...currentCfg,
+                                [field]: val
+                              }
+                            };
+                            setBankMisMappings(updated);
+                          };
+
+                          const updateFieldMapping = (targetKey, colName) => {
+                            const updated = {
+                              ...bankMisMappings,
+                              [selectedBankConfig]: {
+                                ...currentCfg,
+                                field_mappings: {
+                                  ...(currentCfg.field_mappings || {}),
+                                  [targetKey]: colName
+                                }
+                              }
+                            };
+                            setBankMisMappings(updated);
+                          };
+
+                          const addCustomFieldMapping = () => {
+                            const customList = [...(currentCfg.custom_fields || []), { label: '', col_name: '' }];
+                            const updated = {
+                              ...bankMisMappings,
+                              [selectedBankConfig]: {
+                                ...currentCfg,
+                                custom_fields: customList
+                              }
+                            };
+                            setBankMisMappings(updated);
+                          };
+
+                          const updateCustomField = (index, prop, val) => {
+                            const customList = [...(currentCfg.custom_fields || [])];
+                            customList[index] = {
+                              ...customList[index],
+                              [prop]: val
+                            };
+                            const updated = {
+                              ...bankMisMappings,
+                              [selectedBankConfig]: {
+                                ...currentCfg,
+                                custom_fields: customList
+                              }
+                            };
+                            setBankMisMappings(updated);
+                          };
+
+                          const removeCustomField = (index) => {
+                            const customList = (currentCfg.custom_fields || []).filter((_, i) => i !== index);
+                            const updated = {
+                              ...bankMisMappings,
+                              [selectedBankConfig]: {
+                                ...currentCfg,
+                                custom_fields: customList
+                              }
+                            };
+                            setBankMisMappings(updated);
+                          };
+
+                          return (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }} className="admin-split-grid">
+                                <div className="form-group" style={{ marginBottom: 0 }}>
+                                  <label className="form-label">URN Character / Column Name</label>
+                                  <input 
+                                    type="text" 
+                                    className="form-input" 
+                                    placeholder="e.g. contant, LC2_CODE, URN"
+                                    value={currentCfg.urn_column || ''}
+                                    onChange={(e) => updateCurrentCfg('urn_column', e.target.value)}
+                                  />
+                                  <div style={{ fontSize: '0.72rem', color: 'var(--muted)', marginTop: '0.35rem' }}>
+                                    The row header character/field in uploaded MIS containing URN data (e.g. <code>contant</code> in YES Bank MIS).
+                                  </div>
+                                </div>
+
+                                <div className="form-group" style={{ marginBottom: 0 }}>
+                                  <label className="form-label">URN Extraction Mode</label>
+                                  <select 
+                                    className="form-select"
+                                    value={currentCfg.extraction_mode || 'extract_urn'}
+                                    onChange={(e) => updateCurrentCfg('extraction_mode', e.target.value)}
+                                  >
+                                    <option value="extract_urn">Extract URN from String (e.g. ENT_FM2026G2000119_971692 -&gt; FM2026G2000119)</option>
+                                    <option value="exact">Exact Column Character Match</option>
+                                    <option value="regex">Custom Regex Pattern Match</option>
+                                  </select>
+                                  <div style={{ fontSize: '0.72rem', color: 'var(--muted)', marginTop: '0.35rem' }}>
+                                    How to pull the URN out of raw cell values.
+                                  </div>
+                                </div>
+                              </div>
+
+                              {currentCfg.extraction_mode === 'regex' && (
+                                <div className="form-group" style={{ marginBottom: 0 }}>
+                                  <label className="form-label">Custom Regex Pattern</label>
+                                  <input 
+                                    type="text" 
+                                    className="form-input" 
+                                    placeholder="e.g. FM\d{4}[A-Z]\d{7}"
+                                    value={currentCfg.regex_pattern || ''}
+                                    onChange={(e) => updateCurrentCfg('regex_pattern', e.target.value)}
+                                  />
+                                </div>
+                              )}
+
+                              <div style={{ borderTop: '1px solid var(--line)', paddingTop: '1rem', marginTop: '0.5rem' }}>
+                                <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '0.75rem', color: 'var(--ink)' }}>
+                                  Core System Field Mappings for {selectedBankConfig}
+                                </h4>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }} className="admin-split-grid">
+                                  {[
+                                    { key: 'final_decision', label: 'Final Decision / Status Column' },
+                                    { key: 'decline_description', label: 'Decline Description / Reason Column' },
+                                    { key: 'card_name', label: 'Card Name / Product Column' },
+                                    { key: 'state', label: 'Customer State Column' },
+                                    { key: 'customer_type', label: 'Customer Type Column' },
+                                    { key: 'bank_reference_number', label: 'Bank Ref / Application Number Column' }
+                                  ].map(f => (
+                                    <div key={f.key} className="form-group" style={{ marginBottom: 0 }}>
+                                      <label className="form-label" style={{ fontSize: '0.75rem' }}>{f.label}</label>
+                                      <input 
+                                        type="text" 
+                                        className="form-input" 
+                                        placeholder={`e.g. ${f.key}`}
+                                        value={currentCfg.field_mappings?.[f.key] || ''}
+                                        onChange={(e) => updateFieldMapping(f.key, e.target.value)}
+                                      />
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+
+                              {/* Custom Additional Fields to Extract */}
+                              <div style={{ borderTop: '1px solid var(--line)', paddingTop: '1rem', marginTop: '0.75rem' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem' }}>
+                                  <div>
+                                    <h4 style={{ fontSize: '0.95rem', fontWeight: 700, margin: 0, color: 'var(--ink)' }}>
+                                      Custom Extracted Fields from {selectedBankConfig} MIS
+                                    </h4>
+                                    <p style={{ fontSize: '0.75rem', color: 'var(--muted)', margin: '0.15rem 0 0 0' }}>
+                                      Add any additional columns from the MIS file you want to extract and map with URN (e.g. VKYC Status, Credit Limit, Sub Source).
+                                    </p>
+                                  </div>
+                                  <button 
+                                    type="button" 
+                                    onClick={addCustomFieldMapping} 
+                                    className="btn-secondary"
+                                    style={{ padding: '0.45rem 0.85rem', fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', background: 'rgba(224, 168, 46, 0.1)', color: 'var(--gold-deep)', border: '1px solid var(--gold)' }}
+                                  >
+                                    <Plus size={14} /> Add Custom Field
+                                  </button>
+                                </div>
+
+                                {(!currentCfg.custom_fields || currentCfg.custom_fields.length === 0) ? (
+                                  <div style={{ padding: '1.25rem', background: 'var(--paper-2)', borderRadius: '6px', textAlign: 'center', fontSize: '0.8rem', color: 'var(--muted)', border: '1px dashed var(--line)' }}>
+                                    No custom extracted fields added yet. Click <strong>"+ Add Custom Field"</strong> above to extract extra columns from {selectedBankConfig} MIS.
+                                  </div>
+                                ) : (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                                    {currentCfg.custom_fields.map((field, idx) => (
+                                      <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 40px', gap: '0.75rem', alignItems: 'center', background: 'var(--paper-2)', padding: '0.65rem 0.85rem', borderRadius: '6px', border: '1px solid var(--line)' }}>
+                                        <div>
+                                          <label className="form-label" style={{ fontSize: '0.7rem', marginBottom: '3px' }}>Display Label / Property Name</label>
+                                          <input 
+                                            type="text" 
+                                            className="form-input" 
+                                            placeholder="e.g. VKYC Status, Credit Limit"
+                                            value={field.label || ''}
+                                            onChange={(e) => updateCustomField(idx, 'label', e.target.value)}
+                                            style={{ fontSize: '0.8rem', padding: '0.4rem 0.6rem' }}
+                                          />
+                                        </div>
+                                        <div>
+                                          <label className="form-label" style={{ fontSize: '0.7rem', marginBottom: '3px' }}>MIS File Column Header Name</label>
+                                          <input 
+                                            type="text" 
+                                            className="form-input" 
+                                            placeholder="e.g. vkyc_status, limit, sub_source"
+                                            value={field.col_name || ''}
+                                            onChange={(e) => updateCustomField(idx, 'col_name', e.target.value)}
+                                            style={{ fontSize: '0.8rem', padding: '0.4rem 0.6rem' }}
+                                          />
+                                        </div>
+                                        <button 
+                                          type="button" 
+                                          onClick={() => removeCustomField(idx)}
+                                          style={{ background: 'none', border: 'none', color: 'var(--err)', cursor: 'pointer', padding: '6px', borderRadius: '4px', alignSelf: 'center', marginTop: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                          title="Remove Field"
+                                        >
+                                          <Trash2 size={16} />
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+
+                              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.25rem' }}>
                                 <button 
-                                  onClick={() => {
-                                    const current = getBankOptions();
-                                    const updated = current.filter((_, i) => i !== idx);
-                                    handleSaveBanks(updated);
-                                  }}
-                                  className="btn-danger-outline"
-                                  style={{ 
-                                    padding: '0.25rem 0.55rem', 
-                                    fontSize: '0.72rem', 
-                                    color: 'var(--err)', 
-                                    background: 'none', 
-                                    border: '1px solid var(--err)', 
-                                    borderRadius: '4px', 
-                                    cursor: 'pointer',
-                                    transition: 'all 0.15s'
-                                  }}
+                                  type="button"
+                                  onClick={() => handleSaveBankMisMappings(bankMisMappings)}
+                                  className="btn-primary"
                                   disabled={isSubmitting}
-                                  title="Remove Bank"
                                 >
-                                  Remove
+                                  Save {selectedBankConfig} MIS Rules
                                 </button>
                               </div>
-                            ))
-                          )}
-                        </div>
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
                   </div>
@@ -4439,7 +5200,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
       {/* Upload MIS Modal */}
       {showUploadMISModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, backdropFilter: 'blur(8px)' }}>
+        <div className="modal-overlay">
           <div className="glass-panel admin-dialog-panel" style={{ width: '90%', maxWidth: '500px', position: 'relative', borderTop: '4px solid var(--gold)', padding: '2rem' }}>
             <button onClick={() => { setShowUploadMISModal(false); setMisFile(null); }} style={{ position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none', color: 'hsl(var(--text-primary))', cursor: 'pointer' }}>
               <X size={20} />
@@ -4450,6 +5211,20 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
             </p>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', marginBottom: '1.5rem' }}>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" style={{ fontWeight: 600, fontSize: '0.82rem', marginBottom: '0.4rem', color: 'hsl(var(--text-primary))' }}>Select Target Partner Bank MIS</label>
+                <select 
+                  className="form-select"
+                  value={selectedBankForMIS}
+                  onChange={(e) => setSelectedBankForMIS(e.target.value)}
+                  style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
+                >
+                  {getBankOptions().map((bank, i) => (
+                    <option key={i} value={bank}>{bank}</option>
+                  ))}
+                </select>
+              </div>
+
               <div 
                 style={{ 
                   border: '2px dashed var(--line)', 
@@ -4494,6 +5269,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                   setIsSubmitting(true);
                   const formData = new FormData();
                   formData.append('file', misFile);
+                  formData.append('bank', selectedBankForMIS);
                   try {
                     const res = await fetch(`${API_URL}/leads/upload-mis`, {
                       method: 'POST',
@@ -4531,7 +5307,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
       {/* MIS Result Modal */}
       {showMISResultModal && misUploadResult && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, backdropFilter: 'blur(8px)' }}>
+        <div className="modal-overlay">
           <div className="glass-panel admin-dialog-panel" style={{ width: '95%', maxWidth: '600px', position: 'relative', borderTop: '4px solid var(--mint)', padding: '2rem', maxHeight: '85vh', overflowY: 'auto' }}>
             <button onClick={() => setShowMISResultModal(false)} style={{ position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none', color: 'hsl(var(--text-primary))', cursor: 'pointer' }}>
               <X size={20} />
@@ -4618,7 +5394,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
       {/* Password Confirmation Modal */}
       {showPasswordConfirmModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1150, backdropFilter: 'blur(8px)' }}>
+        <div className="modal-overlay" style={{ zIndex: 1150 }}>
           <div className="glass-panel admin-dialog-panel" style={{ width: '90%', maxWidth: '400px', position: 'relative', borderTop: '4px solid var(--err)', padding: '2rem', textAlign: 'center' }}>
             <button onClick={() => { setShowPasswordConfirmModal(false); setPendingDeleteAction(null); }} style={{ position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none', color: 'hsl(var(--text-primary))', cursor: 'pointer' }}>
               <X size={20} />
@@ -4638,6 +5414,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
               onKeyDown={(e) => { if (e.key === 'Enter') handleConfirmDeleteMappedLeads(); }}
               className="form-control"
               style={{ width: '100%', marginBottom: '1.5rem', padding: '0.6rem 0.8rem', border: '1px solid var(--line)', borderRadius: '6px', background: 'var(--paper)', color: 'var(--ink)' }}
+              autoComplete="current-password"
               autoFocus
             />
             <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
@@ -4662,7 +5439,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
       {/* Mapped Lead MIS Details Modal */}
       {selectedMappedLead && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, backdropFilter: 'blur(8px)' }}>
+        <div className="modal-overlay">
           <div className="glass-panel admin-dialog-panel" style={{ width: '90%', maxWidth: '600px', position: 'relative', borderTop: '4px solid var(--mint)', padding: '2rem', maxHeight: '90vh', overflowY: 'auto' }}>
             <button onClick={() => setSelectedMappedLead(null)} style={{ position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none', color: 'hsl(var(--text-primary))', cursor: 'pointer' }}>
               <X size={20} />
@@ -4762,7 +5539,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
       {/* Lead Details Modal */}
       {selectedLeadDetails && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, backdropFilter: 'blur(8px)' }}>
+        <div className="modal-overlay">
           <div className="glass-panel admin-dialog-panel" style={{ width: '90%', maxWidth: '650px', position: 'relative', borderTop: '4px solid var(--gold)', maxHeight: '90vh', overflowY: 'auto', padding: '2rem' }}>
             <button onClick={() => { setSelectedLeadDetails(null); setIsEditingLead(false); }} style={{ position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none', color: 'hsl(var(--text-primary))', cursor: 'pointer' }}>
               <X size={20} />
@@ -5503,6 +6280,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
           </div>
         </div>
       )}
+      </main>
     </div>
   );
 }

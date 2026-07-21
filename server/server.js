@@ -1626,12 +1626,24 @@ function standardizeStatus(statusStr, rawRow) {
   return 'Pending';
 }
 
+function extractUrnFromText(val) {
+  if (val === null || val === undefined) return null;
+  const str = String(val).trim();
+  if (!str) return null;
+  // Match standard URN patterns inside text e.g., ENT_FM2026G2000119_971692 -> FM2026G2000119
+  const match = str.match(/FM\d{4}[A-Z]\d{7}/i) || 
+                str.match(/FM\d{4}\d{6,12}/i) || 
+                str.match(/FM[0-9A-Z]{8,18}/i);
+  return match ? match[0].toUpperCase() : null;
+}
+
 // Upload MIS Route
 app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single('file'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
   }
 
+  const selectedBank = req.body.bank ? String(req.body.bank).trim() : 'HDFC Bank';
   const filename = req.file.originalname;
   const ext = filename.split('.').pop().toLowerCase();
   let parsedRows = [];
@@ -1846,6 +1858,27 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
     }
   });
 
+  const settings = await db.getSettings();
+  let bankMappings = {};
+  if (settings.bank_mis_mappings) {
+    try {
+      bankMappings = typeof settings.bank_mis_mappings === 'string' ? JSON.parse(settings.bank_mis_mappings) : settings.bank_mis_mappings;
+    } catch(e) {
+      bankMappings = {};
+    }
+  }
+
+  const isYesBank = selectedBank.toLowerCase().includes('yes');
+  const isHdfc = selectedBank.toLowerCase().includes('hdfc');
+  const customConfig = bankMappings[selectedBank];
+
+  // If bank is not HDFC, not YES Bank, and has no custom mapping configured in settings
+  if (!isHdfc && !isYesBank && (!customConfig || !customConfig.urn_column)) {
+    return res.status(400).json({
+      error: `MIS parsing format for "${selectedBank}" is not configured yet. Please configure the MIS column mapping for "${selectedBank}" in System Settings & API or choose a supported bank (HDFC Bank, YES Bank).`
+    });
+  }
+
   let totalMatched = 0;
   let totalUnmatched = 0;
   const matchedDetails = [];
@@ -1856,7 +1889,61 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
   const unmatchedUrnsSet = new Set();
 
   for (const row of parsedRows) {
-    const excelLc2 = getRowValue(row, 'LC2_CODE') || getRowValue(row, 'urn_last') || getRowValue(row, 'urn');
+    let excelLc2 = null;
+
+    if (customConfig && customConfig.urn_column) {
+      const rawVal = getRowValue(row, customConfig.urn_column);
+      if (customConfig.extraction_mode === 'extract_urn') {
+        excelLc2 = extractUrnFromText(rawVal);
+      } else if (customConfig.extraction_mode === 'regex' && customConfig.regex_pattern) {
+        try {
+          const re = new RegExp(customConfig.regex_pattern, 'i');
+          const m = String(rawVal || '').match(re);
+          excelLc2 = m ? m[0] : rawVal;
+        } catch(e) {
+          excelLc2 = rawVal;
+        }
+      } else {
+        excelLc2 = rawVal;
+      }
+    } else if (isYesBank) {
+      // YES Bank: search contant/Contant field or scan text for pattern like ENT_FM2026G2000119_971692
+      const contantVal = getRowValue(row, 'contant') || 
+                         getRowValue(row, 'Contant') || 
+                         getRowValue(row, 'contant_field') || 
+                         getRowValue(row, 'Remark') || 
+                         getRowValue(row, 'Comments') || 
+                         getRowValue(row, 'Sub Source') || 
+                         getRowValue(row, 'Reference') || 
+                         getRowValue(row, 'urn') || 
+                         getRowValue(row, 'URN');
+      
+      excelLc2 = extractUrnFromText(contantVal);
+
+      // Fallback: If not found in primary fields, scan all cell values in row for FM... pattern
+      if (!excelLc2) {
+        for (const cellVal of Object.values(row)) {
+          const found = extractUrnFromText(cellVal);
+          if (found) {
+            excelLc2 = found;
+            break;
+          }
+        }
+      }
+    } else {
+      // Default (HDFC Bank)
+      excelLc2 = getRowValue(row, 'LC2_CODE') || getRowValue(row, 'urn_last') || getRowValue(row, 'urn') || getRowValue(row, 'URN') || getRowValue(row, 'APPLICATION_REFERENCE_NUMBER');
+      if (!excelLc2) {
+        // Fallback extract check
+        for (const cellVal of Object.values(row)) {
+          const found = extractUrnFromText(cellVal);
+          if (found) {
+            excelLc2 = found;
+            break;
+          }
+        }
+      }
+    }
     
     if (!excelLc2) {
       totalUnmatched++;
@@ -1864,7 +1951,7 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
     }
 
     const misVal = String(excelLc2).trim();
-    const misDateStr = getRowValue(row, 'CREATION_DATE_TIME') || getRowValue(row, 'Application Submit Date/Time');
+    const misDateStr = getRowValue(row, 'CREATION_DATE_TIME') || getRowValue(row, 'Application Submit Date/Time') || getRowValue(row, 'Date') || getRowValue(row, 'DATE');
     const misDate = parseDateHelper(misDateStr);
 
     let matchedLead = null;
@@ -1915,18 +2002,19 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
       misData[k] = String(v === null || v === undefined ? '' : v).trim();
     }
 
-    misData.bank_reference_number = String(getRowValue(row, 'APPLICATION_REFERENCE_NUMBER') || getRowValue(row, 'Bank Reference Number')).trim();
-    misData.application_submit_date_time = String(getRowValue(row, 'CREATION_DATE_TIME') || getRowValue(row, 'Application Submit Date/Time')).trim();
+    misData.mis_bank_name = selectedBank;
+    misData.bank_reference_number = String(getRowValue(row, 'APPLICATION_REFERENCE_NUMBER') || getRowValue(row, 'Bank Reference Number') || getRowValue(row, 'contant') || getRowValue(row, 'Contant') || '').trim();
+    misData.application_submit_date_time = String(getRowValue(row, 'CREATION_DATE_TIME') || getRowValue(row, 'Application Submit Date/Time') || getRowValue(row, 'Date')).trim();
     misData.customer_type = String(getRowValue(row, 'CUSTOMER_TYPE') || getRowValue(row, 'Customer Type')).trim();
-    misData.state = String(getRowValue(row, 'STATE') || getRowValue(row, 'state')).trim();
-    misData.ipa_status = String(getRowValue(row, 'IPA_STATUS') || getRowValue(row, 'IPA Status')).trim();
+    misData.state = String(getRowValue(row, 'STATE') || getRowValue(row, 'state') || getRowValue(row, 'State')).trim();
+    misData.ipa_status = String(getRowValue(row, 'IPA_STATUS') || getRowValue(row, 'IPA Status') || getRowValue(row, 'Status') || getRowValue(row, 'STATUS')).trim();
     misData.dap_final_flag = String(getRowValue(row, 'DAP_FINAL_FLAG') || getRowValue(row, 'DAP Final Flag')).trim();
     misData.dropoff_reason = String(getRowValue(row, 'DROPOFF_REASON') || getRowValue(row, 'DROPOFFREASON')).trim();
     misData.vkyc_status = String(getRowValue(row, 'VKYC_STATUS') || getRowValue(row, 'VKYC STATUS')).trim();
     misData.kyc_type = String(getRowValue(row, 'VKYC_CONSENT_DATE') || getRowValue(row, 'KYC TYPE') || getRowValue(row, 'KYC Success/NR')).trim();
     misData.vkyc_expiry_date = String(getRowValue(row, 'VKYC_EXPIRY_DATE') || getRowValue(row, 'VKYC EXPIRY DATE')).trim();
     misData.promo_code = String(getRowValue(row, 'PROMO_CODE') || getRowValue(row, 'PROMO CODE')).trim();
-    misData.final_decision = String(getRowValue(row, 'FINAL_DECISION') || getRowValue(row, 'FINAL DECISION')).trim();
+    misData.final_decision = String(getRowValue(row, 'FINAL_DECISION') || getRowValue(row, 'FINAL DECISION') || getRowValue(row, 'Status') || getRowValue(row, 'STATUS') || getRowValue(row, 'Decision')).trim();
     misData.final_decision_date = String(getRowValue(row, 'FINAL_DECISION_DATE') || getRowValue(row, 'FINAL DECISION DATE')).trim();
     misData.current_stage = String(getRowValue(row, 'CURRENT_STAGE') || getRowValue(row, 'CURRENT STAGE')).trim();
     misData.curable_flag = String(getRowValue(row, 'CURABLE_FLAG') || getRowValue(row, 'CURABLE FLAG')).trim();
@@ -1934,13 +2022,38 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
     misData.bkyc_status = String(getRowValue(row, 'BKYC Status') || getRowValue(row, 'BKYC Status')).trim();
     misData.kyc_status = String(getRowValue(row, 'KYC Status') || getRowValue(row, 'KYC Status')).trim();
     misData.decision_month = String(getRowValue(row, 'Decision Month') || getRowValue(row, 'Decision Month')).trim();
-    misData.decline_description = String(getRowValue(row, 'Decline Descreption') || getRowValue(row, 'Decline Descreption') || getRowValue(row, 'Remark')).trim();
+    misData.decline_description = String(getRowValue(row, 'Decline Descreption') || getRowValue(row, 'Decline Descreption') || getRowValue(row, 'Remark') || getRowValue(row, 'REMARK') || getRowValue(row, 'Comments')).trim();
     misData.decline_type = String(getRowValue(row, 'Decline Type') || getRowValue(row, 'Decline Type')).trim();
     misData.card_name = String(getRowValue(row, 'Product Des') || getRowValue(row, 'Product Description') || getRowValue(row, 'Card Name')).trim();
     misData.card_type = String(getRowValue(row, 'Card Type') || getRowValue(row, 'Card Type')).trim();
     misData.card_activation_status = String(getRowValue(row, 'Card Activation Staus') || getRowValue(row, 'Card Activation Staus')).trim();
     misData.source_type = String(getRowValue(row, 'Source Type') || getRowValue(row, 'Source Type')).trim();
     misData.kyc_completion_date = String(getRowValue(row, 'KYC Completion date') || getRowValue(row, 'KYC Completion date')).trim();
+
+    // Custom mappings override
+    if (customConfig && customConfig.field_mappings) {
+      for (const [targetKey, sourceCol] of Object.entries(customConfig.field_mappings)) {
+        if (sourceCol) {
+          const customVal = getRowValue(row, sourceCol);
+          if (customVal !== undefined && customVal !== null) {
+            misData[targetKey] = String(customVal).trim();
+          }
+        }
+      }
+    }
+
+    // Custom extracted fields array (dynamic fields configured by admin)
+    if (customConfig && Array.isArray(customConfig.custom_fields)) {
+      for (const cf of customConfig.custom_fields) {
+        if (cf && cf.col_name) {
+          const customVal = getRowValue(row, cf.col_name);
+          if (customVal !== undefined && customVal !== null) {
+            const targetProp = cf.label && cf.label.trim() ? cf.label.trim() : cf.col_name.trim();
+            misData[targetProp] = String(customVal).trim();
+          }
+        }
+      }
+    }
 
     const finalDecision = misData.final_decision || misData.ipa_status;
     const standardStatus = standardizeStatus(finalDecision, row);

@@ -1110,58 +1110,90 @@ export default function AgentPortal({ navigateTo, theme, toggleTheme }) {
 
   if (!token) {
     return (
-      <section style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '80vh', padding: '2rem' }}>
-        <div className="glass-panel" style={{ width: '100%', maxWidth: '420px', borderLeft: '3px solid hsl(var(--primary))' }}>
-          <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-            <div style={{ width: '60px', height: '60px', background: 'rgba(224, 168, 46, 0.15)', color: 'var(--gold-deep)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem auto', borderRadius: '50%' }}>
-              <User size={30} />
-            </div>
-            <h2 style={{ fontSize: '1.8rem', marginBottom: '0.25rem' }}>Agent Terminal</h2>
-            <p style={{ color: 'hsl(var(--text-secondary))', fontSize: '0.9rem' }}>Access your lead generation control console</p>
-          </div>
+      <div className="split-login-container">
+        {/* Background Video */}
+        <video 
+          autoPlay 
+          loop 
+          muted 
+          playsInline 
+          className="login-bg-video"
+        >
+          <source src="/give_me_the_video_by_removing.mp4" type="video/mp4" />
+        </video>
 
-          <form onSubmit={handleLoginSubmit}>
-            <div className="form-group">
-              <label className="form-label">Username</label>
-              <input 
-                type="text" 
-                name="username" 
-                className="form-input" 
-                placeholder="Enter username" 
-                value={loginForm.username} 
-                onChange={handleLoginChange}
-                required 
+        {/* Left Side - Login Form */}
+        <div className="login-left-side">
+          <div className="login-form-wrapper">
+            <div style={{ textAlign: 'center', marginBottom: '1.75rem' }}>
+              <img 
+                src="/logo.jpg" 
+                alt="FinMantra Logo" 
+                style={{ 
+                  width: '64px', 
+                  height: '64px', 
+                  borderRadius: '16px', 
+                  objectFit: 'cover', 
+                  margin: '0 auto 1.25rem auto', 
+                  display: 'block', 
+                  boxShadow: '0 8px 24px rgba(224, 168, 46, 0.25)',
+                  border: '1.5px solid rgba(224, 168, 46, 0.4)'
+                }} 
               />
+              <h2 style={{ fontSize: '1.9rem', fontWeight: 800, color: 'var(--ink)', marginBottom: '0.35rem' }}>Agent Terminal</h2>
+              <p style={{ color: 'hsl(var(--text-secondary))', fontSize: '0.85rem' }}>Access your lead generation control console</p>
             </div>
 
-            <div className="form-group" style={{ marginBottom: '1.5rem' }}>
-              <label className="form-label">Password</label>
-              <input 
-                type="password" 
-                name="password" 
-                className="form-input" 
-                placeholder="Enter password" 
-                value={loginForm.password} 
-                onChange={handleLoginChange}
-                required 
-              />
-            </div>
-
-            {authError && (
-              <div style={{ background: 'rgba(209, 67, 67, 0.1)', border: '1px solid rgba(209, 67, 67, 0.2)', padding: '0.75rem 1rem', borderRadius: 'var(--radius-sm)', color: 'var(--err)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>
-                {authError}
+            <form onSubmit={handleLoginSubmit}>
+              <div className="interactive-input-group">
+                <label>Username</label>
+                <input 
+                  type="text" 
+                  name="username" 
+                  className="interactive-input-field" 
+                  placeholder="Enter username" 
+                  value={loginForm.username} 
+                  onChange={handleLoginChange}
+                  autoComplete="username"
+                  required 
+                />
               </div>
-            )}
 
-            <button type="submit" className="btn-primary" style={{ width: '100%' }} disabled={loading || timeLeft > 0}>
-              {timeLeft > 0 ? `Blocked (Try again in ${formatTime(timeLeft)})` : (loading ? 'Authenticating...' : 'Access Terminal')} <LogIn size={18} />
-            </button>
-          </form>
-          <div style={{ textAlign: 'center', marginTop: '1.5rem' }}>
-            <a href="/" style={{ fontSize: '0.85rem', color: 'var(--gold-deep)', textDecoration: 'none', fontWeight: 600 }}>← Back to home</a>
+              <div className="interactive-input-group" style={{ marginBottom: '1.75rem' }}>
+                <label>Password</label>
+                <input 
+                  type="password" 
+                  name="password" 
+                  className="interactive-input-field" 
+                  placeholder="Enter password" 
+                  value={loginForm.password} 
+                  onChange={handleLoginChange}
+                  autoComplete="current-password"
+                  required 
+                />
+              </div>
+
+              {authError && (
+                <div style={{ background: 'rgba(209, 67, 67, 0.08)', border: '1px solid rgba(209, 67, 67, 0.15)', padding: '0.75rem 1rem', borderRadius: '8px', color: 'var(--err)', fontSize: '0.82rem', marginBottom: '1.25rem' }}>
+                  {authError}
+                </div>
+              )}
+
+              <button type="submit" className="btn-primary login-btn-interactive" disabled={loading || timeLeft > 0}>
+                <span>{timeLeft > 0 ? `Blocked (Try in ${formatTime(timeLeft)})` : (loading ? 'Authenticating...' : 'Access Terminal')}</span>
+                <LogIn size={18} />
+              </button>
+            </form>
+
+            <div style={{ textAlign: 'center', marginTop: '2rem' }}>
+              <a href="/" style={{ fontSize: '0.85rem', color: 'var(--gold-deep)', textDecoration: 'none', fontWeight: 700 }}>← Back to home</a>
+            </div>
           </div>
         </div>
-      </section>
+
+        {/* Right Side Spacer */}
+        <div className="login-right-side"></div>
+      </div>
     );
   }
 
