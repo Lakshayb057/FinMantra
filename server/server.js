@@ -31,7 +31,10 @@ Object.defineProperty(Layer.prototype, 'handle', {
   }
 });
 
+const compression = require('compression');
+
 const app = express();
+app.use(compression()); // Gzip/Brotli — reduces JSON payload size by ~80-90%
 app.use(cors());
 app.use(express.json());
 

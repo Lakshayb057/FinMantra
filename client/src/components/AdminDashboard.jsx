@@ -297,17 +297,18 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
           
           if (message.type === 'LEAD_ADDED') {
             showToast(`🎉 New Lead Registered: ${message.data.full_name} (${message.data.urn})`, 'success');
-            loadAllAdminData();
+            fetchLeads(currentPage, leadsPerPage); // Only refetch leads, not everything
           } else if (message.type === 'WA_STATUS_UPDATE') {
             setBaileysStatus(message.data);
+          } else if (message.type === 'LEADS_UPDATED') {
+            fetchLeads(currentPage, leadsPerPage); // Only refetch leads
           } else if (
-            message.type === 'LEADS_UPDATED' || 
             message.type === 'CARDS_UPDATED' || 
             message.type === 'LOCATIONS_UPDATED' || 
             message.type === 'SETTINGS_UPDATED' ||
             message.type === 'AGENTS_UPDATED'
           ) {
-            loadAllAdminData();
+            loadAllAdminData(); // Full reload only for non-lead config changes
           }
         } catch (err) {
           // silent
@@ -459,11 +460,13 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
     setCurrentPage(1);
   }, [searchTerm, filterCard, filterSource, filterStartDate, filterEndDate]);
 
-  // Refetch leads when pagination/filters change
+  // Refetch leads when pagination/filters change (debounced for search)
   useEffect(() => {
-    if (isAuthenticated && token) {
+    if (!isAuthenticated || !token) return;
+    const timer = setTimeout(() => {
       fetchLeads(currentPage, leadsPerPage);
-    }
+    }, searchTerm ? 400 : 0); // Debounce search, instant for other filters
+    return () => clearTimeout(timer);
   }, [currentPage, leadsPerPage, searchTerm, filterCard, filterSource, filterStartDate, filterEndDate, isAuthenticated, token]);
 
   const showToast = (text, type = 'success') => {

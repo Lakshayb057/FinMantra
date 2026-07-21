@@ -83,9 +83,12 @@ if (!isLocalhost && !connectionUrl.includes('sslmode=')) {
 const pgConnectionString = require('pg-connection-string');
 const pgConfig = pgConnectionString.parse(connectionUrl);
 pgConfig.ssl = sslConfig;
-pgConfig.max = 20;
-pgConfig.idleTimeoutMillis = 30000;
-pgConfig.connectionTimeoutMillis = 10000;
+pgConfig.max = 25;
+pgConfig.idleTimeoutMillis = 20000;
+pgConfig.connectionTimeoutMillis = 5000;
+pgConfig.keepAlive = true;
+pgConfig.keepAliveInitialDelayMillis = 10000;
+pgConfig.statement_timeout = 30000; // Kill queries running >30s
 
 const pool = new Pool(pgConfig);
 
@@ -310,6 +313,11 @@ async function initPgSchema() {
       await client.query("CREATE INDEX IF NOT EXISTS idx_leads_mis_status ON leads (mis_status) WHERE mis_status IS NOT NULL");
       await client.query("CREATE INDEX IF NOT EXISTS idx_leads_mis_mapped_at ON leads (mis_mapped_at DESC) WHERE mis_status IS NOT NULL");
       await client.query("CREATE INDEX IF NOT EXISTS idx_leads_created_at ON leads (created_at DESC)");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_agent_id ON leads (agent_id)");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_card_id ON leads (card_id)");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_source ON leads (source)");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_phone ON leads (phone)");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_urn ON leads (urn)");
     } catch (migErr) {}
 
     try {
@@ -548,8 +556,12 @@ const db = {
   },
 
   async getLeadsFiltered({ agentId, page = 1, limit = 50, search = '', card = '', source = '', startDate = '', endDate = '' }) {
-    let query = 'SELECT * FROM leads';
-    let countQuery = 'SELECT COUNT(*) FROM leads';
+    const LEAD_COLUMNS = `id, urn, full_name, phone, email, city, employment, income_range,
+      card_id, card_name, card_bank, source, agent_id, agent_name, agent_location, consent,
+      created_at, mis_status, mis_mapped_at, pan_no, pincode, has_credit_card, monthly_income,
+      dob, mother_name, current_address, designation, redirect_url`;
+
+    let whereClause = '';
     const params = [];
     const clauses = [];
     
@@ -579,27 +591,16 @@ const db = {
     }
     
     if (clauses.length > 0) {
-      const whereClause = ' WHERE ' + clauses.join(' AND ');
-      query += whereClause;
-      countQuery += whereClause;
+      whereClause = ' WHERE ' + clauses.join(' AND ');
     }
     
-    // Get total matching count
-    const countRes = await pool.query(countQuery, params);
-    const total = parseInt(countRes.rows[0].count, 10);
-    
-    // Pagination
+    // Pagination params
     const offset = (page - 1) * limit;
-    query += ' ORDER BY created_at DESC LIMIT $' + (params.length + 1) + ' OFFSET $' + (params.length + 2);
-    params.push(limit, offset);
-    
-    const res = await pool.query(query, params);
-    const leads = res.rows.map(row => ({
-      ...row,
-      utm_params: typeof row.utm_params === 'string' ? JSON.parse(row.utm_params) : (row.utm_params || {})
-    }));
-    
-    // Today's leads count (IST)
+    const dataParams = [...params, limit, offset];
+    const limitIdx = params.length + 1;
+    const offsetIdx = params.length + 2;
+
+    // Today's IST date
     const todayISTStr = new Date().toLocaleString("en-US", {timeZone: "Asia/Kolkata"});
     const todayISTDate = new Date(todayISTStr);
     const yyyy = todayISTDate.getFullYear();
@@ -607,11 +608,21 @@ const db = {
     const dd = String(todayISTDate.getDate()).padStart(2, '0');
     const todayIST = `${yyyy}-${mm}-${dd}`;
 
-    const todayRes = await pool.query('SELECT COUNT(*) FROM leads WHERE created_at >= $1::timestamp', [todayIST + ' 00:00:00']);
+    // Run ALL 3 queries in parallel — this is the biggest single speed-up
+    const [countRes, dataRes, todayRes] = await Promise.all([
+      pool.query(`SELECT COUNT(*) FROM leads${whereClause}`, params),
+      pool.query(
+        `SELECT ${LEAD_COLUMNS} FROM leads${whereClause} ORDER BY created_at DESC LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+        dataParams
+      ),
+      pool.query('SELECT COUNT(*) FROM leads WHERE created_at >= $1::timestamp', [todayIST + ' 00:00:00'])
+    ]);
+
+    const total = parseInt(countRes.rows[0].count, 10);
     const todaysCount = parseInt(todayRes.rows[0].count, 10);
 
     return {
-      leads,
+      leads: dataRes.rows,
       total,
       todaysCount,
       page,
