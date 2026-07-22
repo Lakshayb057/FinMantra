@@ -347,6 +347,21 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
     }
   }, [settings.csv_export_template]);
 
+  useEffect(() => {
+    if (settings.bank_mis_mappings) {
+      try {
+        const parsed = typeof settings.bank_mis_mappings === 'string'
+          ? JSON.parse(settings.bank_mis_mappings)
+          : settings.bank_mis_mappings;
+        if (parsed && typeof parsed === 'object') {
+          setBankMisMappings(parsed);
+        }
+      } catch (err) {
+        console.error('Failed to parse bank_mis_mappings:', err);
+      }
+    }
+  }, [settings.bank_mis_mappings]);
+
   const fetchLeads = async (page = 1, limit = 50) => {
     if (!token) return;
     try {
@@ -4958,18 +4973,39 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                         </div>
 
                         {(() => {
+                          const bankLower = selectedBankConfig.toLowerCase();
+                          const isYes = bankLower.includes('yes');
+                          const isHdfc = bankLower.includes('hdfc');
+
+                          const defaultUrnCol = isYes ? 'contant' : (isHdfc ? 'APPLICATION_REFERENCE_NUMBER' : 'URN');
+                          const defaultFieldMappings = isYes ? {
+                            final_decision: 'FINAL_DECISION',
+                            decline_description: 'Decline Descreption',
+                            card_name: 'Product Description',
+                            state: 'STATE',
+                            customer_type: 'CUSTOMER_TYPE',
+                            bank_reference_number: 'bank_reference_number'
+                          } : (isHdfc ? {
+                            final_decision: 'STATUS',
+                            decline_description: 'REASON',
+                            card_name: 'CARD_NAME',
+                            state: 'STATE',
+                            customer_type: 'CUSTOMER_TYPE',
+                            bank_reference_number: 'APPLICATION_REFERENCE_NUMBER'
+                          } : {
+                            final_decision: 'STATUS',
+                            decline_description: 'REASON',
+                            card_name: 'CARD_NAME',
+                            state: 'STATE',
+                            customer_type: 'CUSTOMER_TYPE',
+                            bank_reference_number: 'BANK_REF_NO'
+                          });
+
                           const currentCfg = bankMisMappings[selectedBankConfig] || {
-                            urn_column: selectedBankConfig.toLowerCase().includes('yes') ? 'contant' : 'APPLICATION_REFERENCE_NUMBER',
-                            extraction_mode: selectedBankConfig.toLowerCase().includes('yes') ? 'extract_urn' : 'exact',
+                            urn_column: defaultUrnCol,
+                            extraction_mode: 'extract_urn',
                             regex_pattern: 'FM\\d{4}[A-Z]\\d{7}',
-                            field_mappings: {
-                              final_decision: 'FINAL_DECISION',
-                              decline_description: 'Decline Descreption',
-                              card_name: 'Product Description',
-                              state: 'STATE',
-                              customer_type: 'CUSTOMER_TYPE',
-                              bank_reference_number: 'bank_reference_number'
-                            }
+                            field_mappings: defaultFieldMappings
                           };
 
                           const updateCurrentCfg = (field, val) => {
@@ -5050,7 +5086,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                                     onChange={(e) => updateCurrentCfg('urn_column', e.target.value)}
                                   />
                                   <div style={{ fontSize: '0.72rem', color: 'var(--muted)', marginTop: '0.35rem' }}>
-                                    The row header character/field in uploaded MIS containing URN data (e.g. <code>contant</code> in YES Bank MIS).
+                                    The row header character/field in uploaded MIS containing URN data for <code>{selectedBankConfig}</code>.
                                   </div>
                                 </div>
 
