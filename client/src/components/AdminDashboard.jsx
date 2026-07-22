@@ -2570,7 +2570,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                 <div className="glass-panel" style={{ width: '150px', height: '150px', borderRadius: 0, padding: '0.85rem', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', borderTop: '4px solid var(--gold-deep)', borderLeft: 'none', boxSizing: 'border-box' }}>
                   <div style={{ fontSize: '0.72rem', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Leads Today</div>
                   <div style={{ fontSize: '1.75rem', fontWeight: 800, margin: '0.25rem 0', color: 'var(--gold-deep)' }}>{todaysLeadsCount}</div>
-                  <div style={{ fontSize: '0.65rem', color: 'hsl(var(--text-muted))' }}>Since 12:00 AM</div>
+                  <div style={{ fontSize: '0.65rem', color: 'hsl(var(--text-muted))' }}>Since 12:00 AM (IST)</div>
                 </div>
 
                 <div className="glass-panel" style={{ width: '150px', height: '150px', borderRadius: 0, padding: '0.85rem', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', borderTop: '4px solid var(--gold)', borderLeft: 'none', boxSizing: 'border-box' }}>

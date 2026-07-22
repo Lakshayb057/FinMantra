@@ -588,12 +588,12 @@ const db = {
       clauses.push(`source = $${params.length}`);
     }
     if (startDate) {
-      params.push(startDate);
-      clauses.push(`created_at >= $${params.length}::timestamp`);
+      params.push(startDate + ' 00:00:00+05:30');
+      clauses.push(`created_at >= $${params.length}::timestamptz`);
     }
     if (endDate) {
-      params.push(endDate + ' 23:59:59');
-      clauses.push(`created_at <= $${params.length}::timestamp`);
+      params.push(endDate + ' 23:59:59+05:30');
+      clauses.push(`created_at <= $${params.length}::timestamptz`);
     }
     
     if (clauses.length > 0) {
@@ -606,13 +606,17 @@ const db = {
     const limitIdx = params.length + 1;
     const offsetIdx = params.length + 2;
 
-    // Today's IST date
-    const todayISTStr = new Date().toLocaleString("en-US", {timeZone: "Asia/Kolkata"});
-    const todayISTDate = new Date(todayISTStr);
-    const yyyy = todayISTDate.getFullYear();
-    const mm = String(todayISTDate.getMonth() + 1).padStart(2, '0');
-    const dd = String(todayISTDate.getDate()).padStart(2, '0');
-    const todayIST = `${yyyy}-${mm}-${dd}`;
+    // Today's IST date start (12:00:00 AM IST)
+    const formatterObj = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+    const parts = formatterObj.formatToParts(new Date());
+    const dateMap = {};
+    parts.forEach(p => dateMap[p.type] = p.value);
+    const todayISTStart = `${dateMap.year}-${dateMap.month}-${dateMap.day} 00:00:00+05:30`;
 
     // Run ALL 3 queries in parallel
     const [countRes, dataRes, todayRes] = await Promise.all([
@@ -621,7 +625,7 @@ const db = {
         `SELECT ${LEAD_COLUMNS} FROM leads${whereClause} ORDER BY created_at DESC LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
         dataParams
       ),
-      pool.query('SELECT COUNT(*) FROM leads WHERE created_at >= $1::timestamp', [todayIST + ' 00:00:00'])
+      pool.query('SELECT COUNT(*) FROM leads WHERE created_at >= $1::timestamptz', [todayISTStart])
     ]);
 
     const total = parseInt(countRes.rows[0].count, 10);
