@@ -925,7 +925,8 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
     dob,
     mother_name,
     current_address,
-    designation
+    designation,
+    company
   } = req.body;
 
   const trimmedName = full_name ? String(full_name).trim() : '';
@@ -1175,6 +1176,7 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
     mother_name: mother_name || null,
     current_address: current_address || null,
     designation: designation || null,
+    company_name: company || null,
     ip_address: (() => {
       let clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
       if (clientIp.includes(',')) {

@@ -5568,6 +5568,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                       <div><strong>PAN Number:</strong> <code style={{ color: 'var(--gold-deep)', fontWeight: 600 }}>{selectedLeadDetails.pan_no || 'N/A'}</code></div>
                       <div><strong>Employment Type:</strong> {selectedLeadDetails.employment || 'N/A'}</div>
                       <div><strong>Designation:</strong> {selectedLeadDetails.designation || 'N/A'}</div>
+                      <div><strong>Company / Employer:</strong> {selectedLeadDetails.company_name || 'N/A'}</div>
                       <div><strong>Already Has Credit Card?</strong> {selectedLeadDetails.has_credit_card || 'N/A'}</div>
                       <div><strong>Residence Pincode:</strong> <code>{selectedLeadDetails.pincode || 'N/A'}</code></div>
                       <div><strong>Net Monthly Income:</strong> {selectedLeadDetails.monthly_income ? `₹${selectedLeadDetails.monthly_income}` : 'N/A'}</div>
@@ -5764,6 +5765,16 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                           style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} 
                           value={editLeadForm.designation || ''} 
                           onChange={(e) => handleEditLeadFormChange('designation', e.target.value)} 
+                        />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>Company / Employer</label>
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} 
+                          value={editLeadForm.company_name || ''} 
+                          onChange={(e) => handleEditLeadFormChange('company_name', e.target.value)} 
                         />
                       </div>
                       <div className="form-group" style={{ marginBottom: 0 }}>
