@@ -440,6 +440,10 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
 
     setIsSubmitting(true);
     try {
+      const savedUtmStr = sessionStorage.getItem('finmantra_utm');
+      const savedUtm = savedUtmStr ? JSON.parse(savedUtmStr) : {};
+      const mergedUtm = { ...savedUtm, ...(utmParams || {}) };
+
       const res = await fetch(`${API_URL}/leads`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -453,12 +457,13 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
           current_address: `${formData.address.trim()} (Pincode: ${formData.pincode})`,
           pincode: formData.pincode,
           employment: formData.occupation,
-          designation: formData.designation.trim(),
-          company: formData.company.trim(),
+          designation: formData.designation ? formData.designation.trim() : null,
+          company: formData.company ? formData.company.trim() : null,
+          company_name: formData.company ? formData.company.trim() : null,
           consent: true,
           source: 'simplyclick_sbi',
-          ...utmParams,
-          utm_params: utmParams || null
+          ...mergedUtm,
+          utm_params: mergedUtm
         })
       });
 

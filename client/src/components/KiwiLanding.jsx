@@ -483,6 +483,10 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
     try {
       const compiledAddress = `${formData.address_locality || 'N/A'}, ${formData.address_city || 'N/A'}, ${formData.address_state || 'N/A'} - ${formData.pincode}`;
 
+      const savedUtmStr = sessionStorage.getItem('finmantra_utm');
+      const savedUtm = savedUtmStr ? JSON.parse(savedUtmStr) : {};
+      const mergedUtm = { ...savedUtm, ...(utmParams || {}) };
+
       const res = await fetch(`${API_URL}/leads`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -497,8 +501,8 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
           current_address: compiledAddress,
           consent: true,
           source: 'kiwi',
-          ...utmParams,
-          utm_params: utmParams || null
+          ...mergedUtm,
+          utm_params: mergedUtm
         })
       });
 

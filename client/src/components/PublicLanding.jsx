@@ -905,6 +905,10 @@ export default function PublicLanding({ navigateTo, utmParams }) {
     setIsSubmitting(true);
     setFormError('');
     try {
+      const savedUtmStr = sessionStorage.getItem('finmantra_utm');
+      const savedUtm = savedUtmStr ? JSON.parse(savedUtmStr) : {};
+      const mergedUtm = { ...savedUtm, ...(utmParams || {}) };
+
       const leadRes = await fetch(`${API_URL}/leads`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -916,8 +920,8 @@ export default function PublicLanding({ navigateTo, utmParams }) {
           mother_name: formData.mother_name || null,
           source: 'public',
           consent: true,
-          ...utmParams,
-          utm_params: utmParams || null
+          ...mergedUtm,
+          utm_params: mergedUtm
         })
       });
 

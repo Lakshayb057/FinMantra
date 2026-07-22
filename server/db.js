@@ -561,7 +561,11 @@ const db = {
     const LEAD_COLUMNS = `id, urn, full_name, phone, email, city, employment, income_range,
       card_id, card_name, card_bank, source, agent_id, agent_name, agent_location, consent,
       created_at, mis_status, mis_mapped_at, pan_no, pincode, has_credit_card, monthly_income,
-      dob, mother_name, current_address, designation, company_name, redirect_url`;
+      dob, mother_name, current_address, designation, company_name, redirect_url,
+      utm_source, utm_info, utm_creative_format, utm_medium, utm_campaign, utm_term, utm_content, utm_channel, utm_category, fbclid,
+      gclid, gclsrc, dclid, msclkid, ttclid, twclid, li_fat_id,
+      utm_id, utm_creative, utm_keyword, utm_matchtype, utm_network, utm_placement,
+      utm_device, utm_location, gbraid, wbraid, landing_page, first_landing_page, referrer, ad_id, utm_internal, utm_params`;
 
     let whereClause = '';
     const params = [];
@@ -610,7 +614,7 @@ const db = {
     const dd = String(todayISTDate.getDate()).padStart(2, '0');
     const todayIST = `${yyyy}-${mm}-${dd}`;
 
-    // Run ALL 3 queries in parallel — this is the biggest single speed-up
+    // Run ALL 3 queries in parallel
     const [countRes, dataRes, todayRes] = await Promise.all([
       pool.query(`SELECT COUNT(*) FROM leads${whereClause}`, params),
       pool.query(
@@ -623,8 +627,13 @@ const db = {
     const total = parseInt(countRes.rows[0].count, 10);
     const todaysCount = parseInt(todayRes.rows[0].count, 10);
 
+    const leads = dataRes.rows.map(row => ({
+      ...row,
+      utm_params: typeof row.utm_params === 'string' ? JSON.parse(row.utm_params) : (row.utm_params || {})
+    }));
+
     return {
-      leads: dataRes.rows,
+      leads,
       total,
       todaysCount,
       page,

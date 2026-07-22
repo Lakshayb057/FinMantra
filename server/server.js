@@ -1176,7 +1176,7 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
     mother_name: mother_name || null,
     current_address: current_address || null,
     designation: designation || null,
-    company_name: company || null,
+    company_name: company || company_name || null,
     ip_address: (() => {
       let clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
       if (clientIp.includes(',')) {
@@ -1321,6 +1321,8 @@ app.put('/api/leads/public/urn/:urn', async (req, res) => {
     employment,
     monthly_income,
     designation,
+    company,
+    company_name,
     pan_no,
     has_credit_card,
     pincode,
@@ -1378,6 +1380,7 @@ app.put('/api/leads/public/urn/:urn', async (req, res) => {
     }
   }
   lead.designation = designation || lead.designation;
+  lead.company_name = company || company_name || lead.company_name;
   lead.pan_no = pan_no ? String(pan_no).trim().toUpperCase() : lead.pan_no;
   lead.has_credit_card = has_credit_card || lead.has_credit_card;
   lead.pincode = pincode || lead.pincode;

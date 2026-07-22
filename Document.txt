@@ -12,6 +12,15 @@ cd ../server
 pm2 restart finmantra_backend
 
 
+AWS ClaudeShell:
+curl -s checkip.amazonaws.com
+aws ec2 authorize-security-group-ingress --group-id sg-02b959b399d171829 --protocol tcp --port 5432 --cidr 65.0.4.66/32 --region ap-south-1
+psql -h finmantra-db.cnm6keucqfmp.ap-south-1.rds.amazonaws.com -U postgres -d postgres -W
+Password: FinMantra123!
+postgres=> SELECT id, urn, full_name, phone, company_name, designation, employment, source, created_at FROM leads WHERE phone = '9519370722';
+
+
+
 AWS Console sign-in URL
 https://306678420994.signin.aws.amazon.com/console
 User name: lakshayb057@gmail.com
