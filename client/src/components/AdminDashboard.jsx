@@ -278,57 +278,68 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
     if (!isAuthenticated) return;
 
     const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = window.location.hostname === 'localhost' 
+    const wsUrl = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
       ? `ws://${window.location.hostname}:5000` 
       : `${wsProto}//${window.location.host}/api/ws`;
     let socket;
     let reconnectDelay = 5000;
+    let retryCount = 0;
+    const maxRetries = 5;
 
     const connectWebSocket = () => {
-      socket = new WebSocket(wsUrl);
+      if (retryCount >= maxRetries) return;
+      try {
+        socket = new WebSocket(wsUrl);
 
-      socket.onopen = () => {
-        reconnectDelay = 5000;
-      };
+        socket.onopen = () => {
+          reconnectDelay = 5000;
+          retryCount = 0;
+        };
 
-      socket.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data);
-          
-          if (message.type === 'LEAD_ADDED') {
-            showToast(`🎉 New Lead Registered: ${message.data.full_name} (${message.data.urn})`, 'success');
-            fetchLeads(currentPage, leadsPerPage); // Only refetch leads, not everything
-          } else if (message.type === 'WA_STATUS_UPDATE') {
-            setBaileysStatus(message.data);
-          } else if (message.type === 'LEADS_UPDATED') {
-            fetchLeads(currentPage, leadsPerPage); // Only refetch leads
-          } else if (
-            message.type === 'CARDS_UPDATED' || 
-            message.type === 'LOCATIONS_UPDATED' || 
-            message.type === 'SETTINGS_UPDATED' ||
-            message.type === 'AGENTS_UPDATED'
-          ) {
-            loadAllAdminData(); // Full reload only for non-lead config changes
+        socket.onmessage = (event) => {
+          try {
+            const message = JSON.parse(event.data);
+            
+            if (message.type === 'LEAD_ADDED') {
+              showToast(`🎉 New Lead Registered: ${message.data.full_name} (${message.data.urn})`, 'success');
+              fetchLeads(currentPage, leadsPerPage);
+            } else if (message.type === 'WA_STATUS_UPDATE') {
+              setBaileysStatus(message.data);
+            } else if (message.type === 'LEADS_UPDATED') {
+              fetchLeads(currentPage, leadsPerPage);
+            } else if (
+              message.type === 'CARDS_UPDATED' || 
+              message.type === 'LOCATIONS_UPDATED' || 
+              message.type === 'SETTINGS_UPDATED' ||
+              message.type === 'AGENTS_UPDATED'
+            ) {
+              loadAllAdminData();
+            }
+          } catch (err) {
+            // silent
           }
-        } catch (err) {
-          // silent
-        }
-      };
+        };
 
-      socket.onclose = () => {
-        reconnectDelay = Math.min(reconnectDelay * 2, 300000); // Max 5 minutes backoff
-        setTimeout(connectWebSocket, reconnectDelay);
-      };
+        socket.onclose = () => {
+          retryCount++;
+          if (retryCount < maxRetries) {
+            reconnectDelay = Math.min(reconnectDelay * 2, 60000);
+            setTimeout(connectWebSocket, reconnectDelay);
+          }
+        };
 
-      socket.onerror = () => {
-        socket.close();
-      };
+        socket.onerror = () => {
+          try { socket.close(); } catch(e) {}
+        };
+      } catch (err) {}
     };
 
     connectWebSocket();
 
     return () => {
-      if (socket) socket.close();
+      if (socket) {
+        try { socket.close(); } catch(e) {}
+      }
     };
   }, [isAuthenticated]);
 
