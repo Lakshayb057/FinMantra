@@ -282,18 +282,15 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       ? `ws://${window.location.hostname}:5000` 
       : `${wsProto}//${window.location.host}/api/ws`;
     let socket;
-    let reconnectDelay = 5000;
-    let retryCount = 0;
-    const maxRetries = 5;
+    let reconnectTimer;
+    let reconnectDelay = 3000;
 
     const connectWebSocket = () => {
-      if (retryCount >= maxRetries) return;
       try {
         socket = new WebSocket(wsUrl);
 
         socket.onopen = () => {
-          reconnectDelay = 5000;
-          retryCount = 0;
+          reconnectDelay = 3000;
         };
 
         socket.onmessage = (event) => {
@@ -301,17 +298,19 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
             const message = JSON.parse(event.data);
             
             if (message.type === 'LEAD_ADDED') {
-              showToast(`🎉 New Lead Registered: ${message.data.full_name} (${message.data.urn})`, 'success');
+              showToast(`🎉 New Lead Registered: ${message.data?.full_name || 'Customer'} (${message.data?.urn || 'Lead'})`, 'success');
               fetchLeads(currentPage, leadsPerPage);
+              if (activeTab === 'leads_dashboard' || activeTab === 'mis') fetchMISStats();
+            } else if (message.type === 'LEAD_UPDATED' || message.type === 'LEADS_UPDATED' || message.type === 'MIS_UPDATED') {
+              fetchLeads(currentPage, leadsPerPage);
+              if (activeTab === 'leads_dashboard' || activeTab === 'mis') fetchMISStats();
             } else if (message.type === 'WA_STATUS_UPDATE') {
               setBaileysStatus(message.data);
-            } else if (message.type === 'LEADS_UPDATED') {
-              fetchLeads(currentPage, leadsPerPage);
             } else if (
               message.type === 'CARDS_UPDATED' || 
+              message.type === 'AGENTS_UPDATED' || 
               message.type === 'LOCATIONS_UPDATED' || 
-              message.type === 'SETTINGS_UPDATED' ||
-              message.type === 'AGENTS_UPDATED'
+              message.type === 'SETTINGS_UPDATED'
             ) {
               loadAllAdminData();
             }
@@ -321,11 +320,10 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
         };
 
         socket.onclose = () => {
-          retryCount++;
-          if (retryCount < maxRetries) {
-            reconnectDelay = Math.min(reconnectDelay * 2, 60000);
-            setTimeout(connectWebSocket, reconnectDelay);
-          }
+          reconnectTimer = setTimeout(() => {
+            reconnectDelay = Math.min(reconnectDelay * 1.5, 30000);
+            connectWebSocket();
+          }, reconnectDelay);
         };
 
         socket.onerror = () => {
@@ -337,11 +335,12 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
     connectWebSocket();
 
     return () => {
+      if (reconnectTimer) clearTimeout(reconnectTimer);
       if (socket) {
         try { socket.close(); } catch(e) {}
       }
     };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, currentPage, leadsPerPage, activeTab]);
 
   useEffect(() => {
     if (settings.csv_export_template) {

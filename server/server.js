@@ -201,9 +201,15 @@ const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 const wssClients = new Set();
 
-wss.on('connection', (ws) => {
+function heartbeat() {
+  this.isAlive = true;
+}
+
+wss.on('connection', (ws, req) => {
+  ws.isAlive = true;
+  ws.on('pong', heartbeat);
   wssClients.add(ws);
-  console.log(`[WebSocket Server] Client connected. Active clients: ${wssClients.size}`);
+  console.log(`[WebSocket Server] Client connected from ${req.socket.remoteAddress || 'client'}. Active clients: ${wssClients.size}`);
   
   // Send welcome check
   ws.send(JSON.stringify({ type: 'WS_CONNECTED', message: 'Sync connection established with FinMantra WebSocket' }));
@@ -212,14 +218,33 @@ wss.on('connection', (ws) => {
     wssClients.delete(ws);
     console.log(`[WebSocket Server] Client disconnected. Active clients: ${wssClients.size}`);
   });
+
+  ws.on('error', (err) => {
+    console.error('[WebSocket Error]', err.message);
+    wssClients.delete(ws);
+  });
 });
+
+// Ping clients every 30s to keep connection alive through Nginx/Cloudflare proxies
+const pingInterval = setInterval(() => {
+  wss.clients.forEach((ws) => {
+    if (ws.isAlive === false) return ws.terminate();
+    ws.isAlive = false;
+    ws.ping();
+  });
+}, 30000);
+pingInterval.unref();
 
 // Broadcast Helper
 function broadcast(messageObj) {
   const payload = JSON.stringify(messageObj);
   for (const client of wssClients) {
     if (client.readyState === WebSocket.OPEN) {
-      client.send(payload);
+      try {
+        client.send(payload);
+      } catch(err) {
+        console.error('[WebSocket Broadcast Error]', err);
+      }
     }
   }
 }
