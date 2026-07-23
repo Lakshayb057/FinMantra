@@ -474,7 +474,11 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       setBaileysStatus(baileysData);
     } catch (err) {
       console.error('Error fetching admin dashboard details:', err);
-      showToast('Error syncing with database.', 'error');
+      if (String(err).includes('Failed to fetch')) {
+        showToast('Connection blocked by browser due to invalid SSL certificate on finmantra.org. Please renew SSL cert on EC2.', 'error');
+      } else {
+        showToast('Error syncing with database.', 'error');
+      }
     } finally {
       setLoading(false);
     }
