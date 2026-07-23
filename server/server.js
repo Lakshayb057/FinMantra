@@ -926,7 +926,8 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
     mother_name,
     current_address,
     designation,
-    company
+    company,
+    company_name
   } = req.body;
 
   const trimmedName = full_name ? String(full_name).trim() : '';
