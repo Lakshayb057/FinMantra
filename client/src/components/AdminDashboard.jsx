@@ -3537,31 +3537,41 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
           {/* CARDS TAB */}
           {activeTab === 'cards' && (
-            <div className="admin-split-grid desktop-split-container" style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '1.5rem', alignItems: 'start' }}>
+            <div className="admin-split-grid desktop-split-container" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '1.25rem', height: 'calc(100vh - 150px)', minHeight: '520px', alignItems: 'stretch' }}>
               
               {/* Card Editor / Creator */}
-              <div className="glass-panel">
-                <h3 style={{ fontSize: '1.2rem', marginBottom: '1.5rem' }}>
-                  {editingCard ? `Edit Card: ${editingCard.name}` : 'Add Credit Card'}
-                </h3>
+              <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '1.25rem', boxSizing: 'border-box', overflowY: 'auto' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem', flexShrink: 0 }}>
+                  <h3 style={{ fontSize: '1.15rem', margin: 0, color: 'var(--ink)' }}>
+                    {editingCard ? 'Edit Credit Card Offer' : 'Add Credit Card Offer'}
+                  </h3>
+                  {editingCard && (
+                    <span className="badge badge-info" style={{ fontSize: '0.72rem', padding: '0.25rem 0.6rem' }}>
+                      Editing: {editingCard.name}
+                    </span>
+                  )}
+                </div>
                 
-                <form onSubmit={editingCard ? handleUpdateCard : handleCreateCard}>
-                  <div className="form-group">
-                    <label className="form-label">Card Name</label>
-                    <input 
-                      type="text" 
-                      className="form-input" 
-                      value={editingCard ? editingCard.name : newCardForm.name}
-                      onChange={(e) => editingCard ? setEditingCard({ ...editingCard, name: e.target.value }) : setNewCardForm({ ...newCardForm, name: e.target.value })}
-                      required
-                    />
-                  </div>
-                  
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                    <div className="form-group">
-                      <label className="form-label">Bank Name</label>
+                <form onSubmit={editingCard ? handleUpdateCard : handleCreateCard} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', flex: 1 }}>
+                  {/* Row 1: Name, Bank, Category */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '0.75rem' }}>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.78rem', marginBottom: '0.25rem' }}>Card Name <span style={{ color: 'var(--err)' }}>*</span></label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        placeholder="e.g. SBI SimplyClick"
+                        style={{ padding: '0.45rem 0.65rem', fontSize: '0.85rem' }}
+                        value={editingCard ? editingCard.name : newCardForm.name}
+                        onChange={(e) => editingCard ? setEditingCard({ ...editingCard, name: e.target.value }) : setNewCardForm({ ...newCardForm, name: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.78rem', marginBottom: '0.25rem' }}>Bank Name <span style={{ color: 'var(--err)' }}>*</span></label>
                       <select 
                         className="form-select" 
+                        style={{ padding: '0.45rem 0.65rem', fontSize: '0.85rem' }}
                         value={editingCard ? editingCard.bank : newCardForm.bank}
                         onChange={(e) => editingCard ? setEditingCard({ ...editingCard, bank: e.target.value }) : setNewCardForm({ ...newCardForm, bank: e.target.value })}
                         required
@@ -3572,10 +3582,11 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                         ))}
                       </select>
                     </div>
-                    <div className="form-group">
-                      <label className="form-label">Category</label>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.78rem', marginBottom: '0.25rem' }}>Category</label>
                       <select 
                         className="form-select" 
+                        style={{ padding: '0.45rem 0.65rem', fontSize: '0.85rem' }}
                         value={editingCard ? editingCard.category : newCardForm.category}
                         onChange={(e) => editingCard ? setEditingCard({ ...editingCard, category: e.target.value }) : setNewCardForm({ ...newCardForm, category: e.target.value })}
                       >
@@ -3585,11 +3596,13 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                     </div>
                   </div>
 
+                  {/* Row 2: Campaign Parameters / Location */}
                   {((editingCard && editingCard.category === 'Offline') || (!editingCard && newCardForm.category === 'Offline')) && (
-                    <div className="form-group" style={{ marginTop: '1rem' }}>
-                      <label className="form-label">Location (Kiosks and Cities)</label>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.78rem', marginBottom: '0.25rem' }}>Kiosk / City Location</label>
                       <select 
                         className="form-select"
+                        style={{ padding: '0.45rem 0.65rem', fontSize: '0.85rem' }}
                         value={editingCard 
                           ? (editingCard.card_locations && editingCard.card_locations.length > 0 ? editingCard.card_locations[0] : '')
                           : (newCardForm.card_locations && newCardForm.card_locations.length > 0 ? newCardForm.card_locations[0] : '')
@@ -3604,7 +3617,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                           }
                         }}
                       >
-                        <option value="">All Locations</option>
+                        <option value="">All Locations (Open Market)</option>
                         {locations.map(loc => (
                           <option key={loc.id} value={loc.name}>{loc.name}</option>
                         ))}
@@ -3613,139 +3626,148 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                   )}
 
                   {((editingCard && editingCard.category === 'Digital') || (!editingCard && newCardForm.category === 'Digital')) && (
-                    <>
-                      <div className="form-group" style={{ marginTop: '1rem' }}>
-                        <label className="form-label">UTM Internal (Unique campaign mapping value) <span style={{ color: 'var(--err)' }}>*</span></label>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.78rem', marginBottom: '0.25rem' }}>
+                          UTM Internal (Campaign Tag) <span style={{ color: 'var(--err)' }}>*</span>
+                        </label>
                         <input 
                           type="text" 
                           className="form-input" 
-                          placeholder="e.g. regalia_gold" 
+                          placeholder="e.g. sbi_online, kiwi" 
+                          style={{ padding: '0.45rem 0.65rem', fontSize: '0.85rem' }}
                           value={editingCard ? (editingCard.utm_internal || '') : (newCardForm.utm_internal || '')}
                           onChange={(e) => editingCard 
                             ? setEditingCard({ ...editingCard, utm_internal: e.target.value }) 
                             : setNewCardForm({ ...newCardForm, utm_internal: e.target.value })}
                           required
                         />
-                        <div style={{ fontSize: '0.7rem', color: 'hsl(var(--text-muted))', marginTop: '0.25rem' }}>
-                          Enter the unique campaign UTM Internal name. This single value in the URL query parameter "utm_internal" will map to the redirect template below.
-                        </div>
                       </div>
 
-                      <div className="form-group" style={{ marginTop: '1rem' }}>
-                        <label className="form-label">Campaign Ad ID(s) (ad_id) (comma-separated)</label>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.78rem', marginBottom: '0.25rem' }}>
+                          Campaign Ad ID(s) (ad_id)
+                        </label>
                         <input 
                           type="text" 
                           className="form-input" 
                           placeholder="e.g. ad_123, ad_456" 
+                          style={{ padding: '0.45rem 0.65rem', fontSize: '0.85rem' }}
                           value={editingCard ? (editingCard.ad_id || '') : (newCardForm.ad_id || '')}
                           onChange={(e) => editingCard 
                             ? setEditingCard({ ...editingCard, ad_id: e.target.value }) 
                             : setNewCardForm({ ...newCardForm, ad_id: e.target.value })}
                         />
-                        <div style={{ fontSize: '0.7rem', color: 'hsl(var(--text-muted))', marginTop: '0.25rem' }}>
-                          Optional. Enter campaign Ad ID values separated by commas. Used as fallback matching.
-                        </div>
                       </div>
-                    </>
+                    </div>
                   )}
 
-                  <div className="form-group">
-                    <label className="form-label">Short Description</label>
-                    <textarea 
+                  {/* Row 3: Short Description */}
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.78rem', marginBottom: '0.25rem' }}>Short Description</label>
+                    <input 
+                      type="text"
                       className="form-input" 
-                      rows="3"
+                      placeholder="e.g. SBI SimplyClick Credit Card offer"
+                      style={{ padding: '0.45rem 0.65rem', fontSize: '0.85rem' }}
                       value={editingCard ? editingCard.description : newCardForm.description}
                       onChange={(e) => editingCard ? setEditingCard({ ...editingCard, description: e.target.value }) : setNewCardForm({ ...newCardForm, description: e.target.value })}
                       required
                     />
                   </div>
 
-                  <div className="form-group">
-                    <label className="form-label">Redirect URL Template</label>
+                  {/* Row 4: Redirect URL Template */}
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.78rem', marginBottom: '0.25rem' }}>Redirect URL Template <span style={{ color: 'var(--err)' }}>*</span></label>
                     <input 
                       type="text" 
                       className="form-input" 
-                      placeholder="e.g. https://applyonline.hdfcbank.com/cards/credit-cards.html?CHANNELSOURCE=TDCC&utm_internal={utm_internal}&urn={urn}"
+                      placeholder="https://bank.com/apply?name={name}&phone={phone}&urn={urn}"
+                      style={{ padding: '0.45rem 0.65rem', fontSize: '0.85rem', fontFamily: 'var(--font-mono)' }}
                       value={editingCard ? editingCard.redirect_url_template : newCardForm.redirect_url_template}
                       onChange={(e) => editingCard ? setEditingCard({ ...editingCard, redirect_url_template: e.target.value }) : setNewCardForm({ ...newCardForm, redirect_url_template: e.target.value })}
                       required
                     />
-                      <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', marginTop: '0.25rem' }}>
-                        Allowed wildcards: <code>{`{name}`}</code>, <code>{`{phone}`}</code>, <code>{`{email}`}</code>, <code>{`{urn}`}</code>, <code>{`{urn_first}`}</code>, <code>{`{urn_last}`}</code>, <code>{`{agent_id}`}</code>, <code>{`{utm_source}`}</code>, <code>{`{utm_info}`}</code>, <code>{`{utm_internal}`}</code>. The <code>{`{utm_internal}`}</code> wildcard will be replaced by the matching campaign UTM Internal name.
-                      </div>
+                    <div style={{ fontSize: '0.68rem', color: 'hsl(var(--text-muted))', marginTop: '0.25rem', display: 'flex', flexWrap: 'wrap', gap: '0.2rem 0.4rem', alignItems: 'center' }}>
+                      <span>Wildcards:</span>
+                      <code>{`{name}`}</code> <code>{`{phone}`}</code> <code>{`{email}`}</code> <code>{`{urn}`}</code> <code>{`{urn_first}`}</code> <code>{`{urn_last}`}</code> <code>{`{agent_id}`}</code> <code>{`{utm_source}`}</code> <code>{`{utm_internal}`}</code>
+                    </div>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', alignItems: 'center', marginBottom: '1.5rem' }}>
+                  {/* Row 5: Display Order, Active Status & Action Buttons */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.5fr', gap: '0.75rem', alignItems: 'end', marginTop: '0.25rem' }}>
                     <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label">Display Order</label>
+                      <label className="form-label" style={{ fontSize: '0.78rem', marginBottom: '0.25rem' }}>Display Order</label>
                       <input 
                         type="number" 
                         className="form-input" 
+                        style={{ padding: '0.45rem 0.65rem', fontSize: '0.85rem' }}
                         value={editingCard ? editingCard.display_order : newCardForm.display_order}
                         onChange={(e) => editingCard ? setEditingCard({ ...editingCard, display_order: parseInt(e.target.value) || 1 }) : setNewCardForm({ ...newCardForm, display_order: parseInt(e.target.value) || 1 })}
                         required
                       />
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '1.25rem' }}>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', paddingBottom: '0.45rem' }}>
                       <input 
                         type="checkbox" 
                         id="card-active" 
                         checked={editingCard ? editingCard.active : newCardForm.active}
                         onChange={(e) => editingCard ? setEditingCard({ ...editingCard, active: e.target.checked }) : setNewCardForm({ ...newCardForm, active: e.target.checked })}
-                        style={{ accentColor: 'hsl(var(--primary))' }}
+                        style={{ accentColor: 'hsl(var(--primary))', width: '16px', height: '16px', cursor: 'pointer' }}
                       />
-                      <label htmlFor="card-active" className="form-label" style={{ marginBottom: 0, cursor: 'pointer' }}>Active Status</label>
+                      <label htmlFor="card-active" className="form-label" style={{ marginBottom: 0, cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600 }}>Active Offer</label>
                     </div>
-                  </div>
 
-                  <div style={{ display: 'flex', gap: '1rem' }}>
-                    <button type="submit" className="btn-primary" style={{ flex: 1 }} disabled={isSubmitting}>
-                      {isSubmitting ? 'Processing...' : (editingCard ? 'Save Changes' : 'Create Card')}
-                    </button>
-                    {editingCard && (
-                      <button type="button" onClick={() => setEditingCard(null)} className="btn-secondary" style={{ flex: 1 }} disabled={isSubmitting}>
-                        Cancel
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button type="submit" className="btn-primary" style={{ flex: 1, padding: '0.55rem 0.85rem', fontSize: '0.85rem' }} disabled={isSubmitting}>
+                        {isSubmitting ? 'Saving...' : (editingCard ? 'Update Offer' : 'Create Offer')}
                       </button>
-                    )}
+                      {editingCard && (
+                        <button type="button" onClick={() => setEditingCard(null)} className="btn-secondary" style={{ padding: '0.55rem 0.85rem', fontSize: '0.85rem' }} disabled={isSubmitting}>
+                          Cancel
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </form>
               </div>
 
               {/* Cards Inventory */}
-              <div className="glass-panel desktop-panel-fill" style={{ padding: '1.25rem', boxSizing: 'border-box' }}>
-                <h3 style={{ fontSize: '1.2rem', marginBottom: '1.25rem', flexShrink: 0 }}>Cards Catalog ({cards.length})</h3>
-                <div className="desktop-scroll-panel" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', paddingRight: '0.35rem' }}>
+              <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '1.25rem', boxSizing: 'border-box', overflow: 'hidden' }}>
+                <h3 style={{ fontSize: '1.15rem', marginBottom: '0.85rem', flexShrink: 0, color: 'var(--ink)' }}>Cards Catalog ({cards.length})</h3>
+                <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.75rem', paddingRight: '0.25rem' }}>
                   {cards.map(card => (
-                    <div key={card.id} className="glass-card admin-card-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div key={card.id} className="glass-card admin-card-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.85rem' }}>
                       <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <h4 style={{ fontWeight: 700 }}>{card.name}</h4>
-                          <span className={`badge ${card.active ? 'badge-success' : 'badge-warning'}`}>
+                          <h4 style={{ fontWeight: 700, margin: 0, fontSize: '0.95rem' }}>{card.name}</h4>
+                          <span className={`badge ${card.active ? 'badge-success' : 'badge-warning'}`} style={{ fontSize: '0.68rem' }}>
                             {card.active ? 'Active' : 'Inactive'}
                           </span>
                         </div>
-                        <div style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', margin: '0.25rem 0' }}>
+                        <div style={{ fontSize: '0.78rem', color: 'hsl(var(--text-secondary))', margin: '0.2rem 0' }}>
                           {card.bank} Bank • Category: {card.category} • Order: {card.display_order}
                         </div>
                         {card.category === 'Offline' && (
-                          <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', margin: '0.25rem 0' }}>
+                          <div style={{ fontSize: '0.72rem', color: 'hsl(var(--text-muted))', margin: '0.15rem 0' }}>
                             Locations: {card.card_locations && card.card_locations.length > 0 ? card.card_locations.join(', ') : 'All Locations'}
                           </div>
                         )}
                         {card.category === 'Digital' && (card.utm_internal || card.ad_id) && (
-                          <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', margin: '0.25rem 0' }}>
+                          <div style={{ fontSize: '0.72rem', color: 'hsl(var(--text-muted))', margin: '0.15rem 0' }}>
                             UTM Internal: <span style={{ color: 'var(--gold-deep)', fontWeight: 600 }}>{card.utm_internal || card.ad_id}</span>
                           </div>
                         )}
-                        <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', maxWidth: '350px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        <div style={{ fontSize: '0.72rem', color: 'hsl(var(--text-muted))', maxWidth: '320px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: 'var(--font-mono)' }}>
                           {card.redirect_url_template}
                         </div>
                       </div>
-                      <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <button onClick={() => setEditingCard({ ...card, card_locations: card.card_locations || [] })} className="btn-secondary" style={{ padding: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <div style={{ display: 'flex', gap: '0.4rem', flexShrink: 0 }}>
+                        <button onClick={() => setEditingCard({ ...card, card_locations: card.card_locations || [] })} className="btn-secondary" title="Edit Card" style={{ padding: '0.45rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <Edit size={14} />
                         </button>
-                        <button onClick={() => handleDeleteCard(card.id)} className="btn-secondary" style={{ padding: '0.5rem', background: 'rgba(209, 67, 67, 0.1)', color: 'var(--err)', borderColor: 'rgba(209, 67, 67, 0.15)' }}>
+                        <button onClick={() => handleDeleteCard(card.id)} className="btn-secondary" title="Delete Card" style={{ padding: '0.45rem', background: 'rgba(209, 67, 67, 0.1)', color: 'var(--err)', borderColor: 'rgba(209, 67, 67, 0.15)' }}>
                           <Trash2 size={14} />
                         </button>
                       </div>
