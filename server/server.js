@@ -1809,6 +1809,42 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
         const auRows = auSheetName ? xlsx.utils.sheet_to_json(workbook.Sheets[auSheetName], { defval: '' }) : [];
         const pnbRows = pnbSheetName ? xlsx.utils.sheet_to_json(workbook.Sheets[pnbSheetName], { defval: '' }) : [];
 
+        function findStateKey(sampleRow) {
+          if (!sampleRow) return null;
+          const sampleKeys = Object.keys(sampleRow);
+          let key = sampleKeys.find(k => {
+            const clean = k.toLowerCase().replace(/[^a-z]/g, '');
+            return clean === 'currentstate' || clean === 'currentstatus' || clean === 'appstate' || clean === 'appstatus';
+          });
+          if (key) return key;
+          key = sampleKeys.find(k => {
+            const clean = k.toLowerCase();
+            return clean.includes('current') && (clean.includes('state') || clean.includes('status'));
+          });
+          if (key) return key;
+          key = sampleKeys.find(k => {
+            const clean = k.toLowerCase().replace(/[^a-z]/g, '');
+            return clean === 'status' || clean === 'misstatus' || clean === 'finalstatus';
+          });
+          if (key) return key;
+          key = sampleKeys.find(k => {
+            const clean = k.toLowerCase().trim();
+            return clean !== 'state' && clean !== 'customer_state' && (clean.includes('state') || clean.includes('status'));
+          });
+          return key || 'current_state';
+        }
+
+        function findUserIdKey(sampleRow) {
+          if (!sampleRow) return null;
+          const sampleKeys = Object.keys(sampleRow);
+          let key = sampleKeys.find(k => {
+            const clean = k.toLowerCase().replace(/[^a-z]/g, '');
+            return clean === 'userid' || clean === 'useridentifier';
+          });
+          if (key) return key;
+          return sampleKeys.find(k => k.toLowerCase().replace(/[^a-z]/g, '').includes('user')) || 'user_id';
+        }
+
         // Fast key pre-detection (runs ONCE instead of per row)
         let yesContentKey = null;
         let yesUserIdKey = null;
@@ -1824,21 +1860,22 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
             return val.includes('FM') || val.includes('fm');
           });
 
-          yesUserIdKey = sampleKeys.find(k => k.toLowerCase().replace(/[^a-z]/g, '').includes('user'));
-          yesStateKey = sampleKeys.find(k => k.toLowerCase().replace(/[^a-z]/g, '').includes('state') || k.toLowerCase().replace(/[^a-z]/g, '').includes('status'));
+          yesUserIdKey = findUserIdKey(yesRows[0]);
+          yesStateKey = findStateKey(yesRows[0]);
         }
 
         // Build user_id lookup maps for AU and PNB sheets with clean user ID Keys
         const auUserMap = new Map();
         if (auRows.length > 0) {
-          const auUserIdKey = Object.keys(auRows[0]).find(k => k.toLowerCase().replace(/[^a-z]/g, '').includes('user'));
-          const auStateKey = Object.keys(auRows[0]).find(k => k.toLowerCase().replace(/[^a-z]/g, '').includes('state') || k.toLowerCase().replace(/[^a-z]/g, '').includes('status'));
+          const auUserIdKey = findUserIdKey(auRows[0]);
+          const auStateKey = findStateKey(auRows[0]);
           for (let i = 0; i < auRows.length; i++) {
             const r = auRows[i];
             const rawUid = auUserIdKey ? r[auUserIdKey] : getRowValue(r, 'user_id');
             const uid = cleanUserId(rawUid);
             if (uid) {
-              r._state = String((auStateKey ? r[auStateKey] : getRowValue(r, 'current_state')) || '').trim();
+              const stateVal = (auStateKey ? r[auStateKey] : getRowValue(r, 'current_state')) || getRowValue(r, 'status') || '';
+              r._state = String(stateVal).trim();
               auUserMap.set(uid, r);
             }
           }
@@ -1846,14 +1883,15 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
 
         const pnbUserMap = new Map();
         if (pnbRows.length > 0) {
-          const pnbUserIdKey = Object.keys(pnbRows[0]).find(k => k.toLowerCase().replace(/[^a-z]/g, '').includes('user'));
-          const pnbStateKey = Object.keys(pnbRows[0]).find(k => k.toLowerCase().replace(/[^a-z]/g, '').includes('state') || k.toLowerCase().replace(/[^a-z]/g, '').includes('status'));
+          const pnbUserIdKey = findUserIdKey(pnbRows[0]);
+          const pnbStateKey = findStateKey(pnbRows[0]);
           for (let i = 0; i < pnbRows.length; i++) {
             const r = pnbRows[i];
             const rawUid = pnbUserIdKey ? r[pnbUserIdKey] : getRowValue(r, 'user_id');
             const uid = cleanUserId(rawUid);
             if (uid) {
-              r._state = String((pnbStateKey ? r[pnbStateKey] : getRowValue(r, 'current_state')) || '').trim();
+              const stateVal = (pnbStateKey ? r[pnbStateKey] : getRowValue(r, 'current_state')) || getRowValue(r, 'status') || '';
+              r._state = String(stateVal).trim();
               pnbUserMap.set(uid, r);
             }
           }
