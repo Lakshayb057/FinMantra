@@ -1656,23 +1656,23 @@ function getRowValue(row, targetKey) {
 }
 
 // KIWI Bank Current State Ranking Table
-// Rank 1 = AC_CREATED (Highest/Best Winning Rank)
-// Rank 13 = NOT_STARTED (Lowest/Worst Rank)
-// Lower number = Better status. Winner = bank with LOWEST rank number.
+// Rank 1 = NOT_STARTED (Lowest Rank)
+// Rank 13 = AC_CREATED (Highest Winning Rank)
+// Higher rank number = Better status. Winner = bank with HIGHEST rank number.
 const KIWI_STATUS_RANKING = {
-  'AC_CREATED': 1,              // Highest (Best)
-  'VKYC_PENDING': 2,
-  'SUBMITTED_OTP_VERIFIED': 3,
-  'SUBMITTED': 4,
-  'KYC_DONE': 5,
-  'DOC_REUPLOAD_REQUIRED': 6,
+  'NOT_STARTED': 1,             // Lowest Rank
+  'NOT_APPLICABLE': 2,
+  'REJECTED': 3,
+  'IN_PROGRESS': 4,
+  'DOC_UPLOAD_PENDING': 5,
+  'DOC_UPLOADED': 6,
   'KYC_PENDING': 7,
-  'DOC_UPLOADED': 8,
-  'DOC_UPLOAD_PENDING': 9,
-  'IN_PROGRESS': 10,
-  'REJECTED': 11,
-  'NOT_APPLICABLE': 12,
-  'NOT_STARTED': 13             // Lowest (Worst)
+  'DOC_REUPLOAD_REQUIRED': 8,
+  'KYC_DONE': 9,
+  'SUBMITTED': 10,
+  'SUBMITTED_OTP_VERIFIED': 11,
+  'VKYC_PENDING': 12,
+  'AC_CREATED': 13              // Highest Winning Rank
 };
 
 function cleanUserId(val) {
@@ -1682,31 +1682,31 @@ function cleanUserId(val) {
   return str.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
-// Returns rank number (1-13). Lower = better. 99 = unknown/unmatched.
+// Returns rank number (1-13). Higher = better. 0 = unknown/unmatched.
 function getStatusRank(statusStr) {
-  if (!statusStr) return 99;
+  if (!statusStr) return 0;
   const str = String(statusStr).trim().toUpperCase();
   const clean = str.replace(/[^A-Z0-9]/g, '');
 
-  if (clean.includes('ACCREATED') || clean.includes('ACCOUNTCREATED')) return 1;
-  if (clean.includes('VKYCPENDING') || clean.includes('VKYC')) return 2;
-  if (clean.includes('OTPVERIFIED') || clean.includes('SUBMITTEDOTP')) return 3;
-  if (clean.includes('SUBMITTED')) return 4;
-  if (clean.includes('KYCDONE') || clean.includes('KYCCOMPLETED')) return 5;
-  if (clean.includes('DOCREUPLOAD') || clean.includes('REUPLOAD')) return 6;
+  if (clean.includes('ACCREATED') || clean.includes('ACCOUNTCREATED')) return 13;
+  if (clean.includes('VKYCPENDING') || clean.includes('VKYC')) return 12;
+  if (clean.includes('OTPVERIFIED') || clean.includes('SUBMITTEDOTP')) return 11;
+  if (clean.includes('SUBMITTED')) return 10;
+  if (clean.includes('KYCDONE') || clean.includes('KYCCOMPLETED')) return 9;
+  if (clean.includes('DOCREUPLOAD') || clean.includes('REUPLOAD')) return 8;
   if (clean.includes('KYCPENDING')) return 7;
-  if (clean.includes('DOCUPLOADED') || clean.includes('DOCUMENTUPLOADED')) return 8;
-  if (clean.includes('DOCUPLOADPENDING') || clean.includes('DOCPENDING') || clean.includes('DOCUMENTPENDING')) return 9;
-  if (clean.includes('INPROGRESS') || clean.includes('PROCESSING')) return 10;
-  if (clean.includes('REJECT') || clean.includes('DECLINE') || clean.includes('CANCEL')) return 11;
-  if (clean.includes('NOTAPPLICABLE') || clean.includes('NA')) return 12;
-  if (clean.includes('NOTSTARTED')) return 13;
+  if (clean.includes('DOCUPLOADED') || clean.includes('DOCUMENTUPLOADED')) return 6;
+  if (clean.includes('DOCUPLOADPENDING') || clean.includes('DOCPENDING') || clean.includes('DOCUMENTPENDING')) return 5;
+  if (clean.includes('INPROGRESS') || clean.includes('PROCESSING')) return 4;
+  if (clean.includes('REJECT') || clean.includes('DECLINE') || clean.includes('CANCEL')) return 3;
+  if (clean.includes('NOTAPPLICABLE') || clean.includes('NA')) return 2;
+  if (clean.includes('NOTSTARTED')) return 1;
 
   const cleanUnderscore = str.replace(/[\s-]+/g, '_');
   if (KIWI_STATUS_RANKING[cleanUnderscore] !== undefined) {
     return KIWI_STATUS_RANKING[cleanUnderscore];
   }
-  return 99;
+  return 0;
 }
 
 function standardizeStatus(statusStr, rawRow) {
@@ -1979,14 +1979,14 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
             let winningState = yesState;
             let bestRank = yesRank;
 
-            if (auRank < bestRank) {
+            if (auRank > bestRank) {
               bestRank = auRank;
               winningBank = 'AU';
               winningRow = candidateAuRow;
               winningState = auState;
             }
 
-            if (pnbRank < bestRank) {
+            if (pnbRank > bestRank) {
               bestRank = pnbRank;
               winningBank = 'PNB';
               winningRow = candidatePnbRow;

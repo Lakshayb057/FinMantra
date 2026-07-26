@@ -3,20 +3,24 @@ import json
 import re
 import os
 
+# Status ranking dictionary
+# Rank 1 = NOT_STARTED (Lowest Rank)
+# Rank 13 = AC_CREATED (Highest Winning Rank)
+# Higher rank number = Better status. Winner = bank with HIGHEST rank number.
 STATUS_RANKING = {
-    'AC_CREATED': 1,
-    'VKYC_PENDING': 2,
-    'SUBMITTED_OTP_VERIFIED': 3,
-    'SUBMITTED': 4,
-    'KYC_DONE': 5,
-    'DOC_REUPLOAD_REQUIRED': 6,
+    'NOT_STARTED': 1,
+    'NOT_APPLICABLE': 2,
+    'REJECTED': 3,
+    'IN_PROGRESS': 4,
+    'DOC_UPLOAD_PENDING': 5,
+    'DOC_UPLOADED': 6,
     'KYC_PENDING': 7,
-    'DOC_UPLOADED': 8,
-    'DOC_UPLOAD_PENDING': 9,
-    'IN_PROGRESS': 10,
-    'REJECTED': 11,
-    'NOT_APPLICABLE': 12,
-    'NOT_STARTED': 13
+    'DOC_REUPLOAD_REQUIRED': 8,
+    'KYC_DONE': 9,
+    'SUBMITTED': 10,
+    'SUBMITTED_OTP_VERIFIED': 11,
+    'VKYC_PENDING': 12,
+    'AC_CREATED': 13
 }
 
 def clean_user_id(val):
@@ -29,39 +33,39 @@ def clean_user_id(val):
 
 def get_status_rank(status_str):
     if not status_str:
-        return 99
+        return 0
     s = str(status_str).strip().upper()
     clean = re.sub(r'[^A-Z0-9]', '', s)
 
     if 'ACCREATED' in clean or 'ACCOUNTCREATED' in clean:
-        return 1
+        return 13
     if 'VKYCPENDING' in clean or 'VKYC' in clean:
-        return 2
+        return 12
     if 'OTPVERIFIED' in clean or 'SUBMITTEDOTP' in clean:
-        return 3
+        return 11
     if 'SUBMITTED' in clean:
-        return 4
+        return 10
     if 'KYCDONE' in clean or 'KYCCOMPLETED' in clean:
-        return 5
+        return 9
     if 'DOCREUPLOAD' in clean or 'REUPLOAD' in clean:
-        return 6
+        return 8
     if 'KYCPENDING' in clean:
         return 7
     if 'DOCUPLOADED' in clean or 'DOCUMENTUPLOADED' in clean:
-        return 8
+        return 6
     if 'DOCUPLOADPENDING' in clean or 'DOCPENDING' in clean or 'DOCUMENTPENDING' in clean:
-        return 9
+        return 5
     if 'INPROGRESS' in clean or 'PROCESSING' in clean:
-        return 10
+        return 4
     if 'REJECT' in clean or 'DECLINE' in clean or 'CANCEL' in clean:
-        return 11
+        return 3
     if 'NOTAPPLICABLE' in clean or 'NA' in clean:
-        return 12
+        return 2
     if 'NOTSTARTED' in clean:
-        return 13
+        return 1
 
     clean_u = re.sub(r'[\s-]+', '_', s)
-    return STATUS_RANKING.get(clean_u, 99)
+    return STATUS_RANKING.get(clean_u, 0)
 
 def extract_urn(val):
     if val is None:
@@ -89,7 +93,7 @@ def parse_xlsx_fast(file_path):
                 headers_raw = next(rows_iter)
             except StopIteration:
                 return []
-            if me_not_empty(headers_raw):
+            if headers_raw and any(headers_raw):
                 headers = [str(h).strip() if h is not None else f'col_{idx}' for idx, h in enumerate(headers_raw)]
             else:
                 return []
@@ -104,9 +108,6 @@ def parse_xlsx_fast(file_path):
                         row_dict[headers[idx]] = '' if val is None else str(val).strip()
                 result.append(row_dict)
             return result
-
-        def me_not_empty(h_list):
-            return h_list and any(h_list)
 
         yes_name = next((s for s in sheet_names if 'yes' in s.lower()), None)
         au_name = next((s for s in sheet_names if 'au' in s.lower()), None)
@@ -230,19 +231,19 @@ def process_kiwi_rows(yes_rows, au_rows, pnb_rows):
         au_rank = get_status_rank(au_state)
         pnb_rank = get_status_rank(pnb_state)
 
-        # Lower rank number = better status (1 is best, 13 is worst)
+        # Higher rank number = better status (13 is best: AC_CREATED, 1 is worst: NOT_STARTED)
         winning_bank = 'YES'
         winning_row = yes_row
         winning_state = yes_state
         best_rank = yes_rank
 
-        if au_rank < best_rank:
+        if au_rank > best_rank:
             best_rank = au_rank
             winning_bank = 'AU'
             winning_row = cand_au
             winning_state = au_state
 
-        if pnb_rank < best_rank:
+        if pnb_rank > best_rank:
             best_rank = pnb_rank
             winning_bank = 'PNB'
             winning_row = cand_pnb
