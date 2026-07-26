@@ -2398,6 +2398,8 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
       misData.current_status = row.current_status || row.current_state || '';
       misData.final_decision = row.current_state || '';
       misData.bank_reference_number = String(row._extractedUrn || row.APPLICATION_REFERENCE_NUMBER || '').trim();
+      misData.application_submit_date_time = String(row.form_submit || row.registration || getRowValue(row, 'CREATION_DATE_TIME') || '').trim();
+      misData.ipa_status = String(row.ipa || getRowValue(row, 'IPA_STATUS') || getRowValue(row, 'IPA Status') || row.current_state || '').trim();
 
       misData.kiwi_metadata = {
         yes_state: row.kiwi_yes_status || '',
@@ -2410,14 +2412,14 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
         winning_rank: statusRankVal
       };
 
-      misData.registration = String(getRowValue(row, 'registration') || '').trim();
-      misData.pan_submit = String(getRowValue(row, 'Pan_Submit') || getRowValue(row, 'pan_submit') || '').trim();
-      misData.form_fetch = String(getRowValue(row, 'Form_Fetch') || getRowValue(row, 'form_fetch') || '').trim();
-      misData.form_submit = String(getRowValue(row, 'Form_Submit') || getRowValue(row, 'form_submit') || '').trim();
-      misData.ipa = String(getRowValue(row, 'IPA') || getRowValue(row, 'ipa') || '').trim();
-      misData.card_created = String(getRowValue(row, 'Card_Created') || getRowValue(row, 'card_created') || '').trim();
-      misData.vkyc = String(getRowValue(row, 'VKYC') || getRowValue(row, 'vkyc') || '').trim();
-      misData.reject_reason = String(getRowValue(row, 'reject_reason') || '').trim();
+      misData.registration = String(row.registration || getRowValue(row, 'registration') || '').trim();
+      misData.pan_submit = String(row.pan_submit || getRowValue(row, 'Pan_Submit') || '').trim();
+      misData.form_fetch = String(row.form_fetch || getRowValue(row, 'Form_Fetch') || '').trim();
+      misData.form_submit = String(row.form_submit || getRowValue(row, 'Form_Submit') || '').trim();
+      misData.ipa = String(row.ipa || getRowValue(row, 'IPA') || '').trim();
+      misData.card_created = String(row.card_created || getRowValue(row, 'Card_Created') || '').trim();
+      misData.vkyc = String(row.vkyc || getRowValue(row, 'VKYC') || '').trim();
+      misData.reject_reason = String(row.reject_reason || getRowValue(row, 'reject_reason') || '').trim();
       misData.application_id_bank_2 = String(getRowValue(row, 'application_id_bank_2') || '').trim();
       misData.first_txn = String(getRowValue(row, 'First_txn') || getRowValue(row, 'first_txn') || '').trim();
     }

@@ -23,7 +23,7 @@ STATUS_RANKING = {
     'AC_CREATED': 13
 }
 
-def clean_user_id(val):
+def clean_key_val(val):
     if val is None:
         return ''
     s = str(val).strip()
@@ -113,10 +113,10 @@ def parse_xlsx_fast(file_path):
         au_name = next((s for s in sheet_names if 'au' in s.lower()), None)
         pnb_name = next((s for s in sheet_names if 'pnb' in s.lower()), None)
 
-        if not yes_name:
-            return {"error": "YES KIWI sheet not found in uploaded Excel file."}
+        if not yes_name and not au_name and not pnb_name:
+            return {"error": "No valid KIWI sheets (YES, AU, PNB) found in uploaded Excel file."}
 
-        yes_rows = read_sheet_rows(yes_name)
+        yes_rows = read_sheet_rows(yes_name) if yes_name else []
         au_rows = read_sheet_rows(au_name) if au_name else []
         pnb_rows = read_sheet_rows(pnb_name) if pnb_name else []
 
@@ -126,144 +126,198 @@ def parse_xlsx_fast(file_path):
     except Exception as e:
         return {"error": f"Failed to parse Excel file: {str(e)}"}
 
-def find_key(sample_row, target_type):
-    if not sample_row:
-        return None
-    keys = list(sample_row.keys())
-    if target_type == 'state':
-        for k in keys:
-            c = re.sub(r'[^a-z]', '', k.lower())
-            if c in ('currentstate', 'currentstatus', 'appstate', 'appstatus'):
-                return k
-        for k in keys:
-            c = k.lower()
-            if 'current' in c and ('state' in c or 'status' in c):
-                return k
-        for k in keys:
-            c = re.sub(r'[^a-z]', '', k.lower())
-            if c in ('status', 'misstatus', 'finalstatus'):
-                return k
-        for k in keys:
-            c = k.lower().strip()
-            if c not in ('state', 'customer_state') and ('state' in c or 'status' in c):
-                return k
-        return 'current_state'
+def get_row_value(row_dict, target_name):
+    if not row_dict:
+        return ''
+    clean_target = re.sub(r'[^a-z0-9]', '', target_name.lower())
+    for k, v in row_dict.items():
+        clean_k = re.sub(r'[^a-z0-9]', '', k.lower())
+        if clean_k == clean_target:
+            return str(v).strip()
+    return ''
 
-    elif target_type == 'user_id':
-        for k in keys:
-            c = re.sub(r'[^a-z]', '', k.lower())
-            if c in ('userid', 'useridentifier'):
-                return k
-        for k in keys:
-            if 'user' in re.sub(r'[^a-z]', '', k.lower()):
-                return k
-        return 'user_id'
+def get_state_val(row_dict):
+    if not row_dict:
+        return ''
+    for target in ('current_state', 'current_status', 'app_state', 'app_status', 'status'):
+        val = get_row_value(row_dict, target)
+        if val and val.lower() not in ('state', 'customer_state'):
+            return val
+    # Fallback scan keys
+    for k, v in row_dict.items():
+        lk = k.lower().strip()
+        if lk not in ('state', 'customer_state') and ('state' in lk or 'status' in lk):
+            if v:
+                return str(v).strip()
+    return ''
 
-    elif target_type == 'content':
-        for k in keys:
-            c = re.sub(r'[^a-z]', '', k.lower())
-            if c in ('content', 'contant', 'urn', 'reference'):
-                return k
-        for k, v in sample_row.items():
-            if 'FM' in str(v).upper():
-                return k
-        return 'content'
+def get_user_id_val(row_dict):
+    if not row_dict:
+        return ''
+    for target in ('user_id', 'userid', 'user_identifier', 'useridentifier', 'user'):
+        val = get_row_value(row_dict, target)
+        if val:
+            return val
+    return ''
 
-    return None
+def extract_all_row_keys(row_dict):
+    """
+    Returns a set of cleaned key values (user_id, URN, app_id) for robust cross-sheet lookup.
+    """
+    keys = set()
+    if not row_dict:
+        return keys
+
+    # 1. User ID
+    uid = get_user_id_val(row_dict)
+    if uid:
+        c_uid = clean_key_val(uid)
+        if c_uid:
+            keys.add(c_uid)
+
+    # 2. Application ID (bank 2)
+    app_id = get_row_value(row_dict, 'application_id_bank_2') or get_row_value(row_dict, 'application_id')
+    if app_id:
+        c_app = clean_key_val(app_id)
+        if c_app:
+            keys.add(c_app)
+
+    # 3. URN from content/Reference/URN
+    content_val = get_row_value(row_dict, 'content') or get_row_value(row_dict, 'contant') or get_row_value(row_dict, 'reference') or get_row_value(row_dict, 'urn')
+    urn = extract_urn(content_val)
+    if not urn:
+        # scan values for URN
+        for v in row_dict.values():
+            urn = extract_urn(v)
+            if urn:
+                break
+    if urn:
+        keys.add(urn.upper())
+
+    return keys
+
+def index_sheet_rows(rows_list):
+    """
+    Indexes rows by all possible keys (user_id, application_id_bank_2, URN)
+    Returns: (map_by_key, list_of_rows_with_urn)
+    """
+    row_map = {}
+    rows_with_urn = []
+
+    for r in rows_list:
+        # Pre-compute state
+        r['_state'] = get_state_val(r)
+        
+        # Check URN
+        content_val = get_row_value(r, 'content') or get_row_value(r, 'contant') or get_row_value(r, 'reference') or get_row_value(r, 'urn')
+        urn = extract_urn(content_val)
+        if not urn:
+            for v in r.values():
+                urn = extract_urn(v)
+                if urn:
+                    break
+        if urn:
+            r['_urn'] = urn.upper()
+            rows_with_urn.append(r)
+
+        # Index under all identifiers
+        row_keys = extract_all_row_keys(r)
+        for k in row_keys:
+            if k not in row_map:
+                row_map[k] = r
+
+    return row_map, rows_with_urn
 
 def process_kiwi_rows(yes_rows, au_rows, pnb_rows):
-    if not yes_rows:
-        return {"parsedRows": []}
+    yes_map, yes_urn_rows = index_sheet_rows(yes_rows)
+    au_map, au_urn_rows = index_sheet_rows(au_rows)
+    pnb_map, pnb_urn_rows = index_sheet_rows(pnb_rows)
 
-    yes_sample = yes_rows[0]
-    yes_content_key = find_key(yes_sample, 'content')
-    yes_user_id_key = find_key(yes_sample, 'user_id')
-    yes_state_key = find_key(yes_sample, 'state')
+    # Collect all unique URNs across all 3 sheets (YES primary, then AU, PNB)
+    urn_to_lead = {}
 
-    # Index AU rows by user_id
-    au_user_map = {}
-    if au_rows:
-        au_uid_key = find_key(au_rows[0], 'user_id')
-        au_state_key = find_key(au_rows[0], 'state')
-        for r in au_rows:
-            raw_uid = r.get(au_uid_key) or r.get('user_id') or ''
-            uid = clean_user_id(raw_uid)
-            if uid:
-                st = r.get(au_state_key) or r.get('current_state') or r.get('status') or ''
-                r['_state'] = str(st).strip()
-                au_user_map[uid] = r
+    def add_lead_sources(rows_list, default_bank):
+        for r in rows_list:
+            urn = r.get('_urn')
+            if urn and urn not in urn_to_lead:
+                urn_to_lead[urn] = {
+                    'urn': urn,
+                    'primary_row': r,
+                    'primary_bank': default_bank
+                }
 
-    # Index PNB rows by user_id
-    pnb_user_map = {}
-    if pnb_rows:
-        pnb_uid_key = find_key(pnb_rows[0], 'user_id')
-        pnb_state_key = find_key(pnb_rows[0], 'state')
-        for r in pnb_rows:
-            raw_uid = r.get(pnb_uid_key) or r.get('user_id') or ''
-            uid = clean_user_id(raw_uid)
-            if uid:
-                st = r.get(pnb_state_key) or r.get('current_state') or r.get('status') or ''
-                r['_state'] = str(st).strip()
-                pnb_user_map[uid] = r
+    add_lead_sources(yes_urn_rows, 'YES')
+    add_lead_sources(au_urn_rows, 'AU')
+    add_lead_sources(pnb_urn_rows, 'PNB')
 
     parsed_rows = []
-    skipped_count = 0
 
-    for yes_row in yes_rows:
-        raw_content = yes_row.get(yes_content_key) or yes_row.get('content') or ''
-        extracted_urn = extract_urn(raw_content)
+    for urn, lead_info in urn_to_lead.items():
+        p_row = lead_info['primary_row']
+        p_bank = lead_info['primary_bank']
 
-        if not extracted_urn:
-            skipped_count += 1
-            continue
+        # Extract all keys for this lead from primary_row
+        lead_keys = extract_all_row_keys(p_row)
 
-        raw_uid = yes_row.get(yes_user_id_key) or yes_row.get('user_id') or ''
-        uid = clean_user_id(raw_uid)
+        def find_candidate_row(sheet_map):
+            for k in lead_keys:
+                if k in sheet_map:
+                    return sheet_map[k]
+            return None
 
-        cand_au = au_user_map.get(uid) if uid else None
-        cand_pnb = pnb_user_map.get(uid) if uid else None
+        cand_yes = find_candidate_row(yes_map) or (p_row if p_bank == 'YES' else None)
+        cand_au = find_candidate_row(au_map) or (p_row if p_bank == 'AU' else None)
+        cand_pnb = find_candidate_row(pnb_map) or (p_row if p_bank == 'PNB' else None)
 
-        yes_state = str(yes_row.get(yes_state_key) or yes_row.get('current_state') or '').strip()
-        au_state = str(cand_au.get('_state') or cand_au.get('current_state') or '') if cand_au else ''
-        pnb_state = str(cand_pnb.get('_state') or cand_pnb.get('current_state') or '') if cand_pnb else ''
+        yes_state = str(cand_yes.get('_state') if cand_yes else '').strip()
+        au_state = str(cand_au.get('_state') if cand_au else '').strip()
+        pnb_state = str(cand_pnb.get('_state') if cand_pnb else '').strip()
 
         yes_rank = get_status_rank(yes_state)
         au_rank = get_status_rank(au_state)
         pnb_rank = get_status_rank(pnb_state)
 
-        # Higher rank number = better status (13 is best: AC_CREATED, 1 is worst: NOT_STARTED)
-        winning_bank = 'YES'
-        winning_row = yes_row
-        winning_state = yes_state
-        best_rank = yes_rank
+        # Compare ranks: Higher rank number wins (13 = AC_CREATED best, 1 = NOT_STARTED worst)
+        winning_bank = p_bank
+        winning_row = p_row
+        winning_state = str(p_row.get('_state') or '').strip()
+        best_rank = get_status_rank(winning_state)
 
-        if au_rank > best_rank:
+        if yes_rank > best_rank and cand_yes:
+            best_rank = yes_rank
+            winning_bank = 'YES'
+            winning_row = cand_yes
+            winning_state = yes_state
+
+        if au_rank > best_rank and cand_au:
             best_rank = au_rank
             winning_bank = 'AU'
             winning_row = cand_au
             winning_state = au_state
 
-        if pnb_rank > best_rank:
+        if pnb_rank > best_rank and cand_pnb:
             best_rank = pnb_rank
             winning_bank = 'PNB'
             winning_row = cand_pnb
             winning_state = pnb_state
 
-        wr = winning_row or {}
+        wr = winning_row or p_row
+        uid = get_user_id_val(wr) or get_user_id_val(p_row)
+
         parsed_rows.append({
-            'content': extracted_urn,
-            'registration': wr.get('registration') or wr.get('Registration') or '',
-            'pan_submit': wr.get('Pan_Submit') or wr.get('pan_submit') or '',
-            'form_fetch': wr.get('Form_Fetch') or wr.get('form_fetch') or '',
-            'form_submit': wr.get('Form_Submit') or wr.get('form_submit') or '',
-            'ipa': wr.get('IPA') or wr.get('ipa') or '',
-            'card_created': wr.get('Card_Created') or wr.get('card_created') or '',
-            'vkyc': wr.get('VKYC') or wr.get('vkyc') or '',
+            'content': urn,
+            'registration': get_row_value(wr, 'registration'),
+            'pan_submit': get_row_value(wr, 'Pan_Submit') or get_row_value(wr, 'pan_submit'),
+            'form_fetch': get_row_value(wr, 'Form_Fetch') or get_row_value(wr, 'form_fetch'),
+            'form_submit': get_row_value(wr, 'Form_Submit') or get_row_value(wr, 'form_submit'),
+            'ipa': get_row_value(wr, 'IPA') or get_row_value(wr, 'ipa'),
+            'card_created': get_row_value(wr, 'Card_Created') or get_row_value(wr, 'card_created'),
+            'vkyc': get_row_value(wr, 'VKYC') or get_row_value(wr, 'vkyc'),
             'current_state': winning_state,
-            'reject_reason': wr.get('reject_reason') or '',
-            'application_id_bank_2': wr.get('application_id_bank_2') or '',
-            'first_txn': wr.get('First_txn') or wr.get('first_txn') or '',
-            'APPLICATION_REFERENCE_NUMBER': extracted_urn,
+            'reject_reason': get_row_value(wr, 'reject_reason'),
+            'application_id_bank_2': get_row_value(wr, 'application_id_bank_2'),
+            'first_txn': get_row_value(wr, 'First_txn') or get_row_value(wr, 'first_txn'),
+            'APPLICATION_REFERENCE_NUMBER': urn,
             'current_status': winning_state,
             'final_decision': winning_state,
             'kiwi_winning_bank': winning_bank,
@@ -271,7 +325,7 @@ def process_kiwi_rows(yes_rows, au_rows, pnb_rows):
             'kiwi_yes_status': yes_state,
             'kiwi_au_status': au_state,
             'kiwi_pnb_status': pnb_state,
-            '_extractedUrn': extracted_urn,
+            '_extractedUrn': urn,
             'yes_rank': yes_rank,
             'au_rank': au_rank,
             'pnb_rank': pnb_rank,
@@ -282,7 +336,9 @@ def process_kiwi_rows(yes_rows, au_rows, pnb_rows):
         "success": True,
         "parsedRows": parsed_rows,
         "totalRows": len(parsed_rows),
-        "skippedRows": skipped_count
+        "yesRowsCount": len(yes_rows),
+        "auRowsCount": len(au_rows),
+        "pnbRowsCount": len(pnb_rows)
     }
 
 if __name__ == '__main__':
