@@ -1753,7 +1753,7 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
     return res.status(400).json({ error: 'No file uploaded' });
   }
 
-  const selectedBank = req.body.bank ? String(req.body.bank).trim() : 'HDFC Bank';
+  const selectedBank = (req.body.bank || req.body.bankName) ? String(req.body.bank || req.body.bankName).trim() : 'HDFC Bank';
   const filename = req.file.originalname;
   const ext = filename.split('.').pop().toLowerCase();
   let parsedRows = [];

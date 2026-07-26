@@ -5708,7 +5708,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       {showPasswordConfirmModal && (
         <div className="modal-overlay" style={{ zIndex: 1150 }}>
           <div className="glass-panel admin-dialog-panel" style={{ width: '90%', maxWidth: '400px', position: 'relative', borderTop: '4px solid var(--err)', padding: '2rem', textAlign: 'center' }}>
-            <button onClick={() => { setShowPasswordConfirmModal(false); setPendingDeleteAction(null); }} style={{ position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none', color: 'hsl(var(--text-primary))', cursor: 'pointer' }}>
+            <button type="button" onClick={() => { setShowPasswordConfirmModal(false); setPendingDeleteAction(null); }} style={{ position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none', color: 'hsl(var(--text-primary))', cursor: 'pointer' }}>
               <X size={20} />
             </button>
             <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: '48px', width: '48px', borderRadius: '50%', background: 'rgba(209, 67, 67, 0.1)', color: 'var(--err)', marginBottom: '0.75rem' }}>
@@ -5718,33 +5718,35 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
             <p style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', marginBottom: '1.25rem' }}>
               Please enter the admin password to authorize unmapping of {pendingDeleteAction?.ids?.length} lead(s) from the dashboard.
             </p>
-            <input 
-              type="password"
-              placeholder="Enter password 'Lakshay@123'"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleConfirmDeleteMappedLeads(); }}
-              className="form-control"
-              style={{ width: '100%', marginBottom: '1.5rem', padding: '0.6rem 0.8rem', border: '1px solid var(--line)', borderRadius: '6px', background: 'var(--paper)', color: 'var(--ink)' }}
-              autoComplete="current-password"
-              autoFocus
-            />
-            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
-              <button 
-                onClick={() => { setShowPasswordConfirmModal(false); setPendingDeleteAction(null); }} 
-                className="btn-secondary"
-                style={{ padding: '0.5rem 1rem', fontSize: '0.8rem' }}
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={handleConfirmDeleteMappedLeads} 
-                className="btn-primary"
-                style={{ padding: '0.5rem 1rem', fontSize: '0.8rem', background: 'var(--err)', borderColor: 'var(--err)' }}
-              >
-                Confirm Unmap
-              </button>
-            </div>
+            <form onSubmit={(e) => { e.preventDefault(); handleConfirmDeleteMappedLeads(); }}>
+              <input 
+                type="password"
+                placeholder="Enter password 'Lakshay@123'"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="form-control"
+                style={{ width: '100%', marginBottom: '1.5rem', padding: '0.6rem 0.8rem', border: '1px solid var(--line)', borderRadius: '6px', background: 'var(--paper)', color: 'var(--ink)' }}
+                autoComplete="current-password"
+                autoFocus
+              />
+              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+                <button 
+                  type="button"
+                  onClick={() => { setShowPasswordConfirmModal(false); setPendingDeleteAction(null); }} 
+                  className="btn-secondary"
+                  style={{ padding: '0.5rem 1rem', fontSize: '0.8rem' }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit"
+                  className="btn-primary"
+                  style={{ padding: '0.5rem 1rem', fontSize: '0.8rem', background: 'var(--err)', borderColor: 'var(--err)' }}
+                >
+                  Confirm Unmap
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
