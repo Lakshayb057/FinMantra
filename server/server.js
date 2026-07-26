@@ -1920,7 +1920,8 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
 
         console.log(`[KIWI MIS] Map sizes: AU=${auUserMap.size}, PNB=${pnbUserMap.size}`);
 
-        parsedRows = new Array(yesRows.length);
+        parsedRows = [];
+        let skippedNoUrn = 0;
 
         for (let i = 0; i < yesRows.length; i++) {
           const yesRow = yesRows[i];
@@ -1932,6 +1933,12 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
             if (strContent.includes('FM') || strContent.includes('fm')) {
               extractedUrn = extractUrnFromText(strContent);
             }
+          }
+
+          // Skip rows without a valid URN to save memory
+          if (!extractedUrn) {
+            skippedNoUrn++;
+            continue;
           }
 
           const rawUserId = yesUserIdKey ? yesRow[yesUserIdKey] : getRowValue(yesRow, 'user_id');
@@ -1968,20 +1975,31 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
             winningState = pnbState;
           }
 
-          // Log for debugging first few rows
-          if (i < 3) {
-            console.log(`[KIWI Debug Row ${i}] URN=${extractedUrn}, userId=${userId}`);
+          // Log for debugging first few rows with URN
+          if (parsedRows.length < 5) {
+            console.log(`[KIWI Debug] URN=${extractedUrn}, userId=${userId}`);
             console.log(`  YES state="${yesState}" rank=${yesRank}`);
             console.log(`  AU  state="${auState}" rank=${auRank} (matched=${!!candidateAuRow})`);
             console.log(`  PNB state="${pnbState}" rank=${pnbRank} (matched=${!!candidatePnbRow})`);
             console.log(`  WINNER: ${winningBank} state="${winningState}" rank=${bestRank}`);
           }
 
-          parsedRows[i] = {
-            ...winningRow,
-            APPLICATION_REFERENCE_NUMBER: extractedUrn || rawContent,
-            content: extractedUrn || rawContent,
+          // Only extract the 12 essential KIWI fields from winning row (memory efficient)
+          const wr = winningRow || {};
+          parsedRows.push({
+            content: extractedUrn,
+            registration: getRowValue(wr, 'registration') || '',
+            pan_submit: getRowValue(wr, 'Pan_Submit') || getRowValue(wr, 'pan_submit') || '',
+            form_fetch: getRowValue(wr, 'Form_Fetch') || getRowValue(wr, 'form_fetch') || '',
+            form_submit: getRowValue(wr, 'Form_Submit') || getRowValue(wr, 'form_submit') || '',
+            ipa: getRowValue(wr, 'IPA') || getRowValue(wr, 'ipa') || '',
+            card_created: getRowValue(wr, 'Card_Created') || getRowValue(wr, 'card_created') || '',
+            vkyc: getRowValue(wr, 'VKYC') || getRowValue(wr, 'vkyc') || '',
             current_state: winningState,
+            reject_reason: getRowValue(wr, 'reject_reason') || '',
+            application_id_bank_2: getRowValue(wr, 'application_id_bank_2') || '',
+            first_txn: getRowValue(wr, 'First_txn') || getRowValue(wr, 'first_txn') || '',
+            APPLICATION_REFERENCE_NUMBER: extractedUrn,
             current_status: winningState,
             final_decision: winningState,
             kiwi_winning_bank: winningBank,
@@ -1990,13 +2008,14 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
             kiwi_au_status: auState,
             kiwi_pnb_status: pnbState,
             _extractedUrn: extractedUrn,
-            // Store computed ranks explicitly so misData builder can use them
             yes_rank: yesRank,
             au_rank: auRank,
             pnb_rank: pnbRank,
             status_rank: bestRank
-          };
+          });
         }
+
+        console.log(`[KIWI MIS] Processed: ${parsedRows.length} rows with URN, ${skippedNoUrn} skipped (no URN)`);
       } else {
         const sheetName = workbook.SheetNames[0];
         parsedRows = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
