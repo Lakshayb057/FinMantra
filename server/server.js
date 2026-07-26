@@ -13,7 +13,10 @@ const baileys = require('./baileys');
 const multer = require('multer');
 const xlsx = require('xlsx');
 const pdfParse = require('pdf-parse');
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 100 * 1024 * 1024 } // 100MB limit for large Excel MIS uploads
+});
 
 // Automatically wrap async route handlers to propagate exceptions to global error handler
 const Layer = require('express/lib/router/layer');
@@ -36,7 +39,8 @@ const compression = require('compression');
 const app = express();
 app.use(compression()); // Gzip/Brotli — reduces JSON payload size by ~80-90%
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
 class MemoryRateLimiter {
   constructor(windowMs, maxRequests) {

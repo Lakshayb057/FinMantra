@@ -5374,12 +5374,24 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                       fetchLeads(currentPage, leadsPerPage);
                       fetchMISStats();
                     } else {
-                      const errData = await res.json();
-                      showToast(errData.error || 'Failed to upload MIS file', 'error');
+                      let errMsg = 'Failed to upload MIS file';
+                      if (res.status === 413) {
+                        errMsg = 'File size is too large for Nginx server limits (413 Request Entity Too Large). Please run Nginx fix command on EC2.';
+                      } else {
+                        try {
+                          const errData = await res.json();
+                          errMsg = errData.error || errMsg;
+                        } catch (e) {}
+                      }
+                      showToast(errMsg, 'error');
                     }
                   } catch (err) {
                     console.error('MIS upload error:', err);
-                    showToast('Error uploading file', 'error');
+                    if (String(err).includes('Unexpected token')) {
+                      showToast('File size exceeded Nginx server limit (413 Request Entity Too Large). Please update Nginx client_max_body_size on EC2.', 'error');
+                    } else {
+                      showToast('Error uploading file', 'error');
+                    }
                   } finally {
                     setIsSubmitting(false);
                   }
