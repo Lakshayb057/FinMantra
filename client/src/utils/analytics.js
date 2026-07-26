@@ -55,6 +55,56 @@ export function initAnalytics(settings = {}) {
       console.error('[Clarity] Failed to inject container script:', err);
     }
   }
+
+  // Inject LinkedIn Insight Tag if Partner ID is provided in settings (or default 9660484)
+  const linkedinPartnerId = settings.linkedin_partner_id || settings.linkedin_tag_id || '9660484';
+  if (linkedinPartnerId && !document.getElementById('linkedin-insight-script')) {
+    try {
+      window._linkedin_partner_id = linkedinPartnerId;
+      window._linkedin_data_partner_ids = window._linkedin_data_partner_ids || [];
+      if (!window._linkedin_data_partner_ids.includes(linkedinPartnerId)) {
+        window._linkedin_data_partner_ids.push(linkedinPartnerId);
+      }
+
+      if (!window.lintrk) {
+        window.lintrk = function(a, b) {
+          window.lintrk.q = window.lintrk.q || [];
+          window.lintrk.q.push([a, b]);
+        };
+        window.lintrk.q = [];
+      }
+
+      const f = document.getElementsByTagName('script')[0];
+      const b = document.createElement('script');
+      b.id = 'linkedin-insight-script';
+      b.type = 'text/javascript';
+      b.async = true;
+      b.src = 'https://snap.licdn.com/li.lms-analytics/insight.min.js';
+      if (f && f.parentNode) {
+        f.parentNode.insertBefore(b, f);
+      } else {
+        document.head.appendChild(b);
+      }
+
+      // Fallback noscript image for non-JS environments
+      if (!document.getElementById('linkedin-noscript-img')) {
+        const ns = document.createElement('noscript');
+        const img = document.createElement('img');
+        img.id = 'linkedin-noscript-img';
+        img.height = '1';
+        img.width = '1';
+        img.style.display = 'none';
+        img.alt = '';
+        img.src = `https://px.ads.linkedin.com/collect/?pid=${encodeURIComponent(linkedinPartnerId)}&fmt=gif`;
+        ns.appendChild(img);
+        document.body.appendChild(ns);
+      }
+
+      console.log(`[LinkedIn Insight Tag] Dynamic script & NoScript injected with Partner ID: ${linkedinPartnerId}`);
+    } catch (err) {
+      console.error('[LinkedIn Insight Tag] Failed to inject tracking script:', err);
+    }
+  }
 }
 
 export function trackLeadSubmission({ fullName, email, phone, eventId = null, contentName = 'Lead Submitted', status = 'submitted' }) {
@@ -122,6 +172,16 @@ export function trackLeadSubmission({ fullName, email, phone, eventId = null, co
     console.log('[GTM dataLayer] Pushed "lead_submitted" event successfully.', gtmPayload);
   } catch (err) {
     console.error('[GTM dataLayer] Error pushing event:', err);
+  }
+
+  // 3. LinkedIn Conversion Tracking (lintrk)
+  if (typeof window.lintrk === 'function') {
+    try {
+      window.lintrk('track', { conversion_id: eventId || Date.now() });
+      console.log('[LinkedIn Insight Tag] Tracked lead conversion event successfully.');
+    } catch (err) {
+      console.error('[LinkedIn Insight Tag] Error tracking conversion:', err);
+    }
   }
 }
 

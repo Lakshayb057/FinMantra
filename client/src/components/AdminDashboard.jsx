@@ -4972,6 +4972,20 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                           Enter your Microsoft Clarity project ID (normally a 9-10 character alphanumeric code) to enable screen recordings, heatmaps, and session replay.
                         </div>
                       </div>
+
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontWeight: 600 }}>LinkedIn Partner / Insight Tag ID</label>
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          placeholder="9660484"
+                          value={settings.linkedin_partner_id || ''}
+                          onChange={(e) => setSettings({ ...settings, linkedin_partner_id: e.target.value.trim() })}
+                        />
+                        <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', marginTop: '0.35rem' }}>
+                          Enter your 7-8 digit LinkedIn Partner ID (e.g. <code>9660484</code>) to enable LinkedIn Insight Tag tracking, website demographics, retargeting, and lead conversion analytics.
+                        </div>
+                      </div>
                     </div>
 
                     <div style={{ display: 'flex', justifyContent: 'flex-end' }}>

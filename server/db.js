@@ -488,7 +488,10 @@ async function initPgSchema() {
     if (parseInt(cardBanksCheck.rows[0].count, 10) === 0) {
       await client.query("INSERT INTO settings (key, value) VALUES ('card_manager_banks', 'HDFC,SBI')");
     }
-
+    const linkedinCheck = await client.query("SELECT COUNT(*) FROM settings WHERE key = 'linkedin_partner_id'");
+    if (parseInt(linkedinCheck.rows[0].count, 10) === 0) {
+      await client.query("INSERT INTO settings (key, value) VALUES ('linkedin_partner_id', '9660484')");
+    }
 
     await client.query('COMMIT');
     console.log('[Database] PostgreSQL tables checked, initialized and seeded.');

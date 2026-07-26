@@ -128,6 +128,18 @@ export default function App() {
       params._fbc = getCookie('_fbc') || `fb.1.${Date.now()}.${params.fbclid}`;
     }
 
+    // 4. Process LinkedIn Click ID (li_fat_id) persistence
+    const urlLiFatId = searchParams.get('li_fat_id');
+    if (urlLiFatId) {
+      setCookie('li_fat_id', urlLiFatId, 90);
+      params.li_fat_id = urlLiFatId;
+    } else {
+      const cookieLiFatId = getCookie('li_fat_id');
+      if (cookieLiFatId) {
+        params.li_fat_id = cookieLiFatId;
+      }
+    }
+
     // Capture landing page, first landing page, and referrer
     params.landing_page = window.location.href;
     
