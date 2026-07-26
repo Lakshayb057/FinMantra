@@ -649,18 +649,30 @@ const db = {
     };
   },
 
-  async getLeadsForExport({ startDate, endDate }) {
+  async getLeadsForExport({ search = '', card = '', source = '', startDate = '', endDate = '' }) {
     let query = 'SELECT * FROM leads';
     const params = [];
     const clauses = [];
     
+    if (search) {
+      params.push(`%${search.trim().toLowerCase()}%`);
+      clauses.push(`(LOWER(full_name) LIKE $${params.length} OR phone LIKE $${params.length} OR LOWER(urn) LIKE $${params.length} OR LOWER(pan_no) LIKE $${params.length})`);
+    }
+    if (card) {
+      params.push(card);
+      clauses.push(`card_id = $${params.length}`);
+    }
+    if (source) {
+      params.push(source);
+      clauses.push(`source = $${params.length}`);
+    }
     if (startDate) {
-      params.push(startDate);
-      clauses.push(`created_at >= $${params.length}::timestamp`);
+      params.push(startDate + ' 00:00:00+05:30');
+      clauses.push(`created_at >= $${params.length}::timestamptz`);
     }
     if (endDate) {
-      params.push(endDate + ' 23:59:59');
-      clauses.push(`created_at <= $${params.length}::timestamp`);
+      params.push(endDate + ' 23:59:59+05:30');
+      clauses.push(`created_at <= $${params.length}::timestamptz`);
     }
     
     if (clauses.length > 0) {

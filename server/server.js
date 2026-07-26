@@ -1650,12 +1650,43 @@ function getRowValue(row, targetKey) {
   return '';
 }
 
+// KIWI Bank Current State Ranking Table (Sno 1 to 13)
+const KIWI_STATUS_RANKING = {
+  'NOT_STARTED': 1,
+  'NOT_APPLICABLE': 2,
+  'REJECTED': 3,
+  'IN_PROGRESS': 4,
+  'DOC_UPLOAD_PENDING': 5,
+  'DOC_UPLOADED': 6,
+  'KYC_PENDING': 7,
+  'DOC_REUPLOAD_REQUIRED': 8,
+  'KYC_DONE': 9,
+  'SUBMITTED': 10,
+  'SUBMITTED_OTP_VERIFIED': 11,
+  'VKYC_PENDING': 12,
+  'AC_CREATED': 13
+};
+
+function getStatusRank(statusStr) {
+  if (!statusStr) return 0;
+  const clean = String(statusStr).trim().toUpperCase().replace(/[\s-]+/g, '_');
+  if (KIWI_STATUS_RANKING[clean] !== undefined) {
+    return KIWI_STATUS_RANKING[clean];
+  }
+  for (const [key, rank] of Object.entries(KIWI_STATUS_RANKING)) {
+    if (clean === key || clean.includes(key)) {
+      return rank;
+    }
+  }
+  return 0;
+}
+
 // Helper to standardise MIS status
 function standardizeStatus(statusStr, rawRow) {
   if (!statusStr) return 'Pending';
   const clean = String(statusStr).trim().toLowerCase();
   
-  if (clean.includes('approve') || clean.includes('success') || clean.includes('disbursed') || clean.includes('active') || clean === 'approved') {
+  if (clean.includes('ac_created') || clean.includes('account_created') || clean.includes('approve') || clean.includes('success') || clean.includes('disbursed') || clean.includes('active') || clean === 'approved') {
     return 'Approved';
   }
   if (clean.includes('reject') || clean.includes('decline') || clean.includes('cancel') || clean === 'rejected') {
@@ -1722,8 +1753,104 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
       }
     } else if (ext === 'xls' || ext === 'xlsx') {
       const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
-      const sheetName = workbook.SheetNames[0];
-      parsedRows = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
+      const isKiwiUpload = selectedBank.toLowerCase().includes('kiwi');
+
+      if (isKiwiUpload) {
+        const yesSheetName = workbook.SheetNames.find(s => s.toLowerCase().includes('yes'));
+        const auSheetName = workbook.SheetNames.find(s => s.toLowerCase().includes('au'));
+        const pnbSheetName = workbook.SheetNames.find(s => s.toLowerCase().includes('pnb'));
+
+        if (!yesSheetName) {
+          return res.status(400).json({ error: 'YES KIWI sheet not found in uploaded Excel file. Please ensure the file contains YES KIWI, AU KIWI, and PNB KIWI sheets.' });
+        }
+
+        const yesRows = xlsx.utils.sheet_to_json(workbook.Sheets[yesSheetName], { defval: '' });
+        const auRows = auSheetName ? xlsx.utils.sheet_to_json(workbook.Sheets[auSheetName], { defval: '' }) : [];
+        const pnbRows = pnbSheetName ? xlsx.utils.sheet_to_json(workbook.Sheets[pnbSheetName], { defval: '' }) : [];
+
+        // Build user_id lookup maps for AU and PNB sheets
+        const auUserMap = new Map();
+        auRows.forEach(r => {
+          const uid = String(getRowValue(r, 'user_id') || getRowValue(r, 'userId') || '').trim();
+          if (uid) auUserMap.set(uid, r);
+        });
+
+        const pnbUserMap = new Map();
+        pnbRows.forEach(r => {
+          const uid = String(getRowValue(r, 'user_id') || getRowValue(r, 'userId') || '').trim();
+          if (uid) pnbUserMap.set(uid, r);
+        });
+
+        parsedRows = [];
+
+        for (const yesRow of yesRows) {
+          // Extract URN from YES KIWI sheet (from content column or cell scan)
+          let contantVal = getRowValue(yesRow, 'content') || getRowValue(yesRow, 'Contant') || getRowValue(yesRow, 'contant') || getRowValue(yesRow, 'Reference') || getRowValue(yesRow, 'urn') || getRowValue(yesRow, 'URN');
+          let extractedUrn = extractUrnFromText(contantVal);
+          if (!extractedUrn) {
+            for (const cellVal of Object.values(yesRow)) {
+              const found = extractUrnFromText(cellVal);
+              if (found) {
+                extractedUrn = found;
+                break;
+              }
+            }
+          }
+
+          const userId = String(getRowValue(yesRow, 'user_id') || getRowValue(yesRow, 'userId') || '').trim();
+
+          const candidateAuRow = userId ? auUserMap.get(userId) : null;
+          const candidatePnbRow = userId ? pnbUserMap.get(userId) : null;
+
+          const yesState = String(getRowValue(yesRow, 'current_state') || getRowValue(yesRow, 'current_status') || '').trim();
+          const auState = candidateAuRow ? String(getRowValue(candidateAuRow, 'current_state') || getRowValue(candidateAuRow, 'current_status') || '').trim() : '';
+          const pnbState = candidatePnbRow ? String(getRowValue(candidatePnbRow, 'current_state') || getRowValue(candidatePnbRow, 'current_status') || '').trim() : '';
+
+          const yesRank = getStatusRank(yesState);
+          const auRank = getStatusRank(auState);
+          const pnbRank = getStatusRank(pnbState);
+
+          let winningBank = 'YES';
+          let winningRow = yesRow;
+          let winningState = yesState;
+          let maxRank = yesRank;
+
+          if (auRank > maxRank) {
+            maxRank = auRank;
+            winningBank = 'AU';
+            winningRow = candidateAuRow;
+            winningState = auState;
+          }
+
+          if (pnbRank > maxRank) {
+            maxRank = pnbRank;
+            winningBank = 'PNB';
+            winningRow = candidatePnbRow;
+            winningState = pnbState;
+          }
+
+          // Combine winning bank fields while retaining all details and URN
+          const combinedRow = {
+            ...winningRow,
+            APPLICATION_REFERENCE_NUMBER: extractedUrn || getRowValue(winningRow, 'content'),
+            content: extractedUrn || getRowValue(winningRow, 'content'),
+            current_state: winningState,
+            current_status: winningState,
+            final_decision: winningState,
+            kiwi_winning_bank: winningBank,
+            kiwi_user_id: userId,
+            kiwi_yes_status: yesState,
+            kiwi_au_status: auState,
+            kiwi_pnb_status: pnbState,
+            _extractedUrn: extractedUrn
+          };
+
+          parsedRows.push(combinedRow);
+        }
+      } else {
+        const sheetName = workbook.SheetNames[0];
+        parsedRows = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
+      }
     } else if (ext === 'pdf') {
       const pdfData = await pdfParse(req.file.buffer);
       const lines = pdfData.text.split('\n');
@@ -1906,14 +2033,15 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
     }
   }
 
+  const isKiwi = selectedBank.toLowerCase().includes('kiwi');
   const isYesBank = selectedBank.toLowerCase().includes('yes');
   const isHdfc = selectedBank.toLowerCase().includes('hdfc');
   const customConfig = bankMappings[selectedBank];
 
-  // If bank is not HDFC, not YES Bank, and has no custom mapping configured in settings
-  if (!isHdfc && !isYesBank && (!customConfig || !customConfig.urn_column)) {
+  // If bank is not HDFC, not YES Bank, not KIWI, and has no custom mapping configured in settings
+  if (!isHdfc && !isYesBank && !isKiwi && (!customConfig || !customConfig.urn_column)) {
     return res.status(400).json({
-      error: `MIS parsing format for "${selectedBank}" is not configured yet. Please configure the MIS column mapping for "${selectedBank}" in System Settings & API or choose a supported bank (HDFC Bank, YES Bank).`
+      error: `MIS parsing format for "${selectedBank}" is not configured yet. Please configure the MIS column mapping for "${selectedBank}" in System Settings & API or choose a supported bank (HDFC Bank, YES Bank, KIWI Bank).`
     });
   }
 
@@ -1929,7 +2057,9 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
   for (const row of parsedRows) {
     let excelLc2 = null;
 
-    if (customConfig && customConfig.urn_column) {
+    if (isKiwi && row._extractedUrn) {
+      excelLc2 = row._extractedUrn;
+    } else if (customConfig && customConfig.urn_column) {
       const rawVal = getRowValue(row, customConfig.urn_column);
       if (customConfig.extraction_mode === 'extract_urn') {
         excelLc2 = extractUrnFromText(rawVal);
@@ -1944,8 +2074,8 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
       } else {
         excelLc2 = rawVal;
       }
-    } else if (isYesBank) {
-      // YES Bank: search contant/Contant field or scan text for pattern like ENT_FM2026G2000119_971692
+    } else if (isYesBank || isKiwi) {
+      // YES / KIWI Bank: search contant/Contant field or scan text for pattern like ENT_FM2026G2000119_971692
       const contantVal = getRowValue(row, 'contant') || 
                          getRowValue(row, 'Contant') || 
                          getRowValue(row, 'contant_field') || 
@@ -2067,6 +2197,30 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
     misData.card_activation_status = String(getRowValue(row, 'Card Activation Staus') || getRowValue(row, 'Card Activation Staus')).trim();
     misData.source_type = String(getRowValue(row, 'Source Type') || getRowValue(row, 'Source Type')).trim();
     misData.kyc_completion_date = String(getRowValue(row, 'KYC Completion date') || getRowValue(row, 'KYC Completion date')).trim();
+
+    if (isKiwi) {
+      misData.mis_bank_name = 'KIWI - ' + (row.kiwi_winning_bank || 'Bank');
+      misData.kiwi_bank = row.kiwi_winning_bank || '';
+      misData.winning_bank = row.kiwi_winning_bank || '';
+      misData.user_id = row.kiwi_user_id || '';
+      misData.current_state = row.current_state || '';
+      misData.final_decision = row.current_state || '';
+      misData.bank_reference_number = String(row._extractedUrn || row.APPLICATION_REFERENCE_NUMBER || '').trim();
+      misData.yes_current_state = row.kiwi_yes_status || '';
+      misData.au_current_state = row.kiwi_au_status || '';
+      misData.pnb_current_state = row.kiwi_pnb_status || '';
+
+      misData.registration = String(getRowValue(row, 'registration') || '').trim();
+      misData.pan_submit = String(getRowValue(row, 'Pan_Submit') || getRowValue(row, 'pan_submit') || '').trim();
+      misData.form_fetch = String(getRowValue(row, 'Form_Fetch') || getRowValue(row, 'form_fetch') || '').trim();
+      misData.form_submit = String(getRowValue(row, 'Form_Submit') || getRowValue(row, 'form_submit') || '').trim();
+      misData.ipa = String(getRowValue(row, 'IPA') || getRowValue(row, 'ipa') || '').trim();
+      misData.card_created = String(getRowValue(row, 'Card_Created') || getRowValue(row, 'card_created') || '').trim();
+      misData.vkyc = String(getRowValue(row, 'VKYC') || getRowValue(row, 'vkyc') || '').trim();
+      misData.reject_reason = String(getRowValue(row, 'reject_reason') || '').trim();
+      misData.application_id_bank_2 = String(getRowValue(row, 'application_id_bank_2') || '').trim();
+      misData.first_txn = String(getRowValue(row, 'First_txn') || getRowValue(row, 'first_txn') || '').trim();
+    }
 
     // Custom mappings override
     if (customConfig && customConfig.field_mappings) {
@@ -2341,8 +2495,8 @@ app.put('/api/leads/:id', authenticateToken, requireAdmin, async (req, res) => {
 
 // Export Leads to CSV (Admin Only)
 app.get('/api/leads/export', authenticateToken, requireAdmin, async (req, res) => {
-  const { startDate, endDate } = req.query;
-  const leads = await db.getLeadsForExport({ startDate, endDate });
+  const { search, card, source, startDate, endDate } = req.query;
+  const leads = await db.getLeadsForExport({ search, card, source, startDate, endDate });
   
   const settings = await db.getSettings();
   let columns = [];

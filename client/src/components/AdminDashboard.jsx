@@ -168,16 +168,16 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   const [misStats, setMisStats] = useState(null);
   const [loadingMISStats, setLoadingMISStats] = useState(false);
   const [showUploadMISModal, setShowUploadMISModal] = useState(false);
-  const [selectedBankForMIS, setSelectedBankForMIS] = useState('HDFC Bank');
+  const [selectedBankForMIS, setSelectedBankForMIS] = useState('');
   const [bankMisMappings, setBankMisMappings] = useState({});
-  const [selectedBankConfig, setSelectedBankConfig] = useState('YES Bank');
+  const [selectedBankConfig, setSelectedBankConfig] = useState('');
   const [misFile, setMisFile] = useState(null);
   const [misUploadResult, setMisUploadResult] = useState(null);
   const [showMISResultModal, setShowMISResultModal] = useState(false);
   const [selectedMappedLead, setSelectedMappedLead] = useState(null);
   
   // Dashboard Filters
-  const [dashSelectedBank, setDashSelectedBank] = useState('All');
+  const [dashSelectedBank, setDashSelectedBank] = useState('HDFC');
   const [dashCreatedDate, setDashCreatedDate] = useState('');
   const [dashDateTo, setDashDateTo] = useState('');
   const [dashCardType, setDashCardType] = useState('');
@@ -683,11 +683,14 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
   const handleCsvExport = () => {
     let queryParams = [];
-    if (filterStartDate) queryParams.push(`startDate=${filterStartDate}`);
-    if (filterEndDate) queryParams.push(`endDate=${filterEndDate}`);
+    if (filterStartDate) queryParams.push(`startDate=${encodeURIComponent(filterStartDate)}`);
+    if (filterEndDate) queryParams.push(`endDate=${encodeURIComponent(filterEndDate)}`);
+    if (searchTerm) queryParams.push(`search=${encodeURIComponent(searchTerm)}`);
+    if (filterCard) queryParams.push(`card=${encodeURIComponent(filterCard)}`);
+    if (filterSource) queryParams.push(`source=${encodeURIComponent(filterSource)}`);
     const queryString = queryParams.length > 0 ? `?${queryParams.join('&')}` : '';
 
-    // Since direct window.open can't pass auth header, we fetch it, create a Blob, and download:
+    // Fetch filtered leads, create Blob, and trigger browser download:
     fetch(`${API_URL}/leads/export${queryString}`, {
       headers: { 'Authorization': `Bearer ${token}` }
     })
@@ -696,7 +699,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `finmantra_leads${filterStartDate || filterEndDate ? '_filtered' : ''}.csv`;
+      a.download = `finmantra_leads${queryParams.length > 0 ? '_filtered' : ''}.csv`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -1433,30 +1436,42 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
     }
   };
 
-  const getBankOptions = () => {
-    let list = [];
-    if (settings && settings.card_manager_banks) {
-      list = settings.card_manager_banks.split(',').map(b => b.trim()).filter(Boolean);
-    }
-    const defaultBanks = ['HDFC Bank', 'YES Bank', 'SBI Bank', 'ICICI Bank', 'Axis Bank'];
-    defaultBanks.forEach(b => {
-      const coreName = b.split(' ')[0].toLowerCase();
-      if (!list.some(existing => existing.toLowerCase().includes(coreName))) {
-        list.push(b);
-      }
-    });
-    return Array.from(new Set(list));
+  const cleanBankCode = (val) => {
+    if (!val || !val.trim()) return '';
+    let str = val.trim().replace(/\s+bank$/i, '').trim();
+    if (str.toLowerCase() === 'n/a' || str.toLowerCase() === 'na') return 'N/A';
+    return str.toUpperCase();
   };
+
+  const getBankOptions = useCallback(() => {
+    const set = new Set();
+    if (settings && settings.card_manager_banks) {
+      settings.card_manager_banks.split(',').map(cleanBankCode).filter(Boolean).forEach(b => set.add(b));
+    }
+    if (cards && Array.isArray(cards)) {
+      cards.forEach(c => {
+        const b = cleanBankCode(c.bank);
+        if (b) set.add(b);
+      });
+    }
+    if (misStats && Array.isArray(misStats.mappedLeadsList)) {
+      misStats.mappedLeadsList.forEach(l => {
+        const b = cleanBankCode(l.mis_data?.mis_bank_name || l.card_bank);
+        if (b) set.add(b);
+      });
+    }
+    return Array.from(set);
+  }, [settings, cards, misStats]);
 
   const getLeadBank = useCallback((lead) => {
     if (lead.mis_data && lead.mis_data.mis_bank_name) {
-      return lead.mis_data.mis_bank_name;
+      return cleanBankCode(lead.mis_data.mis_bank_name);
     }
     if (lead.card_name) {
       const match = cards.find(c => c.name === lead.card_name);
-      if (match && match.bank) return match.bank;
+      if (match && match.bank) return cleanBankCode(match.bank);
     }
-    return 'HDFC Bank';
+    return cleanBankCode(lead.card_bank) || 'HDFC';
   }, [cards]);
 
   // ===== MEMOIZED LEADS DASHBOARD COMPUTATIONS =====
@@ -1495,7 +1510,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   // 3. Memoize the filtered list — only recompute when data or filters change
   const filteredMappedLeads = useMemo(() => {
     const searchLower = debouncedDashSearch ? debouncedDashSearch.toLowerCase() : '';
-    const normSelectedBank = (dashSelectedBank && dashSelectedBank !== 'All') ? dashSelectedBank.toLowerCase().split(' ')[0] : '';
+    const normSelectedBank = cleanBankCode(dashSelectedBank);
 
     return allMappedLeads.filter(lead => {
       if (searchLower) {
@@ -1535,7 +1550,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       if (dashSourceType && lead.mis_data?.source_type !== dashSourceType) return false;
       if (normSelectedBank) {
         const leadBank = getLeadBank(lead);
-        if (leadBank.toLowerCase().split(' ')[0] !== normSelectedBank) return false;
+        if (leadBank !== normSelectedBank) return false;
       }
       return true;
     });
@@ -2828,15 +2843,6 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                         )}
 
                         <div style={{ display: 'inline-flex', gap: '0.25rem', padding: '2px', background: 'var(--paper-2)', borderRadius: '20px', border: '1px solid var(--line)', marginLeft: '0.5rem', flexWrap: 'wrap' }}>
-                          <button
-                            type="button"
-                            onClick={() => setDashSelectedBank('All')}
-                            style={{
-                              padding: '0.25rem 0.65rem', fontSize: '0.7rem', borderRadius: '12px', border: 'none', cursor: 'pointer', fontWeight: 600,
-                              background: dashSelectedBank === 'All' ? 'var(--gold-deep)' : 'transparent',
-                              color: dashSelectedBank === 'All' ? '#fff' : 'var(--ink)', transition: 'all 0.15s'
-                            }}
-                          >All Banks</button>
                           {getBankOptions().map((b, idx) => (
                             <button key={idx} type="button" onClick={() => setDashSelectedBank(b)}
                               style={{
@@ -2860,7 +2866,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                             setDashKycStatus(''); setDashIpaStatus(''); setDashFinalDecision(''); setDashCardName('');
                             setDashCustomerType(''); setDashCurrentStage(''); setDashCardActivation('');
                             setDashVkycStatus(''); setDashAgent(''); setDashSourceType(''); setDashSearch('');
-                            setDashSelectedBank('All');
+                            setDashSelectedBank('HDFC Bank');
                           }}
                           className="btn-secondary"
                           style={{ padding: '0.35rem 0.75rem', fontSize: '0.72rem', opacity: activeFilterCount > 0 ? 1 : 0.5 }}
@@ -5024,11 +5030,19 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
                         {(() => {
                           const bankLower = selectedBankConfig.toLowerCase();
+                          const isKiwi = bankLower.includes('kiwi');
                           const isYes = bankLower.includes('yes');
                           const isHdfc = bankLower.includes('hdfc');
 
-                          const defaultUrnCol = isYes ? 'contant' : (isHdfc ? 'APPLICATION_REFERENCE_NUMBER' : 'URN');
-                          const defaultFieldMappings = isYes ? {
+                          const defaultUrnCol = isKiwi ? 'content' : (isYes ? 'contant' : (isHdfc ? 'APPLICATION_REFERENCE_NUMBER' : 'URN'));
+                          const defaultFieldMappings = isKiwi ? {
+                            final_decision: 'current_state',
+                            decline_description: 'reject_reason',
+                            card_name: 'content',
+                            state: 'registration',
+                            customer_type: 'user_id',
+                            bank_reference_number: 'application_id_bank_2'
+                          } : (isYes ? {
                             final_decision: 'FINAL_DECISION',
                             decline_description: 'Decline Descreption',
                             card_name: 'Product Description',
@@ -5049,7 +5063,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                             state: 'STATE',
                             customer_type: 'CUSTOMER_TYPE',
                             bank_reference_number: 'BANK_REF_NO'
-                          });
+                          }));
 
                           const currentCfg = bankMisMappings[selectedBankConfig] || {
                             urn_column: defaultUrnCol,
@@ -5262,6 +5276,77 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                                 )}
                               </div>
 
+                              {/* Active MIS Extraction Field Schema Overview Table */}
+                              <div style={{ borderTop: '1px solid var(--line)', paddingTop: '1rem', marginTop: '1.25rem' }}>
+                                <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '0.4rem', color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                  <Database size={16} style={{ color: 'var(--gold-deep)' }} />
+                                  <span>Active MIS Extraction Field Schema for {selectedBankConfig}</span>
+                                </h4>
+                                <p style={{ fontSize: '0.78rem', color: 'var(--muted)', marginBottom: '0.85rem' }}>
+                                  Full list of standard columns, data formats, and attributes automatically extracted and mapped to the database for <strong>{selectedBankConfig}</strong> MIS uploads.
+                                </p>
+
+                                <div style={{ overflowX: 'auto', background: 'var(--paper-2)', borderRadius: '6px', border: '1px solid var(--line)' }}>
+                                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem', textAlign: 'left' }}>
+                                    <thead>
+                                      <tr style={{ background: 'rgba(224, 168, 46, 0.08)', borderBottom: '1px solid var(--line)' }}>
+                                        <th style={{ padding: '0.5rem 0.75rem', fontWeight: 700 }}>Excel Header / Column Name</th>
+                                        <th style={{ padding: '0.5rem 0.75rem', fontWeight: 700 }}>Data Format</th>
+                                        <th style={{ padding: '0.5rem 0.75rem', fontWeight: 700 }}>Extraction & System Mapping Details</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {(isKiwi ? [
+                                        { col: 'content', fmt: 'Alpha-numeric', desc: 'Primary URN extracted from string (e.g. ENT_FM2026G2000119_971692 -> FM2026G2000119)' },
+                                        { col: 'user_id', fmt: 'Text / UUID', desc: 'Customer User ID linking YES KIWI, AU KIWI, and PNB KIWI sheets' },
+                                        { col: 'registration', fmt: 'Date', desc: 'Registration Date' },
+                                        { col: 'pan_submit / Pan_Submit', fmt: 'Date', desc: 'PAN Submit Date' },
+                                        { col: 'form_fetch / Form_Fetch', fmt: 'Date', desc: 'Form Fetch Date' },
+                                        { col: 'form_submit / Form_Submit', fmt: 'Date', desc: 'Form Submit Date' },
+                                        { col: 'ipa / IPA', fmt: 'Date', desc: 'IPA Decision Date' },
+                                        { col: 'card_created / Card_Created', fmt: 'Date', desc: 'Card Creation Date' },
+                                        { col: 'vkyc / VKYC', fmt: 'Date', desc: 'Video KYC Date' },
+                                        { col: 'current_state', fmt: 'TEXT', desc: 'Current Bank Status (Ranked 1-13 across PNB, AU, YES sheets)' },
+                                        { col: 'reject_reason', fmt: 'TEXT', desc: 'Rejection / Decline Reason' },
+                                        { col: 'application_id_bank_2', fmt: 'Alpha-numeric', desc: 'Secondary Bank Application ID' },
+                                        { col: 'first_txn / First_txn', fmt: 'Date', desc: 'First Transaction Date' }
+                                      ] : isHdfc ? [
+                                        { col: 'APPLICATION_REFERENCE_NUMBER / LC2_CODE', fmt: 'Alpha-numeric', desc: 'Primary URN / Application Reference Number' },
+                                        { col: 'CREATION_DATE_TIME', fmt: 'Date / Time', desc: 'Application Submit Date/Time' },
+                                        { col: 'CUSTOMER_TYPE', fmt: 'Text', desc: 'Customer Type' },
+                                        { col: 'STATE', fmt: 'Text', desc: 'Customer State' },
+                                        { col: 'IPA_STATUS', fmt: 'Text', desc: 'IPA Decision Status' },
+                                        { col: 'DAP_FINAL_FLAG', fmt: 'Text', desc: 'DAP Final Flag' },
+                                        { col: 'DROPOFF_REASON', fmt: 'Text', desc: 'Dropoff Reason' },
+                                        { col: 'VKYC_STATUS', fmt: 'Text', desc: 'VKYC Status' },
+                                        { col: 'VKYC_CONSENT_DATE', fmt: 'Date', desc: 'KYC Type / Consent Date' },
+                                        { col: 'FINAL_DECISION / STATUS', fmt: 'Text', desc: 'Final Decision Status' },
+                                        { col: 'FINAL_DECISION_DATE', fmt: 'Date', desc: 'Decision Date' },
+                                        { col: 'CURRENT_STAGE', fmt: 'Text', desc: 'Current Stage' },
+                                        { col: 'Decline Descreption / REMARK', fmt: 'Text', desc: 'Decline Description / Reason' },
+                                        { col: 'Product Des / CARD_NAME', fmt: 'Text', desc: 'Card Name / Product Description' },
+                                        { col: 'Card Activation Staus', fmt: 'Text', desc: 'Card Activation Status' },
+                                        { col: 'KYC Completion date', fmt: 'Date', desc: 'KYC Completion Date' }
+                                      ] : [
+                                        { col: currentCfg.urn_column || 'URN', fmt: 'Alpha-numeric', desc: 'Primary URN / Customer Reference Column' },
+                                        { col: currentCfg.field_mappings?.final_decision || 'STATUS', fmt: 'Text', desc: 'Final Decision / Status' },
+                                        { col: currentCfg.field_mappings?.decline_description || 'REASON', fmt: 'Text', desc: 'Decline Description / Reason' },
+                                        { col: currentCfg.field_mappings?.card_name || 'CARD_NAME', fmt: 'Text', desc: 'Card Name / Product Description' },
+                                        { col: currentCfg.field_mappings?.state || 'STATE', fmt: 'Text', desc: 'Customer State' },
+                                        { col: currentCfg.field_mappings?.customer_type || 'CUSTOMER_TYPE', fmt: 'Text', desc: 'Customer Type' },
+                                        { col: currentCfg.field_mappings?.bank_reference_number || 'BANK_REF_NO', fmt: 'Text', desc: 'Bank Reference Number' }
+                                      ]).map((item, idx) => (
+                                        <tr key={idx} style={{ borderBottom: '1px solid var(--line)' }}>
+                                          <td style={{ padding: '0.45rem 0.75rem', fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--ink)' }}><code>{item.col}</code></td>
+                                          <td style={{ padding: '0.45rem 0.75rem', color: 'var(--gold-deep)', fontWeight: 600 }}>{item.fmt}</td>
+                                          <td style={{ padding: '0.45rem 0.75rem', color: 'var(--muted)' }}>{item.desc}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+
                               <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.25rem' }}>
                                 <button 
                                   type="button"
@@ -5295,8 +5380,8 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
               <X size={20} />
             </button>
             <h3 style={{ fontSize: '1.4rem', marginBottom: '0.5rem', color: 'hsl(var(--text-primary))' }}>Upload Bank MIS Report</h3>
-            <p style={{ fontSize: '0.85rem', color: 'hsl(var(--text-secondary))', marginBottom: '1.5rem' }}>
-              Upload an Excel (.xls, .xlsx), CSV (.csv), or PDF (.pdf) file. The system will extract URNs (including split urn_first/last parts or LC2_CODE) and automatically map decision statuses.
+            <p style={{ fontSize: '0.85rem', color: 'hsl(var(--text-secondary))', marginBottom: '1.25rem' }}>
+              Upload an Excel (.xls, .xlsx), CSV (.csv), or PDF (.pdf) file. For <strong>KIWI Bank</strong>, upload an Excel file with <strong>PNB KIWI, YES KIWI, and AU KIWI</strong> sheets for automatic 3-bank status ranking and user_id mapping.
             </p>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', marginBottom: '1.5rem' }}>
