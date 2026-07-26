@@ -5609,26 +5609,62 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
             {misUploadResult.matchedDetails.length > 0 && (
               <div style={{ marginBottom: '1.5rem', textAlign: 'left' }}>
-                <h4 style={{ fontSize: '0.9rem', marginBottom: '0.5rem', fontWeight: 700 }}>Matched Leads Detail ({misUploadResult.matchedDetails.length})</h4>
-                <div style={{ maxHeight: '150px', overflowY: 'auto', border: '1px solid var(--line)', borderRadius: '8px', padding: '0.5rem' }}>
-                  <table style={{ width: '100%', fontSize: '0.8rem', borderCollapse: 'collapse' }}>
+                <h4 style={{ fontSize: '0.9rem', marginBottom: '0.6rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span>Matched Leads Rank Breakdown ({misUploadResult.matchedDetails.length})</span>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--gold-deep)', fontWeight: 600 }}>🏆 13-Tier Highest Rank Engine</span>
+                </h4>
+                <div style={{ maxHeight: '240px', overflowY: 'auto', border: '1px solid var(--line)', borderRadius: '8px', padding: '0.5rem' }}>
+                  <table style={{ width: '100%', fontSize: '0.78rem', borderCollapse: 'collapse' }}>
                     <thead>
-                      <tr style={{ borderBottom: '1px solid var(--line)' }}>
-                        <th style={{ textAlign: 'left', padding: '0.35rem' }}>URN</th>
-                        <th style={{ textAlign: 'left', padding: '0.35rem' }}>Name</th>
-                        <th style={{ textAlign: 'left', padding: '0.35rem' }}>Status</th>
+                      <tr style={{ borderBottom: '1px solid var(--line)', background: 'var(--paper-2)' }}>
+                        <th style={{ textAlign: 'left', padding: '0.45rem' }}>URN</th>
+                        <th style={{ textAlign: 'left', padding: '0.45rem' }}>Name</th>
+                        <th style={{ textAlign: 'left', padding: '0.45rem' }}>Winning Bank</th>
+                        <th style={{ textAlign: 'center', padding: '0.45rem' }}>Rank</th>
+                        <th style={{ textAlign: 'left', padding: '0.45rem' }}>YES State (Rank)</th>
+                        <th style={{ textAlign: 'left', padding: '0.45rem' }}>AU State (Rank)</th>
+                        <th style={{ textAlign: 'left', padding: '0.45rem' }}>PNB State (Rank)</th>
+                        <th style={{ textAlign: 'left', padding: '0.45rem' }}>Final Status</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {misUploadResult.matchedDetails.map((item, idx) => (
-                        <tr key={idx} style={{ borderBottom: '1px solid rgba(0,0,0,0.03)' }}>
-                          <td style={{ padding: '0.35rem', fontFamily: 'var(--font-mono)' }}>{item.urn}</td>
-                          <td style={{ padding: '0.35rem' }}>{item.name}</td>
-                          <td style={{ padding: '0.35rem' }}>
-                            <span className={`badge badge-${item.status === 'Approved' ? 'success' : item.status === 'Rejected' ? 'danger' : 'warning'}`}>{item.status}</span>
-                          </td>
-                        </tr>
-                      ))}
+                      {misUploadResult.matchedDetails.map((item, idx) => {
+                        const winBank = item.winning_bank || 'YES';
+                        const winRank = item.winning_rank || 1;
+                        return (
+                          <tr key={idx} style={{ borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
+                            <td style={{ padding: '0.45rem', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{item.urn}</td>
+                            <td style={{ padding: '0.45rem' }}>{item.name}</td>
+                            <td style={{ padding: '0.45rem' }}>
+                              <span style={{
+                                padding: '0.2rem 0.6rem',
+                                borderRadius: '12px',
+                                fontSize: '0.72rem',
+                                fontWeight: 800,
+                                color: '#fff',
+                                background: winBank === 'PNB' ? '#FF6B00' : winBank === 'AU' ? '#0056b3' : '#28a745'
+                              }}>
+                                🏆 {winBank}
+                              </span>
+                            </td>
+                            <td style={{ padding: '0.45rem', textAlign: 'center', fontWeight: 700, color: 'var(--gold-deep)' }}>
+                              {winRank}/13
+                            </td>
+                            <td style={{ padding: '0.45rem', background: winBank === 'YES' ? 'rgba(40, 167, 69, 0.08)' : 'transparent', fontWeight: winBank === 'YES' ? 700 : 400 }}>
+                              {item.yes_state || 'NOT_STARTED'} <span style={{ fontSize: '0.68rem', color: 'var(--muted)' }}>({item.yes_rank || 0}/13)</span>
+                            </td>
+                            <td style={{ padding: '0.45rem', background: winBank === 'AU' ? 'rgba(0, 86, 179, 0.08)' : 'transparent', fontWeight: winBank === 'AU' ? 700 : 400 }}>
+                              {item.au_state || 'NOT_STARTED'} <span style={{ fontSize: '0.68rem', color: 'var(--muted)' }}>({item.au_rank || 0}/13)</span>
+                            </td>
+                            <td style={{ padding: '0.45rem', background: winBank === 'PNB' ? 'rgba(255, 107, 0, 0.08)' : 'transparent', fontWeight: winBank === 'PNB' ? 700 : 400 }}>
+                              {item.pnb_state || 'NOT_STARTED'} <span style={{ fontSize: '0.68rem', color: 'var(--muted)' }}>({item.pnb_rank || 0}/13)</span>
+                            </td>
+                            <td style={{ padding: '0.45rem' }}>
+                              <span className={`badge badge-${item.status === 'Approved' ? 'success' : item.status === 'Rejected' ? 'danger' : 'warning'}`}>{item.status}</span>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

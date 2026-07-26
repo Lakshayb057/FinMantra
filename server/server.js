@@ -1700,15 +1700,34 @@ function getStatusRank(statusStr) {
   return 0;
 }
 
-// Helper to standardise MIS status
 function standardizeStatus(statusStr, rawRow) {
   if (!statusStr) return 'Pending';
-  const clean = String(statusStr).trim().toLowerCase();
-  
-  if (clean.includes('ac_created') || clean.includes('account_created') || clean.includes('approve') || clean.includes('success') || clean.includes('disbursed') || clean.includes('active') || clean === 'approved') {
+  const clean = String(statusStr).trim().toUpperCase().replace(/[\s-]+/g, '_');
+
+  const statusMap = {
+    'NOT_STARTED': 'New',
+    'NOT_APPLICABLE': 'Not Applicable',
+    'REJECTED': 'Rejected',
+    'IN_PROGRESS': 'In Progress',
+    'DOC_UPLOAD_PENDING': 'Document Pending',
+    'DOC_UPLOADED': 'Document Uploaded',
+    'KYC_PENDING': 'KYC Pending',
+    'DOC_REUPLOAD_REQUIRED': 'Reupload Required',
+    'KYC_DONE': 'KYC Done',
+    'SUBMITTED': 'Submitted',
+    'SUBMITTED_OTP_VERIFIED': 'OTP Verified',
+    'VKYC_PENDING': 'VKYC Pending',
+    'AC_CREATED': 'Approved',
+    'APPROVED': 'Approved'
+  };
+
+  if (statusMap[clean]) return statusMap[clean];
+
+  const lower = String(statusStr).trim().toLowerCase();
+  if (lower.includes('ac_created') || lower.includes('account_created') || lower.includes('approve') || lower.includes('success') || lower.includes('disbursed') || lower.includes('active')) {
     return 'Approved';
   }
-  if (clean.includes('reject') || clean.includes('decline') || clean.includes('cancel') || clean === 'rejected') {
+  if (lower.includes('reject') || lower.includes('decline') || lower.includes('cancel')) {
     return 'Rejected';
   }
   return 'Pending';
@@ -2255,15 +2274,32 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
 
     if (isKiwi) {
       misData.mis_bank_name = 'KIWI';
-      misData.kiwi_bank = row.kiwi_winning_bank || '';
-      misData.winning_bank = row.kiwi_winning_bank || '';
+      misData.kiwi_bank = row.kiwi_winning_bank || 'YES';
+      misData.winning_bank = row.kiwi_winning_bank || 'YES';
+      misData.winning_state = row.current_state || '';
+      misData.winning_rank = row.status_rank || 1;
+      misData.yes_state = row.kiwi_yes_status || 'NOT_STARTED';
+      misData.yes_rank = row.yes_rank || 0;
+      misData.au_state = row.kiwi_au_status || 'NOT_STARTED';
+      misData.au_rank = row.au_rank || 0;
+      misData.pnb_state = row.kiwi_pnb_status || 'NOT_STARTED';
+      misData.pnb_rank = row.pnb_rank || 0;
+      misData.status_rank = row.status_rank || 1;
       misData.user_id = row.kiwi_user_id || '';
       misData.current_state = row.current_state || '';
       misData.final_decision = row.current_state || '';
       misData.bank_reference_number = String(row._extractedUrn || row.APPLICATION_REFERENCE_NUMBER || '').trim();
-      misData.yes_current_state = row.kiwi_yes_status || '';
-      misData.au_current_state = row.kiwi_au_status || '';
-      misData.pnb_current_state = row.kiwi_pnb_status || '';
+
+      misData.kiwi_metadata = {
+        yes_state: row.kiwi_yes_status || 'NOT_STARTED',
+        yes_rank: row.yes_rank || 0,
+        au_state: row.kiwi_au_status || 'NOT_STARTED',
+        au_rank: row.au_rank || 0,
+        pnb_state: row.kiwi_pnb_status || 'NOT_STARTED',
+        pnb_rank: row.pnb_rank || 0,
+        winning_bank: row.kiwi_winning_bank || 'YES',
+        winning_rank: row.status_rank || 1
+      };
 
       misData.registration = String(getRowValue(row, 'registration') || '').trim();
       misData.pan_submit = String(getRowValue(row, 'Pan_Submit') || getRowValue(row, 'pan_submit') || '').trim();
@@ -2330,7 +2366,16 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
         urn: matchedLead.urn,
         name: matchedLead.full_name,
         cardName: matchedLead.card_name,
-        status: standardStatus
+        status: standardStatus,
+        winning_bank: misData.winning_bank || 'YES',
+        winning_state: misData.winning_state || misData.current_state || '',
+        winning_rank: misData.winning_rank || misData.status_rank || 1,
+        yes_state: misData.yes_state || 'NOT_STARTED',
+        yes_rank: misData.yes_rank || 0,
+        au_state: misData.au_state || 'NOT_STARTED',
+        au_rank: misData.au_rank || 0,
+        pnb_state: misData.pnb_state || 'NOT_STARTED',
+        pnb_rank: misData.pnb_rank || 0
       });
     } else {
       totalUnmatched++;
