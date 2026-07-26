@@ -1226,7 +1226,7 @@ const db = {
 
   async bulkUpdateLeadMISStatus(updates) {
     if (!updates || updates.length === 0) return;
-    const batchSize = 1000;
+    const batchSize = 200;
     for (let i = 0; i < updates.length; i += batchSize) {
       const batch = updates.slice(i, i + batchSize);
       const valueLines = [];

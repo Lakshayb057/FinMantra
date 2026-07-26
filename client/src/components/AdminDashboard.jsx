@@ -5375,119 +5375,208 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
       {/* Upload MIS Modal */}
       {showUploadMISModal && (
-        <div className="modal-overlay">
-          <div className="glass-panel admin-dialog-panel" style={{ width: '90%', maxWidth: '500px', position: 'relative', borderTop: '4px solid var(--gold)', padding: '2rem' }}>
-            <button onClick={() => { setShowUploadMISModal(false); setMisFile(null); }} style={{ position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none', color: 'hsl(var(--text-primary))', cursor: 'pointer' }}>
-              <X size={20} />
-            </button>
-            <h3 style={{ fontSize: '1.4rem', marginBottom: '0.5rem', color: 'hsl(var(--text-primary))' }}>Upload Bank MIS Report</h3>
-            <p style={{ fontSize: '0.85rem', color: 'hsl(var(--text-secondary))', marginBottom: '1.25rem' }}>
-              Upload an Excel (.xls, .xlsx), CSV (.csv), or PDF (.pdf) file. For <strong>KIWI Bank</strong>, upload an Excel file with <strong>PNB KIWI, YES KIWI, and AU KIWI</strong> sheets for automatic 3-bank status ranking and user_id mapping.
-            </p>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', marginBottom: '1.5rem' }}>
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label" style={{ fontWeight: 600, fontSize: '0.82rem', marginBottom: '0.4rem', color: 'hsl(var(--text-primary))' }}>Select Target Partner Bank MIS</label>
-                <select 
-                  className="form-select"
-                  value={selectedBankForMIS}
-                  onChange={(e) => setSelectedBankForMIS(e.target.value)}
-                  style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
-                >
-                  {getBankOptions().map((bank, i) => (
-                    <option key={i} value={bank}>{bank}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div 
-                style={{ 
-                  border: '2px dashed var(--line)', 
-                  borderRadius: 'var(--radius-md)', 
-                  padding: '2.5rem 1.5rem', 
-                  textAlign: 'center', 
-                  background: 'rgba(224, 168, 46, 0.02)', 
-                  cursor: 'pointer',
-                  position: 'relative'
-                }}
-              >
-                <input 
-                  type="file" 
-                  accept=".csv,.xls,.xlsx,.pdf"
-                  onChange={(e) => setMisFile(e.target.files[0])}
-                  style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }}
-                />
-                <Upload size={32} style={{ color: 'hsl(var(--primary))', marginBottom: '0.75rem', opacity: 0.8 }} />
-                <div style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.25rem' }}>
-                  {misFile ? misFile.name : 'Choose a file or drag it here'}
-                </div>
-                <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>
-                  Supports CSV, Excel, or PDF
-                </div>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+        <div 
+          className="modal-overlay"
+          style={{ 
+            backdropFilter: 'blur(6px)', 
+            background: 'rgba(0, 0, 0, 0.75)', 
+            zIndex: 99999,
+            pointerEvents: isSubmitting ? 'all' : 'auto'
+          }}
+          onClick={(e) => {
+            if (!isSubmitting && e.target === e.currentTarget) {
+              setShowUploadMISModal(false);
+              setMisFile(null);
+            }
+          }}
+        >
+          <div className="glass-panel admin-dialog-panel" style={{ width: '90%', maxWidth: '520px', position: 'relative', borderTop: '4px solid var(--gold)', padding: '2.25rem', borderRadius: '12px' }}>
+            {!isSubmitting && (
               <button 
                 onClick={() => { setShowUploadMISModal(false); setMisFile(null); }} 
-                className="btn-secondary"
-                disabled={isSubmitting}
+                style={{ position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none', color: 'hsl(var(--text-primary))', cursor: 'pointer' }}
               >
-                Cancel
+                <X size={20} />
               </button>
-              <button 
-                onClick={async () => {
-                  if (!misFile) {
-                    showToast('Please select a file first', 'error');
-                    return;
+            )}
+
+            {isSubmitting ? (
+              /* LOCKED PROGRESS VIEW */
+              <div style={{ textAlign: 'center', padding: '1rem 0' }}>
+                <style>{`
+                  @keyframes misSpin {
+                    0% { transform: rotate(0deg); }
+                    100% { transform: rotate(360deg); }
                   }
-                  setIsSubmitting(true);
-                  const formData = new FormData();
-                  formData.append('file', misFile);
-                  formData.append('bank', selectedBankForMIS);
-                  try {
-                    const res = await fetch(`${API_URL}/leads/upload-mis`, {
-                      method: 'POST',
-                      headers: { 'Authorization': `Bearer ${token}` },
-                      body: formData
-                    });
-                    if (res.ok) {
-                      const data = await res.json();
-                      setMisUploadResult(data);
-                      setShowUploadMISModal(false);
-                      setMisFile(null);
-                      setShowMISResultModal(true);
-                      fetchLeads(currentPage, leadsPerPage);
-                      fetchMISStats();
-                    } else {
-                      let errMsg = 'Failed to upload MIS file';
-                      if (res.status === 413) {
-                        errMsg = 'File size is too large for Nginx server limits (413 Request Entity Too Large). Please run Nginx fix command on EC2.';
-                      } else {
-                        try {
-                          const errData = await res.json();
-                          errMsg = errData.error || errMsg;
-                        } catch (e) {}
+                  @keyframes misPulseBar {
+                    0% { width: 10%; margin-left: 0%; }
+                    50% { width: 70%; margin-left: 15%; }
+                    100% { width: 100%; margin-left: 0%; }
+                  }
+                `}</style>
+
+                {/* Animated Circular Ring Progress Indicator */}
+                <div style={{ position: 'relative', width: '96px', height: '96px', margin: '0 auto 1.5rem auto' }}>
+                  <div style={{
+                    width: '96px',
+                    height: '96px',
+                    borderRadius: '50%',
+                    border: '5px solid rgba(224, 168, 46, 0.15)',
+                    borderTopColor: 'var(--gold-deep)',
+                    borderRightColor: 'var(--gold)',
+                    animation: 'misSpin 1.1s linear infinite',
+                    boxShadow: '0 0 15px rgba(224, 168, 46, 0.25)'
+                  }} />
+                  <div style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'var(--gold-deep)'
+                  }}>
+                    <Database size={32} style={{ animation: 'misSpin 4s linear infinite' }} />
+                  </div>
+                </div>
+
+                <h3 style={{ fontSize: '1.3rem', fontWeight: 700, marginBottom: '0.4rem', color: 'var(--ink)' }}>
+                  Uploading & Processing MIS Report...
+                </h3>
+                <p style={{ fontSize: '0.84rem', color: 'var(--muted)', marginBottom: '1.5rem', lineHeight: '1.4' }}>
+                  Parsing sheets, extracting URNs, cross-referencing <strong>13-tier bank status ranks</strong>, and updating PostgreSQL database records.
+                </p>
+
+                {/* Animated Linear Progress Bar */}
+                <div style={{ width: '100%', height: '8px', background: 'var(--paper-2)', borderRadius: '4px', overflow: 'hidden', marginBottom: '1.25rem', border: '1px solid var(--line)' }}>
+                  <div style={{
+                    height: '100%',
+                    background: 'linear-gradient(90deg, #e0a82e 0%, #facc15 50%, #d97706 100%)',
+                    borderRadius: '4px',
+                    animation: 'misPulseBar 2.2s ease-in-out infinite'
+                  }} />
+                </div>
+
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.78rem', color: 'var(--gold-deep)', fontWeight: 600, background: 'rgba(224, 168, 46, 0.1)', padding: '0.65rem 1.1rem', borderRadius: '30px', border: '1px solid rgba(224, 168, 46, 0.25)' }}>
+                  <ShieldAlert size={16} />
+                  <span>Navigation Locked: Please keep this modal open until finished</span>
+                </div>
+              </div>
+            ) : (
+              /* UPLOAD FORM */
+              <>
+                <h3 style={{ fontSize: '1.4rem', marginBottom: '0.5rem', color: 'hsl(var(--text-primary))' }}>Upload Bank MIS Report</h3>
+                <p style={{ fontSize: '0.85rem', color: 'hsl(var(--text-secondary))', marginBottom: '1.25rem' }}>
+                  Upload an Excel (.xls, .xlsx), CSV (.csv), or PDF (.pdf) file. For <strong>KIWI Bank</strong>, upload an Excel file with <strong>PNB KIWI, YES KIWI, and AU KIWI</strong> sheets for automatic 3-bank status ranking and user_id mapping.
+                </p>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', marginBottom: '1.5rem' }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontWeight: 600, fontSize: '0.82rem', marginBottom: '0.4rem', color: 'hsl(var(--text-primary))' }}>Select Target Partner Bank MIS</label>
+                    <select 
+                      className="form-select"
+                      value={selectedBankForMIS}
+                      onChange={(e) => setSelectedBankForMIS(e.target.value)}
+                      style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
+                    >
+                      {getBankOptions().map((bank, i) => (
+                        <option key={i} value={bank}>{bank}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div 
+                    style={{ 
+                      border: '2px dashed var(--line)', 
+                      borderRadius: 'var(--radius-md)', 
+                      padding: '2.5rem 1.5rem', 
+                      textAlign: 'center', 
+                      background: 'rgba(224, 168, 46, 0.02)', 
+                      cursor: 'pointer',
+                      position: 'relative'
+                    }}
+                  >
+                    <input 
+                      type="file" 
+                      accept=".csv,.xls,.xlsx,.pdf"
+                      onChange={(e) => setMisFile(e.target.files[0])}
+                      style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }}
+                    />
+                    <Upload size={32} style={{ color: 'hsl(var(--primary))', marginBottom: '0.75rem', opacity: 0.8 }} />
+                    <div style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.25rem' }}>
+                      {misFile ? misFile.name : 'Choose a file or drag it here'}
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>
+                      Supports CSV, Excel, or PDF
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+                  <button 
+                    onClick={() => { setShowUploadMISModal(false); setMisFile(null); }} 
+                    className="btn-secondary"
+                    disabled={isSubmitting}
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={async () => {
+                      if (!misFile) {
+                        showToast('Please select a file first', 'error');
+                        return;
                       }
-                      showToast(errMsg, 'error');
-                    }
-                  } catch (err) {
-                    console.error('MIS upload error:', err);
-                    if (String(err).includes('Unexpected token')) {
-                      showToast('File size exceeded Nginx server limit (413 Request Entity Too Large). Please update Nginx client_max_body_size on EC2.', 'error');
-                    } else {
-                      showToast('Error uploading file', 'error');
-                    }
-                  } finally {
-                    setIsSubmitting(false);
-                  }
-                }} 
-                className="btn-primary"
-                disabled={isSubmitting || !misFile}
-              >
-                {isSubmitting ? 'Uploading & Matching...' : 'Upload & Process'}
-              </button>
-            </div>
+                      setIsSubmitting(true);
+                      const formData = new FormData();
+                      formData.append('file', misFile);
+                      formData.append('bank', selectedBankForMIS);
+                      try {
+                        const res = await fetch(`${API_URL}/leads/upload-mis`, {
+                          method: 'POST',
+                          headers: { 'Authorization': `Bearer ${token}` },
+                          body: formData
+                        });
+                        if (res.ok) {
+                          const data = await res.json();
+                          setMisUploadResult(data);
+                          setShowUploadMISModal(false);
+                          setMisFile(null);
+                          setShowMISResultModal(true);
+                          fetchLeads(currentPage, leadsPerPage);
+                          fetchMISStats();
+                        } else {
+                          let errMsg = 'Failed to upload MIS file';
+                          if (res.status === 413) {
+                            errMsg = 'File size is too large for Nginx server limits (413 Request Entity Too Large). Please run Nginx fix command on EC2.';
+                          } else {
+                            try {
+                              const errData = await res.json();
+                              errMsg = errData.error || errMsg;
+                            } catch (e) {}
+                          }
+                          showToast(errMsg, 'error');
+                        }
+                      } catch (err) {
+                        console.error('MIS upload error:', err);
+                        if (String(err).includes('Unexpected token')) {
+                          showToast('File size exceeded Nginx server limit (413 Request Entity Too Large). Please update Nginx client_max_body_size on EC2.', 'error');
+                        } else {
+                          showToast('Error uploading file', 'error');
+                        }
+                      } finally {
+                        setIsSubmitting(false);
+                      }
+                    }} 
+                    className="btn-primary"
+                    disabled={isSubmitting}
+                  >
+                    Upload & Process
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
