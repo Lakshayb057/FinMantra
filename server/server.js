@@ -1667,16 +1667,35 @@ const KIWI_STATUS_RANKING = {
   'AC_CREATED': 13
 };
 
+function cleanUserId(val) {
+  if (val === null || val === undefined) return '';
+  let str = String(val).trim();
+  if (str.endsWith('.0')) str = str.slice(0, -2);
+  return str.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
 function getStatusRank(statusStr) {
   if (!statusStr) return 0;
-  const clean = String(statusStr).trim().toUpperCase().replace(/[\s-]+/g, '_');
-  if (KIWI_STATUS_RANKING[clean] !== undefined) {
-    return KIWI_STATUS_RANKING[clean];
-  }
-  for (const [key, rank] of Object.entries(KIWI_STATUS_RANKING)) {
-    if (clean === key || clean.includes(key)) {
-      return rank;
-    }
+  const str = String(statusStr).trim().toUpperCase();
+  const clean = str.replace(/[^A-Z0-9]/g, '');
+
+  if (clean.includes('ACCREATED') || clean.includes('ACCOUNTCREATED')) return 13;
+  if (clean.includes('VKYCPENDING') || clean.includes('VKYC')) return 12;
+  if (clean.includes('OTPVERIFIED') || clean.includes('SUBMITTEDOTP')) return 11;
+  if (clean.includes('SUBMITTED')) return 10;
+  if (clean.includes('KYCDONE') || clean.includes('KYCCOMPLETED')) return 9;
+  if (clean.includes('DOCREUPLOAD') || clean.includes('REUPLOAD')) return 8;
+  if (clean.includes('KYCPENDING')) return 7;
+  if (clean.includes('DOCUPLOADED') || clean.includes('DOCUMENTUPLOADED')) return 6;
+  if (clean.includes('DOCUPLOADPENDING') || clean.includes('DOCPENDING') || clean.includes('DOCUMENTPENDING')) return 5;
+  if (clean.includes('INPROGRESS') || clean.includes('PROCESSING')) return 4;
+  if (clean.includes('REJECT') || clean.includes('DECLINE') || clean.includes('CANCEL')) return 3;
+  if (clean.includes('NOTAPPLICABLE') || clean.includes('NA')) return 2;
+  if (clean.includes('NOTSTARTED')) return 1;
+
+  const cleanUnderscore = str.replace(/[\s-]+/g, '_');
+  if (KIWI_STATUS_RANKING[cleanUnderscore] !== undefined) {
+    return KIWI_STATUS_RANKING[cleanUnderscore];
   }
   return 0;
 }
@@ -1781,25 +1800,24 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
           yesContentKey = sampleKeys.find(k => {
             const clean = k.toLowerCase().replace(/[^a-z]/g, '');
             return clean === 'content' || clean === 'contant' || clean === 'urn' || clean === 'reference';
+          }) || sampleKeys.find(k => {
+            const val = String(yesRows[0][k] || '');
+            return val.includes('FM') || val.includes('fm');
           });
-          if (!yesContentKey) {
-            yesContentKey = sampleKeys.find(k => {
-              const val = String(yesRows[0][k] || '');
-              return val.includes('FM') || val.includes('fm');
-            });
-          }
-          yesUserIdKey = sampleKeys.find(k => k.toLowerCase().replace(/[^a-z]/g, '') === 'userid');
-          yesStateKey = sampleKeys.find(k => k.toLowerCase().replace(/[^a-z]/g, '') === 'currentstate' || k.toLowerCase().replace(/[^a-z]/g, '') === 'currentstatus');
+
+          yesUserIdKey = sampleKeys.find(k => k.toLowerCase().replace(/[^a-z]/g, '').includes('user'));
+          yesStateKey = sampleKeys.find(k => k.toLowerCase().replace(/[^a-z]/g, '').includes('state') || k.toLowerCase().replace(/[^a-z]/g, '').includes('status'));
         }
 
-        // Build user_id lookup maps for AU and PNB sheets with fast pre-detected keys
+        // Build user_id lookup maps for AU and PNB sheets with clean user ID Keys
         const auUserMap = new Map();
         if (auRows.length > 0) {
-          const auUserIdKey = Object.keys(auRows[0]).find(k => k.toLowerCase().replace(/[^a-z]/g, '') === 'userid');
-          const auStateKey = Object.keys(auRows[0]).find(k => k.toLowerCase().replace(/[^a-z]/g, '') === 'currentstate' || k.toLowerCase().replace(/[^a-z]/g, '') === 'currentstatus');
+          const auUserIdKey = Object.keys(auRows[0]).find(k => k.toLowerCase().replace(/[^a-z]/g, '').includes('user'));
+          const auStateKey = Object.keys(auRows[0]).find(k => k.toLowerCase().replace(/[^a-z]/g, '').includes('state') || k.toLowerCase().replace(/[^a-z]/g, '').includes('status'));
           for (let i = 0; i < auRows.length; i++) {
             const r = auRows[i];
-            const uid = String((auUserIdKey ? r[auUserIdKey] : getRowValue(r, 'user_id')) || '').trim();
+            const rawUid = auUserIdKey ? r[auUserIdKey] : getRowValue(r, 'user_id');
+            const uid = cleanUserId(rawUid);
             if (uid) {
               r._state = String((auStateKey ? r[auStateKey] : getRowValue(r, 'current_state')) || '').trim();
               auUserMap.set(uid, r);
@@ -1809,11 +1827,12 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
 
         const pnbUserMap = new Map();
         if (pnbRows.length > 0) {
-          const pnbUserIdKey = Object.keys(pnbRows[0]).find(k => k.toLowerCase().replace(/[^a-z]/g, '') === 'userid');
-          const pnbStateKey = Object.keys(pnbRows[0]).find(k => k.toLowerCase().replace(/[^a-z]/g, '') === 'currentstate' || k.toLowerCase().replace(/[^a-z]/g, '') === 'currentstatus');
+          const pnbUserIdKey = Object.keys(pnbRows[0]).find(k => k.toLowerCase().replace(/[^a-z]/g, '').includes('user'));
+          const pnbStateKey = Object.keys(pnbRows[0]).find(k => k.toLowerCase().replace(/[^a-z]/g, '').includes('state') || k.toLowerCase().replace(/[^a-z]/g, '').includes('status'));
           for (let i = 0; i < pnbRows.length; i++) {
             const r = pnbRows[i];
-            const uid = String((pnbUserIdKey ? r[pnbUserIdKey] : getRowValue(r, 'user_id')) || '').trim();
+            const rawUid = pnbUserIdKey ? r[pnbUserIdKey] : getRowValue(r, 'user_id');
+            const uid = cleanUserId(rawUid);
             if (uid) {
               r._state = String((pnbStateKey ? r[pnbStateKey] : getRowValue(r, 'current_state')) || '').trim();
               pnbUserMap.set(uid, r);
@@ -1835,7 +1854,9 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
             }
           }
 
-          const userId = String((yesUserIdKey ? yesRow[yesUserIdKey] : getRowValue(yesRow, 'user_id')) || '').trim();
+          const rawUserId = yesUserIdKey ? yesRow[yesUserIdKey] : getRowValue(yesRow, 'user_id');
+          const userId = cleanUserId(rawUserId);
+
           const candidateAuRow = userId ? auUserMap.get(userId) : null;
           const candidatePnbRow = userId ? pnbUserMap.get(userId) : null;
 
