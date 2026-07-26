@@ -26,4 +26,6 @@ server/verify_pg*.js
 
 # Baileys WhatsApp Session Folder
 server/baileys_auth_info/
-
+# Python
+__pycache__/
+*.pyc
