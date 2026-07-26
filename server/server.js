@@ -1864,11 +1864,25 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
           yesStateKey = findStateKey(yesRows[0]);
         }
 
+        console.log(`[KIWI MIS] Sheets: YES="${yesSheetName}" (${yesRows.length} rows), AU="${auSheetName}" (${auRows.length} rows), PNB="${pnbSheetName}" (${pnbRows.length} rows)`);
+        console.log(`[KIWI MIS] YES Keys: content="${yesContentKey}", userId="${yesUserIdKey}", state="${yesStateKey}"`);
+        if (yesRows.length > 0) {
+          console.log(`[KIWI MIS] YES Row 0 columns: ${Object.keys(yesRows[0]).join(', ')}`);
+          console.log(`[KIWI MIS] YES Row 0 state value: "${yesStateKey ? yesRows[0][yesStateKey] : 'KEY_NOT_FOUND'}"`);
+        }
+        if (auRows.length > 0) {
+          console.log(`[KIWI MIS] AU Row 0 columns: ${Object.keys(auRows[0]).join(', ')}`);
+        }
+        if (pnbRows.length > 0) {
+          console.log(`[KIWI MIS] PNB Row 0 columns: ${Object.keys(pnbRows[0]).join(', ')}`);
+        }
+
         // Build user_id lookup maps for AU and PNB sheets with clean user ID Keys
         const auUserMap = new Map();
         if (auRows.length > 0) {
           const auUserIdKey = findUserIdKey(auRows[0]);
           const auStateKey = findStateKey(auRows[0]);
+          console.log(`[KIWI MIS] AU Keys: userId="${auUserIdKey}", state="${auStateKey}"`);
           for (let i = 0; i < auRows.length; i++) {
             const r = auRows[i];
             const rawUid = auUserIdKey ? r[auUserIdKey] : getRowValue(r, 'user_id');
@@ -1877,6 +1891,7 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
               const stateVal = (auStateKey ? r[auStateKey] : getRowValue(r, 'current_state')) || getRowValue(r, 'status') || '';
               r._state = String(stateVal).trim();
               auUserMap.set(uid, r);
+              if (i < 2) console.log(`[KIWI MIS] AU Map entry: uid="${uid}", state="${r._state}"`);
             }
           }
         }
@@ -1885,6 +1900,7 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
         if (pnbRows.length > 0) {
           const pnbUserIdKey = findUserIdKey(pnbRows[0]);
           const pnbStateKey = findStateKey(pnbRows[0]);
+          console.log(`[KIWI MIS] PNB Keys: userId="${pnbUserIdKey}", state="${pnbStateKey}"`);
           for (let i = 0; i < pnbRows.length; i++) {
             const r = pnbRows[i];
             const rawUid = pnbUserIdKey ? r[pnbUserIdKey] : getRowValue(r, 'user_id');
@@ -1893,9 +1909,12 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
               const stateVal = (pnbStateKey ? r[pnbStateKey] : getRowValue(r, 'current_state')) || getRowValue(r, 'status') || '';
               r._state = String(stateVal).trim();
               pnbUserMap.set(uid, r);
+              if (i < 2) console.log(`[KIWI MIS] PNB Map entry: uid="${uid}", state="${r._state}"`);
             }
           }
         }
+
+        console.log(`[KIWI MIS] Map sizes: AU=${auUserMap.size}, PNB=${pnbUserMap.size}`);
 
         parsedRows = new Array(yesRows.length);
 
@@ -1944,6 +1963,15 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
             winningState = pnbState;
           }
 
+          // Log for debugging first few rows
+          if (i < 3) {
+            console.log(`[KIWI Debug Row ${i}] URN=${extractedUrn}, userId=${userId}`);
+            console.log(`  YES state="${yesState}" rank=${yesRank}`);
+            console.log(`  AU  state="${auState}" rank=${auRank} (matched=${!!candidateAuRow})`);
+            console.log(`  PNB state="${pnbState}" rank=${pnbRank} (matched=${!!candidatePnbRow})`);
+            console.log(`  WINNER: ${winningBank} state="${winningState}" rank=${maxRank}`);
+          }
+
           parsedRows[i] = {
             ...winningRow,
             APPLICATION_REFERENCE_NUMBER: extractedUrn || rawContent,
@@ -1956,7 +1984,12 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
             kiwi_yes_status: yesState,
             kiwi_au_status: auState,
             kiwi_pnb_status: pnbState,
-            _extractedUrn: extractedUrn
+            _extractedUrn: extractedUrn,
+            // Store computed ranks explicitly so misData builder can use them
+            yes_rank: yesRank,
+            au_rank: auRank,
+            pnb_rank: pnbRank,
+            status_rank: maxRank
           };
         }
       } else {
@@ -2311,32 +2344,38 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
     misData.kyc_completion_date = String(getRowValue(row, 'KYC Completion date') || getRowValue(row, 'KYC Completion date')).trim();
 
     if (isKiwi) {
+      const yesRankVal = (row.yes_rank !== undefined && row.yes_rank !== null) ? row.yes_rank : 0;
+      const auRankVal = (row.au_rank !== undefined && row.au_rank !== null) ? row.au_rank : 0;
+      const pnbRankVal = (row.pnb_rank !== undefined && row.pnb_rank !== null) ? row.pnb_rank : 0;
+      const statusRankVal = (row.status_rank !== undefined && row.status_rank !== null) ? row.status_rank : 0;
+
       misData.mis_bank_name = 'KIWI';
       misData.kiwi_bank = row.kiwi_winning_bank || 'YES';
       misData.winning_bank = row.kiwi_winning_bank || 'YES';
       misData.winning_state = row.current_state || '';
-      misData.winning_rank = row.status_rank || 1;
-      misData.yes_state = row.kiwi_yes_status || 'NOT_STARTED';
-      misData.yes_rank = row.yes_rank || 0;
-      misData.au_state = row.kiwi_au_status || 'NOT_STARTED';
-      misData.au_rank = row.au_rank || 0;
-      misData.pnb_state = row.kiwi_pnb_status || 'NOT_STARTED';
-      misData.pnb_rank = row.pnb_rank || 0;
-      misData.status_rank = row.status_rank || 1;
+      misData.winning_rank = statusRankVal;
+      misData.yes_state = row.kiwi_yes_status || '';
+      misData.yes_rank = yesRankVal;
+      misData.au_state = row.kiwi_au_status || '';
+      misData.au_rank = auRankVal;
+      misData.pnb_state = row.kiwi_pnb_status || '';
+      misData.pnb_rank = pnbRankVal;
+      misData.status_rank = statusRankVal;
       misData.user_id = row.kiwi_user_id || '';
       misData.current_state = row.current_state || '';
+      misData.current_status = row.current_status || row.current_state || '';
       misData.final_decision = row.current_state || '';
       misData.bank_reference_number = String(row._extractedUrn || row.APPLICATION_REFERENCE_NUMBER || '').trim();
 
       misData.kiwi_metadata = {
-        yes_state: row.kiwi_yes_status || 'NOT_STARTED',
-        yes_rank: row.yes_rank || 0,
-        au_state: row.kiwi_au_status || 'NOT_STARTED',
-        au_rank: row.au_rank || 0,
-        pnb_state: row.kiwi_pnb_status || 'NOT_STARTED',
-        pnb_rank: row.pnb_rank || 0,
+        yes_state: row.kiwi_yes_status || '',
+        yes_rank: yesRankVal,
+        au_state: row.kiwi_au_status || '',
+        au_rank: auRankVal,
+        pnb_state: row.kiwi_pnb_status || '',
+        pnb_rank: pnbRankVal,
         winning_bank: row.kiwi_winning_bank || 'YES',
-        winning_rank: row.status_rank || 1
+        winning_rank: statusRankVal
       };
 
       misData.registration = String(getRowValue(row, 'registration') || '').trim();
