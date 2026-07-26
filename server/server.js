@@ -1708,6 +1708,9 @@ function extractUrnFromText(val) {
 
 // Upload MIS Route
 app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single('file'), async (req, res) => {
+  if (req.socket) req.socket.setTimeout(600000);
+  if (res.setTimeout) res.setTimeout(600000);
+
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
   }
@@ -1752,7 +1755,7 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
         }
       }
     } else if (ext === 'xls' || ext === 'xlsx') {
-      const workbook = xlsx.read(req.file.buffer, { type: 'buffer', cellDates: true });
+      const workbook = xlsx.read(req.file.buffer, { type: 'buffer', dense: true, cellHTML: false, cellFormula: false, cellText: false });
       const isKiwiUpload = selectedBank.toLowerCase().includes('kiwi');
 
       if (isKiwiUpload) {
