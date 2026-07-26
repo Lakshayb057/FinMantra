@@ -1752,7 +1752,7 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
         }
       }
     } else if (ext === 'xls' || ext === 'xlsx') {
-      const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
+      const workbook = xlsx.read(req.file.buffer, { type: 'buffer', cellDates: true });
       const isKiwiUpload = selectedBank.toLowerCase().includes('kiwi');
 
       if (isKiwiUpload) {
@@ -1768,43 +1768,77 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
         const auRows = auSheetName ? xlsx.utils.sheet_to_json(workbook.Sheets[auSheetName], { defval: '' }) : [];
         const pnbRows = pnbSheetName ? xlsx.utils.sheet_to_json(workbook.Sheets[pnbSheetName], { defval: '' }) : [];
 
-        // Build user_id lookup maps for AU and PNB sheets
+        // Fast key pre-detection (runs ONCE instead of per row)
+        let yesContentKey = null;
+        let yesUserIdKey = null;
+        let yesStateKey = null;
+
+        if (yesRows.length > 0) {
+          const sampleKeys = Object.keys(yesRows[0]);
+          yesContentKey = sampleKeys.find(k => {
+            const clean = k.toLowerCase().replace(/[^a-z]/g, '');
+            return clean === 'content' || clean === 'contant' || clean === 'urn' || clean === 'reference';
+          });
+          if (!yesContentKey) {
+            yesContentKey = sampleKeys.find(k => {
+              const val = String(yesRows[0][k] || '');
+              return val.includes('FM') || val.includes('fm');
+            });
+          }
+          yesUserIdKey = sampleKeys.find(k => k.toLowerCase().replace(/[^a-z]/g, '') === 'userid');
+          yesStateKey = sampleKeys.find(k => k.toLowerCase().replace(/[^a-z]/g, '') === 'currentstate' || k.toLowerCase().replace(/[^a-z]/g, '') === 'currentstatus');
+        }
+
+        // Build user_id lookup maps for AU and PNB sheets with fast pre-detected keys
         const auUserMap = new Map();
-        auRows.forEach(r => {
-          const uid = String(getRowValue(r, 'user_id') || getRowValue(r, 'userId') || '').trim();
-          if (uid) auUserMap.set(uid, r);
-        });
+        if (auRows.length > 0) {
+          const auUserIdKey = Object.keys(auRows[0]).find(k => k.toLowerCase().replace(/[^a-z]/g, '') === 'userid');
+          const auStateKey = Object.keys(auRows[0]).find(k => k.toLowerCase().replace(/[^a-z]/g, '') === 'currentstate' || k.toLowerCase().replace(/[^a-z]/g, '') === 'currentstatus');
+          for (let i = 0; i < auRows.length; i++) {
+            const r = auRows[i];
+            const uid = String((auUserIdKey ? r[auUserIdKey] : getRowValue(r, 'user_id')) || '').trim();
+            if (uid) {
+              r._state = String((auStateKey ? r[auStateKey] : getRowValue(r, 'current_state')) || '').trim();
+              auUserMap.set(uid, r);
+            }
+          }
+        }
 
         const pnbUserMap = new Map();
-        pnbRows.forEach(r => {
-          const uid = String(getRowValue(r, 'user_id') || getRowValue(r, 'userId') || '').trim();
-          if (uid) pnbUserMap.set(uid, r);
-        });
+        if (pnbRows.length > 0) {
+          const pnbUserIdKey = Object.keys(pnbRows[0]).find(k => k.toLowerCase().replace(/[^a-z]/g, '') === 'userid');
+          const pnbStateKey = Object.keys(pnbRows[0]).find(k => k.toLowerCase().replace(/[^a-z]/g, '') === 'currentstate' || k.toLowerCase().replace(/[^a-z]/g, '') === 'currentstatus');
+          for (let i = 0; i < pnbRows.length; i++) {
+            const r = pnbRows[i];
+            const uid = String((pnbUserIdKey ? r[pnbUserIdKey] : getRowValue(r, 'user_id')) || '').trim();
+            if (uid) {
+              r._state = String((pnbStateKey ? r[pnbStateKey] : getRowValue(r, 'current_state')) || '').trim();
+              pnbUserMap.set(uid, r);
+            }
+          }
+        }
 
-        parsedRows = [];
+        parsedRows = new Array(yesRows.length);
 
-        for (const yesRow of yesRows) {
-          // Extract URN from YES KIWI sheet (from content column or cell scan)
-          let contantVal = getRowValue(yesRow, 'content') || getRowValue(yesRow, 'Contant') || getRowValue(yesRow, 'contant') || getRowValue(yesRow, 'Reference') || getRowValue(yesRow, 'urn') || getRowValue(yesRow, 'URN');
-          let extractedUrn = extractUrnFromText(contantVal);
-          if (!extractedUrn) {
-            for (const cellVal of Object.values(yesRow)) {
-              const found = extractUrnFromText(cellVal);
-              if (found) {
-                extractedUrn = found;
-                break;
-              }
+        for (let i = 0; i < yesRows.length; i++) {
+          const yesRow = yesRows[i];
+          const rawContent = yesContentKey ? yesRow[yesContentKey] : getRowValue(yesRow, 'content');
+          let extractedUrn = null;
+
+          if (rawContent) {
+            const strContent = String(rawContent);
+            if (strContent.includes('FM') || strContent.includes('fm')) {
+              extractedUrn = extractUrnFromText(strContent);
             }
           }
 
-          const userId = String(getRowValue(yesRow, 'user_id') || getRowValue(yesRow, 'userId') || '').trim();
-
+          const userId = String((yesUserIdKey ? yesRow[yesUserIdKey] : getRowValue(yesRow, 'user_id')) || '').trim();
           const candidateAuRow = userId ? auUserMap.get(userId) : null;
           const candidatePnbRow = userId ? pnbUserMap.get(userId) : null;
 
-          const yesState = String(getRowValue(yesRow, 'current_state') || getRowValue(yesRow, 'current_status') || '').trim();
-          const auState = candidateAuRow ? String(getRowValue(candidateAuRow, 'current_state') || getRowValue(candidateAuRow, 'current_status') || '').trim() : '';
-          const pnbState = candidatePnbRow ? String(getRowValue(candidatePnbRow, 'current_state') || getRowValue(candidatePnbRow, 'current_status') || '').trim() : '';
+          const yesState = String((yesStateKey ? yesRow[yesStateKey] : getRowValue(yesRow, 'current_state')) || '').trim();
+          const auState = candidateAuRow ? (candidateAuRow._state || String(getRowValue(candidateAuRow, 'current_state') || '').trim()) : '';
+          const pnbState = candidatePnbRow ? (candidatePnbRow._state || String(getRowValue(candidatePnbRow, 'current_state') || '').trim()) : '';
 
           const yesRank = getStatusRank(yesState);
           const auRank = getStatusRank(auState);
@@ -1829,11 +1863,10 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
             winningState = pnbState;
           }
 
-          // Combine winning bank fields while retaining all details and URN
-          const combinedRow = {
+          parsedRows[i] = {
             ...winningRow,
-            APPLICATION_REFERENCE_NUMBER: extractedUrn || getRowValue(winningRow, 'content'),
-            content: extractedUrn || getRowValue(winningRow, 'content'),
+            APPLICATION_REFERENCE_NUMBER: extractedUrn || rawContent,
+            content: extractedUrn || rawContent,
             current_state: winningState,
             current_status: winningState,
             final_decision: winningState,
@@ -1844,8 +1877,6 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
             kiwi_pnb_status: pnbState,
             _extractedUrn: extractedUrn
           };
-
-          parsedRows.push(combinedRow);
         }
       } else {
         const sheetName = workbook.SheetNames[0];
