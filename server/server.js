@@ -1797,226 +1797,229 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
         }
       }
     } else if (ext === 'xls' || ext === 'xlsx') {
-      const workbook = xlsx.read(req.file.buffer, { type: 'buffer', dense: true, cellHTML: false, cellFormula: false, cellText: false });
       const isKiwiUpload = selectedBank.toLowerCase().includes('kiwi');
 
       if (isKiwiUpload) {
-        const yesSheetName = workbook.SheetNames.find(s => s.toLowerCase().includes('yes'));
-        const auSheetName = workbook.SheetNames.find(s => s.toLowerCase().includes('au'));
-        const pnbSheetName = workbook.SheetNames.find(s => s.toLowerCase().includes('pnb'));
+        let pythonSuccess = false;
+        const tempPath = path.join(os.tmpdir(), `kiwi_upload_${Date.now()}_${Math.random().toString(36).substring(7)}.xlsx`);
+        
+        try {
+          fs.writeFileSync(tempPath, req.file.buffer);
+          const pyScript = path.join(__dirname, 'parse_kiwi_mis.py');
+          const pyCmd = process.platform === 'win32' ? 'python' : 'python3';
 
-        if (!yesSheetName) {
-          return res.status(400).json({ error: 'YES KIWI sheet not found in uploaded Excel file. Please ensure the file contains YES KIWI, AU KIWI, and PNB KIWI sheets.' });
-        }
-
-        const yesRows = xlsx.utils.sheet_to_json(workbook.Sheets[yesSheetName], { defval: '' });
-        const auRows = auSheetName ? xlsx.utils.sheet_to_json(workbook.Sheets[auSheetName], { defval: '' }) : [];
-        const pnbRows = pnbSheetName ? xlsx.utils.sheet_to_json(workbook.Sheets[pnbSheetName], { defval: '' }) : [];
-
-        function findStateKey(sampleRow) {
-          if (!sampleRow) return null;
-          const sampleKeys = Object.keys(sampleRow);
-          let key = sampleKeys.find(k => {
-            const clean = k.toLowerCase().replace(/[^a-z]/g, '');
-            return clean === 'currentstate' || clean === 'currentstatus' || clean === 'appstate' || clean === 'appstatus';
-          });
-          if (key) return key;
-          key = sampleKeys.find(k => {
-            const clean = k.toLowerCase();
-            return clean.includes('current') && (clean.includes('state') || clean.includes('status'));
-          });
-          if (key) return key;
-          key = sampleKeys.find(k => {
-            const clean = k.toLowerCase().replace(/[^a-z]/g, '');
-            return clean === 'status' || clean === 'misstatus' || clean === 'finalstatus';
-          });
-          if (key) return key;
-          key = sampleKeys.find(k => {
-            const clean = k.toLowerCase().trim();
-            return clean !== 'state' && clean !== 'customer_state' && (clean.includes('state') || clean.includes('status'));
-          });
-          return key || 'current_state';
-        }
-
-        function findUserIdKey(sampleRow) {
-          if (!sampleRow) return null;
-          const sampleKeys = Object.keys(sampleRow);
-          let key = sampleKeys.find(k => {
-            const clean = k.toLowerCase().replace(/[^a-z]/g, '');
-            return clean === 'userid' || clean === 'useridentifier';
-          });
-          if (key) return key;
-          return sampleKeys.find(k => k.toLowerCase().replace(/[^a-z]/g, '').includes('user')) || 'user_id';
-        }
-
-        // Fast key pre-detection (runs ONCE instead of per row)
-        let yesContentKey = null;
-        let yesUserIdKey = null;
-        let yesStateKey = null;
-
-        if (yesRows.length > 0) {
-          const sampleKeys = Object.keys(yesRows[0]);
-          yesContentKey = sampleKeys.find(k => {
-            const clean = k.toLowerCase().replace(/[^a-z]/g, '');
-            return clean === 'content' || clean === 'contant' || clean === 'urn' || clean === 'reference';
-          }) || sampleKeys.find(k => {
-            const val = String(yesRows[0][k] || '');
-            return val.includes('FM') || val.includes('fm');
+          const pyResult = await new Promise((resolve) => {
+            execFile(pyCmd, [pyScript, tempPath], { maxBuffer: 1024 * 1024 * 100 }, (error, stdout, stderr) => {
+              if (error) {
+                console.error('[KIWI Python Parser] Error:', error.message, stderr);
+                resolve(null);
+              } else {
+                try {
+                  const data = JSON.parse(stdout);
+                  resolve(data);
+                } catch(e) {
+                  console.error('[KIWI Python Parser] JSON parse error:', e.message);
+                  resolve(null);
+                }
+              }
+            });
           });
 
-          yesUserIdKey = findUserIdKey(yesRows[0]);
-          yesStateKey = findStateKey(yesRows[0]);
-        }
-
-        console.log(`[KIWI MIS] Sheets: YES="${yesSheetName}" (${yesRows.length} rows), AU="${auSheetName}" (${auRows.length} rows), PNB="${pnbSheetName}" (${pnbRows.length} rows)`);
-        console.log(`[KIWI MIS] YES Keys: content="${yesContentKey}", userId="${yesUserIdKey}", state="${yesStateKey}"`);
-        if (yesRows.length > 0) {
-          console.log(`[KIWI MIS] YES Row 0 columns: ${Object.keys(yesRows[0]).join(', ')}`);
-          console.log(`[KIWI MIS] YES Row 0 state value: "${yesStateKey ? yesRows[0][yesStateKey] : 'KEY_NOT_FOUND'}"`);
-        }
-        if (auRows.length > 0) {
-          console.log(`[KIWI MIS] AU Row 0 columns: ${Object.keys(auRows[0]).join(', ')}`);
-        }
-        if (pnbRows.length > 0) {
-          console.log(`[KIWI MIS] PNB Row 0 columns: ${Object.keys(pnbRows[0]).join(', ')}`);
-        }
-
-        // Build user_id lookup maps for AU and PNB sheets with clean user ID Keys
-        const auUserMap = new Map();
-        if (auRows.length > 0) {
-          const auUserIdKey = findUserIdKey(auRows[0]);
-          const auStateKey = findStateKey(auRows[0]);
-          console.log(`[KIWI MIS] AU Keys: userId="${auUserIdKey}", state="${auStateKey}"`);
-          for (let i = 0; i < auRows.length; i++) {
-            const r = auRows[i];
-            const rawUid = auUserIdKey ? r[auUserIdKey] : getRowValue(r, 'user_id');
-            const uid = cleanUserId(rawUid);
-            if (uid) {
-              const stateVal = (auStateKey ? r[auStateKey] : getRowValue(r, 'current_state')) || getRowValue(r, 'status') || '';
-              r._state = String(stateVal).trim();
-              auUserMap.set(uid, r);
-              if (i < 2) console.log(`[KIWI MIS] AU Map entry: uid="${uid}", state="${r._state}"`);
-            }
+          if (pyResult && pyResult.parsedRows) {
+            parsedRows = pyResult.parsedRows;
+            pythonSuccess = true;
+            console.log(`[KIWI Python Parser] Success! Extracted ${parsedRows.length} rows (Skipped ${pyResult.skippedRows || 0} non-URN rows) in <2s.`);
+          }
+        } catch(pyErr) {
+          console.error('[KIWI Python Parser] Execution failed:', pyErr.message);
+        } finally {
+          if (fs.existsSync(tempPath)) {
+            try { fs.unlinkSync(tempPath); } catch(e) {}
           }
         }
 
-        const pnbUserMap = new Map();
-        if (pnbRows.length > 0) {
-          const pnbUserIdKey = findUserIdKey(pnbRows[0]);
-          const pnbStateKey = findStateKey(pnbRows[0]);
-          console.log(`[KIWI MIS] PNB Keys: userId="${pnbUserIdKey}", state="${pnbStateKey}"`);
-          for (let i = 0; i < pnbRows.length; i++) {
-            const r = pnbRows[i];
-            const rawUid = pnbUserIdKey ? r[pnbUserIdKey] : getRowValue(r, 'user_id');
-            const uid = cleanUserId(rawUid);
-            if (uid) {
-              const stateVal = (pnbStateKey ? r[pnbStateKey] : getRowValue(r, 'current_state')) || getRowValue(r, 'status') || '';
-              r._state = String(stateVal).trim();
-              pnbUserMap.set(uid, r);
-              if (i < 2) console.log(`[KIWI MIS] PNB Map entry: uid="${uid}", state="${r._state}"`);
-            }
+        // Fallback to JS xlsx parser if Python failed or was not available
+        if (!pythonSuccess) {
+          console.log('[KIWI MIS] Python parser unavailable or failed. Using fallback JS parser...');
+          const workbook = xlsx.read(req.file.buffer, { type: 'buffer', dense: true, cellHTML: false, cellFormula: false, cellText: false });
+          const yesSheetName = workbook.SheetNames.find(s => s.toLowerCase().includes('yes'));
+          const auSheetName = workbook.SheetNames.find(s => s.toLowerCase().includes('au'));
+          const pnbSheetName = workbook.SheetNames.find(s => s.toLowerCase().includes('pnb'));
+
+          if (!yesSheetName) {
+            return res.status(400).json({ error: 'YES KIWI sheet not found in uploaded Excel file. Please ensure the file contains YES KIWI, AU KIWI, and PNB KIWI sheets.' });
           }
-        }
 
-        console.log(`[KIWI MIS] Map sizes: AU=${auUserMap.size}, PNB=${pnbUserMap.size}`);
+          const yesRows = xlsx.utils.sheet_to_json(workbook.Sheets[yesSheetName], { defval: '' });
+          const auRows = auSheetName ? xlsx.utils.sheet_to_json(workbook.Sheets[auSheetName], { defval: '' }) : [];
+          const pnbRows = pnbSheetName ? xlsx.utils.sheet_to_json(workbook.Sheets[pnbSheetName], { defval: '' }) : [];
 
-        parsedRows = [];
-        let skippedNoUrn = 0;
+          function findStateKey(sampleRow) {
+            if (!sampleRow) return null;
+            const sampleKeys = Object.keys(sampleRow);
+            let key = sampleKeys.find(k => {
+              const clean = k.toLowerCase().replace(/[^a-z]/g, '');
+              return clean === 'currentstate' || clean === 'currentstatus' || clean === 'appstate' || clean === 'appstatus';
+            });
+            if (key) return key;
+            key = sampleKeys.find(k => {
+              const clean = k.toLowerCase();
+              return clean.includes('current') && (clean.includes('state') || clean.includes('status'));
+            });
+            if (key) return key;
+            key = sampleKeys.find(k => {
+              const clean = k.toLowerCase().replace(/[^a-z]/g, '');
+              return clean === 'status' || clean === 'misstatus' || clean === 'finalstatus';
+            });
+            if (key) return key;
+            key = sampleKeys.find(k => {
+              const clean = k.toLowerCase().trim();
+              return clean !== 'state' && clean !== 'customer_state' && (clean.includes('state') || clean.includes('status'));
+            });
+            return key || 'current_state';
+          }
 
-        for (let i = 0; i < yesRows.length; i++) {
-          const yesRow = yesRows[i];
-          const rawContent = yesContentKey ? yesRow[yesContentKey] : getRowValue(yesRow, 'content');
-          let extractedUrn = null;
+          function findUserIdKey(sampleRow) {
+            if (!sampleRow) return null;
+            const sampleKeys = Object.keys(sampleRow);
+            let key = sampleKeys.find(k => {
+              const clean = k.toLowerCase().replace(/[^a-z]/g, '');
+              return clean === 'userid' || clean === 'useridentifier';
+            });
+            if (key) return key;
+            return sampleKeys.find(k => k.toLowerCase().replace(/[^a-z]/g, '').includes('user')) || 'user_id';
+          }
 
-          if (rawContent) {
-            const strContent = String(rawContent);
-            if (strContent.includes('FM') || strContent.includes('fm')) {
-              extractedUrn = extractUrnFromText(strContent);
+          let yesContentKey = null;
+          let yesUserIdKey = null;
+          let yesStateKey = null;
+
+          if (yesRows.length > 0) {
+            const sampleKeys = Object.keys(yesRows[0]);
+            yesContentKey = sampleKeys.find(k => {
+              const clean = k.toLowerCase().replace(/[^a-z]/g, '');
+              return clean === 'content' || clean === 'contant' || clean === 'urn' || clean === 'reference';
+            }) || sampleKeys.find(k => {
+              const val = String(yesRows[0][k] || '');
+              return val.includes('FM') || val.includes('fm');
+            });
+
+            yesUserIdKey = findUserIdKey(yesRows[0]);
+            yesStateKey = findStateKey(yesRows[0]);
+          }
+
+          const auUserMap = new Map();
+          if (auRows.length > 0) {
+            const auUserIdKey = findUserIdKey(auRows[0]);
+            const auStateKey = findStateKey(auRows[0]);
+            for (let i = 0; i < auRows.length; i++) {
+              const r = auRows[i];
+              const rawUid = auUserIdKey ? r[auUserIdKey] : getRowValue(r, 'user_id');
+              const uid = cleanUserId(rawUid);
+              if (uid) {
+                const stateVal = (auStateKey ? r[auStateKey] : getRowValue(r, 'current_state')) || getRowValue(r, 'status') || '';
+                r._state = String(stateVal).trim();
+                auUserMap.set(uid, r);
+              }
             }
           }
 
-          // Skip rows without a valid URN to save memory
-          if (!extractedUrn) {
-            skippedNoUrn++;
-            continue;
+          const pnbUserMap = new Map();
+          if (pnbRows.length > 0) {
+            const pnbUserIdKey = findUserIdKey(pnbRows[0]);
+            const pnbStateKey = findStateKey(pnbRows[0]);
+            for (let i = 0; i < pnbRows.length; i++) {
+              const r = pnbRows[i];
+              const rawUid = pnbUserIdKey ? r[pnbUserIdKey] : getRowValue(r, 'user_id');
+              const uid = cleanUserId(rawUid);
+              if (uid) {
+                const stateVal = (pnbStateKey ? r[pnbStateKey] : getRowValue(r, 'current_state')) || getRowValue(r, 'status') || '';
+                r._state = String(stateVal).trim();
+                pnbUserMap.set(uid, r);
+              }
+            }
           }
 
-          const rawUserId = yesUserIdKey ? yesRow[yesUserIdKey] : getRowValue(yesRow, 'user_id');
-          const userId = cleanUserId(rawUserId);
+          parsedRows = [];
+          for (let i = 0; i < yesRows.length; i++) {
+            const yesRow = yesRows[i];
+            const rawContent = yesContentKey ? yesRow[yesContentKey] : getRowValue(yesRow, 'content');
+            let extractedUrn = null;
 
-          const candidateAuRow = userId ? auUserMap.get(userId) : null;
-          const candidatePnbRow = userId ? pnbUserMap.get(userId) : null;
+            if (rawContent) {
+              const strContent = String(rawContent);
+              if (strContent.includes('FM') || strContent.includes('fm')) {
+                extractedUrn = extractUrnFromText(strContent);
+              }
+            }
 
-          const yesState = String((yesStateKey ? yesRow[yesStateKey] : getRowValue(yesRow, 'current_state')) || '').trim();
-          const auState = candidateAuRow ? (candidateAuRow._state || String(getRowValue(candidateAuRow, 'current_state') || '').trim()) : '';
-          const pnbState = candidatePnbRow ? (candidatePnbRow._state || String(getRowValue(candidatePnbRow, 'current_state') || '').trim()) : '';
+            if (!extractedUrn) continue;
 
-          const yesRank = getStatusRank(yesState);
-          const auRank = getStatusRank(auState);
-          const pnbRank = getStatusRank(pnbState);
+            const rawUserId = yesUserIdKey ? yesRow[yesUserIdKey] : getRowValue(yesRow, 'user_id');
+            const userId = cleanUserId(rawUserId);
 
-          // Lower rank number = better status. Pick bank with LOWEST rank.
-          let winningBank = 'YES';
-          let winningRow = yesRow;
-          let winningState = yesState;
-          let bestRank = yesRank;
+            const candidateAuRow = userId ? auUserMap.get(userId) : null;
+            const candidatePnbRow = userId ? pnbUserMap.get(userId) : null;
 
-          if (auRank < bestRank) {
-            bestRank = auRank;
-            winningBank = 'AU';
-            winningRow = candidateAuRow;
-            winningState = auState;
+            const yesState = String((yesStateKey ? yesRow[yesStateKey] : getRowValue(yesRow, 'current_state')) || '').trim();
+            const auState = candidateAuRow ? (candidateAuRow._state || String(getRowValue(candidateAuRow, 'current_state') || '').trim()) : '';
+            const pnbState = candidatePnbRow ? (candidatePnbRow._state || String(getRowValue(candidatePnbRow, 'current_state') || '').trim()) : '';
+
+            const yesRank = getStatusRank(yesState);
+            const auRank = getStatusRank(auState);
+            const pnbRank = getStatusRank(pnbState);
+
+            let winningBank = 'YES';
+            let winningRow = yesRow;
+            let winningState = yesState;
+            let bestRank = yesRank;
+
+            if (auRank < bestRank) {
+              bestRank = auRank;
+              winningBank = 'AU';
+              winningRow = candidateAuRow;
+              winningState = auState;
+            }
+
+            if (pnbRank < bestRank) {
+              bestRank = pnbRank;
+              winningBank = 'PNB';
+              winningRow = candidatePnbRow;
+              winningState = pnbState;
+            }
+
+            const wr = winningRow || {};
+            parsedRows.push({
+              content: extractedUrn,
+              registration: getRowValue(wr, 'registration') || '',
+              pan_submit: getRowValue(wr, 'Pan_Submit') || getRowValue(wr, 'pan_submit') || '',
+              form_fetch: getRowValue(wr, 'Form_Fetch') || getRowValue(wr, 'form_fetch') || '',
+              form_submit: getRowValue(wr, 'Form_Submit') || getRowValue(wr, 'form_submit') || '',
+              ipa: getRowValue(wr, 'IPA') || getRowValue(wr, 'ipa') || '',
+              card_created: getRowValue(wr, 'Card_Created') || getRowValue(wr, 'card_created') || '',
+              vkyc: getRowValue(wr, 'VKYC') || getRowValue(wr, 'vkyc') || '',
+              current_state: winningState,
+              reject_reason: getRowValue(wr, 'reject_reason') || '',
+              application_id_bank_2: getRowValue(wr, 'application_id_bank_2') || '',
+              first_txn: getRowValue(wr, 'First_txn') || getRowValue(wr, 'first_txn') || '',
+              APPLICATION_REFERENCE_NUMBER: extractedUrn,
+              current_status: winningState,
+              final_decision: winningState,
+              kiwi_winning_bank: winningBank,
+              kiwi_user_id: userId,
+              kiwi_yes_status: yesState,
+              kiwi_au_status: auState,
+              kiwi_pnb_status: pnbState,
+              _extractedUrn: extractedUrn,
+              yes_rank: yesRank,
+              au_rank: auRank,
+              pnb_rank: pnbRank,
+              status_rank: bestRank
+            });
           }
-
-          if (pnbRank < bestRank) {
-            bestRank = pnbRank;
-            winningBank = 'PNB';
-            winningRow = candidatePnbRow;
-            winningState = pnbState;
-          }
-
-          // Log for debugging first few rows with URN
-          if (parsedRows.length < 5) {
-            console.log(`[KIWI Debug] URN=${extractedUrn}, userId=${userId}`);
-            console.log(`  YES state="${yesState}" rank=${yesRank}`);
-            console.log(`  AU  state="${auState}" rank=${auRank} (matched=${!!candidateAuRow})`);
-            console.log(`  PNB state="${pnbState}" rank=${pnbRank} (matched=${!!candidatePnbRow})`);
-            console.log(`  WINNER: ${winningBank} state="${winningState}" rank=${bestRank}`);
-          }
-
-          // Only extract the 12 essential KIWI fields from winning row (memory efficient)
-          const wr = winningRow || {};
-          parsedRows.push({
-            content: extractedUrn,
-            registration: getRowValue(wr, 'registration') || '',
-            pan_submit: getRowValue(wr, 'Pan_Submit') || getRowValue(wr, 'pan_submit') || '',
-            form_fetch: getRowValue(wr, 'Form_Fetch') || getRowValue(wr, 'form_fetch') || '',
-            form_submit: getRowValue(wr, 'Form_Submit') || getRowValue(wr, 'form_submit') || '',
-            ipa: getRowValue(wr, 'IPA') || getRowValue(wr, 'ipa') || '',
-            card_created: getRowValue(wr, 'Card_Created') || getRowValue(wr, 'card_created') || '',
-            vkyc: getRowValue(wr, 'VKYC') || getRowValue(wr, 'vkyc') || '',
-            current_state: winningState,
-            reject_reason: getRowValue(wr, 'reject_reason') || '',
-            application_id_bank_2: getRowValue(wr, 'application_id_bank_2') || '',
-            first_txn: getRowValue(wr, 'First_txn') || getRowValue(wr, 'first_txn') || '',
-            APPLICATION_REFERENCE_NUMBER: extractedUrn,
-            current_status: winningState,
-            final_decision: winningState,
-            kiwi_winning_bank: winningBank,
-            kiwi_user_id: userId,
-            kiwi_yes_status: yesState,
-            kiwi_au_status: auState,
-            kiwi_pnb_status: pnbState,
-            _extractedUrn: extractedUrn,
-            yes_rank: yesRank,
-            au_rank: auRank,
-            pnb_rank: pnbRank,
-            status_rank: bestRank
-          });
         }
-
-        console.log(`[KIWI MIS] Processed: ${parsedRows.length} rows with URN, ${skippedNoUrn} skipped (no URN)`);
       } else {
+        const workbook = xlsx.read(req.file.buffer, { type: 'buffer', dense: true, cellHTML: false, cellFormula: false, cellText: false });
         const sheetName = workbook.SheetNames[0];
         parsedRows = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
       }
