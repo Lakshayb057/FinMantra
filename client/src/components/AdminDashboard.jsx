@@ -1439,6 +1439,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   const cleanBankCode = (val) => {
     if (!val || !val.trim()) return '';
     let str = val.trim().replace(/\s+bank$/i, '').trim();
+    if (str.toUpperCase().includes('KIWI')) return 'KIWI';
     if (str.toLowerCase() === 'n/a' || str.toLowerCase() === 'na') return 'N/A';
     return str.toUpperCase();
   };

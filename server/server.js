@@ -2233,7 +2233,7 @@ app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single
     misData.kyc_completion_date = String(getRowValue(row, 'KYC Completion date') || getRowValue(row, 'KYC Completion date')).trim();
 
     if (isKiwi) {
-      misData.mis_bank_name = 'KIWI - ' + (row.kiwi_winning_bank || 'Bank');
+      misData.mis_bank_name = 'KIWI';
       misData.kiwi_bank = row.kiwi_winning_bank || '';
       misData.winning_bank = row.kiwi_winning_bank || '';
       misData.user_id = row.kiwi_user_id || '';
