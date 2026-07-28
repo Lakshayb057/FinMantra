@@ -597,7 +597,18 @@ const db = {
     const params = [];
     const clauses = [];
     
-    if (agentId) {
+    if (bankMisFilter) {
+      const cleanBank = String(bankMisFilter).toLowerCase().trim().replace(/\s+bank$/i, '').trim();
+      if (cleanBank) {
+        params.push(`%${cleanBank}%`);
+        const pIdx = params.length;
+        clauses.push(`(
+          LOWER(card_bank) LIKE $${pIdx}
+          OR LOWER(mis_data->>'mis_bank_name') LIKE $${pIdx}
+          OR LOWER(card_name) LIKE $${pIdx}
+        )`);
+      }
+    } else if (agentId) {
       const cleanAgentId = agentId.toLowerCase().trim();
       const alnumAgentId = cleanAgentId.replace(/[^a-z0-9]/g, '');
       params.push(cleanAgentId);
@@ -1163,14 +1174,18 @@ const db = {
     }
   },
 
-  async updateLeadMISStatus(id, misStatus, misData) {
-    const res = await pool.query(
-      `UPDATE leads 
-       SET mis_status = $1, mis_mapped_at = NOW(), mis_data = $2
-       WHERE id = $3
-       RETURNING id, urn, full_name`,
-      [misStatus, JSON.stringify(misData), id]
-    );
+  async updateLeadMISStatus(id, misStatus, misData, agentId = null, agentName = null) {
+    let query = `UPDATE leads SET mis_status = $1, mis_mapped_at = NOW(), mis_data = $2`;
+    const params = [misStatus, JSON.stringify(misData), id];
+
+    if (agentId) {
+      params.push(agentId);
+      params.push(agentName || agentId);
+      query += `, agent_id = COALESCE(agent_id, $4), agent_name = COALESCE(agent_name, $5)`;
+    }
+
+    query += ` WHERE id = $3 RETURNING id, urn, full_name, agent_id, agent_name, mis_status`;
+    const res = await pool.query(query, params);
     return res.rows[0] || null;
   },
 
@@ -1327,7 +1342,7 @@ const db = {
     };
   },
 
-  async bulkUpdateLeadMISStatus(updates) {
+  async bulkUpdateLeadMISStatus(updates, agentId = null, agentName = null) {
     if (!updates || updates.length === 0) return;
     const batchSize = 200;
     for (let i = 0; i < updates.length; i += batchSize) {
@@ -1337,19 +1352,23 @@ const db = {
       let paramIndex = 1;
       
       batch.forEach(up => {
-        valueLines.push(`($${paramIndex}::varchar, $${paramIndex + 1}::varchar, $${paramIndex + 2}::jsonb)`);
+        valueLines.push(`($${paramIndex}::varchar, $${paramIndex + 1}::varchar, $${paramIndex + 2}::jsonb, $${paramIndex + 3}::varchar, $${paramIndex + 4}::varchar)`);
         queryParams.push(up.id);
         queryParams.push(up.status);
         queryParams.push(JSON.stringify(up.data));
-        paramIndex += 3;
+        queryParams.push(up.agent_id || agentId || null);
+        queryParams.push(up.agent_name || agentName || null);
+        paramIndex += 5;
       });
       
       const queryText = `
         UPDATE leads AS l
         SET mis_status = tmp.mis_status,
             mis_mapped_at = NOW(),
-            mis_data = tmp.mis_data
-        FROM (VALUES ${valueLines.join(', ')}) AS tmp(id, mis_status, mis_data)
+            mis_data = tmp.mis_data,
+            agent_id = COALESCE(l.agent_id, tmp.agent_id),
+            agent_name = COALESCE(l.agent_name, tmp.agent_name)
+        FROM (VALUES ${valueLines.join(', ')}) AS tmp(id, mis_status, mis_data, agent_id, agent_name)
         WHERE l.id = tmp.id
       `;
       

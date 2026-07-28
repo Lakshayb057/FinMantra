@@ -2041,9 +2041,47 @@ app.post('/api/leads/upload-mis', authenticateToken, upload.single('file'), asyn
           }
         }
       } else {
-        const workbook = xlsx.read(req.file.buffer, { type: 'buffer', dense: true, cellHTML: false, cellFormula: false, cellText: false });
-        const sheetName = workbook.SheetNames[0];
-        parsedRows = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
+        const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
+        parsedRows = [];
+
+        workbook.SheetNames.forEach(sName => {
+          const sheet = workbook.Sheets[sName];
+          if (!sheet || !sheet['!ref']) return;
+
+          const rawMatrix = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+          if (!rawMatrix || rawMatrix.length === 0) return;
+
+          let headerRowIdx = 0;
+          for (let r = 0; r < Math.min(rawMatrix.length, 10); r++) {
+            const row = rawMatrix[r];
+            if (Array.isArray(row)) {
+              const nonEmpCount = row.filter(cell => String(cell || '').trim().length > 0).length;
+              if (nonEmpCount >= 2) {
+                headerRowIdx = r;
+                break;
+              }
+            }
+          }
+
+          const headers = (rawMatrix[headerRowIdx] || []).map(h => String(h || '').trim());
+          for (let r = headerRowIdx + 1; r < rawMatrix.length; r++) {
+            const rowArr = rawMatrix[r];
+            if (!Array.isArray(rowArr) || rowArr.length === 0) continue;
+            
+            const hasData = rowArr.some(c => String(c || '').trim().length > 0);
+            if (!hasData) continue;
+
+            const rowObj = {};
+            headers.forEach((h, colIdx) => {
+              if (h) {
+                rowObj[h] = rowArr[colIdx] !== undefined ? String(rowArr[colIdx]).trim() : '';
+              }
+            });
+
+            rowObj._rawRowValues = rowArr.map(c => String(c || '').trim());
+            parsedRows.push(rowObj);
+          }
+        });
       }
     } else if (ext === 'pdf') {
       const pdfData = await pdfParse(req.file.buffer);
@@ -2573,8 +2611,12 @@ app.post('/api/leads/upload-mis', authenticateToken, upload.single('file'), asyn
 
   // Execute bulk updates in high-performance batch query
   if (updates.length > 0) {
-    await db.bulkUpdateLeadMISStatus(updates);
+    const uploadingAgentId = req.user.role === 'agent' ? req.user.id : null;
+    const uploadingAgentName = req.user.role === 'agent' ? req.user.name : null;
+    await db.bulkUpdateLeadMISStatus(updates, uploadingAgentId, uploadingAgentName);
     invalidateMISCache();
+    broadcast({ type: 'MIS_UPDATED' });
+    broadcast({ type: 'LEADS_UPDATED' });
   }
 
   res.json({
@@ -3584,7 +3626,18 @@ app.post('/api/settings/lead-template', authenticateToken, requireAdmin, async (
 app.get('/api/leads', authenticateToken, async (req, res) => {
   const role = req.user.role;
   if (role === 'admin' || role === 'agent') {
-    const agentId = role === 'agent' ? req.user.id : null;
+    let agentId = null;
+    let bankMisFilter = null;
+
+    if (role === 'agent') {
+      const agent = await db.getAgentById(req.user.id);
+      if (agent && (agent.can_upload_mis || agent.agent_mode === 'bank_mis_agent')) {
+        bankMisFilter = agent.assigned_bank || null;
+      } else {
+        agentId = req.user.id;
+      }
+    }
+
     const page = parseInt(req.query.page, 10) || 1;
     const limit = parseInt(req.query.limit, 10) || 50;
     const search = req.query.search || '';
@@ -3594,7 +3647,7 @@ app.get('/api/leads', authenticateToken, async (req, res) => {
     const endDate = req.query.endDate || '';
     
     const result = await db.getLeadsFiltered({
-      agentId, page, limit, search, card, source, startDate, endDate
+      agentId, bankMisFilter, page, limit, search, card, source, startDate, endDate
     });
     res.json(result);
   } else {

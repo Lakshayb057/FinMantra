@@ -367,10 +367,11 @@ export default function AgentPortal({ navigateTo, theme, toggleTheme }) {
     return (agentLeads || []).filter(l => {
       // Filter to agent's assigned bank if present
       if (agent && agent.assigned_bank) {
-        const assigned = String(agent.assigned_bank).toLowerCase().trim();
-        const leadBank = String(l.card_bank || l.bank || '').toLowerCase().trim();
+        const assignedClean = String(agent.assigned_bank).toLowerCase().replace(/\s+bank$/i, '').trim();
+        const leadBank = String(l.card_bank || l.bank || (l.mis_data && l.mis_data.mis_bank_name) || '').toLowerCase().trim();
         const leadCard = String(l.card_name || '').toLowerCase().trim();
-        if (assigned && !leadBank.includes(assigned) && !leadCard.includes(assigned) && l.agent_id !== agent.id) {
+        const isMatch = (assignedClean && (leadBank.includes(assignedClean) || leadCard.includes(assignedClean))) || l.agent_id === agent.id;
+        if (!isMatch) {
           return false;
         }
       }
