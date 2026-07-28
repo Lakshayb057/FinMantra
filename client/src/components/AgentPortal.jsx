@@ -467,6 +467,190 @@ export default function AgentPortal({ navigateTo, theme, toggleTheme }) {
     return { total: filteredBankMisLeads.length, approved, pending, declined };
   }, [filteredBankMisLeads]);
 
+  // Leads Analytics Memoized Computations for Bank MIS Agent
+  const allMappedLeads = useMemo(() => {
+    if (misStats?.mappedLeadsList && misStats.mappedLeadsList.length > 0) {
+      return misStats.mappedLeadsList;
+    }
+    return (agentLeads || []).filter(l => l.mis_data || l.mis_status);
+  }, [misStats, agentLeads]);
+
+  const filterOptions = useMemo(() => {
+    const opts = {};
+    const agentSet = new Set();
+    const fieldSets = {
+      card_type: new Set(), state: new Set(), kyc_status: new Set(),
+      ipa_status: new Set(), final_decision: new Set(), card_name: new Set(),
+      customer_type: new Set(), current_stage: new Set(), card_activation_status: new Set(),
+      vkyc_status: new Set(), source_type: new Set()
+    };
+    for (let i = 0; i < allMappedLeads.length; i++) {
+      const l = allMappedLeads[i];
+      if (l.agent_name) agentSet.add(l.agent_name);
+      const md = l.mis_data;
+      if (md) {
+        for (const field in fieldSets) {
+          const v = md[field];
+          if (v && String(v).trim()) fieldSets[field].add(v);
+        }
+      }
+    }
+    for (const field in fieldSets) {
+      opts[field] = Array.from(fieldSets[field]).sort();
+    }
+    opts.agents = Array.from(agentSet).sort();
+    return opts;
+  }, [allMappedLeads]);
+
+  const filteredMappedLeads = useMemo(() => {
+    const searchLower = dashSearch ? dashSearch.toLowerCase().trim() : '';
+    const normAssignedBank = agent?.assigned_bank ? String(agent.assigned_bank).toLowerCase().replace(/\s+bank$/i, '').trim() : '';
+
+    return allMappedLeads.filter(lead => {
+      // Bank lock filter
+      if (normAssignedBank) {
+        const leadBank = String(lead.card_bank || (lead.mis_data && lead.mis_data.mis_bank_name) || '').toLowerCase();
+        const leadCard = String(lead.card_name || '').toLowerCase();
+        const isMatch = (leadBank.includes(normAssignedBank) || leadCard.includes(normAssignedBank)) || lead.agent_id === agent?.id;
+        if (!isMatch) return false;
+      }
+
+      if (searchLower) {
+        const urn = (lead.urn || '').toLowerCase();
+        const name = (lead.full_name || '').toLowerCase();
+        const ref = (lead.mis_data?.APPLICATION_REFERENCE_NUMBER || lead.mis_data?.bank_reference_number || '').toLowerCase();
+        const phone = (lead.phone || '').toLowerCase();
+        const pan = (lead.pan_no || '').toLowerCase();
+        if (!urn.includes(searchLower) && !name.includes(searchLower) && !ref.includes(searchLower) && !phone.includes(searchLower) && !pan.includes(searchLower)) {
+          return false;
+        }
+      }
+
+      if (dashCreatedDate || dashDateTo) {
+        const submitDateVal = lead.mis_data?.application_submit_date_time || '';
+        if (submitDateVal) {
+          let parsedDate = null;
+          const numVal = parseFloat(submitDateVal);
+          if (!isNaN(numVal) && numVal > 30000 && numVal < 60000) {
+            parsedDate = new Date(Math.round((numVal - 25569) * 86400 * 1000));
+          } else {
+            parsedDate = new Date(submitDateVal);
+          }
+          if (parsedDate && !isNaN(parsedDate.getTime())) {
+            const dateStr = parsedDate.toISOString().split('T')[0];
+            if (dashCreatedDate && dateStr < dashCreatedDate) return false;
+            if (dashDateTo && dateStr > dashDateTo) return false;
+          } else { return false; }
+        } else { return false; }
+      }
+
+      if (dashCardType && lead.mis_data?.card_type !== dashCardType) return false;
+      if (dashState && lead.mis_data?.state?.toLowerCase() !== dashState.toLowerCase()) return false;
+      if (dashKycStatus && lead.mis_data?.kyc_status !== dashKycStatus) return false;
+      if (dashIpaStatus && lead.mis_data?.ipa_status !== dashIpaStatus) return false;
+      if (dashFinalDecision && lead.mis_data?.final_decision !== dashFinalDecision) return false;
+      if (dashCardName && lead.mis_data?.card_name !== dashCardName) return false;
+      if (dashCustomerType && lead.mis_data?.customer_type !== dashCustomerType) return false;
+      if (dashCurrentStage && lead.mis_data?.current_stage !== dashCurrentStage) return false;
+      if (dashCardActivation && lead.mis_data?.card_activation_status !== dashCardActivation) return false;
+      if (dashVkycStatus && lead.mis_data?.vkyc_status !== dashVkycStatus) return false;
+      if (dashAgent && lead.agent_name !== dashAgent) return false;
+      if (dashSourceType && lead.mis_data?.source_type !== dashSourceType) return false;
+
+      return true;
+    });
+  }, [allMappedLeads, dashSearch, dashCreatedDate, dashDateTo, dashCardType, dashState, dashKycStatus, dashIpaStatus, dashFinalDecision, dashCardName, dashCustomerType, dashCurrentStage, dashCardActivation, dashVkycStatus, dashAgent, dashSourceType, agent]);
+
+  const dashStats = useMemo(() => {
+    let approvedCount = 0, rejectedCount = 0, pendingCount = 0;
+    let funnelIpa = 0, funnelKyc = 0, funnelDecision = 0, funnelActive = 0;
+    let ipaApproved = 0, ipaDeclined = 0;
+    const kycDist = {}, srcDist = {}, cardTypeDist = {}, custTypeDist = {};
+    const actDist = {}, pinDist = {}, prodDist = {};
+
+    for (let i = 0; i < filteredMappedLeads.length; i++) {
+      const l = filteredMappedLeads[i];
+      const md = l.mis_data || {};
+
+      if (l.mis_status === 'Approved') approvedCount++;
+      else if (l.mis_status === 'Rejected') rejectedCount++;
+      else pendingCount++;
+
+      const ipaLower = String(md.ipa_status || '').toLowerCase();
+      if (ipaLower.includes('approve') || ipaLower.includes('success')) { funnelIpa++; ipaApproved++; }
+      if (ipaLower.includes('decline') || ipaLower.includes('reject') || ipaLower.includes('cancel')) ipaDeclined++;
+
+      const ksLower = String(md.kyc_status || '').toLowerCase();
+      const vsLower = String(md.vkyc_status || '').toLowerCase();
+      const ktLower = String(md.kyc_type || '').toLowerCase();
+      if (ksLower.includes('success') || ksLower.includes('complete') || vsLower.includes('success') || vsLower.includes('complete') || ksLower.includes('biokyc') || ktLower.includes('biokyc')) funnelKyc++;
+
+      const decLower = String(md.final_decision || '').toLowerCase();
+      if (decLower.includes('approve') || decLower.includes('success')) funnelDecision++;
+
+      const actLower = String(md.card_activation_status || '').toLowerCase();
+      if (actLower.includes('active') || actLower === 'yes') funnelActive++;
+
+      const kycKey = md.kyc_status || 'Unknown';
+      kycDist[kycKey] = (kycDist[kycKey] || 0) + 1;
+
+      let srcKey = String(md.source_type || '').trim();
+      if (!srcKey || srcKey === '-') srcKey = 'Blank';
+      srcDist[srcKey] = (srcDist[srcKey] || 0) + 1;
+
+      const ctKey = md.card_type || 'Unknown';
+      cardTypeDist[ctKey] = (cardTypeDist[ctKey] || 0) + 1;
+
+      const custKey = md.customer_type || 'Unknown';
+      custTypeDist[custKey] = (custTypeDist[custKey] || 0) + 1;
+
+      const actKey = md.card_activation_status || 'Inactive/Unknown';
+      actDist[actKey] = (actDist[actKey] || 0) + 1;
+
+      const pinKey = md.PIN_CODE || md.pin_code || l.pincode || 'Unknown';
+      pinDist[pinKey] = (pinDist[pinKey] || 0) + 1;
+
+      const prodKey = md.card_name || 'Unknown';
+      prodDist[prodKey] = (prodDist[prodKey] || 0) + 1;
+    }
+
+    const totalSubmit = filteredMappedLeads.length;
+    const approvalRate = totalSubmit > 0 ? ((approvedCount / totalSubmit) * 100).toFixed(1) : '0';
+
+    const topPincodes = Object.entries(pinDist)
+      .map(([pincode, count]) => ({ pincode, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 50);
+
+    return {
+      totalSubmit, approvedCount, rejectedCount, pendingCount, approvalRate,
+      funnelIpa, funnelKyc, funnelDecision, funnelActive,
+      ipaApproved, ipaDeclined,
+      kycDist, srcDist, cardTypeDist, custTypeDist, actDist, prodDist, topPincodes
+    };
+  }, [filteredMappedLeads]);
+
+  const dashGeoData = useMemo(() => {
+    const stateLeadCounts = aggregateLeadsByState(filteredMappedLeads);
+    const maxStateLeads = Math.max(1, ...Object.values(stateLeadCounts));
+    const topStates = Object.entries(stateLeadCounts)
+      .map(([state, count]) => ({ state, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 15);
+    return { stateLeadCounts, maxStateLeads, topStates };
+  }, [filteredMappedLeads]);
+
+  const paginatedMappedLeads = useMemo(() => {
+    const start = (dashPage - 1) * DASH_PAGE_SIZE;
+    return filteredMappedLeads.slice(start, start + DASH_PAGE_SIZE);
+  }, [filteredMappedLeads, dashPage]);
+
+  const totalMappedPages = useMemo(() => Math.max(1, Math.ceil(filteredMappedLeads.length / DASH_PAGE_SIZE)), [filteredMappedLeads.length]);
+
+  const activeFilterCount = useMemo(() => {
+    return [dashCreatedDate, dashDateTo, dashCardType, dashState, dashKycStatus, dashIpaStatus, dashFinalDecision, dashCardName, dashCustomerType, dashCurrentStage, dashCardActivation, dashVkycStatus, dashAgent, dashSourceType, dashSearch].filter(Boolean).length;
+  }, [dashCreatedDate, dashDateTo, dashCardType, dashState, dashKycStatus, dashIpaStatus, dashFinalDecision, dashCardName, dashCustomerType, dashCurrentStage, dashCardActivation, dashVkycStatus, dashAgent, dashSourceType, dashSearch]);
+
   const handleUploadBankMis = async (e) => {
     e.preventDefault();
     if (!bankMisUploadFile) {
