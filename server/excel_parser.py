@@ -81,7 +81,7 @@ def parse_url_query_params(url_str):
                 params[k.strip().lower()] = v.strip()
     return params
 
-def process_lead_file(file_path, agent_map, card_map, user_role='admin', user_id=None):
+def process_lead_file(file_path, agent_map, card_map, user_role='admin', user_id=None, existing_app_ids=None):
     try:
         if file_path.endswith('.csv'):
             df = pd.read_csv(file_path, dtype=str, keep_default_na=False)
@@ -105,6 +105,9 @@ def process_lead_file(file_path, agent_map, card_map, user_role='admin', user_id
     created_count = 0
     failed_count = 0
 
+    existing_set = set([str(x).lower().strip() for x in (existing_app_ids or []) if x])
+    seen_file_app_ids = set()
+
     for idx, row in df.iterrows():
         row_num = idx + 2  # Excel 1-indexed row number excluding header
         
@@ -122,12 +125,14 @@ def process_lead_file(file_path, agent_map, card_map, user_role='admin', user_id
         full_name = get_col('Full Name', 'full_name', 'Name', 'name')
         raw_phone = get_col('Phone', 'phone', 'Mobile', 'mobile')
         clean_phone = re.sub(r'\D', '', raw_phone)
+        email = get_col('Email', 'email')
         agent_identifier = get_col('Agent ID', 'agent_id', 'AgentsId', 'Source Agent', 'Agent')
+        app_id = get_col('Application ID', 'application_id', 'App ID')
 
-        # 1. Full Name Validation
+        # 1. Full Name Validation (Mandatory)
         if not full_name:
             failed_count += 1
-            errors.append(f"Row {row_num}: Full Name is required.")
+            errors.append(f"Row {row_num}: Full Name is mandatory.")
             continue
         
         if not re.match(r'^[a-zA-Z\s]+$', full_name):
@@ -141,10 +146,10 @@ def process_lead_file(file_path, agent_map, card_map, user_role='admin', user_id
             errors.append(f"Row {row_num} ({full_name}): Please enter complete Name (First Name + Last Name).")
             continue
 
-        # 2. Phone Validation
+        # 2. Phone Validation (Mandatory)
         if not clean_phone:
             failed_count += 1
-            errors.append(f"Row {row_num} ({full_name}): Phone number is required.")
+            errors.append(f"Row {row_num} ({full_name}): Phone number is mandatory.")
             continue
 
         if not re.match(r'^[6-9]', clean_phone):
@@ -157,21 +162,34 @@ def process_lead_file(file_path, agent_map, card_map, user_role='admin', user_id
             errors.append(f"Row {row_num} ({full_name}): Mobile number must be exactly 10 digits.")
             continue
 
-        # 3. Email Validation
-        email = get_col('Email', 'email')
-        if email and not re.match(r'^[^\s@]+@[^\s@]+\.[^\s@]+$', email):
+        # 3. Email Validation (Mandatory)
+        if not email:
+            failed_count += 1
+            errors.append(f"Row {row_num} ({full_name}): Email address is mandatory.")
+            continue
+
+        if not re.match(r'^[^\s@]+@[^\s@]+\.[^\s@]+$', email):
             failed_count += 1
             errors.append(f"Row {row_num} ({full_name}): Invalid email format ('{email}').")
             continue
 
-        # 4. PAN Card Validation
+        # 4. Unique Application ID Constraint
+        if app_id:
+            clean_app_id = app_id.lower().strip()
+            if clean_app_id in existing_set or clean_app_id in seen_file_app_ids:
+                failed_count += 1
+                errors.append(f"Row {row_num} ({full_name}): Application ID '{app_id}' already exists in database or upload file. Duplicate rejected.")
+                continue
+            seen_file_app_ids.add(clean_app_id)
+
+        # 5. PAN Card Validation (Optional)
         pan_no = get_col('PAN Number', 'pan_no', 'PAN').upper()
         if pan_no and not re.match(r'^[A-Z]{5}[0-9]{4}[A-Z]{1}$', pan_no):
             failed_count += 1
             errors.append(f"Row {row_num} ({full_name}): Invalid PAN card format ('{pan_no}'). Must be 5 letters, 4 digits, 1 letter (e.g. ABCDE1234F).")
             continue
 
-        # 5. Date of Birth & Age Validation
+        # 6. Date of Birth & Age Validation (Optional)
         raw_dob = row.get('Date of Birth') or row.get('dob') or row.get('DOB') or ''
         formatted_dob, applicant_age = parse_any_date(raw_dob)
 
@@ -185,14 +203,14 @@ def process_lead_file(file_path, agent_map, card_map, user_role='admin', user_id
                 errors.append(f"Row {row_num} ({full_name}): Applicant age ({applicant_age} yrs) must be between 21 and 70 years old.")
                 continue
 
-        # 6. Pincode Validation
+        # 7. Pincode Validation (Optional)
         pincode = get_col('Pincode', 'pincode')
         if pincode and not re.match(r'^\d{6}$', pincode):
             failed_count += 1
             errors.append(f"Row {row_num} ({full_name}): Pincode must be exactly 6 numeric digits ('{pincode}').")
             continue
 
-        # 7. Monthly Income Validation
+        # 8. Monthly Income Validation (Optional)
         raw_income = re.sub(r'\D', '', get_col('Net Monthly Income', 'monthly_income'))
         if raw_income:
             inc_num = int(raw_income)
@@ -201,7 +219,7 @@ def process_lead_file(file_path, agent_map, card_map, user_role='admin', user_id
                 errors.append(f"Row {row_num} ({full_name}): Monthly income (₹{inc_num}) must be between ₹25,000 and ₹10,00,000 for credit card eligibility.")
                 continue
 
-        # 8. Agent ID Verification (Strictly Agent Code / ID, NOT Phone Number)
+        # 9. Agent ID Verification (Strictly Agent Code / ID, NOT Phone Number)
         if agent_identifier and re.match(r'^[6-9]\d{9}$', agent_identifier) and agent_identifier.lower() not in agent_map:
             failed_count += 1
             errors.append(f"Row {row_num} ({full_name}): '{agent_identifier}' is a Phone Number. Please specify a valid Agent Code / ID (e.g. ag_01, lakshay) instead.")
@@ -209,16 +227,28 @@ def process_lead_file(file_path, agent_map, card_map, user_role='admin', user_id
 
         matched_agent = None
         if agent_identifier:
-            matched_agent = agent_map.get(agent_identifier.lower())
-        elif user_role == 'agent' and user_id:
-            matched_agent = agent_map.get(user_id.lower())
+            clean_id = agent_identifier.lower().strip()
+            clean_alnum = re.sub(r'[^a-z0-9]', '', clean_id)
+            matched_agent = agent_map.get(clean_id) or agent_map.get(clean_alnum)
+
+        if not matched_agent and user_role == 'agent' and user_id:
+            clean_user_id = user_id.lower().strip()
+            clean_user_alnum = re.sub(r'[^a-z0-9]', '', clean_user_id)
+            matched_agent = agent_map.get(clean_user_id) or agent_map.get(clean_user_alnum)
+
+        if not matched_agent and user_role == 'agent' and user_id:
+            matched_agent = {
+                "id": user_id,
+                "name": "Field Agent",
+                "locations": ["Head Office"]
+            }
 
         if not matched_agent:
             failed_count += 1
             errors.append(f"Row {row_num} ({full_name}): Source Agent Code / ID '{agent_identifier or 'Unspecified'}' does NOT exist in database. Rejected.")
             continue
 
-        # 9. Card Name Alignment against DB
+        # 10. Card Name Alignment against DB
         raw_card_name = get_col('Card Name', 'card_name', 'Card')
         matched_card = card_map.get(raw_card_name.lower()) if raw_card_name else None
 
@@ -227,7 +257,7 @@ def process_lead_file(file_path, agent_map, card_map, user_role='admin', user_id
         final_card_bank = matched_card.get('bank') if matched_card else get_col('Card Bank', 'card_bank')
         final_redirect_url = (matched_card.get('redirect_url') or matched_card.get('apply_url')) if matched_card else get_col('Redirect URL', 'redirect_url')
 
-        # 10. Complete 30-Parameter Tracking Extraction & URL Parsing
+        # 11. Complete 30-Parameter Tracking Extraction & URL Parsing
         utm_channel = get_col('UTM Channel', 'utm_channel')
         utm_medium = get_col('UTM Medium', 'utm_medium')
         utm_source = get_col('UTM Source', 'utm_source')
@@ -313,7 +343,7 @@ def process_lead_file(file_path, agent_map, card_map, user_role='admin', user_id
             "source": 'agent',
             "consent": get_col('Consent', 'consent').lower() != 'no',
             "redirect_url": redirect_url or None,
-            "application_id": get_col('Application ID', 'application_id', 'App ID') or None,
+            "application_id": app_id or None,
             "utm_channel": utm_channel or None,
             "utm_medium": utm_medium or None,
             "utm_source": utm_source or None,
@@ -400,11 +430,13 @@ if __name__ == '__main__':
     card_map_json = sys.argv[3]
     user_role_arg = sys.argv[4] if len(sys.argv) > 4 else 'admin'
     user_id_arg = sys.argv[5] if len(sys.argv) > 5 else None
+    existing_app_ids_json = sys.argv[6] if len(sys.argv) > 6 else '[]'
 
     try:
         agent_map_data = json.loads(agent_map_json)
         card_map_data = json.loads(card_map_json)
-        result = process_lead_file(file_path_arg, agent_map_data, card_map_data, user_role_arg, user_id_arg)
+        existing_app_ids_data = json.loads(existing_app_ids_json)
+        result = process_lead_file(file_path_arg, agent_map_data, card_map_data, user_role_arg, user_id_arg, existing_app_ids_data)
         print(json.dumps(result))
     except Exception as err:
         print(json.dumps({"success": False, "error": f"Python parser execution error: {str(err)}"}))

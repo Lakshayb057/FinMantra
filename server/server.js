@@ -675,11 +675,24 @@ app.post('/api/agents/login', loginRateLimiter.middleware(), async (req, res) =>
     }
 
     loginTracker.recordSuccess(ip, identity);
-    const token = jwt.sign({ id: agent.id, name: agent.name, role: 'agent', assigned_bank: agent.assigned_bank }, JWT_SECRET, { expiresIn: '8h' });
+    const canCreate = agent.can_create_leads !== false;
+    const canMis = !!agent.can_upload_mis;
+    const mode = agent.agent_mode || 'lead_agent';
+
+    const token = jwt.sign({ id: agent.id, name: agent.name, role: 'agent', assigned_bank: agent.assigned_bank, agent_mode: mode, can_create_leads: canCreate, can_upload_mis: canMis }, JWT_SECRET, { expiresIn: '8h' });
     return res.json({
       token,
       role: 'agent',
-      agent: { id: agent.id, name: agent.name, email: agent.email, locations: agent.locations, assigned_bank: agent.assigned_bank }
+      agent: { 
+        id: agent.id, 
+        name: agent.name, 
+        email: agent.email, 
+        locations: agent.locations, 
+        assigned_bank: agent.assigned_bank,
+        agent_mode: mode,
+        can_create_leads: canCreate,
+        can_upload_mis: canMis
+      }
     });
   }
 
@@ -1754,8 +1767,11 @@ function extractUrnFromText(val) {
   return match ? match[0].toUpperCase() : null;
 }
 
-// Upload MIS Route
-app.post('/api/leads/upload-mis', authenticateToken, requireAdmin, upload.single('file'), async (req, res) => {
+// Upload MIS Route (Admin or Bank MIS Agent)
+app.post('/api/leads/upload-mis', authenticateToken, upload.single('file'), async (req, res) => {
+  if (req.user.role !== 'admin' && !req.user.can_upload_mis) {
+    return res.status(403).json({ error: 'Permission denied. Only Admins and authorized Bank MIS Agents can upload MIS files.' });
+  }
   if (req.socket) req.socket.setTimeout(600000);
   if (res.setTimeout) res.setTimeout(600000);
 
@@ -3198,12 +3214,27 @@ app.post('/api/leads/upload-manual', authenticateToken, upload.single('file'), a
     const agentMap = new Map();
     allAgents.forEach(ag => {
       if (ag.id) {
-        agentMapObj[ag.id.toLowerCase().trim()] = ag;
-        agentMap.set(ag.id.toLowerCase().trim(), ag);
+        const cleanId = ag.id.toLowerCase().trim();
+        const alnumId = cleanId.replace(/[^a-z0-9]/g, '');
+        agentMapObj[cleanId] = ag;
+        agentMapObj[alnumId] = ag;
+        agentMapObj[`agent-${cleanId}`] = ag;
+        agentMap.set(cleanId, ag);
+        agentMap.set(alnumId, ag);
+        agentMap.set(`agent-${cleanId}`, ag);
       }
       if (ag.username) {
-        agentMapObj[ag.username.toLowerCase().trim()] = ag;
-        agentMap.set(ag.username.toLowerCase().trim(), ag);
+        const cleanUser = ag.username.toLowerCase().trim();
+        const alnumUser = cleanUser.replace(/[^a-z0-9]/g, '');
+        agentMapObj[cleanUser] = ag;
+        agentMapObj[alnumUser] = ag;
+        agentMap.set(cleanUser, ag);
+        agentMap.set(alnumUser, ag);
+      }
+      if (ag.name) {
+        const cleanName = ag.name.toLowerCase().trim();
+        agentMapObj[cleanName] = ag;
+        agentMap.set(cleanName, ag);
       }
     });
 
@@ -3227,11 +3258,26 @@ app.post('/api/leads/upload-manual', authenticateToken, upload.single('file'), a
     let errors = [];
     let totalRows = 0;
 
-    // Write file to temporary disk location for Python pandas processing
+    // Ensure persistent storage directory exists
+    const UPLOAD_LEAD_FILES_DIR = path.join(__dirname, 'uploads', 'lead_files');
+    if (!fs.existsSync(UPLOAD_LEAD_FILES_DIR)) {
+      fs.mkdirSync(UPLOAD_LEAD_FILES_DIR, { recursive: true });
+    }
+
+    // Save persistent upload copy
     const ext = (req.file.originalname.split('.').pop() || 'xlsx').toLowerCase();
-    const tmpFileName = `upload_${Date.now()}_${Math.random().toString(36).substring(2)}.${ext}`;
+    const persistentFileName = `lead_upload_${Date.now()}_${req.user.id || 'admin'}.${ext}`;
+    const persistentFilePath = path.join(UPLOAD_LEAD_FILES_DIR, persistentFileName);
+    fs.writeFileSync(persistentFilePath, req.file.buffer);
+
+    // Write file to temporary disk location for Python pandas processing
+    const tmpFileName = `tmp_${Date.now()}_${Math.random().toString(36).substring(2)}.${ext}`;
     const tmpFilePath = path.join(os.tmpdir(), tmpFileName);
     fs.writeFileSync(tmpFilePath, req.file.buffer);
+
+    // Fetch existing Application IDs from DB to prevent duplicate applications
+    const existingAppIdsSet = await db.getExistingApplicationIds();
+    const existingAppIdsArray = Array.from(existingAppIdsSet);
 
     let pythonSuccess = false;
 
@@ -3244,7 +3290,8 @@ app.post('/api/leads/upload-manual', authenticateToken, upload.single('file'), a
           JSON.stringify(agentMapObj),
           JSON.stringify(cardMapObj),
           req.user.role || 'admin',
-          req.user.id || ''
+          req.user.id || '',
+          JSON.stringify(existingAppIdsArray)
         ], { maxBuffer: 50 * 1024 * 1024 }, (err, stdout, stderr) => {
           if (err) return reject(err || stderr);
           try {
@@ -3335,8 +3382,19 @@ app.post('/api/leads/upload-manual', authenticateToken, upload.single('file'), a
         }
 
         let matchedAgent = null;
-        if (agentIdentifier) { matchedAgent = agentMap.get(agentIdentifier.toLowerCase()); }
-        else if (req.user.role === 'agent') { matchedAgent = agentMap.get(req.user.id.toLowerCase()); }
+        if (agentIdentifier) {
+          const cleanId = agentIdentifier.toLowerCase().trim();
+          const alnumId = cleanId.replace(/[^a-z0-9]/g, '');
+          matchedAgent = agentMap.get(cleanId) || agentMap.get(alnumId);
+        }
+        if (!matchedAgent && req.user.role === 'agent' && req.user.id) {
+          const cleanUser = req.user.id.toLowerCase().trim();
+          const alnumUser = cleanUser.replace(/[^a-z0-9]/g, '');
+          matchedAgent = agentMap.get(cleanUser) || agentMap.get(alnumUser);
+        }
+        if (!matchedAgent && req.user.role === 'agent' && req.user.id) {
+          matchedAgent = { id: req.user.id, name: req.user.name || 'Field Agent', locations: ['Head Office'] };
+        }
 
         if (!matchedAgent) { failedCount++; errors.push(`Row ${rowNum} (${fullName}): Source Agent Code / ID '${agentIdentifier || 'Unspecified'}' does NOT exist in database. Rejected.`); continue; }
 
@@ -3391,6 +3449,24 @@ app.post('/api/leads/upload-manual', authenticateToken, upload.single('file'), a
       }
     }
 
+    // Persist file metadata record in DB
+    try {
+      await db.addUploadedLeadFile({
+        filename: persistentFileName,
+        original_filename: req.file.originalname,
+        file_size: req.file.size,
+        agent_id: req.user.id || 'admin',
+        agent_name: req.user.name || (req.user.role === 'admin' ? 'Admin' : 'Field Agent'),
+        total_rows: totalRows,
+        created_count: createdCount,
+        failed_count: failedCount,
+        errors: errors,
+        file_path: persistentFilePath
+      });
+    } catch (dbLogErr) {
+      console.error('[Upload Manual Leads] DB file record logging failed:', dbLogErr);
+    }
+
     invalidateMISCache();
     broadcast({ type: 'LEADS_UPDATED' });
 
@@ -3407,18 +3483,69 @@ app.post('/api/leads/upload-manual', authenticateToken, upload.single('file'), a
   }
 });
 
-// Developer Agent Permissions Toggle
-app.put('/api/agents/:id/permissions', authenticateToken, requireAdmin, async (req, res) => {
-  if (!req.user.canDelete) {
-    return res.status(403).json({ error: 'Only Developer (Lakshay@123) can manage agent permissions.' });
+// GET Uploaded Lead Files List (Admin Only)
+app.get('/api/admin/uploaded-lead-files', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const files = await db.getUploadedLeadFiles();
+    res.json(files);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch uploaded files list: ' + err.message });
   }
+});
 
-  const { can_create_leads } = req.body;
+// Download Raw Uploaded Lead File (Admin Only)
+app.get('/api/admin/uploaded-lead-files/:id/download', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const fileRecord = await db.getUploadedLeadFileById(req.params.id);
+    if (!fileRecord || !fileRecord.file_path) {
+      return res.status(404).json({ error: 'Uploaded file record not found.' });
+    }
+    if (!fs.existsSync(fileRecord.file_path)) {
+      return res.status(404).json({ error: 'File no longer exists on server disk.' });
+    }
+    res.download(fileRecord.file_path, fileRecord.original_filename);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to download file: ' + err.message });
+  }
+});
+
+// Developer / Admin Agent Permissions Toggle
+app.put('/api/agents/:id/permissions', authenticateToken, requireAdmin, async (req, res) => {
+  const { can_create_leads, can_upload_mis, agent_mode, assigned_bank } = req.body;
   const agentId = req.params.id;
 
   try {
-    const updated = await db.updateAgent(agentId, { can_create_leads: !!can_create_leads });
+    const updateObj = {};
+    if (can_create_leads !== undefined) {
+      updateObj.can_create_leads = !!can_create_leads;
+      if (updateObj.can_create_leads) {
+        updateObj.can_upload_mis = false;
+        updateObj.agent_mode = 'lead_agent';
+      }
+    }
+    if (can_upload_mis !== undefined) {
+      updateObj.can_upload_mis = !!can_upload_mis;
+      if (updateObj.can_upload_mis) {
+        updateObj.can_create_leads = false;
+        updateObj.agent_mode = 'bank_mis_agent';
+      }
+    }
+    if (agent_mode) {
+      updateObj.agent_mode = agent_mode;
+      if (agent_mode === 'lead_agent') {
+        updateObj.can_create_leads = true;
+        updateObj.can_upload_mis = false;
+      } else if (agent_mode === 'bank_mis_agent') {
+        updateObj.can_create_leads = false;
+        updateObj.can_upload_mis = true;
+      }
+    }
+    if (assigned_bank !== undefined) updateObj.assigned_bank = assigned_bank || null;
+
+    const updated = await db.updateAgent(agentId, updateObj);
     if (!updated) return res.status(404).json({ error: 'Agent not found' });
+
+    broadcast({ type: 'AGENTS_UPDATED' });
     return res.json({ success: true, agent: updated });
   } catch (err) {
     console.error('[Agent Permissions] Error:', err);
@@ -3816,7 +3943,7 @@ app.get('/api/agents', authenticateToken, requireAdmin, async (req, res) => {
 
 // Create Agent
 app.post('/api/agents', authenticateToken, requireAdmin, async (req, res) => {
-  const { id, name, phone, email, username, password, status, locations, assigned_bank } = req.body;
+  const { id, name, phone, email, username, password, status, locations, assigned_bank, agent_mode, can_create_leads, can_upload_mis } = req.body;
   
   const trimmedId = id ? String(id).trim() : '';
   const trimmedName = name ? String(name).trim() : '';
@@ -3857,6 +3984,10 @@ app.post('/api/agents', authenticateToken, requireAdmin, async (req, res) => {
     return res.status(400).json({ error: 'Agent Username must be unique. This username already exists.' });
   }
 
+  const mode = agent_mode || (assigned_bank ? 'bank_mis_agent' : 'lead_agent');
+  const createPerm = can_create_leads !== undefined ? !!can_create_leads : (mode === 'lead_agent');
+  const misPerm = can_upload_mis !== undefined ? !!can_upload_mis : (mode === 'bank_mis_agent');
+
   const password_hash = bcrypt.hashSync(password, 10);
   const newAgent = await db.addAgent({
     id: trimmedId,
@@ -3867,7 +3998,10 @@ app.post('/api/agents', authenticateToken, requireAdmin, async (req, res) => {
     password_hash,
     status: status || 'active',
     locations: locations || [],
-    assigned_bank: assigned_bank || null
+    assigned_bank: assigned_bank || null,
+    agent_mode: mode,
+    can_create_leads: createPerm,
+    can_upload_mis: misPerm
   });
 
   // Broadcast agents change

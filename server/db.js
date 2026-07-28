@@ -308,9 +308,28 @@ async function initPgSchema() {
     } catch (migErr) {}
     try {
       await client.query("ALTER TABLE agents ADD COLUMN IF NOT EXISTS assigned_bank VARCHAR(255)");
-      await client.query("ALTER TABLE agents ADD COLUMN IF NOT EXISTS can_create_leads BOOLEAN DEFAULT FALSE");
+      await client.query("ALTER TABLE agents ADD COLUMN IF NOT EXISTS can_create_leads BOOLEAN DEFAULT TRUE");
+      await client.query("ALTER TABLE agents ADD COLUMN IF NOT EXISTS can_upload_mis BOOLEAN DEFAULT FALSE");
+      await client.query("ALTER TABLE agents ADD COLUMN IF NOT EXISTS agent_mode VARCHAR(50) DEFAULT 'lead_agent'");
       await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS application_id VARCHAR(100)");
     } catch (migErr) {}
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS uploaded_lead_files (
+        id SERIAL PRIMARY KEY,
+        filename VARCHAR(255) NOT NULL,
+        original_filename VARCHAR(255) NOT NULL,
+        file_size INT,
+        agent_id VARCHAR(100),
+        agent_name VARCHAR(255),
+        total_rows INT DEFAULT 0,
+        created_count INT DEFAULT 0,
+        failed_count INT DEFAULT 0,
+        errors JSONB DEFAULT '[]'::jsonb,
+        file_path VARCHAR(500) NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
 
     // Performance indexes for dashboard queries
     try {
@@ -318,6 +337,8 @@ async function initPgSchema() {
       await client.query("CREATE INDEX IF NOT EXISTS idx_leads_mis_mapped_at ON leads (mis_mapped_at DESC) WHERE mis_status IS NOT NULL");
       await client.query("CREATE INDEX IF NOT EXISTS idx_leads_created_at ON leads (created_at DESC)");
       await client.query("CREATE INDEX IF NOT EXISTS idx_leads_agent_id ON leads (agent_id)");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_application_id ON leads (application_id) WHERE application_id IS NOT NULL");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_uploaded_lead_files_created_at ON uploaded_lead_files (created_at DESC)");
       await client.query("CREATE INDEX IF NOT EXISTS idx_leads_card_id ON leads (card_id)");
       await client.query("CREATE INDEX IF NOT EXISTS idx_leads_source ON leads (source)");
       await client.query("CREATE INDEX IF NOT EXISTS idx_leads_phone ON leads (phone)");
@@ -577,8 +598,21 @@ const db = {
     const clauses = [];
     
     if (agentId) {
-      params.push(agentId);
-      clauses.push(`agent_id = $${params.length}`);
+      const cleanAgentId = agentId.toLowerCase().trim();
+      const alnumAgentId = cleanAgentId.replace(/[^a-z0-9]/g, '');
+      params.push(cleanAgentId);
+      const p1 = params.length;
+      params.push(alnumAgentId);
+      const p2 = params.length;
+      params.push(`%${cleanAgentId}%`);
+      const p3 = params.length;
+      
+      clauses.push(`(
+        LOWER(agent_id) = $${p1} 
+        OR REPLACE(REPLACE(LOWER(agent_id), '_', ''), '-', '') = $${p2} 
+        OR LOWER(agent_id) LIKE $${p3}
+        OR LOWER(agent_name) LIKE $${p3}
+      )`);
     }
     if (search) {
       params.push(`%${search.trim().toLowerCase()}%`);
@@ -866,20 +900,72 @@ const db = {
     return true;
   },
 
+  // --- Unique Application ID Lookup ---
+  async getExistingApplicationIds() {
+    const res = await pool.query("SELECT DISTINCT application_id FROM leads WHERE application_id IS NOT NULL AND application_id != ''");
+    const set = new Set();
+    res.rows.forEach(r => {
+      if (r.application_id) set.add(r.application_id.trim().toLowerCase());
+    });
+    return set;
+  },
+
+  // --- Persistent Uploaded Lead Files ---
+  async addUploadedLeadFile(fileData) {
+    const res = await pool.query(
+      `INSERT INTO uploaded_lead_files 
+       (filename, original_filename, file_size, agent_id, agent_name, total_rows, created_count, failed_count, errors, file_path, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW()) RETURNING *`,
+      [
+        fileData.filename,
+        fileData.original_filename,
+        fileData.file_size || 0,
+        fileData.agent_id || null,
+        fileData.agent_name || null,
+        fileData.total_rows || 0,
+        fileData.created_count || 0,
+        fileData.failed_count || 0,
+        JSON.stringify(fileData.errors || []),
+        fileData.file_path
+      ]
+    );
+    return res.rows[0];
+  },
+
+  async getUploadedLeadFiles() {
+    const res = await pool.query('SELECT * FROM uploaded_lead_files ORDER BY created_at DESC LIMIT 200');
+    return res.rows.map(r => ({
+      ...r,
+      errors: typeof r.errors === 'string' ? JSON.parse(r.errors) : (r.errors || [])
+    }));
+  },
+
+  async getUploadedLeadFileById(id) {
+    const res = await pool.query('SELECT * FROM uploaded_lead_files WHERE id = $1 LIMIT 1', [id]);
+    return res.rows[0] || null;
+  },
+
   // --- Agents ---
   async getAgents() {
     const res = await pool.query('SELECT * FROM agents ORDER BY created_at ASC');
     return res.rows.map(row => ({
       ...row,
-      locations: typeof row.locations === 'string' ? JSON.parse(row.locations) : row.locations
+      locations: typeof row.locations === 'string' ? JSON.parse(row.locations) : row.locations,
+      can_create_leads: row.can_create_leads !== false,
+      can_upload_mis: !!row.can_upload_mis,
+      agent_mode: row.agent_mode || 'lead_agent'
     }));
   },
 
   async addAgent(agent) {
     const locationsJson = JSON.stringify(agent.locations || []);
+    const agentMode = agent.agent_mode || (agent.assigned_bank ? 'bank_mis_agent' : 'lead_agent');
+    const canCreate = agent.can_create_leads !== undefined ? !!agent.can_create_leads : (agentMode === 'lead_agent');
+    const canMis = agent.can_upload_mis !== undefined ? !!agent.can_upload_mis : (agentMode === 'bank_mis_agent');
+
     await pool.query(
-      'INSERT INTO agents (id, name, phone, email, username, password_hash, status, locations, assigned_bank, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())',
-      [agent.id, agent.name, agent.phone || '', agent.email || '', agent.username, agent.password_hash, agent.status || 'active', locationsJson, agent.assigned_bank || null]
+      'INSERT INTO agents (id, name, phone, email, username, password_hash, status, locations, assigned_bank, agent_mode, can_create_leads, can_upload_mis, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())',
+      [agent.id, agent.name, agent.phone || '', agent.email || '', agent.username, agent.password_hash, agent.status || 'active', locationsJson, agent.assigned_bank || null, agentMode, canCreate, canMis]
     );
     return agent;
   },
@@ -889,7 +975,7 @@ const db = {
     const values = [];
     let idx = 1;
     for (const [key, val] of Object.entries(agentData)) {
-      if (['name', 'phone', 'email', 'username', 'password_hash', 'status', 'assigned_bank', 'can_create_leads'].includes(key)) {
+      if (['name', 'phone', 'email', 'username', 'password_hash', 'status', 'assigned_bank', 'can_create_leads', 'can_upload_mis', 'agent_mode'].includes(key)) {
         fields.push(`${key} = $${idx++}`);
         values.push(val);
       } else if (key === 'locations') {

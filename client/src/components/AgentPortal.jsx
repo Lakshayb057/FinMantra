@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { LogIn, User, MapPin, CheckCircle, BarChart3, Plus, LogOut, Sun, Moon, Copy, Briefcase, Home, Calendar, Phone, ArrowRight, RefreshCw, Mail, ChevronDown } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { LogIn, User, MapPin, CheckCircle, BarChart3, Plus, LogOut, Sun, Moon, Copy, Briefcase, Home, Calendar, Phone, ArrowRight, RefreshCw, Mail, ChevronDown, FileSpreadsheet, Download, X, FileText, CheckCircle2, UserPlus, Search, Filter } from 'lucide-react';
 import { trackLeadSubmission } from '../utils/analytics';
 
 const COMMON_DESIGNATIONS = [
@@ -255,8 +255,282 @@ export default function AgentPortal({ navigateTo, theme, toggleTheme }) {
   const employmentDropdownRef = useRef(null);
   const cardDropdownRef = useRef(null);
 
-  // Performance stats
+  // Performance stats & Agent Leads Repository
   const [agentLeads, setAgentLeads] = useState([]);
+  const [agentSearch, setAgentSearch] = useState('');
+  const [agentCardFilter, setAgentCardFilter] = useState('');
+  const [agentCurrentPage, setAgentCurrentPage] = useState(1);
+  const [showCreateLeadModal, setShowCreateLeadModal] = useState(false);
+  const AGENT_PAGE_SIZE = 50;
+
+  const filteredAgentLeads = useMemo(() => {
+    return (agentLeads || []).filter(l => {
+      if (agentCardFilter && String(l.card_id) !== String(agentCardFilter) && l.card_name !== agentCardFilter) {
+        return false;
+      }
+      if (agentSearch.trim()) {
+        const s = agentSearch.trim().toLowerCase();
+        const matchName = (l.full_name || '').toLowerCase().includes(s);
+        const matchPhone = (l.phone || '').includes(s);
+        const matchUrn = (l.urn || '').toLowerCase().includes(s);
+        const matchPan = (l.pan_no || '').toLowerCase().includes(s);
+        const matchEmail = (l.email || '').toLowerCase().includes(s);
+        const matchAppId = (l.application_id || '').toLowerCase().includes(s);
+        if (!matchName && !matchPhone && !matchUrn && !matchPan && !matchEmail && !matchAppId) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [agentLeads, agentSearch, agentCardFilter]);
+
+  const paginatedAgentLeads = useMemo(() => {
+    const start = (agentCurrentPage - 1) * AGENT_PAGE_SIZE;
+    return filteredAgentLeads.slice(start, start + AGENT_PAGE_SIZE);
+  }, [filteredAgentLeads, agentCurrentPage]);
+
+  const totalAgentPages = Math.ceil(filteredAgentLeads.length / AGENT_PAGE_SIZE) || 1;
+  
+  // Bulk Lead Upload States for Agents
+  const [showAgentUploadModal, setShowAgentUploadModal] = useState(false);
+  const [agentUploadFile, setAgentUploadFile] = useState(null);
+  const [isUploadingAgentLeads, setIsUploadingAgentLeads] = useState(false);
+  const [agentUploadResult, setAgentUploadResult] = useState(null);
+  const [showAgentUploadResultModal, setShowAgentUploadResultModal] = useState(false);
+
+  // Bank MIS Agent States
+  const [showBankMisUploadModal, setShowBankMisUploadModal] = useState(false);
+  const [bankMisUploadFile, setBankMisUploadFile] = useState(null);
+  const [bankMisUploadBank, setBankMisUploadBank] = useState('');
+  const [isUploadingBankMis, setIsUploadingBankMis] = useState(false);
+  const [bankMisUploadResult, setBankMisUploadResult] = useState(null);
+  const [showBankMisResultModal, setShowBankMisResultModal] = useState(false);
+  const [bankMisSearch, setBankMisSearch] = useState('');
+  const [bankMisStatusFilter, setBankMisStatusFilter] = useState('');
+  const [bankMisCurrentPage, setBankMisCurrentPage] = useState(1);
+
+  const isBankMisAgent = agent?.can_upload_mis || agent?.agent_mode === 'bank_mis_agent';
+
+  const getMatchingBankValue = useCallback((rawBank) => {
+    if (!rawBank) return 'HDFC Bank';
+    const b = String(rawBank).trim();
+    const bLower = b.toLowerCase();
+    
+    if (bLower.includes('hdfc')) return 'HDFC Bank';
+    if (bLower.includes('sbi') || bLower.includes('state bank')) return 'SBI';
+    if (bLower.includes('axis')) return 'Axis Bank';
+    if (bLower.includes('icici')) return 'ICICI Bank';
+    if (bLower.includes('tata')) return 'TATA Capital';
+    if (bLower.includes('kotak')) return 'Kotak Mahindra Bank';
+    if (bLower.includes('indusind')) return 'IndusInd Bank';
+    if (bLower.includes('au small') || bLower.includes('au bank')) return 'AU Small Finance Bank';
+    if (bLower.includes('idfc')) return 'IDFC FIRST Bank';
+    if (bLower.includes('kiwi')) return 'KIWI';
+    return b;
+  }, []);
+
+  const availableBankOptions = useMemo(() => {
+    const list = [
+      'HDFC Bank',
+      'SBI',
+      'Axis Bank',
+      'ICICI Bank',
+      'TATA Capital',
+      'Kotak Mahindra Bank',
+      'IndusInd Bank',
+      'AU Small Finance Bank',
+      'IDFC FIRST Bank',
+      'KIWI'
+    ];
+    if (agent && agent.assigned_bank) {
+      const assigned = getMatchingBankValue(agent.assigned_bank);
+      if (!list.includes(assigned)) {
+        list.unshift(assigned);
+      }
+    }
+    (cards || []).forEach(c => {
+      if (c.bank) {
+        const b = getMatchingBankValue(c.bank);
+        if (!list.includes(b)) list.push(b);
+      }
+    });
+    return list;
+  }, [agent, cards, getMatchingBankValue]);
+
+  useEffect(() => {
+    if (agent && agent.assigned_bank && !bankMisUploadBank) {
+      setBankMisUploadBank(getMatchingBankValue(agent.assigned_bank));
+    }
+  }, [agent, bankMisUploadBank, getMatchingBankValue]);
+
+  const filteredBankMisLeads = useMemo(() => {
+    return (agentLeads || []).filter(l => {
+      // Filter to agent's assigned bank if present
+      if (agent && agent.assigned_bank) {
+        const assigned = String(agent.assigned_bank).toLowerCase().trim();
+        const leadBank = String(l.card_bank || l.bank || '').toLowerCase().trim();
+        const leadCard = String(l.card_name || '').toLowerCase().trim();
+        if (assigned && !leadBank.includes(assigned) && !leadCard.includes(assigned) && l.agent_id !== agent.id) {
+          return false;
+        }
+      }
+      if (bankMisStatusFilter) {
+        const st = String(l.mis_status || 'Pending').toLowerCase();
+        if (bankMisStatusFilter === 'approved' && !st.includes('approved') && !st.includes('issued') && !st.includes('sanctioned') && !st.includes('success')) return false;
+        if (bankMisStatusFilter === 'pending' && !st.includes('pending') && !st.includes('process') && !st.includes('wip')) return false;
+        if (bankMisStatusFilter === 'declined' && !st.includes('declined') && !st.includes('rejected') && !st.includes('dropped')) return false;
+      }
+      if (bankMisSearch.trim()) {
+        const s = bankMisSearch.trim().toLowerCase();
+        const matchName = (l.full_name || '').toLowerCase().includes(s);
+        const matchPhone = (l.phone || '').includes(s);
+        const matchUrn = (l.urn || '').toLowerCase().includes(s);
+        const matchPan = (l.pan_no || '').toLowerCase().includes(s);
+        const matchAppId = (l.application_id || '').toLowerCase().includes(s);
+        if (!matchName && !matchPhone && !matchUrn && !matchPan && !matchAppId) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [agentLeads, agent, bankMisSearch, bankMisStatusFilter]);
+
+  const paginatedBankMisLeads = useMemo(() => {
+    const start = (bankMisCurrentPage - 1) * AGENT_PAGE_SIZE;
+    return filteredBankMisLeads.slice(start, start + AGENT_PAGE_SIZE);
+  }, [filteredBankMisLeads, bankMisCurrentPage]);
+
+  const totalBankMisPages = Math.ceil(filteredBankMisLeads.length / AGENT_PAGE_SIZE) || 1;
+
+  const bankMisStats = useMemo(() => {
+    let approved = 0;
+    let pending = 0;
+    let declined = 0;
+    filteredBankMisLeads.forEach(l => {
+      const st = String(l.mis_status || 'Pending').toLowerCase();
+      if (st.includes('approved') || st.includes('issued') || st.includes('success') || st.includes('sanctioned')) {
+        approved++;
+      } else if (st.includes('declined') || st.includes('rejected') || st.includes('dropped')) {
+        declined++;
+      } else {
+        pending++;
+      }
+    });
+    return { total: filteredBankMisLeads.length, approved, pending, declined };
+  }, [filteredBankMisLeads]);
+
+  const handleUploadBankMis = async (e) => {
+    e.preventDefault();
+    if (!bankMisUploadFile) {
+      alert('Please select an Excel or CSV file to upload.');
+      return;
+    }
+
+    setIsUploadingBankMis(true);
+    const formData = new FormData();
+    const targetBank = getMatchingBankValue(agent?.assigned_bank) || agent?.assigned_bank || 'HDFC Bank';
+    formData.append('file', bankMisUploadFile);
+    formData.append('bank', targetBank);
+
+    try {
+      const res = await fetch(`${API_URL}/leads/upload-mis`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to upload Bank MIS file.');
+      }
+
+      setBankMisUploadResult(data);
+      setShowBankMisUploadModal(false);
+      setShowBankMisResultModal(true);
+      setBankMisUploadFile(null);
+      fetchMasterData();
+    } catch (err) {
+      alert(err.message || 'Bank MIS Upload failed.');
+    } finally {
+      setIsUploadingBankMis(false);
+    }
+  };
+
+  const handleDownloadBankMisTemplate = () => {
+    const csvContent = `URN,Application ID,PAN Number,Customer Name,Phone,Bank Name,IPA Status,Final Decision,Remark
+FM2026G2800080,APP10001,ABCDE1234F,Harsh Deep,8708569574,HDFC Bank,APPROVED,Approved,Card issued successfully
+FM2026G2800079,APP10002,DVRPA5807A,IMTIYAZ AHMED,9785197812,SBI,DECLINE,Declined,Low CIBIL score`;
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `${(agent?.assigned_bank || 'Bank').replace(/\s+/g, '_')}_MIS_Upload_Template.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleDownloadTemplate = () => {
+    const headers = [
+      'Application ID', 'Full Name', 'Phone', 'Email', 'PAN Number', 'Date of Birth',
+      'Mother Name', 'Current Address', 'Pincode', 'Employment', 'Designation',
+      'Company Name', 'Already Has Credit Card', 'Net Monthly Income', 'Income Range',
+      'Card Name', 'Card Bank', 'Consent', 'Landing Page URL', 'Redirect URL'
+    ];
+    const sampleRow = [
+      'APP10099', 'Anil Sharma', '9876543210', 'anil.sharma@example.com', 'ABCDE1234F', '1995-05-15',
+      'Sunita Sharma', '123 Main Street, Sector 15', '110001', 'Salaried', 'Software Engineer',
+      'TCS Tech', 'No', '65000', '6-9 LPA',
+      'Kiwi Credit Card', 'Kiwi', 'Yes', 'https://finmantra.org/kiwi', 'https://finmantra.org/'
+    ];
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), sampleRow.join(',')].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', 'FinMantra_Lead_Upload_Template.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleUploadAgentLeads = async (e) => {
+    e.preventDefault();
+    if (!agentUploadFile) {
+      alert('Please select an Excel or CSV file to upload.');
+      return;
+    }
+
+    setIsUploadingAgentLeads(true);
+    const formData = new FormData();
+    formData.append('file', agentUploadFile);
+
+    try {
+      const res = await fetch(`${API_URL}/leads/upload-manual`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to upload leads.');
+      }
+
+      setAgentUploadResult(data);
+      setShowAgentUploadModal(false);
+      setShowAgentUploadResultModal(true);
+      setAgentUploadFile(null);
+      fetchMasterData();
+    } catch (err) {
+      alert(err.message || 'Upload failed.');
+    } finally {
+      setIsUploadingAgentLeads(false);
+    }
+  };
   
   const filteredCards = useMemo(() => {
     return cards.filter(c => {
@@ -330,6 +604,8 @@ export default function AgentPortal({ navigateTo, theme, toggleTheme }) {
   useEffect(() => {
     if (!isAuthenticated) return;
 
+    let isCleaningUp = false;
+    let reconnectTimer;
     const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = window.location.hostname === 'localhost' 
       ? `ws://${window.location.hostname}:5000` 
@@ -338,44 +614,78 @@ export default function AgentPortal({ navigateTo, theme, toggleTheme }) {
     let reconnectDelay = 5000;
 
     const connectWebSocket = () => {
-      socket = new WebSocket(wsUrl);
+      if (isCleaningUp) return;
+      try {
+        socket = new WebSocket(wsUrl);
 
-      socket.onopen = () => {
-        reconnectDelay = 5000;
-      };
+        socket.onopen = () => {
+          reconnectDelay = 5000;
+        };
 
-      socket.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data);
-          
-          if (
-            message.type === 'CARDS_UPDATED' || 
-            message.type === 'LOCATIONS_UPDATED' || 
-            message.type === 'LEAD_ADDED' || 
-            message.type === 'LEADS_UPDATED' ||
-            message.type === 'AGENTS_UPDATED'
-          ) {
-            fetchMasterData();
+        socket.onmessage = (event) => {
+          try {
+            const message = JSON.parse(event.data);
+            
+            if (
+              message.type === 'CARDS_UPDATED' || 
+              message.type === 'LOCATIONS_UPDATED' || 
+              message.type === 'LEAD_ADDED' || 
+              message.type === 'LEADS_UPDATED' ||
+              message.type === 'AGENTS_UPDATED'
+            ) {
+              fetchMasterData();
+            }
+          } catch (err) {
+            // silent
           }
-        } catch (err) {
-          // silent
-        }
-      };
+        };
 
-      socket.onclose = () => {
-        reconnectDelay = Math.min(reconnectDelay * 2, 300000); // Max 5 minutes backoff
-        setTimeout(connectWebSocket, reconnectDelay);
-      };
+        socket.onclose = () => {
+          if (isCleaningUp) return;
+          reconnectTimer = setTimeout(() => {
+            if (!isCleaningUp) {
+              reconnectDelay = Math.min(reconnectDelay * 2, 300000); // Max 5 minutes backoff
+              connectWebSocket();
+            }
+          }, reconnectDelay);
+        };
 
-      socket.onerror = () => {
-        socket.close();
-      };
+        socket.onerror = () => {
+          if (socket && socket.readyState === WebSocket.OPEN) {
+            try { socket.close(); } catch(e) {}
+          }
+        };
+      } catch (err) {}
     };
+
+    const handlePageHide = () => {
+      isCleaningUp = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (socket) {
+        try { socket.close(); } catch(e) {}
+      }
+    };
+
+    const handlePageShow = (e) => {
+      if (e.persisted) {
+        isCleaningUp = false;
+        connectWebSocket();
+      }
+    };
+
+    window.addEventListener('pagehide', handlePageHide);
+    window.addEventListener('pageshow', handlePageShow);
 
     connectWebSocket();
 
     return () => {
-      if (socket) socket.close();
+      isCleaningUp = true;
+      window.removeEventListener('pagehide', handlePageHide);
+      window.removeEventListener('pageshow', handlePageShow);
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (socket) {
+        try { socket.close(); } catch(e) {}
+      }
     };
   }, [isAuthenticated]);
 
@@ -412,10 +722,7 @@ export default function AgentPortal({ navigateTo, theme, toggleTheme }) {
       if (leadsRes.ok) {
         const leadsData = await leadsRes.json();
         const leadsList = Array.isArray(leadsData) ? leadsData : (leadsData.leads || []);
-        // Filter leads submitted by this agent
-        const filtered = leadsList.filter(l => l.agent_id === agent?.id);
-        setAgentLeads(filtered);
-        // Token is verified - enable WebSocket sync
+        setAgentLeads(leadsList);
         setIsAuthenticated(true);
       }
     } catch (err) {
@@ -1304,747 +1611,421 @@ export default function AgentPortal({ navigateTo, theme, toggleTheme }) {
 
       </div>
 
-      {/* Dashboard Top Header */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.75rem' }}>
-        <h1 style={{ fontSize: '1.75rem', marginBottom: '0.25rem' }}>Welcome, {agent?.name}</h1>
-        <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', color: 'hsl(var(--text-secondary))', fontSize: '0.9rem' }}>
-          <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-            <User size={16} /> ID: Agent-{agent?.id || 'Active'}
-          </span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-            <MapPin size={16} /> Assigned Locations: {agent?.locations?.join(', ') || 'General'}
-          </span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: 'hsl(var(--secondary))', fontWeight: 600 }}>
-            <CheckCircle size={16} /> Working Today At: {agentLocation || 'General'}
-            {agent?.locations && agent.locations.length > 1 && (
-              <button 
-                onClick={() => setShowLocationModal(true)} 
-                style={{ background: 'none', border: 'none', color: 'hsl(var(--primary))', textDecoration: 'underline', cursor: 'pointer', fontSize: '0.8rem', marginLeft: '0.5rem', padding: 0 }}
-              >
-                Change
-              </button>
-            )}
-          </span>
-        </div>
-      </div>
-
-      {/* Performance Summary Cards */}
-      <div className="agent-stats-grid">
-        <div className="glass-panel agent-stat-card" style={{ borderLeft: '3px solid hsl(var(--primary))' }}>
-          <div className="agent-stat-header">
-            <span className="agent-stat-title">Leads Submitted Today</span>
-            <CheckCircle size={20} className="agent-stat-icon" style={{ color: 'hsl(var(--primary))' }} />
-          </div>
-          <div className="agent-stat-value">{todaysLeads.length}</div>
-          <div className="agent-stat-desc">Resetting at midnight</div>
-        </div>
-
-        <div className="glass-panel agent-stat-card" style={{ borderLeft: '3px solid hsl(var(--secondary))' }}>
-          <div className="agent-stat-header">
-            <span className="agent-stat-title">Total Lifetime Leads</span>
-            <BarChart3 size={20} className="agent-stat-icon" style={{ color: 'hsl(var(--secondary))' }} />
-          </div>
-          <div className="agent-stat-value">{agentLeads.length}</div>
-          <div className="agent-stat-desc">Leads registered via Agent source</div>
-        </div>
-      </div>
-
-      {/* Main Grid for entry + list */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '2.5rem', alignItems: 'start' }} className="agent-panels-grid">
-        
-        {/* Walk-in Capture Lead Form */}
-        <div className="glass-panel" style={{ borderLeft: '3px solid var(--gold)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-            <Plus size={22} style={{ color: 'var(--gold-deep)' }} />
-            <h2 style={{ fontSize: '1.4rem' }}>Walk-in Lead Capture</h2>
-          </div>
-
-          <form onSubmit={handleLeadSubmit}>
-            {/* Step indicator */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', position: 'relative', padding: '0 8px' }}>
-              <div style={{ position: 'absolute', top: '15px', left: '16px', right: '16px', height: '2px', background: 'var(--line)', zIndex: 1 }}>
-                <div style={{ width: agentFormStep === 2 ? '100%' : '0%', height: '100%', background: 'var(--gold)', transition: 'width 0.3s ease' }}></div>
-              </div>
-              <div 
-                onClick={() => !isSubmitting && setAgentFormStep(1)}
-                style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 2, position: 'relative', cursor: isSubmitting ? 'not-allowed' : 'pointer' }}
-              >
-                <div style={{ 
-                  width: '32px', height: '32px', borderRadius: '50%', 
-                  background: agentFormStep >= 1 ? 'var(--gold)' : 'var(--white)', 
-                  border: agentFormStep >= 1 ? '2px solid var(--gold)' : '2px solid var(--line)',
-                  color: agentFormStep >= 1 ? 'var(--white)' : 'var(--muted)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.85rem',
-                  transition: 'all 0.3s ease'
-                }}>1</div>
-                <span style={{ fontSize: '0.75rem', fontWeight: 600, marginTop: '6px', color: agentFormStep === 1 ? 'var(--gold-deep)' : 'var(--muted)' }}>Contact & Personal</span>
-              </div>
-              <div 
-                onClick={() => {
-                  if (isSubmitting) return;
-                  if (agentFormStep === 2) return;
-                  if (currentLeadUrn) {
-                    setAgentFormStep(2);
-                  } else {
-                    handleAgentContinueToStep2();
-                  }
-                }}
-                style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 2, position: 'relative', cursor: isSubmitting ? 'not-allowed' : 'pointer' }}
-              >
-                <div style={{ 
-                  width: '32px', height: '32px', borderRadius: '50%', 
-                  background: agentFormStep >= 2 ? 'var(--gold)' : 'var(--white)', 
-                  border: agentFormStep >= 2 ? '2px solid var(--gold)' : '2px solid var(--line)',
-                  color: agentFormStep >= 2 ? 'var(--white)' : 'var(--muted)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.85rem',
-                  transition: 'all 0.3s ease'
-                }}>2</div>
-                <span style={{ fontSize: '0.75rem', fontWeight: 600, marginTop: '6px', color: agentFormStep === 2 ? 'var(--gold-deep)' : 'var(--muted)' }}>More Info</span>
+      {/* Dedicated View for Bank MIS Agents vs Field Sales Agents */}
+      {isBankMisAgent ? (
+        <>
+          {/* Bank MIS Agent Top Header */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.75rem' }}>
+            <div>
+              <h1 style={{ fontSize: '1.75rem', marginBottom: '0.25rem' }}>Welcome, {agent?.name}</h1>
+              <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', color: 'hsl(var(--text-secondary))', fontSize: '0.9rem' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                  <User size={16} /> ID: Agent-{agent?.id || 'Active'}
+                </span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: 'var(--gold-deep)', fontWeight: 700 }}>
+                  🏦 Mapped Bank: {agent?.assigned_bank || 'All Partner Banks'}
+                </span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: 'hsl(var(--secondary))', fontWeight: 600 }}>
+                  <CheckCircle size={16} /> Working Today At: {agentLocation || 'Bank Desk'}
+                </span>
               </div>
             </div>
 
-            {/* STEP 1 */}
-            {agentFormStep === 1 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                  <div className="form-group">
-                    <label className="form-label">Name as per Govt. ID <span style={{ color: 'var(--err)' }}>*</span></label>
-                    <input 
-                      type="text" 
-                      name="fullName" 
-                      className="form-input" 
-                      placeholder="e.g. Anil Sharma"
-                      value={leadForm.fullName}
-                      onChange={handleLeadChange} 
-                      required
-                      disabled={isSubmitting}
-                    />
-                    {errors.fullName && <div style={{ color: 'var(--err)', fontSize: '0.8rem', marginTop: '0.25rem' }}>{errors.fullName}</div>}
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">WhatsApp number <span style={{ color: 'var(--err)' }}>*</span></label>
-                    <input 
-                      type="tel" 
-                      name="phone" 
-                      className="form-input" 
-                      placeholder="10-digit number"
-                      maxLength="10"
-                      value={leadForm.phone}
-                      onChange={handleLeadChange} 
-                      required
-                      disabled={isSubmitting}
-                    />
-                    {errors.phone && <div style={{ color: 'var(--err)', fontSize: '0.8rem', marginTop: '0.25rem' }}>{errors.phone}</div>}
-                  </div>
-                </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <button 
+                type="button"
+                onClick={() => {
+                  setBankMisUploadBank(getMatchingBankValue(agent?.assigned_bank));
+                  setShowBankMisUploadModal(true);
+                }} 
+                className="btn-primary" 
+                style={{ padding: '0.6rem 1.25rem', fontSize: '0.9rem', display: 'inline-flex', alignItems: 'center', gap: '0.5rem', borderRadius: '6px', background: 'var(--gold-deep)', color: '#fff', border: 'none', fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 14px rgba(224, 168, 46, 0.3)' }}
+              >
+                <FileSpreadsheet size={18} /> Upload Bank MIS (Excel / CSV)
+              </button>
+            </div>
+          </div>
 
-                <div className="form-group" style={{ marginBottom: '1rem' }}>
-                  <label className="form-label">Email Address <span style={{ color: 'var(--err)' }}>*</span></label>
-                  <input 
-                    type="email" 
-                    name="email" 
-                    className="form-input" 
-                    placeholder="anil@gmail.com"
-                    value={leadForm.email}
-                    onChange={handleLeadChange} 
-                    required
-                    disabled={isSubmitting}
-                  />
-                  {errors.email && <div style={{ color: 'var(--err)', fontSize: '0.8rem', marginTop: '0.25rem' }}>{errors.email}</div>}
-                </div>
+          {/* Bank MIS Metrics Cards Grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+            <div className="glass-panel" style={{ padding: '1.1rem', borderLeft: '4px solid var(--gold-deep)' }}>
+              <div style={{ fontSize: '0.8rem', color: 'var(--muted)', fontWeight: 600 }}>Total Bank MIS Leads</div>
+              <div style={{ fontSize: '1.75rem', fontWeight: 800, marginTop: '0.2rem' }}>{bankMisStats.total}</div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--muted)', marginTop: '0.2rem' }}>Mapped for {agent?.assigned_bank || 'Bank'}</div>
+            </div>
 
-                <div className="form-group" style={{ marginBottom: '1rem' }}>
-                  <label className="form-label">PAN Number <span style={{ color: 'var(--err)' }}>*</span></label>
-                  <input 
-                    type="text" 
-                    name="pan_no" 
-                    className="form-input" 
-                    placeholder="e.g. ABCDE1234F"
-                    value={leadForm.pan_no}
-                    onChange={handleLeadChange} 
-                    required
-                    disabled={isSubmitting}
-                    style={{ textTransform: 'uppercase' }}
-                  />
-                  {errors.pan_no && <div style={{ color: 'var(--err)', fontSize: '0.8rem', marginTop: '0.25rem' }}>{errors.pan_no}</div>}
-                </div>
+            <div className="glass-panel" style={{ padding: '1.1rem', borderLeft: '4px solid var(--success)' }}>
+              <div style={{ fontSize: '0.8rem', color: 'var(--success)', fontWeight: 600 }}>Approved / Issued</div>
+              <div style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--success)', marginTop: '0.2rem' }}>{bankMisStats.approved}</div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--muted)', marginTop: '0.2rem' }}>Card issued or approved</div>
+            </div>
 
-                <div className="form-group" style={{ marginBottom: '1rem' }}>
-                  <label className="form-label">Date of Birth <span style={{ color: 'var(--err)' }}>*</span></label>
-                  <input 
-                    type="date" 
-                    name="dob" 
-                    className="form-input" 
-                    value={leadForm.dob}
-                    onChange={handleLeadChange} 
-                    required
-                    disabled={isSubmitting}
-                  />
-                  {errors.dob && <div style={{ color: 'var(--err)', fontSize: '0.8rem', marginTop: '0.25rem' }}>{errors.dob}</div>}
-                </div>
+            <div className="glass-panel" style={{ padding: '1.1rem', borderLeft: '4px solid var(--warning)' }}>
+              <div style={{ fontSize: '0.8rem', color: 'var(--warning)', fontWeight: 600 }}>Pending Verification</div>
+              <div style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--warning)', marginTop: '0.2rem' }}>{bankMisStats.pending}</div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--muted)', marginTop: '0.2rem' }}>In process / under review</div>
+            </div>
 
-                <div className="form-group" style={{ marginBottom: '1rem' }}>
-                  <label className="form-label">Mother's Full Name <span style={{ color: 'var(--err)' }}>*</span></label>
-                  <input 
-                    type="text" 
-                    name="mother_name" 
-                    className="form-input" 
-                    placeholder="Enter mother's full name"
-                    value={leadForm.mother_name}
-                    onChange={handleLeadChange} 
-                    required
-                    disabled={isSubmitting}
-                  />
-                  {errors.mother_name && <div style={{ color: 'var(--err)', fontSize: '0.8rem', marginTop: '0.25rem' }}>{errors.mother_name}</div>}
-                </div>
+            <div className="glass-panel" style={{ padding: '1.1rem', borderLeft: '4px solid var(--err)' }}>
+              <div style={{ fontSize: '0.8rem', color: 'var(--err)', fontWeight: 600 }}>Declined / Rejected</div>
+              <div style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--err)', marginTop: '0.2rem' }}>{bankMisStats.declined}</div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--muted)', marginTop: '0.2rem' }}>Dropped or declined</div>
+            </div>
+          </div>
 
-
-
-                {leadError && (
-                  <div style={{ background: 'rgba(209, 67, 67, 0.1)', border: '1px solid rgba(209, 67, 67, 0.2)', padding: '0.75rem 1rem', borderRadius: 'var(--radius-sm)', color: 'var(--err)', fontSize: '0.85rem' }}>
-                    {leadError}
-                  </div>
-                )}
-
-                <button 
-                  type="button" 
-                  onClick={handleAgentContinueToStep2} 
-                  className="btn-primary" 
-                  style={{ width: '100%', marginTop: '0.5rem' }}
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? 'Saving Step 1...' : 'Continue to Next Step'} <ArrowRight size={18} />
-                </button>
+          {/* Bank MIS Repository Table */}
+          <div className="glass-panel" style={{ width: '100%', boxSizing: 'border-box', padding: '1.5rem', marginBottom: '2rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.25rem', paddingBottom: '1rem', borderBottom: '1px solid var(--line)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <h2 style={{ fontSize: '1.35rem', margin: 0, fontWeight: 700 }}>My Bank MIS & Leads Repository</h2>
+                <span className="badge badge-success" style={{ fontSize: '0.8rem', padding: '0.25rem 0.65rem' }}>
+                  {filteredBankMisLeads.length} Bank Records
+                </span>
               </div>
-            )}
 
-            {/* STEP 2 */}
-            {agentFormStep === 2 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
-                <div ref={employmentDropdownRef} className="form-group" style={{ marginBottom: '1rem', position: 'relative' }}>
-                  <label className="form-label">Employment Type <span style={{ color: 'var(--err)' }}>*</span></label>
-                  <div style={{ position: 'relative' }}>
-                    <div 
-                      onClick={() => !isSubmitting && setEmploymentDropdownOpen(!employmentDropdownOpen)}
-                      className="form-select-trigger"
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        height: '38px',
-                        padding: '0 0.9rem',
-                        border: '1.5px solid ' + (errors.employment ? 'var(--err)' : employmentDropdownOpen ? 'var(--gold)' : 'var(--line)'),
-                        borderRadius: 'var(--radius-sm)',
-                        background: 'var(--white)',
-                        color: leadForm.employment ? 'var(--ink)' : 'var(--muted)',
-                        cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                        fontSize: '0.95rem',
-                        userSelect: 'none',
-                        transition: 'border-color 0.15s, box-shadow 0.15s',
-                        boxShadow: employmentDropdownOpen ? '0 0 0 3px rgba(224, 168, 46, 0.2)' : 'none'
-                      }}
-                    >
-                      <span>{leadForm.employment ? leadForm.employment : '-- Select Employment --'}</span>
-                      <ChevronDown size={16} style={{ 
-                        transform: employmentDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-                        transition: 'transform 0.2s ease',
-                        color: 'var(--muted)'
-                      }} />
-                    </div>
-
-                    {employmentDropdownOpen && (
-                      <div 
-                        className="custom-select-options-list"
-                        style={{
-                          position: 'absolute',
-                          top: 'calc(100% + 4px)',
-                          left: 0,
-                          right: 0,
-                          zIndex: 9999,
-                          background: 'var(--white)',
-                          border: '1.5px solid var(--line)',
-                          borderRadius: 'var(--radius-sm)',
-                          boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
-                          maxHeight: '200px',
-                          overflowY: 'auto'
-                        }}
-                      >
-                        {[
-                          { label: '-- Select Employment --', value: '' },
-                          { label: 'Salaried', value: 'Salaried' },
-                          { label: 'Self-Employed', value: 'Self-Employed' },
-                          { label: 'Business/Professional', value: 'Business/Professional' },
-                          { label: 'Other', value: 'Other' }
-                        ].map((opt) => (
-                          <div 
-                            key={opt.value}
-                            onClick={() => {
-                              setLeadForm(prev => ({ ...prev, employment: opt.value }));
-                              if (errors.employment) {
-                                setErrors(prev => {
-                                  const newErr = { ...prev };
-                                  delete newErr.employment;
-                                  return newErr;
-                                });
-                              }
-                              setEmploymentDropdownOpen(false);
-                            }}
-                            className="custom-select-option"
-                            style={{
-                              padding: '0.65rem 0.9rem',
-                              cursor: 'pointer',
-                              fontSize: '0.95rem',
-                              background: leadForm.employment === opt.value ? 'rgba(224, 168, 46, 0.08)' : 'transparent',
-                              color: leadForm.employment === opt.value ? 'var(--gold-deep)' : 'var(--ink)',
-                              fontWeight: leadForm.employment === opt.value ? 600 : 400,
-                              borderBottom: '1px solid var(--line-light)'
-                            }}
-                            onMouseEnter={(e) => {
-                              if (leadForm.employment !== opt.value) {
-                                e.currentTarget.style.background = 'var(--paper)';
-                              }
-                            }}
-                            onMouseLeave={(e) => {
-                              if (leadForm.employment !== opt.value) {
-                                e.currentTarget.style.background = 'transparent';
-                              }
-                            }}
-                          >
-                            {opt.label}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  {errors.employment && <div style={{ color: 'var(--err)', fontSize: '0.8rem', marginTop: '0.25rem' }}>{errors.employment}</div>}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                {/* Search Input */}
+                <div style={{ position: 'relative', minWidth: '280px' }}>
+                  <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} />
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    placeholder="Search name, phone, URN, PAN, App ID..."
+                    value={bankMisSearch}
+                    onChange={(e) => { setBankMisSearch(e.target.value); setBankMisCurrentPage(1); }}
+                    style={{ paddingLeft: '2.2rem', height: '38px', fontSize: '0.85rem' }}
+                  />
                 </div>
 
-                <div ref={designationDropdownRef} className="form-group" style={{ marginBottom: '1rem', position: 'relative' }}>
-                  <label className="form-label">Designation <span style={{ color: 'var(--err)' }}>*</span></label>
-                  <div style={{ position: 'relative' }}>
-                    <input 
-                      type="text" 
-                      name="designation" 
-                      className="form-input" 
-                      placeholder="Type or select designation"
-                      value={leadForm.designation}
-                      onChange={handleLeadChange} 
-                      onFocus={() => !isSubmitting && setDesignationDropdownOpen(true)}
-                      required
-                      disabled={isSubmitting}
-                      autoComplete="off"
-                    />
-                    <ChevronDown size={16} style={{
-                      position: 'absolute', right: '0.85rem', top: '50%',
-                      transform: designationDropdownOpen ? 'translateY(-50%) rotate(180deg)' : 'translateY(-50%)',
-                      transition: 'transform 0.2s ease',
-                      color: 'var(--muted)',
-                      pointerEvents: 'none'
-                    }} />
-                  </div>
-                  
-                  {designationDropdownOpen && (
-                    <div style={{
-                      position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
-                      background: 'var(--white)',
-                      border: '1.5px solid var(--line)',
-                      borderRadius: 'var(--radius-sm)',
-                      boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-                      zIndex: 50,
-                      maxHeight: '180px',
-                      overflowY: 'auto',
-                      animation: 'fadeIn 0.15s ease'
-                    }}>
-                      {COMMON_DESIGNATIONS.filter(des => 
-                        des.toLowerCase().includes((leadForm.designation || '').toLowerCase())
-                      ).length > 0 ? (
-                        COMMON_DESIGNATIONS.filter(des => 
-                          des.toLowerCase().includes((leadForm.designation || '').toLowerCase())
-                        ).map((opt, idx) => (
-                          <div
-                            key={idx}
-                            onClick={() => {
-                              setLeadForm(prev => ({ ...prev, designation: opt }));
-                              setDesignationDropdownOpen(false);
-                            }}
-                            style={{
-                              padding: '0.65rem 1rem',
-                              fontSize: '0.9rem',
-                              cursor: 'pointer',
-                              background: leadForm.designation === opt ? 'rgba(224, 168, 46, 0.15)' : 'transparent',
-                              color: leadForm.designation === opt ? 'var(--gold-deep)' : 'var(--ink)',
-                              fontWeight: leadForm.designation === opt ? 700 : 400,
-                              transition: 'background 0.15s ease, color 0.15s ease',
-                              borderBottom: '1px solid var(--line)'
-                            }}
-                            onMouseEnter={e => { 
-                              if (leadForm.designation !== opt) { 
-                                e.currentTarget.style.background = 'var(--paper-2)'; 
-                              } 
-                            }}
-                            onMouseLeave={e => { 
-                              if (leadForm.designation !== opt) { 
-                                e.currentTarget.style.background = 'transparent'; 
-                              } 
-                            }}
-                          >
-                            {opt}
-                          </div>
-                        ))
-                      ) : (
-                        <div style={{ padding: '0.65rem 1rem', fontSize: '0.9rem', color: 'var(--muted)' }}>
-                          Press enter or continue typing for custom option
-                        </div>
-                      )}
-                    </div>
+                {/* Status Filter */}
+                <div style={{ minWidth: '180px' }}>
+                  <select 
+                    className="form-select"
+                    value={bankMisStatusFilter}
+                    onChange={(e) => { setBankMisStatusFilter(e.target.value); setBankMisCurrentPage(1); }}
+                    style={{ height: '38px', fontSize: '0.85rem' }}
+                  >
+                    <option value="">All MIS Statuses</option>
+                    <option value="approved">Approved / Issued</option>
+                    <option value="pending">Pending Verification</option>
+                    <option value="declined">Declined / Rejected</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Table View */}
+            <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid var(--line)' }}>
+              <table className="admin-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                <thead>
+                  <tr style={{ background: 'var(--paper-2)', borderBottom: '1px solid var(--line)', textAlign: 'left' }}>
+                    <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>URN No.</th>
+                    <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Date & Time</th>
+                    <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Customer Name</th>
+                    <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Contact Info</th>
+                    <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Application ID</th>
+                    <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Bank / Scheme</th>
+                    <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>MIS Status</th>
+                    <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Stage / Remarks</th>
+                    <th style={{ padding: '0.75rem 1rem', fontWeight: 600, textAlign: 'center' }}>Link / Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedBankMisLeads.length > 0 ? (
+                    paginatedBankMisLeads.map(lead => {
+                      const st = String(lead.mis_status || 'Pending').toLowerCase();
+                      const isApp = st.includes('approved') || st.includes('issued') || st.includes('success') || st.includes('sanctioned');
+                      const isDec = st.includes('declined') || st.includes('rejected') || st.includes('dropped');
+                      const badgeClass = isApp ? 'badge-success' : (isDec ? 'badge-warning' : 'badge-info');
+
+                      return (
+                        <tr key={lead.id} style={{ borderBottom: '1px solid var(--line)' }}>
+                          <td style={{ padding: '0.75rem 1rem' }}>
+                            <span className="badge badge-success" style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.75rem' }}>
+                              {lead.urn || 'N/A'}
+                            </span>
+                          </td>
+                          <td style={{ padding: '0.75rem 1rem', whiteSpace: 'nowrap', color: 'var(--muted)', fontSize: '0.8rem' }}>
+                            {lead.created_at ? new Date(lead.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : 'N/A'}
+                          </td>
+                          <td style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>
+                            {lead.full_name || 'N/A'}
+                          </td>
+                          <td style={{ padding: '0.75rem 1rem' }}>
+                            <div>📱 {lead.phone || 'N/A'}</div>
+                            {lead.email && <div style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>✉️ {lead.email}</div>}
+                          </td>
+                          <td style={{ padding: '0.75rem 1rem' }}>
+                            {lead.application_id ? (
+                              <code style={{ background: 'rgba(224, 168, 46, 0.1)', color: 'var(--gold-deep)', padding: '0.15rem 0.4rem', borderRadius: '4px', fontWeight: 700 }}>
+                                {lead.application_id}
+                              </code>
+                            ) : (
+                              <span style={{ color: 'var(--muted)' }}>N/A</span>
+                            )}
+                          </td>
+                          <td style={{ padding: '0.75rem 1rem', fontWeight: 500 }}>
+                            {lead.card_bank || lead.card_name || agent?.assigned_bank || 'Bank Partner'}
+                          </td>
+                          <td style={{ padding: '0.75rem 1rem' }}>
+                            <span className={`badge ${badgeClass}`} style={{ fontSize: '0.75rem', fontWeight: 700 }}>
+                              {lead.mis_status || 'Pending'}
+                            </span>
+                          </td>
+                          <td style={{ padding: '0.75rem 1rem', color: 'var(--muted)', fontSize: '0.8rem' }}>
+                            {lead.utm_params?.decline_description || lead.utm_params?.current_stage || lead.utm_params?.remark || 'No Remarks'}
+                          </td>
+                          <td style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>
+                            {lead.redirect_url ? (
+                              <CopyLinkButton url={lead.redirect_url} />
+                            ) : (
+                              <span style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>MIS Record</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan="9" style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--muted)' }}>
+                        No Bank MIS records found for {agent?.assigned_bank || 'your bank'}. Click "Upload Bank MIS" to upload Excel/CSV MIS files!
+                      </td>
+                    </tr>
                   )}
-                  {errors.designation && <div style={{ color: 'var(--err)', fontSize: '0.8rem', marginTop: '0.25rem' }}>{errors.designation}</div>}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination Bar */}
+            {totalBankMisPages > 1 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1.25rem', paddingTop: '0.75rem', borderTop: '1px solid var(--line)' }}>
+                <div style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>
+                  Showing {((bankMisCurrentPage - 1) * AGENT_PAGE_SIZE) + 1} - {Math.min(bankMisCurrentPage * AGENT_PAGE_SIZE, filteredBankMisLeads.length)} of {filteredBankMisLeads.length} bank records
                 </div>
-
-                <div className="form-group" style={{ marginBottom: '1rem' }}>
-                  <label className="form-label">Net Monthly Income</label>
-                  <input 
-                    type="text" 
-                    name="monthly_income" 
-                    className="form-input" 
-                    placeholder="e.g. 50000 (optional)"
-                    value={leadForm.monthly_income}
-                    onChange={handleLeadChange} 
-                    disabled={isSubmitting}
-                  />
-                  {errors.monthly_income && <div style={{ color: 'var(--err)', fontSize: '0.8rem', marginTop: '0.25rem' }}>{errors.monthly_income}</div>}
-                </div>
-
-                <div ref={cardDropdownRef} className="form-group" style={{ marginBottom: '1rem', position: 'relative' }}>
-                  <label className="form-label">Select Card <span style={{ color: 'var(--err)' }}>*</span></label>
-                  <div style={{ position: 'relative' }}>
-                    <div 
-                      onClick={() => !isSubmitting && setCardDropdownOpen(!cardDropdownOpen)}
-                      className="form-select-trigger"
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        height: '38px',
-                        padding: '0 0.9rem',
-                        border: '1.5px solid ' + (errors.cardId ? 'var(--err)' : cardDropdownOpen ? 'var(--gold)' : 'var(--line)'),
-                        borderRadius: 'var(--radius-sm)',
-                        background: 'var(--white)',
-                        color: leadForm.cardId ? 'var(--ink)' : 'var(--muted)',
-                        cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                        fontSize: '0.95rem',
-                        userSelect: 'none',
-                        transition: 'border-color 0.15s, box-shadow 0.15s',
-                        boxShadow: cardDropdownOpen ? '0 0 0 3px rgba(224, 168, 46, 0.2)' : 'none'
-                      }}
-                    >
-                      <span>
-                        {leadForm.cardId 
-                          ? filteredCards.find(c => c.id.toString() === leadForm.cardId)
-                            ? `${filteredCards.find(c => c.id.toString() === leadForm.cardId).bank} - ${filteredCards.find(c => c.id.toString() === leadForm.cardId).name}`
-                            : '-- Select Card to Apply --'
-                          : '-- Select Card to Apply --'}
-                      </span>
-                      <ChevronDown size={16} style={{ 
-                        transform: cardDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-                        transition: 'transform 0.2s ease',
-                        color: 'var(--muted)'
-                      }} />
-                    </div>
-
-                    {cardDropdownOpen && (
-                      <div 
-                        className="custom-select-options-list"
-                        style={{
-                          position: 'absolute',
-                          top: 'calc(100% + 4px)',
-                          left: 0,
-                          right: 0,
-                          zIndex: 9999,
-                          background: 'var(--white)',
-                          border: '1.5px solid var(--line)',
-                          borderRadius: 'var(--radius-sm)',
-                          boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
-                          maxHeight: '200px',
-                          overflowY: 'auto'
-                        }}
-                      >
-                        <div 
-                          onClick={() => {
-                            setLeadForm(prev => ({ ...prev, cardId: '' }));
-                            setCardDropdownOpen(false);
-                          }}
-                          className="custom-select-option"
-                          style={{
-                            padding: '0.65rem 0.9rem',
-                            cursor: 'pointer',
-                            fontSize: '0.95rem',
-                            background: !leadForm.cardId ? 'rgba(224, 168, 46, 0.08)' : 'transparent',
-                            color: !leadForm.cardId ? 'var(--gold-deep)' : 'var(--ink)',
-                            fontWeight: !leadForm.cardId ? 600 : 400,
-                            borderBottom: '1px solid var(--line-light)'
-                          }}
-                          onMouseEnter={(e) => {
-                            if (leadForm.cardId) {
-                              e.currentTarget.style.background = 'var(--paper)';
-                            }
-                          }}
-                          onMouseLeave={(e) => {
-                            if (leadForm.cardId) {
-                              e.currentTarget.style.background = 'transparent';
-                            }
-                          }}
-                        >
-                          -- Select Card to Apply --
-                        </div>
-                        {filteredCards.map((c) => (
-                          <div 
-                            key={c.id}
-                            onClick={() => {
-                              setLeadForm(prev => ({ ...prev, cardId: c.id.toString() }));
-                              if (errors.cardId) {
-                                setErrors(prev => {
-                                  const newErr = { ...prev };
-                                  delete newErr.cardId;
-                                  return newErr;
-                                });
-                              }
-                              setCardDropdownOpen(false);
-                            }}
-                            className="custom-select-option"
-                            style={{
-                              padding: '0.65rem 0.9rem',
-                              cursor: 'pointer',
-                              fontSize: '0.95rem',
-                              background: leadForm.cardId === c.id.toString() ? 'rgba(224, 168, 46, 0.08)' : 'transparent',
-                              color: leadForm.cardId === c.id.toString() ? 'var(--gold-deep)' : 'var(--ink)',
-                              fontWeight: leadForm.cardId === c.id.toString() ? 600 : 400,
-                              borderBottom: '1px solid var(--line-light)'
-                            }}
-                            onMouseEnter={(e) => {
-                              if (leadForm.cardId !== c.id.toString()) {
-                                e.currentTarget.style.background = 'var(--paper)';
-                              }
-                            }}
-                            onMouseLeave={(e) => {
-                              if (leadForm.cardId !== c.id.toString()) {
-                                e.currentTarget.style.background = 'transparent';
-                              }
-                            }}
-                          >
-                            {c.bank} - {c.name}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  {errors.cardId && <div style={{ color: 'var(--err)', fontSize: '0.8rem', marginTop: '0.25rem' }}>{errors.cardId}</div>}
-                </div>
-
-                {/* Structured Address Fields */}
-                <div style={{ borderTop: '1px dashed var(--line)', paddingTop: '1rem', marginTop: '0.25rem', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
-                  <h4 style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--gold-deep)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 0 }}>Current Residence Address</h4>
-                  
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label">Flat / House No. / Building <span style={{ color: 'var(--err)' }}>*</span></label>
-                      <input 
-                        type="text" 
-                        name="address_house" 
-                        className="form-input" 
-                        placeholder="Flat/House No., Bldg"
-                        value={leadForm.address_house}
-                        onChange={handleLeadChange} 
-                        required
-                        disabled={isSubmitting}
-                      />
-                      {errors.address_house && <div style={{ color: 'var(--err)', fontSize: '0.8rem', marginTop: '0.25rem' }}>{errors.address_house}</div>}
-                    </div>
-                    
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label">Road / Street / Landmark <span style={{ color: 'var(--err)' }}>*</span></label>
-                      <input 
-                        type="text" 
-                        name="address_street" 
-                        className="form-input" 
-                        placeholder="Road, Street, Area"
-                        value={leadForm.address_street}
-                        onChange={handleLeadChange} 
-                        required
-                        disabled={isSubmitting}
-                      />
-                      {errors.address_street && <div style={{ color: 'var(--err)', fontSize: '0.8rem', marginTop: '0.25rem' }}>{errors.address_street}</div>}
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label">Pincode <span style={{ color: 'var(--err)' }}>*</span></label>
-                      <input 
-                        type="text" 
-                        name="pincode" 
-                        className="form-input" 
-                        placeholder="6-digit Pincode"
-                        maxLength="6"
-                        value={leadForm.pincode}
-                        onChange={handleLeadChange} 
-                        required
-                        disabled={isSubmitting}
-                      />
-                      {pincodeLoading && <div style={{ fontSize: '0.7rem', color: 'var(--gold)', marginTop: '0.25rem' }}>Verifying...</div>}
-                      {pincodeLocationText && (
-                        <div style={{ fontSize: '0.7rem', color: 'var(--mint)', marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                          <span style={{ display: 'inline-block', width: '5px', height: '5px', borderRadius: '50%', background: 'var(--mint)' }}></span>
-                          {pincodeLocationText}
-                        </div>
-                      )}
-                      {(errors.pincode || pincodeError) && <div style={{ fontSize: '0.7rem', color: 'var(--err)', marginTop: '0.25rem' }}>{errors.pincode || pincodeError}</div>}
-                    </div>
-
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label">Locality / Area <span style={{ color: 'var(--err)' }}>*</span></label>
-                      {pincodeLocalities.length > 0 ? (
-                        <select 
-                          name="address_locality" 
-                          className="form-select" 
-                          value={leadForm.address_locality}
-                          onChange={handleLeadChange} 
-                          required
-                          disabled={isSubmitting}
-                          style={{ height: '42px' }}
-                        >
-                          {pincodeLocalities.map((loc, idx) => (
-                            <option key={idx} value={loc}>{loc}</option>
-                          ))}
-                        </select>
-                      ) : (
-                        <input 
-                          type="text" 
-                          name="address_locality" 
-                          className="form-input" 
-                          placeholder="Locality name"
-                          value={leadForm.address_locality}
-                          onChange={handleLeadChange} 
-                          required
-                          disabled={isSubmitting}
-                        />
-                      )}
-                      {errors.address_locality && <div style={{ color: 'var(--err)', fontSize: '0.8rem', marginTop: '0.25rem' }}>{errors.address_locality}</div>}
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label">City <span style={{ color: 'var(--err)' }}>*</span></label>
-                      <input 
-                        type="text" 
-                        name="address_city" 
-                        className="form-input" 
-                        placeholder="City"
-                        value={leadForm.address_city}
-                        onChange={handleLeadChange} 
-                        required
-                        disabled={isSubmitting}
-                      />
-                      {errors.address_city && <div style={{ color: 'var(--err)', fontSize: '0.8rem', marginTop: '0.25rem' }}>{errors.address_city}</div>}
-                    </div>
-
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label">State <span style={{ color: 'var(--err)' }}>*</span></label>
-                      <select 
-                        name="address_state" 
-                        className="form-select" 
-                        value={leadForm.address_state}
-                        onChange={handleLeadChange} 
-                        required
-                        disabled={isSubmitting}
-                        style={{ height: '42px' }}
-                      >
-                        <option value="">Select State</option>
-                        {[
-                          "Andaman and Nicobar Islands", "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar",
-                          "Chandigarh", "Chhattisgarh", "Dadra and Nagar Haveli and Daman and Diu", "Delhi", "Goa",
-                          "Gujarat", "Haryana", "Himachal Pradesh", "Jammu and Kashmir", "Jharkhand", "Karnataka",
-                          "Kerala", "Ladakh", "Lakshadweep", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya",
-                          "Mizoram", "Nagaland", "Odisha", "Puducherry", "Punjab", "Rajasthan", "Sikkim",
-                          "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal"
-                        ].map((st, idx) => (
-                          <option key={idx} value={st}>{st}</option>
-                        ))}
-                      </select>
-                      {errors.address_state && <div style={{ color: 'var(--err)', fontSize: '0.8rem', marginTop: '0.25rem' }}>{errors.address_state}</div>}
-                    </div>
-                  </div>
-                </div>
-
-                {leadError && (
-                  <div style={{ background: 'rgba(209, 67, 67, 0.1)', border: '1px solid rgba(209, 67, 67, 0.2)', padding: '0.75rem 1rem', borderRadius: 'var(--radius-sm)', color: 'var(--err)', fontSize: '0.85rem' }}>
-                    {leadError}
-                  </div>
-                )}
-
-                {leadSuccess && (
-                  <div style={{ background: 'rgba(22, 163, 123, 0.1)', border: '1px solid rgba(22, 163, 123, 0.2)', padding: '0.75rem 1rem', borderRadius: 'var(--radius-sm)', color: 'var(--mint)', fontSize: '0.85rem' }}>
-                    {leadSuccess}
-                  </div>
-                )}
-
-                <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem' }}>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
                   <button 
-                    type="button" 
-                    onClick={() => setAgentFormStep(1)} 
+                    disabled={bankMisCurrentPage <= 1} 
+                    onClick={() => setBankMisCurrentPage(p => Math.max(p - 1, 1))} 
                     className="btn-secondary" 
-                    style={{ flex: 1 }}
-                    disabled={isSubmitting}
+                    style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
                   >
-                    Back
+                    Previous
                   </button>
+                  <span style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', fontWeight: 600 }}>
+                    Page {bankMisCurrentPage} of {totalBankMisPages}
+                  </span>
                   <button 
-                    type="submit" 
-                    className="btn-primary" 
-                    style={{ flex: 2 }}
-                    disabled={isSubmitting}
+                    disabled={bankMisCurrentPage >= totalBankMisPages} 
+                    onClick={() => setBankMisCurrentPage(p => Math.min(p + 1, totalBankMisPages))} 
+                    className="btn-secondary" 
+                    style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
                   >
-                    {isSubmitting ? 'Registering Lead...' : 'Register Lead'}
+                    Next
                   </button>
                 </div>
-              </div>
-            )}
-          </form>
-        </div>
-
-        {/* Today's submissions list (mini grid) */}
-        <div className="glass-panel">
-          <h2 style={{ fontSize: '1.3rem', marginBottom: '1.25rem' }}>Submissions History</h2>
-          
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxHeight: '420px', overflowY: 'auto' }}>
-            {agentLeads.length > 0 ? (
-              [...agentLeads].reverse().slice(0, 15).map(lead => (
-                <div key={lead.id} className="glass-card" style={{ padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>{lead.full_name}</div>
-                    <div style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', marginBottom: lead.redirect_url ? '4px' : '0' }}>
-                      {lead.card_name} {lead.pan_no ? `• ${lead.pan_no}` : ''} {lead.monthly_income ? `• ₹${lead.monthly_income}` : ''} • {lead.city || 'Walk-in'}
-                    </div>
-                    {lead.redirect_url && <CopyLinkButton url={lead.redirect_url} />}
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <span className="badge badge-success" style={{ fontSize: '0.7rem' }}>{lead.urn}</span>
-                    <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', marginTop: '0.25rem' }}>
-                      {formatTimeOnly(lead.created_at)}
-                    </div>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div style={{ textAlign: 'center', padding: '3rem 0', color: 'hsl(var(--text-muted))', fontSize: '0.9rem' }}>
-                No leads submitted in this session.
               </div>
             )}
           </div>
-        </div>
+        </>
+      ) : (
+        /* Field Sales Agent Mode */
+        <>
+          {/* Dashboard Top Header & Action Bar */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.75rem' }}>
+            <div>
+              <h1 style={{ fontSize: '1.75rem', marginBottom: '0.25rem' }}>Welcome, {agent?.name}</h1>
+              <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', color: 'hsl(var(--text-secondary))', fontSize: '0.9rem' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                  <User size={16} /> ID: Agent-{agent?.id || 'Active'}
+                </span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                  <MapPin size={16} /> Assigned Locations: {agent?.locations?.join(', ') || 'General'}
+                </span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: 'hsl(var(--secondary))', fontWeight: 600 }}>
+                  <CheckCircle size={16} /> Working Today At: {agentLocation || 'General'}
+                  {agent?.locations && agent.locations.length > 1 && (
+                    <button 
+                      onClick={() => setShowLocationModal(true)} 
+                      style={{ background: 'none', border: 'none', color: 'hsl(var(--primary))', textDecoration: 'underline', cursor: 'pointer', fontSize: '0.8rem', marginLeft: '0.5rem', padding: 0 }}
+                    >
+                      Change
+                    </button>
+                  )}
+                </span>
+              </div>
+            </div>
 
-      </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+              {agent?.can_create_leads !== false && (
+                <>
+                  <button 
+                    type="button"
+                    onClick={() => setShowCreateLeadModal(true)} 
+                    className="btn-secondary" 
+                    style={{ padding: '0.55rem 1.1rem', fontSize: '0.88rem', display: 'inline-flex', alignItems: 'center', gap: '0.45rem', borderRadius: '6px', fontWeight: 600, cursor: 'pointer' }}
+                  >
+                    <UserPlus size={16} /> Create Single Lead
+                  </button>
+
+                  <button 
+                    type="button"
+                    onClick={() => setShowAgentUploadModal(true)} 
+                    className="btn-primary" 
+                    style={{ padding: '0.55rem 1.1rem', fontSize: '0.88rem', display: 'inline-flex', alignItems: 'center', gap: '0.45rem', borderRadius: '6px', background: 'var(--gold-deep)', color: '#fff', border: 'none', fontWeight: 600, cursor: 'pointer', boxShadow: '0 4px 12px rgba(224, 168, 46, 0.25)' }}
+                  >
+                    <FileSpreadsheet size={16} /> Upload Leads (Excel / CSV)
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Agent Leads Repository Section */}
+          <div className="glass-panel" style={{ width: '100%', boxSizing: 'border-box', padding: '1.5rem', marginBottom: '2rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.25rem', paddingBottom: '1rem', borderBottom: '1px solid var(--line)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <h2 style={{ fontSize: '1.35rem', margin: 0, fontWeight: 700 }}>My Uploaded Leads Repository</h2>
+                <span className="badge badge-success" style={{ fontSize: '0.8rem', padding: '0.25rem 0.65rem' }}>
+                  {filteredAgentLeads.length} Total Leads
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                {/* Search Input */}
+                <div style={{ position: 'relative', minWidth: '280px' }}>
+                  <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} />
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    placeholder="Search name, phone, URN, PAN, App ID..."
+                    value={agentSearch}
+                    onChange={(e) => { setAgentSearch(e.target.value); setAgentCurrentPage(1); }}
+                    style={{ paddingLeft: '2.2rem', height: '38px', fontSize: '0.85rem' }}
+                  />
+                </div>
+
+                {/* Card Filter */}
+                <div style={{ minWidth: '180px' }}>
+                  <select 
+                    className="form-select"
+                    value={agentCardFilter}
+                    onChange={(e) => { setAgentCardFilter(e.target.value); setAgentCurrentPage(1); }}
+                    style={{ height: '38px', fontSize: '0.85rem' }}
+                  >
+                    <option value="">All Credit Cards</option>
+                    {cards.map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Table View */}
+            <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid var(--line)' }}>
+              <table className="admin-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                <thead>
+                  <tr style={{ background: 'var(--paper-2)', borderBottom: '1px solid var(--line)', textAlign: 'left' }}>
+                    <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>URN No.</th>
+                    <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Date & Time</th>
+                    <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Customer Name</th>
+                    <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Contact Info</th>
+                    <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>PAN No.</th>
+                    <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Application ID</th>
+                    <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Card Name</th>
+                    <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>City / Location</th>
+                    <th style={{ padding: '0.75rem 1rem', fontWeight: 600, textAlign: 'center' }}>Link / Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedAgentLeads.length > 0 ? (
+                    paginatedAgentLeads.map(lead => (
+                      <tr key={lead.id} style={{ borderBottom: '1px solid var(--line)' }}>
+                        <td style={{ padding: '0.75rem 1rem' }}>
+                          <span className="badge badge-success" style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.75rem' }}>
+                            {lead.urn || 'N/A'}
+                          </span>
+                        </td>
+                        <td style={{ padding: '0.75rem 1rem', whiteSpace: 'nowrap', color: 'var(--muted)', fontSize: '0.8rem' }}>
+                          {lead.created_at ? new Date(lead.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : 'N/A'}
+                        </td>
+                        <td style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>
+                          {lead.full_name || 'N/A'}
+                        </td>
+                        <td style={{ padding: '0.75rem 1rem' }}>
+                          <div>📱 {lead.phone || 'N/A'}</div>
+                          {lead.email && <div style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>✉️ {lead.email}</div>}
+                        </td>
+                        <td style={{ padding: '0.75rem 1rem', textTransform: 'uppercase', fontFamily: 'monospace' }}>
+                          {lead.pan_no || 'N/A'}
+                        </td>
+                        <td style={{ padding: '0.75rem 1rem' }}>
+                          {lead.application_id ? (
+                            <code style={{ background: 'rgba(224, 168, 46, 0.1)', color: 'var(--gold-deep)', padding: '0.15rem 0.4rem', borderRadius: '4px', fontWeight: 700 }}>
+                              {lead.application_id}
+                            </code>
+                          ) : (
+                            <span style={{ color: 'var(--muted)' }}>N/A</span>
+                          )}
+                        </td>
+                        <td style={{ padding: '0.75rem 1rem', fontWeight: 500 }}>
+                          {lead.card_name || 'General Card'}
+                        </td>
+                        <td style={{ padding: '0.75rem 1rem', color: 'var(--muted)' }}>
+                          {lead.city || lead.location || 'Walk-in'}
+                        </td>
+                        <td style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>
+                          {lead.redirect_url ? (
+                            <CopyLinkButton url={lead.redirect_url} />
+                          ) : (
+                            <span style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>Uploaded</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="9" style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--muted)' }}>
+                        No leads found in your repository. Click "Upload Leads (Excel / CSV)" to upload bulk leads directly!
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination Bar */}
+            {totalAgentPages > 1 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1.25rem', paddingTop: '0.75rem', borderTop: '1px solid var(--line)' }}>
+                <div style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>
+                  Showing {((agentCurrentPage - 1) * AGENT_PAGE_SIZE) + 1} - {Math.min(agentCurrentPage * AGENT_PAGE_SIZE, filteredAgentLeads.length)} of {filteredAgentLeads.length} leads
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button 
+                    disabled={agentCurrentPage <= 1} 
+                    onClick={() => setAgentCurrentPage(p => Math.max(p - 1, 1))} 
+                    className="btn-secondary" 
+                    style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
+                  >
+                    Previous
+                  </button>
+                  <span style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', fontWeight: 600 }}>
+                    Page {agentCurrentPage} of {totalAgentPages}
+                  </span>
+                  <button 
+                    disabled={agentCurrentPage >= totalAgentPages} 
+                    onClick={() => setAgentCurrentPage(p => Math.min(p + 1, totalAgentPages))} 
+                    className="btn-secondary" 
+                    style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </>
+      )}
 
       {/* Footer Controls */}
       <div style={{ 
@@ -2111,6 +2092,192 @@ export default function AgentPortal({ navigateTo, theme, toggleTheme }) {
           </button>
         </div>
       </div>
+
+      {/* Agent Excel Upload Modal */}
+      {showAgentUploadModal && (
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: '1rem' }}>
+          <div className="glass-panel modal-content" style={{ width: '100%', maxWidth: '540px', borderRadius: '16px', background: 'var(--paper)', border: '1px solid var(--line)', padding: '1.75rem', borderTop: '4px solid var(--gold-deep)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--line)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <FileSpreadsheet size={22} style={{ color: 'var(--gold-deep)' }} />
+                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700 }}>Upload Leads (Excel / CSV)</h3>
+              </div>
+              <button onClick={() => setShowAgentUploadModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={20} /></button>
+            </div>
+
+            <div style={{ background: 'rgba(224, 168, 46, 0.08)', border: '1px solid rgba(224, 168, 46, 0.25)', padding: '0.85rem', borderRadius: '8px', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--gold-deep)' }}>Need a formatted template?</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>Includes all headers & sample rows</div>
+              </div>
+              <button 
+                type="button"
+                onClick={handleDownloadTemplate} 
+                className="btn-primary" 
+                style={{ fontSize: '0.78rem', padding: '0.35rem 0.75rem', display: 'inline-flex', alignItems: 'center', gap: '0.3rem', whiteSpace: 'nowrap', background: 'var(--gold-deep)', color: '#fff' }}
+              >
+                <Download size={13} /> Download Template
+              </button>
+            </div>
+
+            <form onSubmit={handleUploadAgentLeads}>
+              <div className="form-group" style={{ marginBottom: '1rem' }}>
+                <label className="form-label" style={{ fontWeight: 600 }}>Select Excel (.xlsx, .xls) or CSV File</label>
+                <input 
+                  type="file" 
+                  accept=".xlsx, .xls, .csv" 
+                  onChange={(e) => setAgentUploadFile(e.target.files[0])} 
+                  className="form-input" 
+                  required 
+                />
+              </div>
+
+              <div style={{ fontSize: '0.78rem', color: 'var(--muted)', marginTop: '0.5rem', marginBottom: '1.25rem', background: 'var(--paper-2)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--line)' }}>
+                ℹ️ All valid lead rows will be automatically assigned to your Agent ID (<code>Agent-{agent?.id}</code>). Mandatory fields: Full Name, Phone, Email.
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+                <button type="button" onClick={() => setShowAgentUploadModal(false)} className="btn-secondary">Cancel</button>
+                <button type="submit" className="btn-primary" disabled={isUploadingAgentLeads} style={{ background: 'var(--gold-deep)', color: '#fff' }}>
+                  {isUploadingAgentLeads ? 'Processing Upload...' : 'Upload & Validate Leads'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Agent Upload Results Modal */}
+      {showAgentUploadResultModal && agentUploadResult && (
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: '1rem' }}>
+          <div className="glass-panel modal-content" style={{ width: '100%', maxWidth: '580px', maxHeight: '85vh', overflowY: 'auto', borderRadius: '16px', background: 'var(--paper)', border: '1px solid var(--line)', padding: '1.75rem', borderTop: '4px solid var(--gold-deep)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--line)' }}>
+              <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700 }}>Bulk Lead Upload Results</h3>
+              <button onClick={() => setShowAgentUploadResultModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={20} /></button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem', marginBottom: '1.25rem' }}>
+              <div style={{ background: 'var(--paper-2)', padding: '0.85rem', borderRadius: '8px', textAlign: 'center', border: '1px solid var(--line)' }}>
+                <div style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>Total Rows</div>
+                <div style={{ fontSize: '1.4rem', fontWeight: 800 }}>{agentUploadResult.total}</div>
+              </div>
+              <div style={{ background: 'rgba(56, 142, 60, 0.1)', padding: '0.85rem', borderRadius: '8px', textAlign: 'center', border: '1px solid rgba(56, 142, 60, 0.25)' }}>
+                <div style={{ fontSize: '0.75rem', color: 'var(--success)' }}>Created</div>
+                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--success)' }}>{agentUploadResult.created}</div>
+              </div>
+              <div style={{ background: 'rgba(209, 67, 67, 0.1)', padding: '0.85rem', borderRadius: '8px', textAlign: 'center', border: '1px solid rgba(209, 67, 67, 0.25)' }}>
+                <div style={{ fontSize: '0.75rem', color: 'var(--err)' }}>Rejected</div>
+                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--err)' }}>{agentUploadResult.failed}</div>
+              </div>
+            </div>
+
+            {agentUploadResult.errors && agentUploadResult.errors.length > 0 && (
+              <div style={{ marginBottom: '1.25rem' }}>
+                <h4 style={{ fontSize: '0.9rem', marginBottom: '0.5rem', color: 'var(--err)' }}>Validation Error Log ({agentUploadResult.errors.length}):</h4>
+                <div style={{ background: 'var(--paper-2)', border: '1px solid var(--line)', padding: '0.75rem', borderRadius: '8px', maxHeight: '180px', overflowY: 'auto', fontSize: '0.78rem', color: 'var(--ink)' }}>
+                  {agentUploadResult.errors.map((err, idx) => (
+                    <div key={idx} style={{ marginBottom: '0.35rem' }}>• {err}</div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button onClick={() => setShowAgentUploadResultModal(false)} className="btn-primary" style={{ background: 'var(--gold-deep)', color: '#fff' }}>Done</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bank MIS Upload Modal */}
+      {showBankMisUploadModal && (
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: '1rem' }}>
+          <div className="glass-panel modal-content" style={{ width: '100%', maxWidth: '580px', borderRadius: '16px', background: 'var(--paper)', border: '1px solid var(--line)', padding: '1.75rem', borderTop: '4px solid var(--gold-deep)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--line)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <FileSpreadsheet size={22} style={{ color: 'var(--gold-deep)' }} />
+                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700 }}>Upload Bank MIS (Excel / CSV)</h3>
+              </div>
+              <button onClick={() => setShowBankMisUploadModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={20} /></button>
+            </div>
+
+            <form onSubmit={handleUploadBankMis}>
+              <div style={{ marginBottom: '1.25rem', background: 'var(--paper-2)', padding: '0.85rem 1rem', borderRadius: '8px', border: '1px solid var(--line)' }}>
+                <div style={{ fontSize: '0.75rem', color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Target Bank Partner</div>
+                <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--gold-deep)', marginTop: '0.15rem', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                  🏦 {getMatchingBankValue(agent?.assigned_bank) || agent?.assigned_bank || 'HDFC Bank'}
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1.25rem' }}>
+                <label className="form-label" style={{ marginBottom: '0.35rem', fontWeight: 600, fontSize: '0.85rem' }}>Bank MIS File (.xlsx, .csv) *</label>
+                
+                <input 
+                  type="file" 
+                  accept=".xlsx, .xls, .csv" 
+                  onChange={(e) => setBankMisUploadFile(e.target.files[0])}
+                  className="form-input"
+                  style={{ padding: '0.5rem', height: 'auto', background: 'var(--paper-2)' }}
+                  required
+                />
+              </div>
+
+              <div style={{ fontSize: '0.78rem', color: 'var(--muted)', marginTop: '0.5rem', marginBottom: '1.25rem', background: 'var(--paper-2)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--line)' }}>
+                ℹ️ Bank MIS upload maps URN / Application ID and updates final decision status (`Approved`, `Pending`, `Declined`) directly across the repository.
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+                <button type="button" onClick={() => setShowBankMisUploadModal(false)} className="btn-secondary">Cancel</button>
+                <button type="submit" className="btn-primary" disabled={isUploadingBankMis} style={{ background: 'var(--gold-deep)', color: '#fff' }}>
+                  {isUploadingBankMis ? 'Processing Upload...' : 'Upload & Process MIS'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Bank MIS Upload Results Modal */}
+      {showBankMisResultModal && bankMisUploadResult && (
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: '1rem' }}>
+          <div className="glass-panel modal-content" style={{ width: '100%', maxWidth: '580px', maxHeight: '85vh', overflowY: 'auto', borderRadius: '16px', background: 'var(--paper)', border: '1px solid var(--line)', padding: '1.75rem', borderTop: '4px solid var(--gold-deep)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--line)' }}>
+              <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700 }}>Bank MIS Upload Results</h3>
+              <button onClick={() => setShowBankMisResultModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={20} /></button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem', marginBottom: '1.25rem' }}>
+              <div style={{ background: 'var(--paper-2)', padding: '0.85rem', borderRadius: '8px', textAlign: 'center', border: '1px solid var(--line)' }}>
+                <div style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>Total Processed</div>
+                <div style={{ fontSize: '1.4rem', fontWeight: 800 }}>{bankMisUploadResult.processed || bankMisUploadResult.total || 0}</div>
+              </div>
+              <div style={{ background: 'rgba(56, 142, 60, 0.1)', padding: '0.85rem', borderRadius: '8px', textAlign: 'center', border: '1px solid rgba(56, 142, 60, 0.25)' }}>
+                <div style={{ fontSize: '0.75rem', color: 'var(--success)' }}>Mapped Leads</div>
+                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--success)' }}>{bankMisUploadResult.updated || bankMisUploadResult.mapped || 0}</div>
+              </div>
+              <div style={{ background: 'rgba(209, 67, 67, 0.1)', padding: '0.85rem', borderRadius: '8px', textAlign: 'center', border: '1px solid rgba(209, 67, 67, 0.25)' }}>
+                <div style={{ fontSize: '0.75rem', color: 'var(--err)' }}>Unmatched</div>
+                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--err)' }}>{bankMisUploadResult.unmatched || bankMisUploadResult.failed || 0}</div>
+              </div>
+            </div>
+
+            {bankMisUploadResult.unmatchedList && bankMisUploadResult.unmatchedList.length > 0 && (
+              <div style={{ marginBottom: '1.25rem' }}>
+                <h4 style={{ fontSize: '0.9rem', marginBottom: '0.5rem', color: 'var(--warning)' }}>Unmatched URN / Application IDs ({bankMisUploadResult.unmatchedList.length}):</h4>
+                <div style={{ background: 'var(--paper-2)', border: '1px solid var(--line)', padding: '0.75rem', borderRadius: '8px', maxHeight: '180px', overflowY: 'auto', fontSize: '0.78rem', color: 'var(--ink)' }}>
+                  {bankMisUploadResult.unmatchedList.map((item, idx) => (
+                    <div key={idx} style={{ marginBottom: '0.35rem' }}>• {typeof item === 'string' ? item : (item.urn || item.appId || JSON.stringify(item))}</div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button onClick={() => setShowBankMisResultModal(false)} className="btn-primary" style={{ background: 'var(--gold-deep)', color: '#fff' }}>Done</button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

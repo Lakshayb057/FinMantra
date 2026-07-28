@@ -5,7 +5,7 @@ import {
   Trash2, Download, Search, Plus, Edit, Check, X, RefreshCw, AlertCircle,
   QrCode, Smartphone, CheckCircle, Wifi, WifiOff, Eye, EyeOff, MessageSquare, Layers,
   ArrowUp, ArrowDown, MoreVertical, LogOut, Activity, Sun, Moon, LogIn,
-  TrendingUp, Upload, CheckCircle2, Filter, Database, UserPlus, FileSpreadsheet
+  TrendingUp, Upload, CheckCircle2, Filter, Database, UserPlus, FileSpreadsheet, FolderArchive, FolderDown, FileText
 } from 'lucide-react';
 
 const formatDateTime = (dateStr) => {
@@ -264,7 +264,10 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
   const [newBankInput, setNewBankInput] = useState('');
   const [newCardForm, setNewCardForm] = useState({ name: '', bank: '', category: 'Offline', ad_id: '', utm_internal: '', description: '', redirect_url_template: '', display_order: 1, active: true, card_locations: [] });
-  const [newAgentForm, setNewAgentForm] = useState({ id: '', name: '', phone: '', email: '', username: '', password: '', status: 'active', locations: [], assigned_bank: '' });
+  const [newAgentForm, setNewAgentForm] = useState({ id: '', name: '', phone: '', email: '', username: '', password: '', status: 'active', locations: [], assigned_bank: '', agent_mode: 'lead_agent', can_create_leads: true, can_upload_mis: false });
+  const [uploadedFilesList, setUploadedFilesList] = useState([]);
+  const [showUploadedFilesModal, setShowUploadedFilesModal] = useState(false);
+  const [isLoadingUploadedFiles, setIsLoadingUploadedFiles] = useState(false);
   const [newLocName, setNewLocName] = useState('');
 
   const [message, setMessage] = useState({ text: '', type: 'success' });
@@ -325,6 +328,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   useEffect(() => {
     if (!isAuthenticated) return;
 
+    let isCleaningUp = false;
     const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
       ? `ws://${window.location.hostname}:5000` 
@@ -334,6 +338,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
     let reconnectDelay = 3000;
 
     const connectWebSocket = () => {
+      if (isCleaningUp) return;
       try {
         socket = new WebSocket(wsUrl);
 
@@ -368,21 +373,47 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
         };
 
         socket.onclose = () => {
+          if (isCleaningUp) return;
           reconnectTimer = setTimeout(() => {
-            reconnectDelay = Math.min(reconnectDelay * 1.5, 30000);
-            connectWebSocket();
+            if (!isCleaningUp) {
+              reconnectDelay = Math.min(reconnectDelay * 1.5, 30000);
+              connectWebSocket();
+            }
           }, reconnectDelay);
         };
 
         socket.onerror = () => {
-          try { socket.close(); } catch(e) {}
+          if (socket && socket.readyState === WebSocket.OPEN) {
+            try { socket.close(); } catch(e) {}
+          }
         };
       } catch (err) {}
     };
 
+    const handlePageHide = () => {
+      isCleaningUp = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (socket) {
+        try { socket.close(); } catch(e) {}
+      }
+    };
+
+    const handlePageShow = (e) => {
+      if (e.persisted) {
+        isCleaningUp = false;
+        connectWebSocket();
+      }
+    };
+
+    window.addEventListener('pagehide', handlePageHide);
+    window.addEventListener('pageshow', handlePageShow);
+
     connectWebSocket();
 
     return () => {
+      isCleaningUp = true;
+      window.removeEventListener('pagehide', handlePageHide);
+      window.removeEventListener('pageshow', handlePageShow);
       if (reconnectTimer) clearTimeout(reconnectTimer);
       if (socket) {
         try { socket.close(); } catch(e) {}
@@ -1302,6 +1333,53 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
         ? current.filter(l => l !== locName)
         : [...current, locName];
       setEditingAgent({ ...editingAgent, locations: updated });
+    }
+  };
+
+  const handleToggleAgentPermission = async (agentId, permField, currentValue) => {
+    try {
+      const updates = {};
+      if (permField === 'can_create_leads') {
+        const nextVal = !currentValue;
+        updates.can_create_leads = nextVal;
+        if (nextVal) {
+          updates.can_upload_mis = false;
+          updates.agent_mode = 'lead_agent';
+        }
+      } else if (permField === 'can_upload_mis') {
+        const nextVal = !currentValue;
+        updates.can_upload_mis = nextVal;
+        if (nextVal) {
+          updates.can_create_leads = false;
+          updates.agent_mode = 'bank_mis_agent';
+        }
+      }
+      await apiFetch(`${API_URL}/agents/${agentId}/permissions`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(updates)
+      });
+      showToast('Agent permission updated successfully.');
+      loadAllAdminData();
+    } catch (err) {
+      showToast(err.message || 'Failed to update agent permission.', 'error');
+    }
+  };
+
+  const fetchUploadedFilesList = async () => {
+    setIsLoadingUploadedFiles(true);
+    try {
+      const data = await apiFetch(`${API_URL}/admin/uploaded-lead-files`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      setUploadedFilesList(Array.isArray(data) ? data : []);
+    } catch (err) {
+      showToast('Failed to load uploaded lead files history.', 'error');
+    } finally {
+      setIsLoadingUploadedFiles(false);
     }
   };
 
@@ -2716,6 +2794,13 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                 >
                   <FileSpreadsheet size={14} /> Upload Leads
                 </button>
+                <button 
+                  onClick={() => { setShowUploadedFilesModal(true); fetchUploadedFilesList(); }} 
+                  className="btn-secondary" 
+                  style={{ padding: '0.4rem 0.85rem', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', height: '34px', borderRadius: '4px', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                >
+                  <FolderArchive size={14} /> Uploaded Files
+                </button>
                 {canDelete && selectedLeads.length > 0 && (
                   <button onClick={handleBulkDeleteLeads} className="btn-secondary" style={{ background: 'rgba(209, 67, 67, 0.15)', color: 'var(--err)', border: '1px solid rgba(209, 67, 67, 0.2)', padding: '0.4rem 0.85rem', fontSize: '0.82rem', height: '34px', borderRadius: '2px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
                     <Trash2 size={14} /> Delete ({selectedLeads.length})
@@ -3964,8 +4049,8 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
             <div className="admin-split-grid desktop-split-container" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '1.5rem', alignItems: 'start' }}>
               
               {/* Agent Form */}
-              <div className="glass-panel">
-                <h3 style={{ fontSize: '1.2rem', marginBottom: '1.5rem' }}>
+              <div className="glass-panel" style={{ maxHeight: 'calc(100vh - 140px)', overflowY: 'auto', padding: '1.25rem' }}>
+                <h3 style={{ fontSize: '1.2rem', marginBottom: '1.25rem' }}>
                   {editingAgent ? `Edit Agent: ${editingAgent.name}` : 'Register Field Agent'}
                 </h3>
                 
@@ -4012,6 +4097,96 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                       value={editingAgent ? editingAgent.email : newAgentForm.email}
                       onChange={(e) => editingAgent ? setEditingAgent({ ...editingAgent, email: e.target.value }) : setNewAgentForm({ ...newAgentForm, email: e.target.value })}
                     />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Operational Mode & Role</label>
+                    <select 
+                      className="form-select"
+                      value={editingAgent ? (editingAgent.can_create_leads ? 'lead_agent' : (editingAgent.can_upload_mis ? 'bank_mis_agent' : 'no_permissions')) : (newAgentForm.can_create_leads ? 'lead_agent' : (newAgentForm.can_upload_mis ? 'bank_mis_agent' : 'no_permissions'))}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const isLead = val === 'lead_agent';
+                        const isMis = val === 'bank_mis_agent';
+                        if (editingAgent) {
+                          setEditingAgent({ 
+                            ...editingAgent, 
+                            agent_mode: isMis ? 'bank_mis_agent' : 'lead_agent',
+                            can_create_leads: isLead,
+                            can_upload_mis: isMis
+                          });
+                        } else {
+                          setNewAgentForm({ 
+                            ...newAgentForm, 
+                            agent_mode: isMis ? 'bank_mis_agent' : 'lead_agent',
+                            can_create_leads: isLead,
+                            can_upload_mis: isMis
+                          });
+                        }
+                      }}
+                    >
+                      <option value="lead_agent">📱 Field Sales Agent (Lead Upload & Capture)</option>
+                      <option value="bank_mis_agent">🏦 Bank MIS Agent (Bank Partner Payout)</option>
+                      <option value="no_permissions">🚫 No Special Permissions (View Only)</option>
+                    </select>
+                  </div>
+
+                  <div className="form-group" style={{ background: 'var(--paper-2)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--line)' }}>
+                    <label className="form-label" style={{ fontWeight: 700, marginBottom: '0.5rem' }}>Agent Feature Permissions (At Most 1 Allowed)</label>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                      <label style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.45rem', cursor: 'pointer' }}>
+                        <input 
+                          type="checkbox"
+                          checked={editingAgent ? !!editingAgent.can_create_leads : !!newAgentForm.can_create_leads}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            if (editingAgent) {
+                              setEditingAgent({ 
+                                ...editingAgent, 
+                                can_create_leads: checked, 
+                                can_upload_mis: checked ? false : !!editingAgent.can_upload_mis,
+                                agent_mode: checked ? 'lead_agent' : editingAgent.agent_mode
+                              });
+                            } else {
+                              setNewAgentForm({ 
+                                ...newAgentForm, 
+                                can_create_leads: checked, 
+                                can_upload_mis: checked ? false : !!newAgentForm.can_upload_mis,
+                                agent_mode: checked ? 'lead_agent' : newAgentForm.agent_mode
+                              });
+                            }
+                          }}
+                          style={{ accentColor: 'var(--gold)' }}
+                        />
+                        <span><strong>Manual Lead Upload & Creation Access</strong> (Leads Repository)</span>
+                      </label>
+                      <label style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.45rem', cursor: 'pointer' }}>
+                        <input 
+                          type="checkbox"
+                          checked={editingAgent ? !!editingAgent.can_upload_mis : !!newAgentForm.can_upload_mis}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            if (editingAgent) {
+                              setEditingAgent({ 
+                                ...editingAgent, 
+                                can_upload_mis: checked, 
+                                can_create_leads: checked ? false : !!editingAgent.can_create_leads,
+                                agent_mode: checked ? 'bank_mis_agent' : editingAgent.agent_mode
+                              });
+                            } else {
+                              setNewAgentForm({ 
+                                ...newAgentForm, 
+                                can_upload_mis: checked, 
+                                can_create_leads: checked ? false : !!newAgentForm.can_create_leads,
+                                agent_mode: checked ? 'bank_mis_agent' : newAgentForm.agent_mode
+                              });
+                            }
+                          }}
+                          style={{ accentColor: 'var(--gold)' }}
+                        />
+                        <span><strong>Bank MIS Upload Access</strong> (Bank Upload & MIS Dashboard)</span>
+                      </label>
+                    </div>
                   </div>
 
                   <div className="form-group">
@@ -4103,16 +4278,19 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
               </div>
 
               {/* Agent Roster */}
-              <div className="glass-panel desktop-panel-fill" style={{ padding: '1.25rem', boxSizing: 'border-box' }}>
+              <div className="glass-panel desktop-panel-fill" style={{ maxHeight: 'calc(100vh - 140px)', display: 'flex', flexDirection: 'column', padding: '1.25rem', boxSizing: 'border-box' }}>
                 <h3 style={{ fontSize: '1.2rem', marginBottom: '1.25rem', flexShrink: 0 }}>Registered Agents ({agents.length})</h3>
-                <div className="desktop-scroll-panel" style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem', paddingRight: '0.35rem' }}>
+                <div className="desktop-scroll-panel" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1.1rem', paddingRight: '0.35rem' }}>
                   {agents.map(ag => (
                     <div key={ag.id} className="glass-card admin-card-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                           <h4 style={{ fontWeight: 700 }}>{ag.name}</h4>
                           <span className={`badge ${ag.status === 'active' ? 'badge-success' : 'badge-warning'}`}>
                             {ag.status}
+                          </span>
+                          <span className="badge" style={{ background: 'rgba(224, 168, 46, 0.15)', color: 'var(--gold-deep)', border: '1px solid rgba(224, 168, 46, 0.3)', fontSize: '0.7rem' }}>
+                            {ag.agent_mode === 'bank_mis_agent' ? '🏦 Bank MIS Agent' : '📱 Field Sales Agent'}
                           </span>
                         </div>
                         <div style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', margin: '0.25rem 0' }}>
@@ -4122,20 +4300,34 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                           Locations: {ag.locations && ag.locations.length > 0 ? ag.locations.join(', ') : 'None assigned'}
                           {ag.assigned_bank && ` • Mapped Bank: ${ag.assigned_bank}`}
                         </div>
-                        {canDelete && (
-                          <div style={{ marginTop: '0.45rem', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'rgba(224, 168, 46, 0.08)', padding: '0.2rem 0.5rem', borderRadius: '4px', border: '1px solid rgba(224, 168, 46, 0.2)', width: 'fit-content' }}>
+                        
+                        <div style={{ marginTop: '0.45rem', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                          <div style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'rgba(224, 168, 46, 0.08)', padding: '0.2rem 0.5rem', borderRadius: '4px', border: '1px solid rgba(224, 168, 46, 0.2)', width: 'fit-content' }}>
                             <input 
                               type="checkbox" 
                               id={`perm-lead-${ag.id}`}
                               checked={!!ag.can_create_leads}
-                              onChange={() => handleToggleAgentLeadAccess(ag.id, !!ag.can_create_leads)}
+                              onChange={() => handleToggleAgentPermission(ag.id, 'can_create_leads', !!ag.can_create_leads)}
                               style={{ accentColor: 'var(--gold)', cursor: 'pointer' }}
                             />
                             <label htmlFor={`perm-lead-${ag.id}`} style={{ cursor: 'pointer', fontWeight: 600, color: 'var(--gold-deep)' }}>
                               Manual Lead Upload Access
                             </label>
                           </div>
-                        )}
+
+                          <div style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'rgba(56, 142, 60, 0.08)', padding: '0.2rem 0.5rem', borderRadius: '4px', border: '1px solid rgba(56, 142, 60, 0.2)', width: 'fit-content' }}>
+                            <input 
+                              type="checkbox" 
+                              id={`perm-mis-${ag.id}`}
+                              checked={!!ag.can_upload_mis}
+                              onChange={() => handleToggleAgentPermission(ag.id, 'can_upload_mis', !!ag.can_upload_mis)}
+                              style={{ accentColor: 'var(--success)', cursor: 'pointer' }}
+                            />
+                            <label htmlFor={`perm-mis-${ag.id}`} style={{ cursor: 'pointer', fontWeight: 600, color: 'var(--success)' }}>
+                              Bank MIS Upload Access
+                            </label>
+                          </div>
+                        </div>
                       </div>
                       <div style={{ display: 'flex', gap: '0.5rem' }}>
                         <button onClick={() => setEditingAgent(ag)} className="btn-secondary" style={{ padding: '0.5rem' }}>
@@ -7175,6 +7367,75 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Uploaded Files History Modal */}
+      {showUploadedFilesModal && (
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: '1rem' }}>
+          <div className="glass-panel modal-content" style={{ width: '100%', maxWidth: '850px', maxHeight: '85vh', overflowY: 'auto', borderRadius: '16px', background: 'var(--paper)', border: '1px solid var(--line)', padding: '1.75rem', borderTop: '4px solid var(--gold-deep)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--line)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <FolderArchive size={22} style={{ color: 'var(--gold-deep)' }} />
+                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700 }}>Uploaded Excel / CSV Files Repository</h3>
+              </div>
+              <button onClick={() => setShowUploadedFilesModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={20} /></button>
+            </div>
+
+            {isLoadingUploadedFiles ? (
+              <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--muted)' }}>
+                <RefreshCw size={24} className="spin" style={{ marginBottom: '0.5rem' }} />
+                <div>Loading raw file upload history...</div>
+              </div>
+            ) : uploadedFilesList.length === 0 ? (
+              <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--muted)', background: 'var(--paper-2)', borderRadius: '8px' }}>
+                No lead files uploaded yet.
+              </div>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table className="admin-table" style={{ width: '100%', fontSize: '0.82rem' }}>
+                  <thead>
+                    <tr>
+                      <th style={{ padding: '0.6rem 0.75rem' }}>Upload Time</th>
+                      <th style={{ padding: '0.6rem 0.75rem' }}>Original Filename</th>
+                      <th style={{ padding: '0.6rem 0.75rem' }}>Uploaded By</th>
+                      <th style={{ padding: '0.6rem 0.75rem' }}>Total Rows</th>
+                      <th style={{ padding: '0.6rem 0.75rem' }}>Created Leads</th>
+                      <th style={{ padding: '0.6rem 0.75rem' }}>Failed Rows</th>
+                      <th style={{ padding: '0.6rem 0.75rem', textAlign: 'right' }}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {uploadedFilesList.map(file => (
+                      <tr key={file.id}>
+                        <td style={{ padding: '0.6rem 0.75rem', whiteSpace: 'nowrap' }}>{formatDateTime(file.created_at)}</td>
+                        <td style={{ padding: '0.6rem 0.75rem', fontWeight: 600 }}>
+                          <FileText size={13} style={{ marginRight: '0.35rem', verticalAlign: 'middle', color: 'var(--gold-deep)' }} />
+                          {file.original_filename}
+                        </td>
+                        <td style={{ padding: '0.6rem 0.75rem' }}>
+                          {file.agent_name || file.agent_id || 'Admin'}
+                        </td>
+                        <td style={{ padding: '0.6rem 0.75rem', fontWeight: 600 }}>{file.total_rows}</td>
+                        <td style={{ padding: '0.6rem 0.75rem', color: 'var(--success)', fontWeight: 700 }}>{file.created_count}</td>
+                        <td style={{ padding: '0.6rem 0.75rem', color: file.failed_count > 0 ? 'var(--err)' : 'var(--muted)' }}>{file.failed_count}</td>
+                        <td style={{ padding: '0.6rem 0.75rem', textAlign: 'right' }}>
+                          <a 
+                            href={`${API_URL}/admin/uploaded-lead-files/${file.id}/download`} 
+                            download 
+                            className="btn-primary" 
+                            style={{ padding: '0.3rem 0.65rem', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '0.3rem', textDecoration: 'none', background: 'var(--gold-deep)', color: '#fff' }}
+                          >
+                            <FolderDown size={12} /> Download
+                          </a>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       )}
