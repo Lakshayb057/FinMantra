@@ -4,9 +4,9 @@ git pull origin main
 cd server && npm install && cd ..
 cd client && npm run build && cd ..
 
-# Ensure python3 and openpyxl are installed for ultra-fast KIWI MIS processing
+# Ensure python3, pandas, and openpyxl are installed for ultra-fast lead & MIS processing
 if command -v python3 &>/dev/null; then
-  python3 -m pip install openpyxl --quiet 2>/dev/null || sudo apt-get update && sudo apt-get install -y python3-openpyxl 2>/dev/null || true
+  python3 -m pip install pandas openpyxl --quiet 2>/dev/null || sudo apt-get update && sudo apt-get install -y python3-pandas python3-openpyxl 2>/dev/null || true
 fi
 
 # Fix Nginx timeouts globally in conf.d
