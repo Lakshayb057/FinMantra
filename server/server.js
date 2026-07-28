@@ -2635,16 +2635,44 @@ const MIS_CACHE_TTL_MS = 30000; // 30 seconds
 
 function invalidateMISCache() { misStatsCache = null; misStatsCacheTime = 0; }
 
-// GET MIS stats for Dashboard (cached)
-app.get('/api/leads/mis-stats', authenticateToken, requireAdmin, async (req, res) => {
-  const now = Date.now();
-  if (misStatsCache && (now - misStatsCacheTime) < MIS_CACHE_TTL_MS) {
-    return res.json(misStatsCache);
+// GET MIS stats for Dashboard (cached for admin, scoped for agents)
+app.get('/api/leads/mis-stats', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin' && req.user.role !== 'agent') {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const now = Date.now();
+    if (req.user.role === 'admin' && misStatsCache && (now - misStatsCacheTime) < MIS_CACHE_TTL_MS) {
+      return res.json(misStatsCache);
+    }
+
+    let stats = await db.getMISStats();
+
+    if (req.user.role === 'agent') {
+      const agent = await db.getAgentById(req.user.id);
+      if (agent && agent.assigned_bank) {
+        const cleanBank = String(agent.assigned_bank).toLowerCase().replace(/\s+bank$/i, '').trim();
+        const filteredMapped = (stats.mappedLeadsList || []).filter(lead => {
+          const leadBank = String(lead.card_bank || (lead.mis_data && lead.mis_data.mis_bank_name) || '').toLowerCase();
+          return leadBank.includes(cleanBank) || lead.agent_id === agent.id;
+        });
+        stats = {
+          totalLeads: filteredMapped.length,
+          mappedLeadsCount: filteredMapped.length,
+          mappedLeadsList: filteredMapped
+        };
+      }
+    } else {
+      misStatsCache = stats;
+      misStatsCacheTime = now;
+    }
+
+    return res.json(stats);
+  } catch (err) {
+    console.error('[GET /api/leads/mis-stats] Error:', err);
+    return res.status(500).json({ error: 'Failed to fetch MIS statistics' });
   }
-  const stats = await db.getMISStats();
-  misStatsCache = stats;
-  misStatsCacheTime = now;
-  res.json(stats);
 });
 
 async function canUserCreateLeads(user) {
