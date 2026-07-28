@@ -3624,34 +3624,39 @@ app.post('/api/settings/lead-template', authenticateToken, requireAdmin, async (
 
 // Fetch Leads (Admin or Agent)
 app.get('/api/leads', authenticateToken, async (req, res) => {
-  const role = req.user.role;
-  if (role === 'admin' || role === 'agent') {
-    let agentId = null;
-    let bankMisFilter = null;
+  try {
+    const role = req.user.role;
+    if (role === 'admin' || role === 'agent') {
+      let agentId = null;
+      let bankMisFilter = null;
 
-    if (role === 'agent') {
-      const agent = await db.getAgentById(req.user.id);
-      if (agent && (agent.can_upload_mis || agent.agent_mode === 'bank_mis_agent')) {
-        bankMisFilter = agent.assigned_bank || null;
-      } else {
-        agentId = req.user.id;
+      if (role === 'agent') {
+        const agent = await db.getAgentById(req.user.id);
+        if (agent && (agent.can_upload_mis || agent.agent_mode === 'bank_mis_agent')) {
+          bankMisFilter = agent.assigned_bank || null;
+        } else {
+          agentId = req.user.id;
+        }
       }
-    }
 
-    const page = parseInt(req.query.page, 10) || 1;
-    const limit = parseInt(req.query.limit, 10) || 50;
-    const search = req.query.search || '';
-    const card = req.query.card || '';
-    const source = req.query.source || '';
-    const startDate = req.query.startDate || '';
-    const endDate = req.query.endDate || '';
-    
-    const result = await db.getLeadsFiltered({
-      agentId, bankMisFilter, page, limit, search, card, source, startDate, endDate
-    });
-    res.json(result);
-  } else {
-    res.status(403).json({ error: 'Access denied' });
+      const page = parseInt(req.query.page, 10) || 1;
+      const limit = parseInt(req.query.limit, 10) || 50;
+      const search = req.query.search || '';
+      const card = req.query.card || '';
+      const source = req.query.source || '';
+      const startDate = req.query.startDate || '';
+      const endDate = req.query.endDate || '';
+      
+      const result = await db.getLeadsFiltered({
+        agentId, bankMisFilter, page, limit, search, card, source, startDate, endDate
+      });
+      return res.json(result);
+    } else {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+  } catch (err) {
+    console.error('[GET /api/leads] Error:', err);
+    return res.status(500).json({ error: 'Failed to fetch leads from database' });
   }
 });
 

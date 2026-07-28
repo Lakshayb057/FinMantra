@@ -583,7 +583,7 @@ const db = {
     };
   },
 
-  async getLeadsFiltered({ agentId, page = 1, limit = 50, search = '', card = '', source = '', startDate = '', endDate = '' }) {
+  async getLeadsFiltered({ agentId = null, bankMisFilter = null, page = 1, limit = 50, search = '', card = '', source = '', startDate = '', endDate = '' }) {
     const LEAD_COLUMNS = `id, urn, full_name, phone, email, city, employment, income_range,
       card_id, card_name, card_bank, source, agent_id, agent_name, agent_location, consent,
       created_at, mis_status, mis_mapped_at, pan_no, pincode, has_credit_card, monthly_income,
