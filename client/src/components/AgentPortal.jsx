@@ -1849,52 +1849,89 @@ FM2026G2800079,APP10002,DVRPA5807A,IMTIYAZ AHMED,9785197812,SBI,DECLINE,Declined
       {/* Sticky Premium Top Navigation Bar */}
       <div className="admin-navbar glass-panel" style={{ 
         position: 'sticky', 
-        top: '1rem', 
+        top: '0.75rem', 
         zIndex: 1000, 
         display: 'flex', 
         justifyContent: 'space-between', 
         alignItems: 'center', 
-        padding: '0.9rem 1.75rem', 
-        minHeight: '70px',
-        marginBottom: '1rem',
-        backdropFilter: 'blur(12px)',
+        padding: '0.85rem 1.75rem', 
+        minHeight: '68px',
+        marginBottom: '1.25rem',
+        backdropFilter: 'blur(16px)',
         background: 'var(--glass-bg)',
         border: '1px solid var(--line)',
-        borderRadius: 'var(--radius-md)',
+        borderRadius: '14px',
         boxShadow: '0 8px 32px 0 rgba(17, 19, 43, 0.08)'
       }}>
         {/* Brand/Logo */}
         <div className="admin-nav-brand" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <img src="/logo.jpg" alt="FinMantra Logo" style={{ height: '40px', width: '40px', borderRadius: '9px', objectFit: 'cover', boxShadow: '0 3px 10px rgba(224, 168, 46, 0.28)' }} />
-          <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: '1.35rem', letterSpacing: '-0.03em', color: 'var(--ink)' }}>
-            FinMantra <span style={{ color: 'var(--gold-deep)', fontWeight: 500, fontSize: '0.9rem' }}>Agent</span>
+          <img src="/logo.jpg" alt="FinMantra Logo" style={{ height: '42px', width: '42px', borderRadius: '10px', objectFit: 'cover', boxShadow: '0 4px 14px rgba(224, 168, 46, 0.3)' }} />
+          <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: '1.4rem', letterSpacing: '-0.03em', color: 'var(--ink)' }}>
+            FinMantra <span style={{ color: 'var(--gold-deep)', fontWeight: 600, fontSize: '0.9rem' }}>Agent Terminal</span>
           </span>
         </div>
 
-
+        {/* User Badge & Logout */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--paper-2)', padding: '0.45rem 0.9rem', borderRadius: '20px', border: '1px solid var(--line)', fontSize: '0.82rem', fontWeight: 600 }}>
+            <User size={15} style={{ color: 'var(--gold-deep)' }} />
+            <span>{agent?.name || 'Agent'}</span>
+          </div>
+          {agent?.assigned_bank && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'rgba(224, 168, 46, 0.12)', color: 'var(--gold-deep)', padding: '0.45rem 0.9rem', borderRadius: '20px', border: '1px solid rgba(224, 168, 46, 0.3)', fontSize: '0.82rem', fontWeight: 700 }}>
+              🏦 <span>{agent.assigned_bank}</span>
+            </div>
+          )}
+          <button 
+            onClick={handleLogout}
+            className="btn-secondary" 
+            style={{ padding: '0.45rem 0.95rem', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '0.4rem', borderRadius: '8px', color: 'var(--err)', borderColor: 'rgba(209, 67, 67, 0.25)', fontWeight: 600 }}
+          >
+            <LogOut size={15} /> Logout
+          </button>
+        </div>
       </div>
 
       {/* Dedicated View for Bank MIS Agents vs Field Sales Agents */}
       {isBankMisAgent ? (
         <>
-          {/* Bank MIS Agent Top Header */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.75rem' }}>
+          {/* Bank MIS Hero Banner Header */}
+          <div className="glass-panel" style={{ 
+            padding: '1.5rem 1.75rem', 
+            borderRadius: '16px', 
+            marginBottom: '1.5rem', 
+            background: 'linear-gradient(135deg, rgba(224, 168, 46, 0.07) 0%, rgba(255, 255, 255, 0.95) 100%)', 
+            border: '1px solid rgba(224, 168, 46, 0.22)',
+            boxShadow: '0 8px 30px rgba(0, 0, 0, 0.04)',
+            display: 'flex',
+            alignItems: 'center',
+            justify: 'space-between',
+            flexWrap: 'wrap',
+            gap: '1.25rem'
+          }}>
             <div>
-              <h1 style={{ fontSize: '1.75rem', marginBottom: '0.25rem', margin: 0, fontWeight: 800 }}>Welcome, {agent?.name} <span style={{ fontSize: '0.9rem', color: 'var(--gold-deep)', fontWeight: 600 }}>(Bank MIS Manager)</span></h1>
-              <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', color: 'hsl(var(--text-secondary))', fontSize: '0.85rem', marginTop: '0.4rem' }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                  <User size={15} /> ID: Agent-{agent?.id || 'Active'}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.35rem' }}>
+                <h1 style={{ fontSize: '1.8rem', margin: 0, fontWeight: 800, color: 'var(--ink)', letterSpacing: '-0.02em' }}>
+                  Welcome back, {agent?.name}
+                </h1>
+                <span className="badge badge-warning" style={{ fontSize: '0.75rem', padding: '0.2rem 0.6rem', borderRadius: '20px', fontWeight: 700 }}>
+                  Bank MIS Manager
                 </span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: 'var(--gold-deep)', fontWeight: 700 }}>
-                  🏦 Mapped Bank: {agent?.assigned_bank || 'HDFC Bank'} (Assigned)
+              </div>
+              <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap', color: 'hsl(var(--text-secondary))', fontSize: '0.85rem', marginTop: '0.5rem', alignItems: 'center' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', background: 'var(--paper-2)', padding: '0.25rem 0.65rem', borderRadius: '6px', border: '1px solid var(--line)', fontWeight: 600 }}>
+                  <User size={14} style={{ color: 'var(--gold-deep)' }} /> ID: Agent-{agent?.id || 'Active'}
                 </span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: 'hsl(var(--secondary))', fontWeight: 600 }}>
-                  <CheckCircle size={15} /> Kiosk Location: {agentLocation || 'Main Desk'}
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', background: 'rgba(224, 168, 46, 0.12)', color: 'var(--gold-deep)', padding: '0.25rem 0.65rem', borderRadius: '6px', border: '1px solid rgba(224, 168, 46, 0.3)', fontWeight: 700 }}>
+                  🏦 Mapped Bank: {agent?.assigned_bank || 'HDFC Bank'} (Assigned & Locked)
+                </span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', background: 'rgba(16, 185, 129, 0.1)', color: 'var(--mint)', padding: '0.25rem 0.65rem', borderRadius: '6px', border: '1px solid rgba(16, 185, 129, 0.25)', fontWeight: 600 }}>
+                  <CheckCircle size={14} /> Kiosk Location: {agentLocation || 'Main Kiosk'}
                 </span>
               </div>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <div>
               <button 
                 type="button"
                 onClick={() => {
@@ -1902,40 +1939,54 @@ FM2026G2800079,APP10002,DVRPA5807A,IMTIYAZ AHMED,9785197812,SBI,DECLINE,Declined
                   setShowBankMisUploadModal(true);
                 }} 
                 className="btn-primary" 
-                style={{ padding: '0.65rem 1.25rem', fontSize: '0.9rem', display: 'inline-flex', alignItems: 'center', gap: '0.5rem', borderRadius: '8px', background: 'var(--gold-deep)', color: '#fff', border: 'none', fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 14px rgba(224, 168, 46, 0.3)' }}
+                style={{ 
+                  padding: '0.75rem 1.4rem', 
+                  fontSize: '0.92rem', 
+                  display: 'inline-flex', 
+                  alignItems: 'center', 
+                  gap: '0.6rem', 
+                  borderRadius: '10px', 
+                  background: 'linear-gradient(135deg, #E0A82E 0%, #C68A12 100%)', 
+                  color: '#fff', 
+                  border: 'none', 
+                  fontWeight: 700, 
+                  cursor: 'pointer', 
+                  boxShadow: '0 6px 18px rgba(224, 168, 46, 0.35)',
+                  transition: 'all 0.2s ease'
+                }}
               >
-                <FileSpreadsheet size={18} /> Upload Bank MIS (Excel / CSV)
+                <FileSpreadsheet size={19} /> Upload Bank MIS (Excel / CSV)
               </button>
             </div>
           </div>
 
           {/* LEADS MAPPING & ANALYTICS DASHBOARD FOR BANK MIS AGENT */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', textAlign: 'left', marginBottom: '2.5rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem', textAlign: 'left', marginBottom: '2.5rem' }}>
             
             {/* Filters Panel */}
-            <div className="glass-panel" style={{ padding: '1.25rem 1.5rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
-                  <Filter size={15} style={{ color: 'var(--gold)' }} />
-                  <span style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--ink)' }}>Leads Analytics Filters ({agent?.assigned_bank || 'Assigned Bank'} Scoped)</span>
+            <div className="glass-panel" style={{ padding: '1.35rem 1.6rem', borderRadius: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.1rem', flexWrap: 'wrap', gap: '0.85rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
+                  <Filter size={16} style={{ color: 'var(--gold)' }} />
+                  <span style={{ fontSize: '0.92rem', fontWeight: 800, color: 'var(--ink)' }}>Leads Analytics Filters ({agent?.assigned_bank || 'Assigned Bank'} Scoped)</span>
                   {activeFilterCount > 0 && (
                     <span style={{
-                      background: 'var(--gold)', color: '#fff', fontSize: '0.65rem', fontWeight: 800,
-                      padding: '0.15rem 0.5rem', borderRadius: '10px', minWidth: '20px', textAlign: 'center'
+                      background: 'var(--gold-deep)', color: '#fff', fontSize: '0.7rem', fontWeight: 800,
+                      padding: '0.15rem 0.55rem', borderRadius: '12px', minWidth: '22px', textAlign: 'center'
                     }}>{activeFilterCount}</span>
                   )}
 
                   {/* Locked Bank Badge */}
-                  <div style={{ display: 'inline-flex', gap: '0.25rem', padding: '3px 0.75rem', background: 'rgba(224, 168, 46, 0.12)', borderRadius: '20px', border: '1px solid rgba(224, 168, 46, 0.3)', color: 'var(--gold-deep)', fontWeight: 700, fontSize: '0.78rem', alignItems: 'center' }}>
-                    🏦 Bank Partner: {agent?.assigned_bank || 'HDFC Bank'} (Assigned - Locked)
+                  <div style={{ display: 'inline-flex', gap: '0.3rem', padding: '4px 0.85rem', background: 'rgba(224, 168, 46, 0.12)', borderRadius: '20px', border: '1px solid rgba(224, 168, 46, 0.3)', color: 'var(--gold-deep)', fontWeight: 700, fontSize: '0.8rem', alignItems: 'center' }}>
+                    🏦 Partner: {agent?.assigned_bank || 'HDFC Bank'} (Locked)
                   </div>
                 </div>
 
                 <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                   <button onClick={() => setDashFiltersExpanded(!dashFiltersExpanded)} className="btn-secondary"
-                    style={{ padding: '0.35rem 0.75rem', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                    style={{ padding: '0.4rem 0.85rem', fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '0.35rem', borderRadius: '8px', fontWeight: 600 }}>
                     {dashFiltersExpanded ? 'Less Filters' : 'More Filters'}
-                    <span style={{ fontSize: '0.6rem', transform: dashFiltersExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>▼</span>
+                    <span style={{ fontSize: '0.65rem', transform: dashFiltersExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>▼</span>
                   </button>
                   <button
                     onClick={() => {
@@ -1945,30 +1996,30 @@ FM2026G2800079,APP10002,DVRPA5807A,IMTIYAZ AHMED,9785197812,SBI,DECLINE,Declined
                       setDashVkycStatus(''); setDashAgent(''); setDashSourceType(''); setDashSearch('');
                     }}
                     className="btn-secondary"
-                    style={{ padding: '0.35rem 0.75rem', fontSize: '0.75rem', opacity: activeFilterCount > 0 ? 1 : 0.5 }}
+                    style={{ padding: '0.4rem 0.85rem', fontSize: '0.78rem', opacity: activeFilterCount > 0 ? 1 : 0.5, borderRadius: '8px', fontWeight: 600 }}
                     disabled={activeFilterCount === 0}
                   >Reset All</button>
                 </div>
               </div>
 
               {/* Search bar */}
-              <div style={{ marginBottom: '0.85rem' }}>
+              <div style={{ marginBottom: '1rem' }}>
                 <div style={{ position: 'relative' }}>
-                  <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} />
+                  <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} />
                   <input
                     type="text" className="form-input"
                     placeholder="Search by URN, Customer Name, Phone, App ID or PAN..."
                     value={dashSearch}
                     onChange={(e) => setDashSearch(e.target.value)}
-                    style={{ paddingLeft: '2rem', padding: '0.45rem 0.6rem 0.45rem 2rem', fontSize: '0.82rem', width: '100%' }}
+                    style={{ paddingLeft: '2.25rem', padding: '0.5rem 0.75rem 0.5rem 2.25rem', fontSize: '0.85rem', width: '100%', borderRadius: '8px' }}
                   />
                 </div>
               </div>
 
               {/* Filter controls */}
               {(() => {
-                const fls = { padding: '0.4rem 0.6rem', fontSize: '0.78rem' };
-                const fll = { fontSize: '0.72rem', marginBottom: '3px', color: 'var(--muted)', fontWeight: 600, letterSpacing: '0.3px' };
+                const fls = { padding: '0.45rem 0.65rem', fontSize: '0.8rem', borderRadius: '8px', border: '1px solid var(--line)' };
+                const fll = { fontSize: '0.75rem', marginBottom: '4px', color: 'var(--muted)', fontWeight: 700, letterSpacing: '0.3px' };
                 const FS = ({ label, value, onChange, options, placeholder }) => (
                   <div className="form-group" style={{ marginBottom: 0 }}>
                     <label className="form-label" style={fll}>{label}</label>
@@ -1980,7 +2031,7 @@ FM2026G2800079,APP10002,DVRPA5807A,IMTIYAZ AHMED,9785197812,SBI,DECLINE,Declined
                 );
                 return (
                   <>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem', alignItems: 'end' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.85rem', alignItems: 'end' }}>
                       <div className="form-group" style={{ marginBottom: 0 }}>
                         <label className="form-label" style={fll}>Date From (MIS)</label>
                         <input type="date" className="form-input" style={fls} value={dashCreatedDate} onChange={(e) => setDashCreatedDate(e.target.value)} />
@@ -1996,7 +2047,7 @@ FM2026G2800079,APP10002,DVRPA5807A,IMTIYAZ AHMED,9785197812,SBI,DECLINE,Declined
                     </div>
 
                     {dashFiltersExpanded && (
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem', alignItems: 'end', marginTop: '0.85rem', paddingTop: '0.85rem', borderTop: '1px solid var(--line)' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.85rem', alignItems: 'end', marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--line)' }}>
                         <FS label="Card Name" value={dashCardName} onChange={setDashCardName} options={filterOptions.card_name || []} placeholder="All Cards" />
                         <FS label="KYC Status" value={dashKycStatus} onChange={setDashKycStatus} options={filterOptions.kyc_status || []} placeholder="All KYC" />
                         <FS label="Customer Type" value={dashCustomerType} onChange={setDashCustomerType} options={filterOptions.customer_type || []} placeholder="All Customers" />
@@ -2012,35 +2063,35 @@ FM2026G2800079,APP10002,DVRPA5807A,IMTIYAZ AHMED,9785197812,SBI,DECLINE,Declined
             </div>
 
             {/* KPI SUMMARY CARDS */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.25rem' }}>
-              <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid var(--gold)' }}>
-                <div style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Total Mapped Applications</div>
-                <div style={{ fontSize: '2rem', fontWeight: 800, margin: '0.25rem 0' }}>{dashStats.totalSubmit}</div>
-                <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>Matched for {agent?.assigned_bank || 'HDFC Bank'}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '1.25rem' }}>
+              <div className="glass-panel" style={{ padding: '1.35rem', borderLeft: '5px solid var(--gold)', borderRadius: '14px' }}>
+                <div style={{ fontSize: '0.82rem', color: 'hsl(var(--text-secondary))', fontWeight: 700 }}>Total Mapped Applications</div>
+                <div style={{ fontSize: '2.2rem', fontWeight: 800, margin: '0.3rem 0', color: 'var(--ink)' }}>{dashStats.totalSubmit}</div>
+                <div style={{ fontSize: '0.78rem', color: 'hsl(var(--text-muted))' }}>Matched for {agent?.assigned_bank || 'HDFC Bank'}</div>
               </div>
-              <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid var(--mint)' }}>
-                <div style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Approved Rate</div>
-                <div style={{ fontSize: '2rem', fontWeight: 800, margin: '0.25rem 0', color: 'var(--mint)' }}>{dashStats.approvalRate}%</div>
-                <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>{dashStats.approvedCount} of {dashStats.totalSubmit} approved</div>
+              <div className="glass-panel" style={{ padding: '1.35rem', borderLeft: '5px solid var(--mint)', borderRadius: '14px' }}>
+                <div style={{ fontSize: '0.82rem', color: 'hsl(var(--text-secondary))', fontWeight: 700 }}>Approved Rate</div>
+                <div style={{ fontSize: '2.2rem', fontWeight: 800, margin: '0.3rem 0', color: 'var(--mint)' }}>{dashStats.approvalRate}%</div>
+                <div style={{ fontSize: '0.78rem', color: 'hsl(var(--text-muted))' }}>{dashStats.approvedCount} of {dashStats.totalSubmit} approved</div>
               </div>
-              <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid var(--err)' }}>
-                <div style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Rejected Applications</div>
-                <div style={{ fontSize: '2rem', fontWeight: 800, margin: '0.25rem 0', color: 'var(--err)' }}>{dashStats.rejectedCount}</div>
-                <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>Declined by partner bank</div>
+              <div className="glass-panel" style={{ padding: '1.35rem', borderLeft: '5px solid var(--err)', borderRadius: '14px' }}>
+                <div style={{ fontSize: '0.82rem', color: 'hsl(var(--text-secondary))', fontWeight: 700 }}>Rejected Applications</div>
+                <div style={{ fontSize: '2.2rem', fontWeight: 800, margin: '0.3rem 0', color: 'var(--err)' }}>{dashStats.rejectedCount}</div>
+                <div style={{ fontSize: '0.78rem', color: 'hsl(var(--text-muted))' }}>Declined by partner bank</div>
               </div>
-              <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid #E0A82E' }}>
-                <div style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Pending Verification</div>
-                <div style={{ fontSize: '2rem', fontWeight: 800, margin: '0.25rem 0', color: 'var(--gold-deep)' }}>{dashStats.pendingCount}</div>
-                <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>In verification stage</div>
+              <div className="glass-panel" style={{ padding: '1.35rem', borderLeft: '5px solid #E0A82E', borderRadius: '14px' }}>
+                <div style={{ fontSize: '0.82rem', color: 'hsl(var(--text-secondary))', fontWeight: 700 }}>Pending Verification</div>
+                <div style={{ fontSize: '2.2rem', fontWeight: 800, margin: '0.3rem 0', color: 'var(--gold-deep)' }}>{dashStats.pendingCount}</div>
+                <div style={{ fontSize: '0.78rem', color: 'hsl(var(--text-muted))' }}>In verification stage</div>
               </div>
             </div>
 
             {/* 9 VISUAL ANALYTICS CHARTS GRID */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem' }}>
               
               {/* Visual 1: Funnel Chart */}
-              <div className="glass-panel" style={{ padding: '2rem', gridColumn: 'span 2', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1.5rem', width: '100%', textAlign: 'left' }}>Conversion Funnel Stages (%) - {agent?.assigned_bank || 'HDFC Bank'}</h4>
+              <div className="glass-panel" style={{ padding: '1.75rem', gridColumn: 'span 2', display: 'flex', flexDirection: 'column', alignItems: 'center', borderRadius: '16px' }}>
+                <h4 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: '1.5rem', width: '100%', textAlign: 'left', color: 'var(--ink)' }}>Conversion Funnel Stages (%) - {agent?.assigned_bank || 'HDFC Bank'}</h4>
                 <div style={{ width: '100%', maxWidth: '600px', display: 'flex', justifyContent: 'center', overflowX: 'auto' }}>
                   <svg width="100%" viewBox="0 0 600 300" style={{ display: 'block', overflow: 'visible' }}>
                     {(() => {
@@ -2115,10 +2166,10 @@ FM2026G2800079,APP10002,DVRPA5807A,IMTIYAZ AHMED,9785197812,SBI,DECLINE,Declined
               </div>
 
               {/* Visual 2: Pie Chart - IPA Approved vs Declined */}
-              <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
-                <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>IPA Decision Breakdown</h4>
+              <div className="glass-panel" style={{ padding: '1.75rem', display: 'flex', flexDirection: 'column', borderRadius: '16px' }}>
+                <h4 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: '1.25rem', color: 'var(--ink)' }}>IPA Decision Breakdown</h4>
                 <div style={{ display: 'flex', flex: 1, alignItems: 'center', justifyContent: 'center', gap: '1.5rem' }}>
-                  <svg width="120" height="120" viewBox="0 0 36 36">
+                  <svg width="130" height="130" viewBox="0 0 36 36">
                     <circle cx="18" cy="18" r="15.915" fill="none" stroke="var(--line)" strokeWidth="4.2" />
                     {dashStats.totalSubmit > 0 && (() => {
                       const ipaAppPct = (dashStats.ipaApproved / dashStats.totalSubmit) * 100;
@@ -2133,16 +2184,16 @@ FM2026G2800079,APP10002,DVRPA5807A,IMTIYAZ AHMED,9785197812,SBI,DECLINE,Declined
                       );
                     })()}
                   </svg>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.8rem', textAlign: 'left' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', fontSize: '0.82rem', textAlign: 'left' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600 }}>
                       <span style={{ height: '10px', width: '10px', borderRadius: '50%', background: 'var(--mint)' }} />
                       <span>Approved: {dashStats.ipaApproved}</span>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600 }}>
                       <span style={{ height: '10px', width: '10px', borderRadius: '50%', background: 'var(--err)' }} />
                       <span>Declined: {dashStats.ipaDeclined}</span>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600 }}>
                       <span style={{ height: '10px', width: '10px', borderRadius: '50%', background: 'var(--line)' }} />
                       <span>Pending: {dashStats.totalSubmit - dashStats.ipaApproved - dashStats.ipaDeclined}</span>
                     </div>
@@ -2151,18 +2202,18 @@ FM2026G2800079,APP10002,DVRPA5807A,IMTIYAZ AHMED,9785197812,SBI,DECLINE,Declined
               </div>
 
               {/* Visual 3: Bar Chart - KYC Status */}
-              <div className="glass-panel" style={{ padding: '1.5rem' }}>
-                <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>KYC Status Distribution</h4>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '180px', overflowY: 'auto' }}>
+              <div className="glass-panel" style={{ padding: '1.75rem', borderRadius: '16px' }}>
+                <h4 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: '1.25rem', color: 'var(--ink)' }}>KYC Status Distribution</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', maxHeight: '200px', overflowY: 'auto' }}>
                   {Object.entries(dashStats.kycDist || {}).map(([name, val], idx) => {
                     const pct = dashStats.totalSubmit > 0 ? (val / dashStats.totalSubmit) * 100 : 0;
                     return (
-                      <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem' }}>
-                        <div style={{ width: '80px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', textAlign: 'right' }}>{name}</div>
-                        <div style={{ flex: 1, height: '14px', background: 'var(--paper-2)', borderRadius: '4px', overflow: 'hidden' }}>
+                      <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.82rem' }}>
+                        <div style={{ width: '85px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', textAlign: 'right', fontWeight: 600 }}>{name}</div>
+                        <div style={{ flex: 1, height: '16px', background: 'var(--paper-2)', borderRadius: '6px', overflow: 'hidden' }}>
                           <div style={{ height: '100%', width: `${pct}%`, background: 'var(--gold)' }} />
                         </div>
-                        <div style={{ width: '40px', fontWeight: 'bold' }}>{val}</div>
+                        <div style={{ width: '45px', fontWeight: 800 }}>{val}</div>
                       </div>
                     );
                   })}
@@ -2170,21 +2221,21 @@ FM2026G2800079,APP10002,DVRPA5807A,IMTIYAZ AHMED,9785197812,SBI,DECLINE,Declined
               </div>
 
               {/* Visual 4: Customer Type */}
-              <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
-                <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>Customer Type (NTB / ETB)</h4>
+              <div className="glass-panel" style={{ padding: '1.75rem', display: 'flex', flexDirection: 'column', borderRadius: '16px' }}>
+                <h4 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: '1.25rem', color: 'var(--ink)' }}>Customer Type (NTB / ETB)</h4>
                 <div style={{ display: 'flex', flex: 1, alignItems: 'center', justifyContent: 'center', gap: '1.5rem' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.8rem', textAlign: 'left', width: '100%' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', fontSize: '0.82rem', textAlign: 'left', width: '100%' }}>
                     {Object.entries(dashStats.custTypeDist || {}).map(([name, val], idx) => {
                       const colors = ['#16A37B', '#D14343', '#E0A82E', '#11132B'];
                       const color = colors[idx % colors.length];
                       const pct = dashStats.totalSubmit > 0 ? ((val / dashStats.totalSubmit) * 100).toFixed(1) : 0;
                       return (
                         <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                            <span style={{ height: '8px', width: '8px', borderRadius: '50%', background: color }} />
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600 }}>
+                            <span style={{ height: '10px', width: '10px', borderRadius: '50%', background: color }} />
                             <span>{name}</span>
                           </div>
-                          <span style={{ fontWeight: 'bold' }}>{val} ({pct}%)</span>
+                          <span style={{ fontWeight: 800 }}>{val} ({pct}%)</span>
                         </div>
                       );
                     })}
@@ -2193,18 +2244,18 @@ FM2026G2800079,APP10002,DVRPA5807A,IMTIYAZ AHMED,9785197812,SBI,DECLINE,Declined
               </div>
 
               {/* Visual 5: Card Activation Status */}
-              <div className="glass-panel" style={{ padding: '1.5rem' }}>
-                <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>Card Activation Status</h4>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <div className="glass-panel" style={{ padding: '1.75rem', borderRadius: '16px' }}>
+                <h4 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: '1.25rem', color: 'var(--ink)' }}>Card Activation Status</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
                   {Object.entries(dashStats.actDist || {}).map(([name, val], idx) => {
                     const pct = dashStats.totalSubmit > 0 ? (val / dashStats.totalSubmit) * 100 : 0;
                     return (
-                      <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem' }}>
-                        <div style={{ width: '100px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', textAlign: 'right' }}>{name}</div>
-                        <div style={{ flex: 1, height: '14px', background: 'var(--paper-2)', borderRadius: '4px', overflow: 'hidden' }}>
+                      <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.82rem' }}>
+                        <div style={{ width: '105px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', textAlign: 'right', fontWeight: 600 }}>{name}</div>
+                        <div style={{ flex: 1, height: '16px', background: 'var(--paper-2)', borderRadius: '6px', overflow: 'hidden' }}>
                           <div style={{ height: '100%', width: `${pct}%`, background: 'var(--mint)' }} />
                         </div>
-                        <div style={{ width: '40px', fontWeight: 'bold' }}>{val}</div>
+                        <div style={{ width: '45px', fontWeight: 800 }}>{val}</div>
                       </div>
                     );
                   })}
@@ -2212,9 +2263,9 @@ FM2026G2800079,APP10002,DVRPA5807A,IMTIYAZ AHMED,9785197812,SBI,DECLINE,Declined
               </div>
 
               {/* Visual 6: Geographic Heatmap India */}
-              <div className="glass-panel" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', gridColumn: 'span 2' }}>
-                <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '0.25rem' }}>Geographic Heatmap — India ({agent?.assigned_bank || 'HDFC Bank'})</h4>
-                <p style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', marginBottom: '1.5rem' }}>State-wise application volume mapped from pincodes and MIS state entries.</p>
+              <div className="glass-panel" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', gridColumn: 'span 2', borderRadius: '16px' }}>
+                <h4 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: '0.35rem', color: 'var(--ink)' }}>Geographic Heatmap — India ({agent?.assigned_bank || 'HDFC Bank'})</h4>
+                <p style={{ fontSize: '0.78rem', color: 'hsl(var(--text-muted))', marginBottom: '1.5rem' }}>State-wise application volume mapped from pincodes and MIS state entries.</p>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: '2rem' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', background: 'var(--paper-2)', borderRadius: '16px', padding: '1.25rem', minHeight: '400px', border: '1px solid var(--line)' }}>
@@ -2236,12 +2287,12 @@ FM2026G2800079,APP10002,DVRPA5807A,IMTIYAZ AHMED,9785197812,SBI,DECLINE,Declined
                   </div>
 
                   <div>
-                    <h5 style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.75rem' }}>Top Active States</h5>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', maxHeight: '360px', overflowY: 'auto' }}>
+                    <h5 style={{ fontSize: '0.88rem', fontWeight: 800, marginBottom: '0.85rem', color: 'var(--ink)' }}>Top Active States</h5>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', maxHeight: '360px', overflowY: 'auto' }}>
                       {dashGeoData.topStates.map((st, idx) => (
-                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.4rem 0.6rem', background: 'var(--paper-2)', borderRadius: '6px', fontSize: '0.8rem' }}>
-                          <span>{st.state}</span>
-                          <span style={{ fontWeight: 700, color: 'var(--gold-deep)' }}>{st.count} Leads</span>
+                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.45rem 0.75rem', background: 'var(--paper-2)', borderRadius: '8px', fontSize: '0.82rem', border: '1px solid var(--line)' }}>
+                          <span style={{ fontWeight: 600 }}>{st.state}</span>
+                          <span style={{ fontWeight: 800, color: 'var(--gold-deep)' }}>{st.count} Leads</span>
                         </div>
                       ))}
                     </div>
@@ -2251,43 +2302,43 @@ FM2026G2800079,APP10002,DVRPA5807A,IMTIYAZ AHMED,9785197812,SBI,DECLINE,Declined
             </div>
 
             {/* MY BANK MIS & LEADS REPOSITORY TABLE */}
-            <div className="glass-panel" style={{ width: '100%', boxSizing: 'border-box', padding: '1.5rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.25rem', paddingBottom: '1rem', borderBottom: '1px solid var(--line)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <h2 style={{ fontSize: '1.35rem', margin: 0, fontWeight: 700 }}>My Bank MIS & Mapped Leads Repository</h2>
-                  <span className="badge badge-success" style={{ fontSize: '0.8rem', padding: '0.25rem 0.65rem' }}>
+            <div className="glass-panel" style={{ width: '100%', boxSizing: 'border-box', padding: '1.75rem', borderRadius: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.35rem', paddingBottom: '1.1rem', borderBottom: '1px solid var(--line)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+                  <h2 style={{ fontSize: '1.4rem', margin: 0, fontWeight: 800, color: 'var(--ink)' }}>My Bank MIS & Mapped Leads Repository</h2>
+                  <span className="badge badge-success" style={{ fontSize: '0.82rem', padding: '0.3rem 0.75rem', borderRadius: '20px', fontWeight: 800 }}>
                     {filteredMappedLeads.length} Bank Records
                   </span>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-                  <div style={{ position: 'relative', minWidth: '280px' }}>
-                    <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', flexWrap: 'wrap' }}>
+                  <div style={{ position: 'relative', minWidth: '300px' }}>
+                    <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} />
                     <input 
                       type="text" 
                       className="form-input" 
                       placeholder="Search name, phone, URN, PAN, App ID..."
                       value={dashSearch}
                       onChange={(e) => { setDashSearch(e.target.value); setDashPage(1); }}
-                      style={{ paddingLeft: '2.2rem', height: '38px', fontSize: '0.85rem' }}
+                      style={{ paddingLeft: '2.35rem', height: '40px', fontSize: '0.85rem', borderRadius: '8px' }}
                     />
                   </div>
                 </div>
               </div>
 
-              <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid var(--line)' }}>
+              <div style={{ overflowX: 'auto', borderRadius: '10px', border: '1px solid var(--line)' }}>
                 <table className="admin-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                   <thead>
                     <tr style={{ background: 'var(--paper-2)', borderBottom: '1px solid var(--line)', textAlign: 'left' }}>
-                      <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>URN No.</th>
-                      <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Date & Time</th>
-                      <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Customer Name</th>
-                      <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Contact Info</th>
-                      <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Application ID</th>
-                      <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Bank / Scheme</th>
-                      <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>MIS Status</th>
-                      <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Stage / Remarks</th>
-                      <th style={{ padding: '0.75rem 1rem', fontWeight: 600, textAlign: 'center' }}>Link / Action</th>
+                      <th style={{ padding: '0.85rem 1rem', fontWeight: 700, color: 'var(--ink)' }}>URN No.</th>
+                      <th style={{ padding: '0.85rem 1rem', fontWeight: 700, color: 'var(--ink)' }}>Date & Time</th>
+                      <th style={{ padding: '0.85rem 1rem', fontWeight: 700, color: 'var(--ink)' }}>Customer Name</th>
+                      <th style={{ padding: '0.85rem 1rem', fontWeight: 700, color: 'var(--ink)' }}>Contact Info</th>
+                      <th style={{ padding: '0.85rem 1rem', fontWeight: 700, color: 'var(--ink)' }}>Application ID</th>
+                      <th style={{ padding: '0.85rem 1rem', fontWeight: 700, color: 'var(--ink)' }}>Bank / Scheme</th>
+                      <th style={{ padding: '0.85rem 1rem', fontWeight: 700, color: 'var(--ink)' }}>MIS Status</th>
+                      <th style={{ padding: '0.85rem 1rem', fontWeight: 700, color: 'var(--ink)' }}>Stage / Remarks</th>
+                      <th style={{ padding: '0.85rem 1rem', fontWeight: 700, color: 'var(--ink)', textAlign: 'center' }}>Link / Action</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2300,46 +2351,46 @@ FM2026G2800079,APP10002,DVRPA5807A,IMTIYAZ AHMED,9785197812,SBI,DECLINE,Declined
 
                         return (
                           <tr key={lead.id} style={{ borderBottom: '1px solid var(--line)' }}>
-                            <td style={{ padding: '0.75rem 1rem' }}>
-                              <span className="badge badge-success" style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.75rem' }}>
+                            <td style={{ padding: '0.85rem 1rem' }}>
+                              <span className="badge badge-success" style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '0.78rem', background: 'rgba(224, 168, 46, 0.15)', color: 'var(--gold-deep)', border: '1px solid rgba(224, 168, 46, 0.3)', padding: '0.25rem 0.5rem', borderRadius: '6px' }}>
                                 {lead.urn || 'N/A'}
                               </span>
                             </td>
-                            <td style={{ padding: '0.75rem 1rem', whiteSpace: 'nowrap', color: 'var(--muted)', fontSize: '0.8rem' }}>
+                            <td style={{ padding: '0.85rem 1rem', whiteSpace: 'nowrap', color: 'var(--muted)', fontSize: '0.82rem' }}>
                               {lead.created_at ? new Date(lead.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : 'N/A'}
                             </td>
-                            <td style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>
+                            <td style={{ padding: '0.85rem 1rem', fontWeight: 700, color: 'var(--ink)' }}>
                               {lead.full_name || 'N/A'}
                             </td>
-                            <td style={{ padding: '0.75rem 1rem' }}>
-                              <div>📱 {lead.phone || 'N/A'}</div>
-                              {lead.email && <div style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>✉️ {lead.email}</div>}
+                            <td style={{ padding: '0.85rem 1rem' }}>
+                              <div style={{ fontWeight: 600 }}>📱 {lead.phone || 'N/A'}</div>
+                              {lead.email && <div style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>✉️ {lead.email}</div>}
                             </td>
-                            <td style={{ padding: '0.75rem 1rem' }}>
+                            <td style={{ padding: '0.85rem 1rem' }}>
                               {lead.application_id || lead.mis_data?.APPLICATION_REFERENCE_NUMBER || lead.mis_data?.bank_reference_number ? (
-                                <code style={{ background: 'rgba(224, 168, 46, 0.1)', color: 'var(--gold-deep)', padding: '0.15rem 0.4rem', borderRadius: '4px', fontWeight: 700 }}>
+                                <code style={{ background: 'rgba(224, 168, 46, 0.12)', color: 'var(--gold-deep)', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 800, border: '1px solid rgba(224, 168, 46, 0.25)' }}>
                                   {lead.application_id || lead.mis_data?.APPLICATION_REFERENCE_NUMBER || lead.mis_data?.bank_reference_number}
                                 </code>
                               ) : (
                                 <span style={{ color: 'var(--muted)' }}>N/A</span>
                               )}
                             </td>
-                            <td style={{ padding: '0.75rem 1rem', fontWeight: 500 }}>
+                            <td style={{ padding: '0.85rem 1rem', fontWeight: 600 }}>
                               {lead.card_bank || lead.card_name || agent?.assigned_bank || 'Bank Partner'}
                             </td>
-                            <td style={{ padding: '0.75rem 1rem' }}>
-                              <span className={`badge ${badgeClass}`} style={{ fontSize: '0.75rem', fontWeight: 700 }}>
+                            <td style={{ padding: '0.85rem 1rem' }}>
+                              <span className={`badge ${badgeClass}`} style={{ fontSize: '0.78rem', fontWeight: 800, padding: '0.25rem 0.6rem', borderRadius: '6px' }}>
                                 {lead.mis_status || 'Pending'}
                               </span>
                             </td>
-                            <td style={{ padding: '0.75rem 1rem', color: 'var(--muted)', fontSize: '0.8rem' }}>
+                            <td style={{ padding: '0.85rem 1rem', color: 'var(--muted)', fontSize: '0.82rem' }}>
                               {lead.mis_data?.decline_description || lead.mis_data?.current_stage || lead.mis_data?.remark || 'No Remarks'}
                             </td>
-                            <td style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>
+                            <td style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>
                               {lead.redirect_url ? (
                                 <CopyLinkButton url={lead.redirect_url} />
                               ) : (
-                                <span style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>MIS Record</span>
+                                <span style={{ fontSize: '0.78rem', color: 'var(--muted)', fontWeight: 600 }}>MIS Record</span>
                               )}
                             </td>
                           </tr>
@@ -2347,7 +2398,7 @@ FM2026G2800079,APP10002,DVRPA5807A,IMTIYAZ AHMED,9785197812,SBI,DECLINE,Declined
                       })
                     ) : (
                       <tr>
-                        <td colSpan="9" style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--muted)' }}>
+                        <td colSpan="9" style={{ textAlign: 'center', padding: '3.5rem 1rem', color: 'var(--muted)', fontWeight: 600 }}>
                           No Bank MIS records found for {agent?.assigned_bank || 'your bank'}. Click "Upload Bank MIS" to upload Excel/CSV MIS files!
                         </td>
                       </tr>
@@ -2357,8 +2408,8 @@ FM2026G2800079,APP10002,DVRPA5807A,IMTIYAZ AHMED,9785197812,SBI,DECLINE,Declined
               </div>
 
               {totalMappedPages > 1 && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1.25rem', paddingTop: '0.75rem', borderTop: '1px solid var(--line)' }}>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1.35rem', paddingTop: '0.85rem', borderTop: '1px solid var(--line)' }}>
+                  <div style={{ fontSize: '0.82rem', color: 'var(--muted)', fontWeight: 600 }}>
                     Showing {((dashPage - 1) * DASH_PAGE_SIZE) + 1} - {Math.min(dashPage * DASH_PAGE_SIZE, filteredMappedLeads.length)} of {filteredMappedLeads.length} bank records
                   </div>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -2366,18 +2417,18 @@ FM2026G2800079,APP10002,DVRPA5807A,IMTIYAZ AHMED,9785197812,SBI,DECLINE,Declined
                       disabled={dashPage <= 1} 
                       onClick={() => setDashPage(p => Math.max(p - 1, 1))} 
                       className="btn-secondary" 
-                      style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
+                      style={{ padding: '0.4rem 0.85rem', fontSize: '0.82rem', borderRadius: '8px', fontWeight: 600 }}
                     >
                       Previous
                     </button>
-                    <span style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', fontWeight: 600 }}>
+                    <span style={{ padding: '0.4rem 0.85rem', fontSize: '0.82rem', fontWeight: 700 }}>
                       Page {dashPage} of {totalMappedPages}
                     </span>
                     <button 
                       disabled={dashPage >= totalMappedPages} 
                       onClick={() => setDashPage(p => Math.min(p + 1, totalMappedPages))} 
                       className="btn-secondary" 
-                      style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
+                      style={{ padding: '0.4rem 0.85rem', fontSize: '0.82rem', borderRadius: '8px', fontWeight: 600 }}
                     >
                       Next
                     </button>
