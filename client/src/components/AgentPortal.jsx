@@ -509,10 +509,18 @@ export default function AgentPortal({ navigateTo, theme, toggleTheme }) {
     return allMappedLeads.filter(lead => {
       // Bank lock filter
       if (normAssignedBank) {
-        const leadBank = String(lead.card_bank || (lead.mis_data && lead.mis_data.mis_bank_name) || '').toLowerCase();
-        const leadCard = String(lead.card_name || '').toLowerCase();
-        const isMatch = (leadBank.includes(normAssignedBank) || leadCard.includes(normAssignedBank)) || lead.agent_id === agent?.id;
-        if (!isMatch) return false;
+        const misBank = String(lead.mis_data?.mis_bank_name || '').toLowerCase();
+        const cardBank = String(lead.card_bank || lead.bank || '').toLowerCase();
+        const cardName = String(lead.card_name || '').toLowerCase();
+        const kiwiBank = String(lead.mis_data?.kiwi_bank || lead.mis_data?.kiwi_winning_bank || lead.mis_data?.winning_bank || '').toLowerCase();
+
+        let isMatch = false;
+        if (normAssignedBank === 'kiwi') {
+          isMatch = misBank.includes('kiwi') || cardName.includes('kiwi') || cardBank.includes('kiwi') || Boolean(kiwiBank);
+        } else {
+          isMatch = misBank.includes(normAssignedBank) || cardBank.includes(normAssignedBank) || cardName.includes(normAssignedBank);
+        }
+        if (!isMatch && lead.agent_id !== agent?.id) return false;
       }
 
       if (searchLower) {

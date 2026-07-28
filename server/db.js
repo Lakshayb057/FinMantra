@@ -602,11 +602,21 @@ const db = {
       if (cleanBank) {
         params.push(`%${cleanBank}%`);
         const pIdx = params.length;
-        clauses.push(`(
-          LOWER(card_bank) LIKE $${pIdx}
-          OR LOWER(mis_data->>'mis_bank_name') LIKE $${pIdx}
-          OR LOWER(card_name) LIKE $${pIdx}
-        )`);
+        if (cleanBank === 'kiwi') {
+          clauses.push(`(
+            LOWER(card_bank) LIKE $${pIdx}
+            OR LOWER(mis_data->>'mis_bank_name') LIKE $${pIdx}
+            OR LOWER(card_name) LIKE $${pIdx}
+            OR mis_data->>'kiwi_bank' IS NOT NULL
+            OR mis_data->>'kiwi_winning_bank' IS NOT NULL
+          )`);
+        } else {
+          clauses.push(`(
+            LOWER(card_bank) LIKE $${pIdx}
+            OR LOWER(mis_data->>'mis_bank_name') LIKE $${pIdx}
+            OR LOWER(card_name) LIKE $${pIdx}
+          )`);
+        }
       }
     } else if (agentId) {
       const cleanAgentId = agentId.toLowerCase().trim();
