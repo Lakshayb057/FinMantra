@@ -2607,10 +2607,10 @@ app.get('/api/leads/mis-stats', authenticateToken, requireAdmin, async (req, res
 
 async function canUserCreateLeads(user) {
   if (!user) return false;
-  if (user.role === 'admin' && user.canDelete) return true;
+  if (user.role === 'admin') return true;
   if (user.role === 'agent' && user.id) {
     const agent = await db.getAgentById(user.id);
-    return agent && agent.status === 'active' && !!agent.can_create_leads;
+    return agent && agent.status === 'active' && agent.can_create_leads !== false;
   }
   return false;
 }

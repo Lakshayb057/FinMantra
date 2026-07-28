@@ -1311,6 +1311,26 @@ FM2026G2800079,APP10002,DVRPA5807A,IMTIYAZ AHMED,9785197812,SBI,DECLINE,Declined
     return isValid;
   };
 
+  const fetchPincodeDetails = async (pin) => {
+    if (!pin || pin.length !== 6) return;
+    try {
+      const res = await fetch(`https://api.postalpincode.in/pincode/${pin}`);
+      const data = await res.json();
+      if (data && data[0] && data[0].Status === 'Success') {
+        const postOffices = data[0].PostOffice || [];
+        if (postOffices.length > 0) {
+          const po = postOffices[0];
+          setLeadForm(prev => ({
+            ...prev,
+            address_city: po.District || po.Division || prev.address_city,
+            address_state: po.State || prev.address_state,
+            address_locality: po.Name || prev.address_locality
+          }));
+        }
+      }
+    } catch(e) {}
+  };
+
   const handleAgentContinueToStep2 = () => {
     if (validateAgentStep(1)) {
       setAgentFormStep(2);
@@ -2092,6 +2112,307 @@ FM2026G2800079,APP10002,DVRPA5807A,IMTIYAZ AHMED,9785197812,SBI,DECLINE,Declined
           </button>
         </div>
       </div>
+
+      {/* Create Single Lead Modal */}
+      {showCreateLeadModal && (
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: '1rem' }}>
+          <div className="glass-panel modal-content" style={{ width: '100%', maxWidth: '640px', maxHeight: '90vh', overflowY: 'auto', borderRadius: '16px', background: 'var(--paper)', border: '1px solid var(--line)', padding: '1.75rem', borderTop: '4px solid var(--gold-deep)' }}>
+            
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--line)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <UserPlus size={22} style={{ color: 'var(--gold-deep)' }} />
+                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700 }}>Create Single Lead (Walk-in / Field Capture)</h3>
+              </div>
+              <button onClick={() => setShowCreateLeadModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={20} /></button>
+            </div>
+
+            {/* Step Progress Bar */}
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem' }}>
+              <div 
+                onClick={() => setAgentFormStep(1)}
+                style={{ 
+                  flex: 1, 
+                  padding: '0.55rem', 
+                  borderRadius: '6px', 
+                  background: agentFormStep === 1 ? 'var(--gold-deep)' : 'var(--paper-2)', 
+                  color: agentFormStep === 1 ? '#fff' : 'var(--muted)',
+                  fontSize: '0.8rem',
+                  fontWeight: 700,
+                  textAlign: 'center',
+                  cursor: 'pointer',
+                  border: '1px solid var(--line)'
+                }}
+              >
+                1. Personal & Contact Info
+              </div>
+              <div 
+                onClick={() => { if (validateAgentStep(1)) setAgentFormStep(2); }}
+                style={{ 
+                  flex: 1, 
+                  padding: '0.55rem', 
+                  borderRadius: '6px', 
+                  background: agentFormStep === 2 ? 'var(--gold-deep)' : 'var(--paper-2)', 
+                  color: agentFormStep === 2 ? '#fff' : 'var(--muted)',
+                  fontSize: '0.8rem',
+                  fontWeight: 700,
+                  textAlign: 'center',
+                  cursor: 'pointer',
+                  border: '1px solid var(--line)'
+                }}
+              >
+                2. Employment & Address
+              </div>
+            </div>
+
+            {leadError && (
+              <div style={{ background: 'rgba(209, 67, 67, 0.1)', border: '1px solid rgba(209, 67, 67, 0.25)', color: 'var(--err)', padding: '0.75rem', borderRadius: '8px', marginBottom: '1rem', fontSize: '0.85rem' }}>
+                ⚠️ {leadError}
+              </div>
+            )}
+
+            {leadSuccess && (
+              <div style={{ background: 'rgba(56, 142, 60, 0.1)', border: '1px solid rgba(56, 142, 60, 0.25)', color: 'var(--success)', padding: '0.75rem', borderRadius: '8px', marginBottom: '1rem', fontSize: '0.85rem' }}>
+                ✅ {leadSuccess}
+              </div>
+            )}
+
+            <form onSubmit={handleLeadSubmit}>
+              {agentFormStep === 1 ? (
+                /* Step 1 Fields */
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div>
+                    <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Name as per Govt ID *</label>
+                    <input 
+                      type="text" 
+                      className="form-input" 
+                      placeholder="e.g. Anil Sharma"
+                      value={leadForm.fullName}
+                      onChange={(e) => setLeadForm(prev => ({ ...prev, fullName: e.target.value }))}
+                      required
+                    />
+                    {errors.fullName && <div style={{ color: 'var(--err)', fontSize: '0.75rem', marginTop: '0.2rem' }}>{errors.fullName}</div>}
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    <div>
+                      <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>WhatsApp Number *</label>
+                      <input 
+                        type="tel" 
+                        className="form-input" 
+                        placeholder="10-digit number"
+                        value={leadForm.phone}
+                        onChange={(e) => setLeadForm(prev => ({ ...prev, phone: e.target.value.replace(/\D/g, '').slice(0, 10) }))}
+                        required
+                      />
+                      {errors.phone && <div style={{ color: 'var(--err)', fontSize: '0.75rem', marginTop: '0.2rem' }}>{errors.phone}</div>}
+                    </div>
+
+                    <div>
+                      <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Email Address *</label>
+                      <input 
+                        type="email" 
+                        className="form-input" 
+                        placeholder="anil@gmail.com"
+                        value={leadForm.email}
+                        onChange={(e) => setLeadForm(prev => ({ ...prev, email: e.target.value }))}
+                        required
+                      />
+                      {errors.email && <div style={{ color: 'var(--err)', fontSize: '0.75rem', marginTop: '0.2rem' }}>{errors.email}</div>}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    <div>
+                      <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>PAN Number *</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        placeholder="e.g. ABCDE1234F"
+                        value={leadForm.pan_no}
+                        onChange={(e) => setLeadForm(prev => ({ ...prev, pan_no: e.target.value.toUpperCase().slice(0, 10) }))}
+                        required
+                      />
+                      {errors.pan_no && <div style={{ color: 'var(--err)', fontSize: '0.75rem', marginTop: '0.2rem' }}>{errors.pan_no}</div>}
+                    </div>
+
+                    <div>
+                      <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Date of Birth *</label>
+                      <input 
+                        type="date" 
+                        className="form-input" 
+                        value={leadForm.dob}
+                        onChange={(e) => setLeadForm(prev => ({ ...prev, dob: e.target.value }))}
+                        required
+                      />
+                      {errors.dob && <div style={{ color: 'var(--err)', fontSize: '0.75rem', marginTop: '0.2rem' }}>{errors.dob}</div>}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Mother's Full Name *</label>
+                    <input 
+                      type="text" 
+                      className="form-input" 
+                      placeholder="Enter mother's full name"
+                      value={leadForm.mother_name}
+                      onChange={(e) => setLeadForm(prev => ({ ...prev, mother_name: e.target.value }))}
+                      required
+                    />
+                    {errors.mother_name && <div style={{ color: 'var(--err)', fontSize: '0.75rem', marginTop: '0.2rem' }}>{errors.mother_name}</div>}
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
+                    <button type="button" onClick={handleAgentContinueToStep2} className="btn-primary" style={{ background: 'var(--gold-deep)', color: '#fff' }}>
+                      Continue to Next Step →
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* Step 2 Fields */
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    <div>
+                      <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Target Credit Card *</label>
+                      <select 
+                        className="form-select"
+                        value={leadForm.cardId}
+                        onChange={(e) => setLeadForm(prev => ({ ...prev, cardId: e.target.value }))}
+                        required
+                      >
+                        <option value="">Select Credit Card</option>
+                        {cards.map(c => (
+                          <option key={c.id} value={c.id}>{c.name} ({c.bank || 'Bank'})</option>
+                        ))}
+                      </select>
+                      {errors.cardId && <div style={{ color: 'var(--err)', fontSize: '0.75rem', marginTop: '0.2rem' }}>{errors.cardId}</div>}
+                    </div>
+
+                    <div>
+                      <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Employment Type *</label>
+                      <select 
+                        className="form-select"
+                        value={leadForm.employment}
+                        onChange={(e) => setLeadForm(prev => ({ ...prev, employment: e.target.value }))}
+                        required
+                      >
+                        <option value="">Select Employment</option>
+                        <option value="Salaried">Salaried</option>
+                        <option value="Self-Employed">Self-Employed / Business</option>
+                      </select>
+                      {errors.employment && <div style={{ color: 'var(--err)', fontSize: '0.75rem', marginTop: '0.2rem' }}>{errors.employment}</div>}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    <div>
+                      <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Designation / Profession</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        placeholder="e.g. Software Engineer"
+                        value={leadForm.designation}
+                        onChange={(e) => setLeadForm(prev => ({ ...prev, designation: e.target.value }))}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Monthly Net Income (₹) *</label>
+                      <input 
+                        type="number" 
+                        className="form-input" 
+                        placeholder="e.g. 45000"
+                        value={leadForm.monthly_income}
+                        onChange={(e) => setLeadForm(prev => ({ ...prev, monthly_income: e.target.value }))}
+                        required
+                      />
+                      {errors.monthly_income && <div style={{ color: 'var(--err)', fontSize: '0.75rem', marginTop: '0.2rem' }}>{errors.monthly_income}</div>}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem' }}>
+                    <div>
+                      <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Flat / House No. *</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        placeholder="House No."
+                        value={leadForm.address_house}
+                        onChange={(e) => setLeadForm(prev => ({ ...prev, address_house: e.target.value }))}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Street / Area *</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        placeholder="Street Name"
+                        value={leadForm.address_street}
+                        onChange={(e) => setLeadForm(prev => ({ ...prev, address_street: e.target.value }))}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Pincode *</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        placeholder="6-digit Pincode"
+                        value={leadForm.pincode}
+                        onChange={(e) => {
+                          const p = e.target.value.replace(/\D/g, '').slice(0, 6);
+                          setLeadForm(prev => ({ ...prev, pincode: p }));
+                          if (p.length === 6) fetchPincodeDetails(p);
+                        }}
+                        required
+                      />
+                      {errors.pincode && <div style={{ color: 'var(--err)', fontSize: '0.75rem', marginTop: '0.2rem' }}>{errors.pincode}</div>}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    <div>
+                      <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>City *</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        placeholder="City"
+                        value={leadForm.address_city}
+                        onChange={(e) => setLeadForm(prev => ({ ...prev, address_city: e.target.value }))}
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>State *</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        placeholder="State"
+                        value={leadForm.address_state}
+                        onChange={(e) => setLeadForm(prev => ({ ...prev, address_state: e.target.value }))}
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.75rem' }}>
+                    <button type="button" onClick={() => setAgentFormStep(1)} className="btn-secondary">
+                      ← Back to Step 1
+                    </button>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button type="button" onClick={() => setShowCreateLeadModal(false)} className="btn-secondary">Cancel</button>
+                      <button type="submit" className="btn-primary" disabled={isSubmitting} style={{ background: 'var(--gold-deep)', color: '#fff' }}>
+                        {isSubmitting ? 'Registering Lead...' : 'Submit & Register Lead'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Agent Excel Upload Modal */}
       {showAgentUploadModal && (
