@@ -3091,46 +3091,53 @@ FM2026G2800079,APP10002,DVRPA5807A,IMTIYAZ AHMED,9785197812,SBI,DECLINE,Declined
       )}
 
       {/* Bank MIS Upload Results Modal */}
-      {showBankMisResultModal && bankMisUploadResult && (
-        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: '1rem' }}>
-          <div className="glass-panel modal-content" style={{ width: '100%', maxWidth: '580px', maxHeight: '85vh', overflowY: 'auto', borderRadius: '16px', background: 'var(--paper)', border: '1px solid var(--line)', padding: '1.75rem', borderTop: '4px solid var(--gold-deep)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--line)' }}>
-              <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700 }}>Bank MIS Upload Results</h3>
-              <button onClick={() => setShowBankMisResultModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={20} /></button>
-            </div>
+      {showBankMisResultModal && bankMisUploadResult && (() => {
+        const matchedCount = bankMisUploadResult.totalMatched ?? bankMisUploadResult.updated ?? bankMisUploadResult.mapped ?? 0;
+        const unmatchedCount = bankMisUploadResult.totalUnmatched ?? bankMisUploadResult.unmatched ?? bankMisUploadResult.failed ?? 0;
+        const processedCount = bankMisUploadResult.totalProcessed ?? bankMisUploadResult.processed ?? bankMisUploadResult.total ?? (matchedCount + unmatchedCount);
+        const unmatchedItems = bankMisUploadResult.unmatchedDetails || bankMisUploadResult.unmatchedList || [];
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem', marginBottom: '1.25rem' }}>
-              <div style={{ background: 'var(--paper-2)', padding: '0.85rem', borderRadius: '8px', textAlign: 'center', border: '1px solid var(--line)' }}>
-                <div style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>Total Processed</div>
-                <div style={{ fontSize: '1.4rem', fontWeight: 800 }}>{bankMisUploadResult.processed || bankMisUploadResult.total || 0}</div>
+        return (
+          <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: '1rem' }}>
+            <div className="glass-panel modal-content" style={{ width: '100%', maxWidth: '580px', maxHeight: '85vh', overflowY: 'auto', borderRadius: '16px', background: 'var(--paper)', border: '1px solid var(--line)', padding: '1.75rem', borderTop: '4px solid var(--gold-deep)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--line)' }}>
+                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700 }}>Bank MIS Upload Results</h3>
+                <button onClick={() => setShowBankMisResultModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={20} /></button>
               </div>
-              <div style={{ background: 'rgba(56, 142, 60, 0.1)', padding: '0.85rem', borderRadius: '8px', textAlign: 'center', border: '1px solid rgba(56, 142, 60, 0.25)' }}>
-                <div style={{ fontSize: '0.75rem', color: 'var(--success)' }}>Mapped Leads</div>
-                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--success)' }}>{bankMisUploadResult.updated || bankMisUploadResult.mapped || 0}</div>
-              </div>
-              <div style={{ background: 'rgba(209, 67, 67, 0.1)', padding: '0.85rem', borderRadius: '8px', textAlign: 'center', border: '1px solid rgba(209, 67, 67, 0.25)' }}>
-                <div style={{ fontSize: '0.75rem', color: 'var(--err)' }}>Unmatched</div>
-                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--err)' }}>{bankMisUploadResult.unmatched || bankMisUploadResult.failed || 0}</div>
-              </div>
-            </div>
 
-            {bankMisUploadResult.unmatchedList && bankMisUploadResult.unmatchedList.length > 0 && (
-              <div style={{ marginBottom: '1.25rem' }}>
-                <h4 style={{ fontSize: '0.9rem', marginBottom: '0.5rem', color: 'var(--warning)' }}>Unmatched URN / Application IDs ({bankMisUploadResult.unmatchedList.length}):</h4>
-                <div style={{ background: 'var(--paper-2)', border: '1px solid var(--line)', padding: '0.75rem', borderRadius: '8px', maxHeight: '180px', overflowY: 'auto', fontSize: '0.78rem', color: 'var(--ink)' }}>
-                  {bankMisUploadResult.unmatchedList.map((item, idx) => (
-                    <div key={idx} style={{ marginBottom: '0.35rem' }}>• {typeof item === 'string' ? item : (item.urn || item.appId || JSON.stringify(item))}</div>
-                  ))}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem', marginBottom: '1.25rem' }}>
+                <div style={{ background: 'var(--paper-2)', padding: '0.85rem', borderRadius: '8px', textAlign: 'center', border: '1px solid var(--line)' }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>Total Processed</div>
+                  <div style={{ fontSize: '1.4rem', fontWeight: 800 }}>{processedCount}</div>
+                </div>
+                <div style={{ background: 'rgba(56, 142, 60, 0.1)', padding: '0.85rem', borderRadius: '8px', textAlign: 'center', border: '1px solid rgba(56, 142, 60, 0.25)' }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--success)' }}>Mapped Leads</div>
+                  <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--success)' }}>{matchedCount}</div>
+                </div>
+                <div style={{ background: 'rgba(209, 67, 67, 0.1)', padding: '0.85rem', borderRadius: '8px', textAlign: 'center', border: '1px solid rgba(209, 67, 67, 0.25)' }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--err)' }}>Unmatched</div>
+                  <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--err)' }}>{unmatchedCount}</div>
                 </div>
               </div>
-            )}
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <button onClick={() => setShowBankMisResultModal(false)} className="btn-primary" style={{ background: 'var(--gold-deep)', color: '#fff' }}>Done</button>
+              {unmatchedItems && unmatchedItems.length > 0 && (
+                <div style={{ marginBottom: '1.25rem' }}>
+                  <h4 style={{ fontSize: '0.9rem', marginBottom: '0.5rem', color: 'var(--warning)' }}>Unmatched URN / Application IDs ({unmatchedItems.length}):</h4>
+                  <div style={{ background: 'var(--paper-2)', border: '1px solid var(--line)', padding: '0.75rem', borderRadius: '8px', maxHeight: '180px', overflowY: 'auto', fontSize: '0.78rem', color: 'var(--ink)' }}>
+                    {unmatchedItems.map((item, idx) => (
+                      <div key={idx} style={{ marginBottom: '0.35rem' }}>• {typeof item === 'string' ? item : (item.urn || item.appId || JSON.stringify(item))}</div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <button onClick={() => setShowBankMisResultModal(false)} className="btn-primary" style={{ background: 'var(--gold-deep)', color: '#fff' }}>Done</button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
     </div>
   );

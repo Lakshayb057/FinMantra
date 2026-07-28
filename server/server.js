@@ -2623,8 +2623,16 @@ app.post('/api/leads/upload-mis', authenticateToken, upload.single('file'), asyn
     success: true,
     totalMatched,
     totalUnmatched,
+    totalProcessed: totalMatched + totalUnmatched,
+    total: totalMatched + totalUnmatched,
+    processed: totalMatched + totalUnmatched,
+    updated: totalMatched,
+    mapped: totalMatched,
+    unmatched: totalUnmatched,
+    failed: totalUnmatched,
     matchedDetails,
-    unmatchedDetails
+    unmatchedDetails,
+    unmatchedList: unmatchedDetails
   });
 });
 
