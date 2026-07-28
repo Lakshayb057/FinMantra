@@ -5,7 +5,7 @@ import {
   Trash2, Download, Search, Plus, Edit, Check, X, RefreshCw, AlertCircle,
   QrCode, Smartphone, CheckCircle, Wifi, WifiOff, Eye, EyeOff, MessageSquare, Layers,
   ArrowUp, ArrowDown, MoreVertical, LogOut, Activity, Sun, Moon, LogIn,
-  TrendingUp, Upload, CheckCircle2, Filter, Database
+  TrendingUp, Upload, CheckCircle2, Filter, Database, UserPlus, FileSpreadsheet
 } from 'lucide-react';
 
 const formatDateTime = (dateStr) => {
@@ -175,6 +175,54 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   const [misUploadResult, setMisUploadResult] = useState(null);
   const [showMISResultModal, setShowMISResultModal] = useState(false);
   const [selectedMappedLead, setSelectedMappedLead] = useState(null);
+
+  // Manual Lead Creation & Upload States
+  const [canCreateLeads, setCanCreateLeads] = useState(false);
+  const [showCreateLeadModal, setShowCreateLeadModal] = useState(false);
+  const [showUploadLeadsModal, setShowUploadLeadsModal] = useState(false);
+  const [isSubmittingLead, setIsSubmittingLead] = useState(false);
+  const [isUploadingManualLeads, setIsUploadingManualLeads] = useState(false);
+  const defaultCreateLeadForm = {
+    application_id: '',
+    full_name: '',
+    phone: '',
+    email: '',
+    pan_no: '',
+    dob: '',
+    mother_name: '',
+    current_address: '',
+    pincode: '',
+    employment: 'Salaried',
+    designation: '',
+    company_name: '',
+    has_credit_card: 'No',
+    monthly_income: '',
+    income_range: '3-6 LPA',
+    city: '',
+    card_id: '',
+    card_name: '',
+    card_bank: '',
+    agent_id: '',
+    source: 'public',
+    consent: true,
+    redirect_url: '',
+    utm_source: 'meta',
+    utm_medium: 'paid_social',
+    utm_campaign: '',
+    utm_term: '',
+    utm_content: '',
+    utm_info: '',
+    utm_id: '',
+    utm_creative: '',
+    utm_placement: '',
+    landing_page: '',
+    referrer: '',
+    fbclid: ''
+  };
+  const [createLeadForm, setCreateLeadForm] = useState(defaultCreateLeadForm);
+  const [manualUploadFile, setManualUploadFile] = useState(null);
+  const [manualUploadResult, setManualUploadResult] = useState(null);
+  const [showManualUploadResultModal, setShowManualUploadResultModal] = useState(false);
   
   // Dashboard Filters
   const [dashSelectedBank, setDashSelectedBank] = useState('HDFC');
@@ -705,6 +753,117 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       a.remove();
     })
     .catch(err => showToast('Export failed.', 'error'));
+  };
+
+  const handleDownloadTemplate = () => {
+    window.open(`${API_URL}/leads/download-template`, '_blank');
+  };
+
+  const handleCreateManualLead = async (e) => {
+    e.preventDefault();
+    if (!createLeadForm.full_name || !createLeadForm.phone) {
+      showToast('Full Name and 10-digit Phone Number are required.', 'error');
+      return;
+    }
+    if (!createLeadForm.agent_id && !canDelete) {
+      showToast('Please select a valid Source Agent.', 'error');
+      return;
+    }
+
+    setIsSubmittingLead(true);
+    try {
+      const res = await fetch(`${API_URL}/leads/create-manual`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(createLeadForm)
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast('Lead record created successfully!');
+        setShowCreateLeadModal(false);
+        setCreateLeadForm(defaultCreateLeadForm);
+        loadAllAdminData();
+      } else {
+        showToast(data.error || 'Failed to create lead', 'error');
+      }
+    } catch (err) {
+      showToast('Connection error while creating lead.', 'error');
+    } finally {
+      setIsSubmittingLead(false);
+    }
+  };
+
+  const handleUploadManualLeads = async (e) => {
+    e.preventDefault();
+    if (!manualUploadFile) {
+      showToast('Please select an Excel or CSV file to upload.', 'error');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', manualUploadFile);
+
+    setIsUploadingManualLeads(true);
+    let isSuccess = false;
+    let responseData = null;
+
+    try {
+      const res = await fetch(`${API_URL}/leads/upload-manual`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+      responseData = await res.json();
+      if (res.ok && responseData.success) {
+        isSuccess = true;
+      } else {
+        showToast(responseData?.error || 'Failed to process Excel/CSV lead file.', 'error');
+      }
+    } catch (err) {
+      showToast('Error uploading lead file: ' + (err.message || 'Connection error'), 'error');
+    } finally {
+      setIsUploadingManualLeads(false);
+    }
+
+    if (isSuccess && responseData) {
+      setManualUploadResult(responseData);
+      setShowManualUploadResultModal(true);
+      setShowUploadLeadsModal(false);
+      setManualUploadFile(null);
+      showToast(`Bulk lead upload complete! Created ${responseData.created} leads (${responseData.failed} rejected).`, responseData.created > 0 ? 'success' : 'info');
+      try {
+        await loadAllAdminData();
+      } catch (refreshErr) {
+        console.warn('Dashboard data refresh error after lead upload:', refreshErr);
+      }
+    }
+  };
+
+  const handleToggleAgentLeadAccess = async (agentId, currentStatus) => {
+    try {
+      const res = await fetch(`${API_URL}/agents/${agentId}/permissions`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ can_create_leads: !currentStatus })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast(`Agent permission updated: ${!currentStatus ? 'Access Granted' : 'Access Revoked'}`);
+        loadAllAdminData();
+      } else {
+        showToast(data.error || 'Failed to update agent permission.', 'error');
+      }
+    } catch (err) {
+      showToast('Error updating permission.', 'error');
+    }
   };
 
   const handleViewLead = (lead) => {
@@ -2543,12 +2702,30 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', marginLeft: 'auto', flexShrink: 0 }}>
             {activeTab === 'leads' && (
               <>
+                {(canDelete || canCreateLeads) && (
+                  <>
+                    <button 
+                      onClick={() => setShowCreateLeadModal(true)} 
+                      className="btn-primary" 
+                      style={{ padding: '0.4rem 0.85rem', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', height: '34px', borderRadius: '4px', cursor: 'pointer', whiteSpace: 'nowrap', background: 'var(--gold-deep)', color: '#fff' }}
+                    >
+                      <UserPlus size={14} /> Create Lead
+                    </button>
+                    <button 
+                      onClick={() => setShowUploadLeadsModal(true)} 
+                      className="btn-secondary" 
+                      style={{ padding: '0.4rem 0.85rem', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', height: '34px', borderRadius: '4px', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                    >
+                      <FileSpreadsheet size={14} /> Upload Leads
+                    </button>
+                  </>
+                )}
                 {canDelete && selectedLeads.length > 0 && (
                   <button onClick={handleBulkDeleteLeads} className="btn-secondary" style={{ background: 'rgba(209, 67, 67, 0.15)', color: 'var(--err)', border: '1px solid rgba(209, 67, 67, 0.2)', padding: '0.4rem 0.85rem', fontSize: '0.82rem', height: '34px', borderRadius: '2px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
                     <Trash2 size={14} /> Delete ({selectedLeads.length})
                   </button>
                 )}
-                <button onClick={handleCsvExport} className="btn-primary" style={{ padding: '0.4rem 0.85rem', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', height: '34px', borderRadius: '2px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                <button onClick={handleCsvExport} className="btn-secondary" style={{ padding: '0.4rem 0.85rem', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', height: '34px', borderRadius: '2px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
                   <Download size={14} /> Export to CSV
                 </button>
                 <button onClick={() => setShowUploadMISModal(true)} className="btn-secondary" style={{ padding: '0.4rem 0.85rem', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', height: '34px', borderRadius: '2px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
@@ -3949,6 +4126,20 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                           Locations: {ag.locations && ag.locations.length > 0 ? ag.locations.join(', ') : 'None assigned'}
                           {ag.assigned_bank && ` • Mapped Bank: ${ag.assigned_bank}`}
                         </div>
+                        {canDelete && (
+                          <div style={{ marginTop: '0.45rem', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'rgba(224, 168, 46, 0.08)', padding: '0.2rem 0.5rem', borderRadius: '4px', border: '1px solid rgba(224, 168, 46, 0.2)', width: 'fit-content' }}>
+                            <input 
+                              type="checkbox" 
+                              id={`perm-lead-${ag.id}`}
+                              checked={!!ag.can_create_leads}
+                              onChange={() => handleToggleAgentLeadAccess(ag.id, !!ag.can_create_leads)}
+                              style={{ accentColor: 'var(--gold)', cursor: 'pointer' }}
+                            />
+                            <label htmlFor={`perm-lead-${ag.id}`} style={{ cursor: 'pointer', fontWeight: 600, color: 'var(--gold-deep)' }}>
+                              Manual Lead Upload Access
+                            </label>
+                          </div>
+                        )}
                       </div>
                       <div style={{ display: 'flex', gap: '0.5rem' }}>
                         <button onClick={() => setEditingAgent(ag)} className="btn-secondary" style={{ padding: '0.5rem' }}>
@@ -6602,6 +6793,434 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+      {/* Create Manual Lead Modal */}
+      {showCreateLeadModal && (
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: '1rem' }}>
+          <div className="glass-panel modal-content" style={{ width: '100%', maxWidth: '650px', maxHeight: '90vh', overflowY: 'auto', borderRadius: '16px', background: 'var(--paper)', border: '1px solid var(--line)', padding: '1.75rem', boxShadow: '0 20px 40px rgba(0,0,0,0.3)', borderTop: '4px solid var(--gold-deep)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--line)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <UserPlus size={22} style={{ color: 'var(--gold-deep)' }} />
+                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: 'var(--ink)' }}>Create New Lead (Manual Entry)</h3>
+              </div>
+              <button onClick={() => setShowCreateLeadModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={20} /></button>
+            </div>
+
+            <form onSubmit={handleCreateManualLead}>
+              {/* Section 1: Customer Details */}
+              <div style={{ marginBottom: '1.25rem', background: 'var(--paper-2)', padding: '1rem', borderRadius: '10px', border: '1px solid var(--line)' }}>
+                <h4 style={{ fontSize: '0.95rem', fontWeight: 700, margin: '0 0 0.85rem 0', color: 'var(--gold-deep)', borderBottom: '1px solid var(--line)', paddingBottom: '0.4rem' }}>
+                  👤 Customer & Application Details
+                </h4>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem', marginBottom: '0.85rem' }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.78rem', fontWeight: 600 }}>Application ID / URN (Optional)</label>
+                    <input 
+                      type="text" 
+                      className="form-input" 
+                      placeholder="Auto URN generated if left blank"
+                      value={createLeadForm.application_id}
+                      onChange={(e) => setCreateLeadForm({ ...createLeadForm, application_id: e.target.value })}
+                    />
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.78rem', fontWeight: 600 }}>Full Name *</label>
+                    <input 
+                      type="text" 
+                      className="form-input" 
+                      placeholder="e.g. Harsh Deep"
+                      value={createLeadForm.full_name}
+                      onChange={(e) => setCreateLeadForm({ ...createLeadForm, full_name: e.target.value })}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem', marginBottom: '0.85rem' }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.78rem', fontWeight: 600 }}>Phone Number (10 digits) *</label>
+                    <input 
+                      type="tel" 
+                      maxLength="10"
+                      className="form-input" 
+                      placeholder="e.g. 8708569574"
+                      value={createLeadForm.phone}
+                      onChange={(e) => setCreateLeadForm({ ...createLeadForm, phone: e.target.value.replace(/\D/g, '') })}
+                      required
+                    />
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.78rem', fontWeight: 600 }}>Email Address</label>
+                    <input 
+                      type="email" 
+                      className="form-input" 
+                      placeholder="e.g. harshdeep301@icloud.com"
+                      value={createLeadForm.email}
+                      onChange={(e) => setCreateLeadForm({ ...createLeadForm, email: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.85rem', marginBottom: '0.85rem' }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.78rem', fontWeight: 600 }}>PAN Number</label>
+                    <input 
+                      type="text" 
+                      maxLength="10"
+                      className="form-input" 
+                      placeholder="e.g. BOGPH7116K"
+                      value={createLeadForm.pan_no}
+                      onChange={(e) => setCreateLeadForm({ ...createLeadForm, pan_no: e.target.value.toUpperCase() })}
+                    />
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.78rem', fontWeight: 600 }}>Date of Birth</label>
+                    <input 
+                      type="date" 
+                      className="form-input" 
+                      value={createLeadForm.dob}
+                      onChange={(e) => setCreateLeadForm({ ...createLeadForm, dob: e.target.value })}
+                    />
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.78rem', fontWeight: 600 }}>Mother's Name</label>
+                    <input 
+                      type="text" 
+                      className="form-input" 
+                      placeholder="Mother's Full Name"
+                      value={createLeadForm.mother_name}
+                      onChange={(e) => setCreateLeadForm({ ...createLeadForm, mother_name: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '0.85rem' }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.78rem', fontWeight: 600 }}>Current Address</label>
+                    <input 
+                      type="text" 
+                      className="form-input" 
+                      placeholder="House, Street, City, State"
+                      value={createLeadForm.current_address}
+                      onChange={(e) => setCreateLeadForm({ ...createLeadForm, current_address: e.target.value })}
+                    />
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.78rem', fontWeight: 600 }}>Residence Pincode</label>
+                    <input 
+                      type="text" 
+                      maxLength="6"
+                      className="form-input" 
+                      placeholder="e.g. 126112"
+                      value={createLeadForm.pincode}
+                      onChange={(e) => setCreateLeadForm({ ...createLeadForm, pincode: e.target.value.replace(/\D/g, '') })}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 2: Employment, Financial & Card Details */}
+              <div style={{ marginBottom: '1.25rem', background: 'var(--paper-2)', padding: '1rem', borderRadius: '10px', border: '1px solid var(--line)' }}>
+                <h4 style={{ fontSize: '0.95rem', fontWeight: 700, margin: '0 0 0.85rem 0', color: 'var(--gold-deep)', borderBottom: '1px solid var(--line)', paddingBottom: '0.4rem' }}>
+                  💼 Employment & Financial Info
+                </h4>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem', marginBottom: '0.85rem' }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.78rem', fontWeight: 600 }}>Employment Type</label>
+                    <div style={{ display: 'flex', gap: '0.6rem', marginTop: '0.25rem' }}>
+                      {['Salaried', 'Self-Employed', 'Business'].map(emp => (
+                        <label key={emp} style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.78rem', cursor: 'pointer' }}>
+                          <input 
+                            type="radio" 
+                            name="manual_emp" 
+                            value={emp}
+                            checked={createLeadForm.employment === emp}
+                            onChange={(e) => setCreateLeadForm({ ...createLeadForm, employment: e.target.value })}
+                            style={{ accentColor: 'var(--gold-deep)' }}
+                          /> {emp}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.78rem', fontWeight: 600 }}>Already Has Credit Card?</label>
+                    <select 
+                      className="form-select"
+                      value={createLeadForm.has_credit_card}
+                      onChange={(e) => setCreateLeadForm({ ...createLeadForm, has_credit_card: e.target.value })}
+                    >
+                      <option value="No">No</option>
+                      <option value="Yes">Yes</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.85rem', marginBottom: '0.85rem' }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.78rem', fontWeight: 600 }}>Designation</label>
+                    <input 
+                      type="text" 
+                      className="form-input" 
+                      placeholder="e.g. Student / Software Engineer"
+                      value={createLeadForm.designation}
+                      onChange={(e) => setCreateLeadForm({ ...createLeadForm, designation: e.target.value })}
+                    />
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.78rem', fontWeight: 600 }}>Company / Employer</label>
+                    <input 
+                      type="text" 
+                      className="form-input" 
+                      placeholder="e.g. N/A or TCS"
+                      value={createLeadForm.company_name}
+                      onChange={(e) => setCreateLeadForm({ ...createLeadForm, company_name: e.target.value })}
+                    />
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.78rem', fontWeight: 600 }}>Net Monthly Income (₹)</label>
+                    <input 
+                      type="text" 
+                      className="form-input" 
+                      placeholder="e.g. 15000"
+                      value={createLeadForm.monthly_income}
+                      onChange={(e) => setCreateLeadForm({ ...createLeadForm, monthly_income: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.85rem' }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.78rem', fontWeight: 600 }}>City / Location *</label>
+                    <select 
+                      className="form-select"
+                      value={createLeadForm.city}
+                      onChange={(e) => setCreateLeadForm({ ...createLeadForm, city: e.target.value })}
+                    >
+                      <option value="">Select City</option>
+                      {locations.map(loc => (
+                        <option key={loc.id} value={loc.name}>{loc.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.78rem', fontWeight: 600 }}>Source Agent *</label>
+                    <select 
+                      className="form-select"
+                      value={createLeadForm.agent_id}
+                      onChange={(e) => setCreateLeadForm({ ...createLeadForm, agent_id: e.target.value })}
+                      required
+                    >
+                      <option value="">Select DB Agent</option>
+                      {agents.map(ag => (
+                        <option key={ag.id} value={ag.id}>{ag.name} ({ag.username})</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.78rem', fontWeight: 600 }}>Target Credit Card</label>
+                    <select 
+                      className="form-select"
+                      value={createLeadForm.card_id}
+                      onChange={(e) => {
+                        const selected = cards.find(c => c.id === e.target.value);
+                        setCreateLeadForm({ 
+                          ...createLeadForm, 
+                          card_id: e.target.value,
+                          card_name: selected ? selected.name : '',
+                          card_bank: selected ? selected.bank : ''
+                        });
+                      }}
+                    >
+                      <option value="">Select Card Offer</option>
+                      {cards.map(c => (
+                        <option key={c.id} value={c.id}>{c.bank} - {c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 3: Marketing & Tracking Parameters */}
+              <div style={{ marginBottom: '1.25rem', background: 'var(--paper-2)', padding: '1rem', borderRadius: '10px', border: '1px solid var(--line)' }}>
+                <h4 style={{ fontSize: '0.95rem', fontWeight: 700, margin: '0 0 0.85rem 0', color: 'var(--gold-deep)', borderBottom: '1px solid var(--line)', paddingBottom: '0.4rem' }}>
+                  🎯 Marketing & Tracking Parameters (UTM & Ad Attribution)
+                </h4>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                  <div>
+                    <label style={{ fontSize: '0.75rem', color: 'var(--muted)', fontWeight: 600 }}>UTM Source</label>
+                    <input type="text" className="form-input" placeholder="e.g. meta" value={createLeadForm.utm_source} onChange={e => setCreateLeadForm({ ...createLeadForm, utm_source: e.target.value })} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.75rem', color: 'var(--muted)', fontWeight: 600 }}>UTM Medium</label>
+                    <input type="text" className="form-input" placeholder="e.g. paid_social" value={createLeadForm.utm_medium} onChange={e => setCreateLeadForm({ ...createLeadForm, utm_medium: e.target.value })} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.75rem', color: 'var(--muted)', fontWeight: 600 }}>UTM Campaign</label>
+                    <input type="text" className="form-input" placeholder="e.g. HDFC_Digitally_Acquired..." value={createLeadForm.utm_campaign} onChange={e => setCreateLeadForm({ ...createLeadForm, utm_campaign: e.target.value })} />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                  <div>
+                    <label style={{ fontSize: '0.75rem', color: 'var(--muted)', fontWeight: 600 }}>UTM Term</label>
+                    <input type="text" className="form-input" placeholder="e.g. HDFC_Digitally_Acquired..." value={createLeadForm.utm_term} onChange={e => setCreateLeadForm({ ...createLeadForm, utm_term: e.target.value })} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.75rem', color: 'var(--muted)', fontWeight: 600 }}>UTM Content</label>
+                    <input type="text" className="form-input" placeholder="e.g. Pixel_Free_plus_fast..." value={createLeadForm.utm_content} onChange={e => setCreateLeadForm({ ...createLeadForm, utm_content: e.target.value })} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.75rem', color: 'var(--muted)', fontWeight: 600 }}>UTM Info</label>
+                    <input type="text" className="form-input" placeholder="e.g. paid_social" value={createLeadForm.utm_info} onChange={e => setCreateLeadForm({ ...createLeadForm, utm_info: e.target.value })} />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                  <div>
+                    <label style={{ fontSize: '0.75rem', color: 'var(--muted)', fontWeight: 600 }}>UTM Campaign ID (utm_id)</label>
+                    <input type="text" className="form-input" placeholder="e.g. 120251645680990319" value={createLeadForm.utm_id} onChange={e => setCreateLeadForm({ ...createLeadForm, utm_id: e.target.value })} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.75rem', color: 'var(--muted)', fontWeight: 600 }}>UTM Ad ID (utm_creative)</label>
+                    <input type="text" className="form-input" placeholder="e.g. 120251645805950319" value={createLeadForm.utm_creative} onChange={e => setCreateLeadForm({ ...createLeadForm, utm_creative: e.target.value })} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.75rem', color: 'var(--muted)', fontWeight: 600 }}>UTM Placement</label>
+                    <input type="text" className="form-input" placeholder="e.g. Instagram_Feed" value={createLeadForm.utm_placement} onChange={e => setCreateLeadForm({ ...createLeadForm, utm_placement: e.target.value })} />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                  <div>
+                    <label style={{ fontSize: '0.75rem', color: 'var(--muted)', fontWeight: 600 }}>Landing Page URL</label>
+                    <input type="text" className="form-input" placeholder="e.g. https://finmantra.org/apply" value={createLeadForm.landing_page} onChange={e => setCreateLeadForm({ ...createLeadForm, landing_page: e.target.value })} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.75rem', color: 'var(--muted)', fontWeight: 600 }}>Redirect URL</label>
+                    <input type="text" className="form-input" placeholder="e.g. https://bank.com/redirect" value={createLeadForm.redirect_url} onChange={e => setCreateLeadForm({ ...createLeadForm, redirect_url: e.target.value })} />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                  <div>
+                    <label style={{ fontSize: '0.75rem', color: 'var(--muted)', fontWeight: 600 }}>Referrer Source</label>
+                    <input type="text" className="form-input" placeholder="e.g. instagram.com" value={createLeadForm.referrer} onChange={e => setCreateLeadForm({ ...createLeadForm, referrer: e.target.value })} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.75rem', color: 'var(--muted)', fontWeight: 600 }}>FBCLID (Facebook Click ID)</label>
+                    <input type="text" className="form-input" placeholder="e.g. fb.1.178..." value={createLeadForm.fbclid} onChange={e => setCreateLeadForm({ ...createLeadForm, fbclid: e.target.value })} />
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.5rem' }}>
+                <button type="button" onClick={() => setShowCreateLeadModal(false)} className="btn-secondary">Cancel</button>
+                <button type="submit" className="btn-primary" disabled={isSubmittingLead} style={{ background: 'var(--gold-deep)', color: '#fff', padding: '0.6rem 1.5rem', fontWeight: 600 }}>
+                  {isSubmittingLead ? 'Creating Lead Record...' : 'Save Lead Record'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Upload Leads Modal */}
+      {showUploadLeadsModal && (
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: '1rem' }}>
+          <div className="glass-panel modal-content" style={{ width: '100%', maxWidth: '540px', borderRadius: '16px', background: 'var(--paper)', border: '1px solid var(--line)', padding: '1.75rem', borderTop: '4px solid var(--gold-deep)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--line)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <FileSpreadsheet size={22} style={{ color: 'var(--gold-deep)' }} />
+                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700 }}>Upload Leads (Excel / CSV)</h3>
+              </div>
+              <button onClick={() => setShowUploadLeadsModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={20} /></button>
+            </div>
+
+            <div style={{ background: 'rgba(224, 168, 46, 0.08)', border: '1px solid rgba(224, 168, 46, 0.25)', padding: '0.85rem', borderRadius: '8px', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--gold-deep)' }}>Need a formatted template?</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>Includes all headers, Application ID & sample rows</div>
+              </div>
+              <button 
+                type="button"
+                onClick={handleDownloadTemplate} 
+                className="btn-primary" 
+                style={{ fontSize: '0.78rem', padding: '0.35rem 0.75rem', display: 'inline-flex', alignItems: 'center', gap: '0.3rem', whiteSpace: 'nowrap', background: 'var(--gold-deep)', color: '#fff' }}
+              >
+                <Download size={13} /> Download Template
+              </button>
+            </div>
+
+            <form onSubmit={handleUploadManualLeads}>
+              <div className="form-group" style={{ marginBottom: '1rem' }}>
+                <label className="form-label" style={{ fontWeight: 600 }}>Select Excel (.xlsx, .xls) or CSV File</label>
+                <input 
+                  type="file" 
+                  accept=".xlsx, .xls, .csv" 
+                  onChange={(e) => setManualUploadFile(e.target.files[0])} 
+                  className="form-input" 
+                  required 
+                />
+              </div>
+
+              <div style={{ fontSize: '0.78rem', color: 'var(--muted)', marginTop: '0.5rem', marginBottom: '1.25rem', background: 'var(--paper-2)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--line)' }}>
+                ⚠️ <strong>Agent Validation Rule</strong>: Every lead row must specify a valid <code>Source Agent</code> (Agent ID, Username, or Name) that exists in the database. Unmatched agent rows will be rejected.
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+                <button type="button" onClick={() => setShowUploadLeadsModal(false)} className="btn-secondary">Cancel</button>
+                <button type="submit" className="btn-primary" disabled={isUploadingManualLeads} style={{ background: 'var(--gold-deep)', color: '#fff' }}>
+                  {isUploadingManualLeads ? 'Processing Upload...' : 'Upload & Validate Leads'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Manual Upload Results Summary Modal */}
+      {showManualUploadResultModal && manualUploadResult && (
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: '1rem' }}>
+          <div className="glass-panel modal-content" style={{ width: '100%', maxWidth: '600px', maxHeight: '85vh', overflowY: 'auto', borderRadius: '16px', background: 'var(--paper)', border: '1px solid var(--line)', padding: '1.75rem', borderTop: '4px solid var(--gold-deep)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--line)' }}>
+              <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700 }}>Lead Upload Execution Summary</h3>
+              <button onClick={() => setShowManualUploadResultModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={20} /></button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem', marginBottom: '1.25rem' }}>
+              <div style={{ background: 'var(--paper-2)', padding: '0.85rem', borderRadius: '8px', textAlign: 'center', border: '1px solid var(--line)' }}>
+                <div style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>Total Rows</div>
+                <div style={{ fontSize: '1.4rem', fontWeight: 800 }}>{manualUploadResult.total}</div>
+              </div>
+              <div style={{ background: 'rgba(46, 160, 67, 0.12)', padding: '0.85rem', borderRadius: '8px', textAlign: 'center', border: '1px solid rgba(46, 160, 67, 0.25)' }}>
+                <div style={{ fontSize: '0.75rem', color: '#2ea043' }}>Created Leads</div>
+                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#2ea043' }}>{manualUploadResult.created}</div>
+              </div>
+              <div style={{ background: 'rgba(219, 53, 69, 0.12)', padding: '0.85rem', borderRadius: '8px', textAlign: 'center', border: '1px solid rgba(219, 53, 69, 0.25)' }}>
+                <div style={{ fontSize: '0.75rem', color: '#dc3545' }}>Rejected Rows</div>
+                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#dc3545' }}>{manualUploadResult.failed}</div>
+              </div>
+            </div>
+
+            {manualUploadResult.errors && manualUploadResult.errors.length > 0 && (
+              <div>
+                <h4 style={{ fontSize: '0.9rem', color: '#dc3545', marginBottom: '0.5rem', fontWeight: 700 }}>Rejected Rows & Validation Log:</h4>
+                <div style={{ background: 'var(--paper-2)', border: '1px solid var(--line)', borderRadius: '8px', padding: '0.75rem', maxHeight: '180px', overflowY: 'auto', fontSize: '0.78rem', fontFamily: 'monospace' }}>
+                  {manualUploadResult.errors.map((err, i) => (
+                    <div key={i} style={{ marginBottom: '0.35rem', color: '#dc3545' }}>• {err}</div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
+              <button onClick={() => setShowManualUploadResultModal(false)} className="btn-primary" style={{ background: 'var(--gold-deep)', color: '#fff' }}>Done</button>
+            </div>
           </div>
         </div>
       )}

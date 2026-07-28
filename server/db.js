@@ -308,6 +308,8 @@ async function initPgSchema() {
     } catch (migErr) {}
     try {
       await client.query("ALTER TABLE agents ADD COLUMN IF NOT EXISTS assigned_bank VARCHAR(255)");
+      await client.query("ALTER TABLE agents ADD COLUMN IF NOT EXISTS can_create_leads BOOLEAN DEFAULT FALSE");
+      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS application_id VARCHAR(100)");
     } catch (migErr) {}
 
     // Performance indexes for dashboard queries
@@ -887,7 +889,7 @@ const db = {
     const values = [];
     let idx = 1;
     for (const [key, val] of Object.entries(agentData)) {
-      if (['name', 'phone', 'email', 'username', 'password_hash', 'status', 'assigned_bank'].includes(key)) {
+      if (['name', 'phone', 'email', 'username', 'password_hash', 'status', 'assigned_bank', 'can_create_leads'].includes(key)) {
         fields.push(`${key} = $${idx++}`);
         values.push(val);
       } else if (key === 'locations') {
@@ -910,6 +912,21 @@ const db = {
 
   async getAgentById(id) {
     const res = await pool.query('SELECT * FROM agents WHERE id = $1 LIMIT 1', [id]);
+    if (res.rows.length === 0) return null;
+    const row = res.rows[0];
+    return {
+      ...row,
+      locations: typeof row.locations === 'string' ? JSON.parse(row.locations) : (row.locations || [])
+    };
+  },
+
+  async getAgentByIdOrUsername(identifier) {
+    if (!identifier) return null;
+    const clean = String(identifier).trim().toLowerCase();
+    const res = await pool.query(
+      'SELECT * FROM agents WHERE LOWER(id) = $1 OR LOWER(username) = $1 OR LOWER(name) = $1 LIMIT 1',
+      [clean]
+    );
     if (res.rows.length === 0) return null;
     const row = res.rows[0];
     return {

@@ -17,6 +17,7 @@ const db = require('./db');
 const baileys = require('./baileys');
 const multer = require('multer');
 const xlsx = require('xlsx');
+const ExcelJS = require('exceljs');
 const pdfParse = require('pdf-parse');
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -2586,6 +2587,870 @@ app.get('/api/leads/mis-stats', authenticateToken, requireAdmin, async (req, res
   misStatsCache = stats;
   misStatsCacheTime = now;
   res.json(stats);
+});
+
+async function canUserCreateLeads(user) {
+  if (!user) return false;
+  if (user.role === 'admin' && user.canDelete) return true;
+  if (user.role === 'agent' && user.id) {
+    const agent = await db.getAgentById(user.id);
+    return agent && agent.status === 'active' && !!agent.can_create_leads;
+  }
+  return false;
+}
+
+// Universal Date Parser (handles JS Date, Excel Serial, YYYY-MM-DD, DD-MM-YYYY, DD/MM/YYYY)
+function parseAnyDate(val) {
+  if (!val) return null;
+
+  if (val instanceof Date) {
+    return isNaN(val.getTime()) ? null : val;
+  }
+
+  // Handle numeric Excel serial date (e.g. 38452 or 38452.5)
+  if (typeof val === 'number' || (typeof val === 'string' && /^\d+(\.\d+)?$/.test(val.trim()))) {
+    const serial = parseFloat(val);
+    if (serial > 1000 && serial < 100000) {
+      // Excel epoch is Dec 30 1899
+      const utc_days = Math.floor(serial - 25569);
+      const utc_value = utc_days * 86400;
+      return new Date(utc_value * 1000);
+    }
+  }
+
+  const str = String(val).trim();
+  if (!str) return null;
+
+  // Handle YYYY-MM-DD
+  if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(str)) {
+    const [y, m, d] = str.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  }
+
+  // Handle DD-MM-YYYY or DD/MM/YYYY
+  if (/^\d{1,2}[-\/]\d{1,2}[-\/]\d{4}$/.test(str)) {
+    const parts = str.split(/[-\/]/).map(Number);
+    const day = parts[0];
+    const month = parts[1];
+    const year = parts[2];
+    return new Date(year, month - 1, day);
+  }
+
+  // Fallback standard Date parse
+  const parsed = new Date(str);
+  return isNaN(parsed.getTime()) ? null : parsed;
+}
+
+// Calculate applicant age accurately
+function calculateApplicantAge(dobVal) {
+  const birthDate = parseAnyDate(dobVal);
+  if (!birthDate || isNaN(birthDate.getTime())) return -1;
+
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDiff = today.getMonth() - birthDate.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+  return age;
+}
+
+// Download Leads Upload Template (.xlsx) with ExcelJS, Dynamic Card Dropdown, Landing Page Validations & 2nd Sheet Guidelines
+app.get('/api/leads/download-template', async (req, res) => {
+  try {
+    const workbook = new ExcelJS.Workbook();
+    
+    // Sheet 1: Leads Template
+    const worksheet = workbook.addWorksheet('Leads Template');
+
+    // Fetch active agents and cards from DB for dropdowns
+    const agents = await db.getAgents();
+    const cards = await db.getCards();
+
+    // Map strictly by Agent Code / ID (e.g., ag_01, FIDR30, lakshay) - EXCLUDE phone numbers
+    const agentIdentifiers = agents
+      .map(a => {
+        const uname = (a.username || '').trim();
+        const aid = (a.id || '').trim();
+        if (uname && !/^[6-9]\d{9}$/.test(uname)) return uname;
+        if (aid && !/^[6-9]\d{9}$/.test(aid)) return aid;
+        return uname || aid;
+      })
+      .filter(id => id && !/^[6-9]\d{9}$/.test(id));
+
+    const agentDropdown = agentIdentifiers.length > 0 ? agentIdentifiers.join(',') : 'ag_01,ag_02,FIDR30,lakshay';
+
+    const cardNames = cards.map(c => c.name).filter(Boolean);
+    const cardDropdown = cardNames.length > 0 ? cardNames.join(',') : 'HDFC Pixel Credit Card,SBI SimplyCLICK,AU Altura,YES Bank CC';
+
+    worksheet.columns = [
+      { header: 'Application ID', key: 'application_id', width: 18 },
+      { header: 'Full Name', key: 'full_name', width: 22 },
+      { header: 'Phone', key: 'phone', width: 16 },
+      { header: 'Email', key: 'email', width: 26 },
+      { header: 'PAN Number', key: 'pan_no', width: 16 },
+      { header: 'Date of Birth', key: 'dob', width: 15 },
+      { header: 'Mother Name', key: 'mother_name', width: 20 },
+      { header: 'Current Address', key: 'current_address', width: 45 },
+      { header: 'Pincode', key: 'pincode', width: 12 },
+      { header: 'Employment', key: 'employment', width: 16 },
+      { header: 'Designation', key: 'designation', width: 20 },
+      { header: 'Company Name', key: 'company_name', width: 22 },
+      { header: 'Already Has Credit Card', key: 'has_credit_card', width: 24 },
+      { header: 'Net Monthly Income', key: 'monthly_income', width: 20 },
+      { header: 'Income Range', key: 'income_range', width: 15 },
+      { header: 'Agent ID', key: 'agent_id', width: 18 },
+      { header: 'Card Name', key: 'card_name', width: 28 },
+      { header: 'Consent', key: 'consent', width: 12 }
+    ];
+
+    // Single fixed sample data row
+    worksheet.addRow({
+      application_id: 'APP100293',
+      full_name: 'Harsh Deep',
+      phone: '8708569574',
+      email: 'harshdeep301@icloud.com',
+      pan_no: 'BOGPH7116K',
+      dob: '2004-07-14',
+      mother_name: 'Harsh Deep',
+      current_address: 'Shiv c, Colony ward no 17, Safidon City, Jind, Haryana - 126112',
+      pincode: '126112',
+      employment: 'Salaried',
+      designation: 'Student',
+      company_name: 'N/A',
+      has_credit_card: 'No',
+      monthly_income: '35000',
+      income_range: '3-6 LPA',
+      agent_id: agentIdentifiers[0] || 'ag_01',
+      card_name: cardNames[0] || 'Public Redirection',
+      consent: 'Yes'
+    });
+
+    // Style Header Row (Row 1)
+    const headerRow = worksheet.getRow(1);
+    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+    headerRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF1E293B' } // Dark Slate Navy
+    };
+    headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+    headerRow.height = 26;
+
+    // Style Sample Data Row (Row 2)
+    const sampleRow = worksheet.getRow(2);
+    sampleRow.font = { size: 10, color: { argb: 'FF0F172A' } };
+    sampleRow.alignment = { vertical: 'middle', horizontal: 'left' };
+
+    // Apply Data Validations (Dropdowns) for Rows 2 to 500
+    for (let r = 2; r <= 500; r++) {
+      // Employment Dropdown (Col J: 10)
+      worksheet.getCell(`J${r}`).dataValidation = {
+        type: 'list',
+        allowBlank: true,
+        formulae: ['"Salaried,Self-Employed,Business"'],
+        showErrorMessage: true,
+        errorTitle: 'Invalid Employment Type',
+        error: 'Please select Salaried, Self-Employed, or Business.'
+      };
+
+      // Already Has Credit Card Dropdown (Col M: 13)
+      worksheet.getCell(`M${r}`).dataValidation = {
+        type: 'list',
+        allowBlank: true,
+        formulae: ['"Yes,No"'],
+        showErrorMessage: true,
+        errorTitle: 'Invalid Selection',
+        error: 'Please select Yes or No.'
+      };
+
+      // Income Range Dropdown (Col O: 15)
+      worksheet.getCell(`O${r}`).dataValidation = {
+        type: 'list',
+        allowBlank: true,
+        formulae: ['"< 3 LPA,3-6 LPA,6-10 LPA,10+ LPA"'],
+        showErrorMessage: true,
+        errorTitle: 'Invalid Income Range',
+        error: 'Please select a valid income bracket.'
+      };
+
+      // Agent ID Dropdown (Col P: 16)
+      worksheet.getCell(`P${r}`).dataValidation = {
+        type: 'list',
+        allowBlank: true,
+        formulae: [`"${agentDropdown}"`],
+        showErrorMessage: true,
+        errorTitle: 'Invalid Agent ID',
+        error: 'Agent ID must be a valid registered Agent Code / ID in database.'
+      };
+
+      // Card Name Dropdown (Col Q: 17)
+      worksheet.getCell(`Q${r}`).dataValidation = {
+        type: 'list',
+        allowBlank: true,
+        formulae: [`"${cardDropdown}"`],
+        showErrorMessage: true,
+        errorTitle: 'Invalid Card Name',
+        error: 'Please select a valid credit card offer from database.'
+      };
+
+      // Consent Dropdown (Col R: 18)
+      worksheet.getCell(`R${r}`).dataValidation = {
+        type: 'list',
+        allowBlank: true,
+        formulae: ['"Yes,No"'],
+        showErrorMessage: true,
+        errorTitle: 'Invalid Selection',
+        error: 'Please select Yes or No.'
+      };
+    }
+
+    // ==========================================
+    // Sheet 2: Upload Guidelines & Rules
+    // ==========================================
+    const guideSheet = workbook.addWorksheet('Upload Guidelines & Rules');
+
+    // Title Row
+    guideSheet.mergeCells('A1:E1');
+    const titleCell = guideSheet.getCell('A1');
+    titleCell.value = '📋 FINMANTRA AGENT BULK LEAD UPLOAD — COMPLIANCE & VALIDATION GUIDE';
+    titleCell.font = { bold: true, size: 13, color: { argb: 'FFFFFFFF' } };
+    titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
+    titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
+    guideSheet.getRow(1).height = 34;
+
+    // Subtitle
+    guideSheet.mergeCells('A2:E2');
+    const subCell = guideSheet.getCell('A2');
+    subCell.value = 'Rules mirror all FinMantra landing page validations. Non-compliant rows will be rejected automatically.';
+    subCell.font = { italic: true, size: 9.5, color: { argb: 'FF475569' } };
+    guideSheet.getRow(2).height = 20;
+
+    // Section 1 Header: Landing Page Field Validations
+    guideSheet.mergeCells('A4:E4');
+    const sec1 = guideSheet.getCell('A4');
+    sec1.value = '1. LANDING PAGE FORM FIELD VALIDATION STANDARDS';
+    sec1.font = { bold: true, size: 10.5, color: { argb: 'FFFFFFFF' } };
+    sec1.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
+    guideSheet.getRow(4).height = 24;
+
+    const regHeaders = ['Field Name', 'Required / Optional', 'Validation Rule & Casing', 'Valid Example', 'Action on Violation'];
+    guideSheet.getRow(5).values = regHeaders;
+    const r5 = guideSheet.getRow(5);
+    r5.font = { bold: true, color: { argb: 'FF0F172A' } };
+    r5.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+    guideSheet.getRow(5).height = 22;
+
+    const rules = [
+      ['Full Name', 'Mandatory', 'Letters & spaces only. Must contain at least 2 words (First + Last Name as per PAN).', 'Harsh Deep', 'Row REJECTED'],
+      ['Phone', 'Mandatory', 'Exactly 10 numeric digits starting with 6, 7, 8, or 9. No country code (+91 / 0).', '8708569574', 'Row REJECTED'],
+      ['PAN Number', 'Optional', '10 uppercase alphanumeric characters (5 Letters + 4 Digits + 1 Letter).', 'BOGPH7116K', 'Row REJECTED if malformed'],
+      ['Date of Birth', 'Optional', 'Format YYYY-MM-DD or DD-MM-YYYY. Applicant age MUST be between 21 and 70 years old.', '2004-07-14', 'Row REJECTED if age <21 or >70'],
+      ['Pincode', 'Optional', 'Exactly 6 numeric digits.', '126112', 'Row REJECTED if invalid length'],
+      ['Net Monthly Income', 'Optional', 'Numeric value in ₹. Recommended range ₹25,000 to ₹10,00,000/month.', '35000', 'Flagged if < 25k'],
+      ['Agent ID', 'Mandatory', 'Must match an active registered Agent Code / ID in DB (NOT Phone Number).', 'ag_01', 'Row REJECTED if invalid or Phone used'],
+      ['Card Name', 'Mandatory', 'Must be selected from active database credit card offers catalog.', 'Public Redirection', 'Auto-Aligns Card Bank & Link']
+    ];
+
+    rules.forEach((row) => {
+      guideSheet.addRow(row);
+    });
+
+    // Section 2 Header: DOs and DON'Ts Table
+    guideSheet.addRow([]);
+    const dosRowIdx = guideSheet.rowCount + 1;
+    guideSheet.mergeCells(`A${dosRowIdx}:E${dosRowIdx}`);
+    const sec2 = guideSheet.getCell(`A${dosRowIdx}`);
+    sec2.value = '2. DOs & DON\'Ts FOR AGENT LEAD FILE PREPARATION';
+    sec2.font = { bold: true, size: 10.5, color: { argb: 'FFFFFFFF' } };
+    sec2.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
+    guideSheet.getRow(dosRowIdx).height = 24;
+
+    const dosHeaderIdx = dosRowIdx + 1;
+    guideSheet.getRow(dosHeaderIdx).values = ['Category', 'DO (Recommended Action)', 'DON\'T (Prohibited Action)'];
+    const rDos = guideSheet.getRow(dosHeaderIdx);
+    rDos.font = { bold: true, color: { argb: 'FF0F172A' } };
+    rDos.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+    guideSheet.getRow(dosHeaderIdx).height = 22;
+
+    const dosAndDonts = [
+      ['Agent ID', 'Use Agent Code / ID (e.g. ag_01, lakshay, FIDR30) from the dropdown.', 'Do NOT enter Agent Phone Numbers into Agent ID column.'],
+      ['Full Name', 'Enter complete First and Last Name matching PAN card (e.g. Harsh Deep).', 'Do NOT enter single names (e.g. Rahul) or numbers.'],
+      ['Mobile Number', 'Enter 10 digits starting with 6, 7, 8, or 9 (e.g. 8708569574).', 'Do NOT add +91, leading 0, spaces, or hyphens.'],
+      ['Card Selection', 'Select Card Name from dropdown list populated from database cards.', 'Do NOT enter custom unapproved card names.'],
+      ['Date of Birth', 'Ensure applicant is between 21 and 70 years of age.', 'Do NOT submit leads for underage applicants (<21 yrs).']
+    ];
+
+    dosAndDonts.forEach(row => {
+      guideSheet.addRow(row);
+    });
+
+    // Column widths for Guidelines Sheet
+    guideSheet.getColumn(1).width = 18;
+    guideSheet.getColumn(2).width = 22;
+    guideSheet.getColumn(3).width = 65;
+    guideSheet.getColumn(4).width = 25;
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="FinMantra_Leads_Upload_Template.xlsx"');
+
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error('[Template Generator] Failed:', err);
+    res.status(500).json({ error: 'Failed to generate template' });
+  }
+});
+
+// Single Manual Lead Creation
+app.post('/api/leads/create-manual', authenticateToken, async (req, res) => {
+  const canCreate = await canUserCreateLeads(req.user);
+  if (!canCreate) {
+    return res.status(403).json({ error: 'Permission denied. Manual lead creation is restricted to Developer or authorized accounts.' });
+  }
+
+  const {
+    application_id,
+    full_name,
+    phone,
+    email,
+    city,
+    employment,
+    income_range,
+    card_id,
+    card_name,
+    card_bank,
+    agent_id,
+    pan_no,
+    dob,
+    mother_name,
+    current_address,
+    pincode,
+    designation,
+    company_name,
+    has_credit_card,
+    monthly_income,
+    consent,
+    source,
+    utm_source,
+    utm_medium,
+    utm_campaign,
+    utm_content,
+    utm_term,
+    utm_info,
+    utm_id,
+    utm_creative,
+    utm_placement,
+    landing_page,
+    redirect_url,
+    referrer,
+    fbclid
+  } = req.body;
+
+  if (!full_name || !phone) {
+    return res.status(400).json({ error: 'Full Name and 10-digit Phone Number are required.' });
+  }
+
+  const cleanPhone = String(phone).replace(/\D/g, '');
+  if (!/^[6-9]/.test(cleanPhone) || cleanPhone.length !== 10) {
+    return res.status(400).json({ error: 'Phone number must start with 6,7,8,9 and contain exactly 10 digits.' });
+  }
+
+  // Validate Agent in database
+  let targetAgent = null;
+  if (agent_id) {
+    targetAgent = await db.getAgentByIdOrUsername(agent_id);
+    if (!targetAgent) {
+      return res.status(400).json({ error: `Source Agent '${agent_id}' does not exist in database. Lead rejected.` });
+    }
+  } else if (req.user.role === 'agent') {
+    targetAgent = await db.getAgentById(req.user.id);
+  } else {
+    return res.status(400).json({ error: 'Source Agent selection is required.' });
+  }
+
+  let finalCardName = card_name || '';
+  let finalCardBank = card_bank || '';
+  if (card_id) {
+    const card = await db.getCardById(card_id);
+    if (card) {
+      finalCardName = card.name;
+      finalCardBank = card.bank;
+    }
+  }
+
+  const leadObj = {
+    full_name: full_name.trim(),
+    phone: cleanPhone,
+    email: (email || '').trim(),
+    city: city || targetAgent.locations?.[0] || 'Unknown',
+    employment: employment || 'Salaried',
+    income_range: income_range || '3-6 LPA',
+    card_id: card_id || null,
+    card_name: finalCardName,
+    card_bank: finalCardBank,
+    source: source || 'public',
+    agent_id: targetAgent.id,
+    agent_name: targetAgent.name,
+    agent_location: targetAgent.locations?.[0] || city || 'Head Office',
+    application_id: application_id ? String(application_id).trim() : null,
+    pan_no: pan_no ? String(pan_no).trim().toUpperCase() : null,
+    dob: dob ? String(dob).trim() : null,
+    mother_name: mother_name ? String(mother_name).trim() : null,
+    current_address: current_address ? String(current_address).trim() : null,
+    pincode: pincode ? String(pincode).trim() : null,
+    designation: designation ? String(designation).trim() : null,
+    company_name: company_name ? String(company_name).trim() : null,
+    has_credit_card: has_credit_card || 'No',
+    monthly_income: monthly_income ? String(monthly_income).trim() : null,
+    consent: consent !== undefined ? consent : true,
+    utm_source: utm_source || 'manual',
+    utm_medium: utm_medium || 'agent_portal',
+    utm_campaign: utm_campaign || '',
+    utm_content: utm_content || '',
+    utm_term: utm_term || '',
+    utm_info: utm_info || null,
+    utm_id: utm_id || null,
+    utm_creative: utm_creative || null,
+    utm_placement: utm_placement || null,
+    landing_page: landing_page || null,
+    redirect_url: redirect_url || null,
+    referrer: referrer || null,
+    fbclid: fbclid || null
+  };
+
+  try {
+    const savedLead = await db.addLead(leadObj);
+    invalidateMISCache();
+    broadcast({ type: 'LEADS_UPDATED' });
+    return res.json({ success: true, lead: savedLead });
+  } catch (err) {
+    console.error('[Create Lead] Error:', err);
+    return res.status(500).json({ error: 'Failed to save manual lead to database: ' + err.message });
+  }
+});
+
+// Extract and map all 30 Marketing, Attribution, & Click Identifier fields from Excel or URL query params
+function extractAndMapAllTrackingParams(r, matchedCard) {
+  const getCol = (...keys) => {
+    for (const k of keys) {
+      if (r[k] !== undefined && r[k] !== null && String(r[k]).trim() !== '') {
+        return String(r[k]).trim();
+      }
+    }
+    return '';
+  };
+
+  let utm_channel = getCol('UTM Channel', 'utm_channel');
+  let utm_medium = getCol('UTM Medium', 'utm_medium');
+  let utm_source = getCol('UTM Source', 'utm_source');
+  let utm_category = getCol('UTM Category', 'utm_category');
+  let utm_campaign = getCol('UTM Campaign', 'utm_campaign');
+  let utm_term = getCol('UTM Term', 'utm_term');
+  let utm_content = getCol('UTM Content', 'utm_content');
+  let utm_creative_format = getCol('UTM Creative Format', 'utm_creative_format');
+  let utm_info = getCol('UTM Info', 'utm_info');
+  let utm_id = getCol('UTM Campaign ID (utm_id)', 'UTM Campaign ID', 'utm_id');
+  let utm_creative = getCol('UTM Ad ID (utm_creative)', 'UTM Ad ID', 'utm_creative', 'ad_id');
+  let utm_internal = getCol('UTM Internal', 'utm_internal');
+  let utm_keyword = getCol('UTM Keyword (utm_keyword)', 'UTM Keyword', 'utm_keyword');
+  let utm_matchtype = getCol('UTM Matchtype (utm_matchtype)', 'UTM Matchtype', 'utm_matchtype');
+  let utm_network = getCol('UTM Network (utm_network)', 'UTM Network', 'utm_network');
+  let utm_placement = getCol('UTM Placement (utm_placement)', 'UTM Placement', 'utm_placement');
+  let utm_device = getCol('UTM Device (utm_device)', 'UTM Device', 'utm_device');
+  let utm_location = getCol('UTM Location (utm_location)', 'UTM Location', 'utm_location');
+
+  let landing_page = getCol('Landing Page URL', 'landing_page', 'Landing Page');
+  let redirect_url = getCol('Redirect URL', 'redirect_url');
+  let referrer = getCol('Referrer Source', 'referrer', 'Referrer');
+
+  let fbclid = getCol('FBCLID (Facebook)', 'FBCLID', 'fbclid');
+  let gclid = getCol('GCLID (Google)', 'GCLID', 'gclid');
+  let gbraid = getCol('GBRAID (Google App iOS)', 'GBRAID', 'gbraid');
+  let wbraid = getCol('WBRAID (Google App Web)', 'WBRAID', 'wbraid');
+  let gclsrc = getCol('GCLSRC (Google Click Source)', 'GCLSRC', 'gclsrc');
+  let dclid = getCol('DCLID (Google Display)', 'DCLID', 'dclid');
+  let msclkid = getCol('MSCLKID (Bing)', 'MSCLKID', 'msclkid');
+  let ttclid = getCol('TTCLID (TikTok)', 'TTCLID', 'ttclid');
+  let twclid = getCol('TWCLID (Twitter)', 'TWCLID', 'twclid');
+  let li_fat_id = getCol('LI_FAT_ID (LinkedIn)', 'LI_FAT_ID', 'li_fat_id');
+
+  if (!redirect_url && matchedCard) {
+    redirect_url = matchedCard.redirect_url || matchedCard.apply_url || '';
+  }
+
+  const parseUrlParams = (urlStr) => {
+    if (!urlStr) return;
+    try {
+      const targetStr = urlStr.startsWith('http') ? urlStr : `https://${urlStr}`;
+      const urlObj = new URL(targetStr);
+      const params = urlObj.searchParams;
+
+      if (!utm_source && params.get('utm_source')) utm_source = params.get('utm_source');
+      if (!utm_medium && params.get('utm_medium')) utm_medium = params.get('utm_medium');
+      if (!utm_campaign && params.get('utm_campaign')) utm_campaign = params.get('utm_campaign');
+      if (!utm_term && params.get('utm_term')) utm_term = params.get('utm_term');
+      if (!utm_content && params.get('utm_content')) utm_content = params.get('utm_content');
+      if (!utm_creative && (params.get('utm_creative') || params.get('ad_id'))) utm_creative = params.get('utm_creative') || params.get('ad_id');
+      if (!utm_id && params.get('utm_id')) utm_id = params.get('utm_id');
+      if (!utm_placement && params.get('utm_placement')) utm_placement = params.get('utm_placement');
+      if (!utm_internal && params.get('utm_internal')) utm_internal = params.get('utm_internal');
+      if (!utm_info && params.get('utm_info')) utm_info = params.get('utm_info');
+      if (!fbclid && params.get('fbclid')) fbclid = params.get('fbclid');
+      if (!gclid && params.get('gclid')) gclid = params.get('gclid');
+      if (!gbraid && params.get('gbraid')) gbraid = params.get('gbraid');
+      if (!wbraid && params.get('wbraid')) wbraid = params.get('wbraid');
+    } catch (e) {}
+  };
+
+  parseUrlParams(landing_page);
+  parseUrlParams(redirect_url);
+
+  if (!utm_source) utm_source = fbclid ? 'meta' : (gclid ? 'google' : 'excel_upload');
+  if (!utm_medium) utm_medium = fbclid ? 'paid_social' : (gclid ? 'cpc' : 'agent_portal');
+  if (!utm_info) utm_info = utm_medium || 'agent_portal';
+  if (!utm_channel) utm_channel = utm_medium === 'paid_social' ? 'paid_social' : (utm_medium || 'N/A');
+
+  const utm_params = {
+    utm_source: utm_source || null,
+    utm_medium: utm_medium || null,
+    utm_campaign: utm_campaign || null,
+    utm_term: utm_term || null,
+    utm_content: utm_content || null,
+    utm_channel: utm_channel || null,
+    utm_category: utm_category || null,
+    utm_info: utm_info || null,
+    utm_creative_format: utm_creative_format || null,
+    utm_id: utm_id || null,
+    utm_creative: utm_creative || null,
+    utm_internal: utm_internal || null,
+    utm_keyword: utm_keyword || null,
+    utm_matchtype: utm_matchtype || null,
+    utm_network: utm_network || null,
+    utm_placement: utm_placement || null,
+    utm_device: utm_device || null,
+    utm_location: utm_location || null,
+    landing_page: landing_page || null,
+    redirect_url: redirect_url || null,
+    referrer: referrer || null,
+    fbclid: fbclid || null,
+    gclid: gclid || null,
+    gbraid: gbraid || null,
+    wbraid: wbraid || null,
+    gclsrc: gclsrc || null,
+    dclid: dclid || null,
+    msclkid: msclkid || null,
+    ttclid: ttclid || null,
+    twclid: twclid || null,
+    li_fat_id: li_fat_id || null
+  };
+
+  return {
+    utm_channel: utm_channel || null,
+    utm_medium: utm_medium || null,
+    utm_source: utm_source || null,
+    utm_category: utm_category || null,
+    utm_campaign: utm_campaign || null,
+    utm_term: utm_term || null,
+    utm_content: utm_content || null,
+    utm_creative_format: utm_creative_format || null,
+    utm_info: utm_info || null,
+    utm_id: utm_id || null,
+    utm_creative: utm_creative || null,
+    utm_internal: utm_internal || null,
+    utm_keyword: utm_keyword || null,
+    utm_matchtype: utm_matchtype || null,
+    utm_network: utm_network || null,
+    utm_placement: utm_placement || null,
+    utm_device: utm_device || null,
+    utm_location: utm_location || null,
+    landing_page: landing_page || null,
+    redirect_url: redirect_url || null,
+    referrer: referrer || null,
+    fbclid: fbclid || null,
+    gclid: gclid || null,
+    gbraid: gbraid || null,
+    wbraid: wbraid || null,
+    gclsrc: gclsrc || null,
+    dclid: dclid || null,
+    msclkid: msclkid || null,
+    ttclid: ttclid || null,
+    twclid: twclid || null,
+    li_fat_id: li_fat_id || null,
+    utm_params
+  };
+}
+
+// Bulk Lead Upload (Accelerated via Python Pandas Micro-Engine with Native JS Fallback)
+app.post('/api/leads/upload-manual', authenticateToken, upload.single('file'), async (req, res) => {
+  const canCreate = await canUserCreateLeads(req.user);
+  if (!canCreate) {
+    return res.status(403).json({ error: 'Permission denied. Bulk lead upload is restricted.' });
+  }
+
+  if (!req.file) {
+    return res.status(400).json({ error: 'No Excel/CSV file uploaded.' });
+  }
+
+  try {
+    const allAgents = await db.getAgents();
+    const agentMapObj = {};
+    const agentMap = new Map();
+    allAgents.forEach(ag => {
+      if (ag.id) {
+        agentMapObj[ag.id.toLowerCase().trim()] = ag;
+        agentMap.set(ag.id.toLowerCase().trim(), ag);
+      }
+      if (ag.username) {
+        agentMapObj[ag.username.toLowerCase().trim()] = ag;
+        agentMap.set(ag.username.toLowerCase().trim(), ag);
+      }
+    });
+
+    const allCards = await db.getCards();
+    const cardMapObj = {};
+    const cardMap = new Map();
+    allCards.forEach(c => {
+      if (c.id) {
+        cardMapObj[c.id.toLowerCase().trim()] = c;
+        cardMap.set(c.id.toLowerCase().trim(), c);
+      }
+      if (c.name) {
+        cardMapObj[c.name.toLowerCase().trim()] = c;
+        cardMap.set(c.name.toLowerCase().trim(), c);
+      }
+    });
+
+    let validLeads = [];
+    let createdCount = 0;
+    let failedCount = 0;
+    let errors = [];
+    let totalRows = 0;
+
+    // Write file to temporary disk location for Python pandas processing
+    const ext = (req.file.originalname.split('.').pop() || 'xlsx').toLowerCase();
+    const tmpFileName = `upload_${Date.now()}_${Math.random().toString(36).substring(2)}.${ext}`;
+    const tmpFilePath = path.join(os.tmpdir(), tmpFileName);
+    fs.writeFileSync(tmpFilePath, req.file.buffer);
+
+    let pythonSuccess = false;
+
+    try {
+      const pythonScript = path.join(__dirname, 'excel_parser.py');
+      const pyResult = await new Promise((resolve, reject) => {
+        execFile('python', [
+          pythonScript,
+          tmpFilePath,
+          JSON.stringify(agentMapObj),
+          JSON.stringify(cardMapObj),
+          req.user.role || 'admin',
+          req.user.id || ''
+        ], { maxBuffer: 50 * 1024 * 1024 }, (err, stdout, stderr) => {
+          if (err) return reject(err || stderr);
+          try {
+            const parsed = JSON.parse(stdout);
+            resolve(parsed);
+          } catch (pe) {
+            reject(pe);
+          }
+        });
+      });
+
+      if (pyResult && pyResult.success) {
+        pythonSuccess = true;
+        totalRows = pyResult.total;
+        failedCount = pyResult.failed;
+        errors = pyResult.errors || [];
+        validLeads = pyResult.valid_leads || [];
+        console.log(`[Python Micro-Engine] Processed ${totalRows} rows cleanly (${validLeads.length} valid leads, ${failedCount} errors).`);
+      }
+    } catch (pyErr) {
+      console.warn('[Python Micro-Engine Warning] Falling back to Node JS parser:', pyErr.message || pyErr);
+    } finally {
+      try { if (fs.existsSync(tmpFilePath)) fs.unlinkSync(tmpFilePath); } catch (e) {}
+    }
+
+    // Fallback to Native JS parser if Python is unavailable
+    if (!pythonSuccess) {
+      const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
+      const sheetName = workbook.SheetNames[0];
+      const rows = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
+
+      if (!rows || rows.length === 0) {
+        return res.status(400).json({ error: 'Uploaded Excel/CSV file contains no data rows.' });
+      }
+
+      totalRows = rows.length;
+
+      for (let idx = 0; idx < rows.length; idx++) {
+        const r = rows[idx];
+        const rowNum = idx + 2;
+
+        const fullName = (r['Full Name'] || r['full_name'] || r['Name'] || r['name'] || '').toString().trim();
+        const rawPhone = (r['Phone'] || r['phone'] || r['Mobile'] || r['mobile'] || '').toString().trim();
+        const cleanPhone = rawPhone.replace(/\D/g, '');
+        const agentIdentifier = (r['Agent ID'] || r['agent_id'] || r['AgentsId'] || r['Source Agent'] || r['Agent'] || '').toString().trim();
+
+        if (!fullName) { failedCount++; errors.push(`Row ${rowNum}: Full Name is required.`); continue; }
+        if (!/^[a-zA-Z\s]+$/.test(fullName)) { failedCount++; errors.push(`Row ${rowNum} (${fullName}): Name must contain alphabetic characters only as per PAN card.`); continue; }
+        const nameWords = fullName.split(/\s+/).filter(Boolean);
+        if (nameWords.length < 2) { failedCount++; errors.push(`Row ${rowNum} (${fullName}): Please enter complete Name (First Name + Last Name).`); continue; }
+
+        if (!cleanPhone) { failedCount++; errors.push(`Row ${rowNum} (${fullName}): Phone number is required.`); continue; }
+        if (!/^[6-9]/.test(cleanPhone)) { failedCount++; errors.push(`Row ${rowNum} (${fullName}): Mobile number must start with 6, 7, 8, or 9.`); continue; }
+        if (cleanPhone.length !== 10) { failedCount++; errors.push(`Row ${rowNum} (${fullName}): Mobile number must be exactly 10 digits.`); continue; }
+
+        const email = (r['Email'] || r['email'] || '').toString().trim();
+        if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { failedCount++; errors.push(`Row ${rowNum} (${fullName}): Invalid email format ('${email}').`); continue; }
+
+        const panNo = (r['PAN Number'] || r['pan_no'] || r['PAN'] || '').toString().trim().toUpperCase();
+        if (panNo && !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(panNo)) { failedCount++; errors.push(`Row ${rowNum} (${fullName}): Invalid PAN card format ('${panNo}'). Must be 5 letters, 4 digits, 1 letter (e.g. ABCDE1234F).`); continue; }
+
+        const dobVal = r['Date of Birth'] || r['dob'] || r['DOB'] || '';
+        let formattedDob = null;
+        if (dobVal) {
+          const applicantAge = calculateApplicantAge(dobVal);
+          if (applicantAge === -1) { failedCount++; errors.push(`Row ${rowNum} (${fullName}): Invalid Date of Birth ('${dobVal}'). Use YYYY-MM-DD or DD-MM-YYYY.`); continue; }
+          if (applicantAge < 21 || applicantAge > 70) { failedCount++; errors.push(`Row ${rowNum} (${fullName}): Applicant age (${applicantAge} yrs) must be between 21 and 70 years old.`); continue; }
+          const dObj = parseAnyDate(dobVal);
+          if (dObj) {
+            const yyyy = dObj.getFullYear();
+            const mm = String(dObj.getMonth() + 1).padStart(2, '0');
+            const dd = String(dObj.getDate()).padStart(2, '0');
+            formattedDob = `${yyyy}-${mm}-${dd}`;
+          }
+        }
+
+        const pincode = (r['Pincode'] || r['pincode'] || '').toString().trim();
+        if (pincode && !/^\d{6}$/.test(pincode)) { failedCount++; errors.push(`Row ${rowNum} (${fullName}): Pincode must be exactly 6 numeric digits ('${pincode}').`); continue; }
+
+        const rawMonthlyInc = (r['Net Monthly Income'] || r['monthly_income'] || '').toString().trim().replace(/\D/g, '');
+        if (rawMonthlyInc) {
+          const incNum = parseInt(rawMonthlyInc, 10);
+          if (incNum < 25000 || incNum > 1000000) { failedCount++; errors.push(`Row ${rowNum} (${fullName}): Monthly income (₹${incNum}) must be between ₹25,000 and ₹10,00,000 for credit card eligibility.`); continue; }
+        }
+
+        if (agentIdentifier && /^[6-9]\d{9}$/.test(agentIdentifier) && !agentMap.has(agentIdentifier.toLowerCase())) {
+          failedCount++; errors.push(`Row ${rowNum} (${fullName}): '${agentIdentifier}' is a Phone Number. Please specify a valid Agent Code / ID (e.g. ag_01, lakshay) instead.`); continue;
+        }
+
+        let matchedAgent = null;
+        if (agentIdentifier) { matchedAgent = agentMap.get(agentIdentifier.toLowerCase()); }
+        else if (req.user.role === 'agent') { matchedAgent = agentMap.get(req.user.id.toLowerCase()); }
+
+        if (!matchedAgent) { failedCount++; errors.push(`Row ${rowNum} (${fullName}): Source Agent Code / ID '${agentIdentifier || 'Unspecified'}' does NOT exist in database. Rejected.`); continue; }
+
+        const rawCardName = (r['Card Name'] || r['card_name'] || r['Card'] || '').toString().trim();
+        let matchedCard = rawCardName ? cardMap.get(rawCardName.toLowerCase()) : null;
+        let cardId = matchedCard ? matchedCard.id : null;
+        let finalCardName = matchedCard ? matchedCard.name : rawCardName;
+        let finalCardBank = matchedCard ? matchedCard.bank : (r['Card Bank'] || r['card_bank'] || '');
+
+        const trackingData = extractAndMapAllTrackingParams(r, matchedCard);
+        const appId = (r['Application ID'] || r['application_id'] || r['App ID'] || '').toString().trim();
+
+        const leadObj = {
+          full_name: fullName,
+          phone: cleanPhone,
+          email,
+          pan_no: panNo || null,
+          dob: formattedDob || null,
+          mother_name: (r['Mother Name'] || r['mother_name'] || '').toString().trim() || null,
+          current_address: (r['Current Address'] || r['current_address'] || r['Address'] || '').toString().trim() || null,
+          pincode: pincode || null,
+          employment: (r['Employment'] || r['employment'] || 'Salaried').toString().trim(),
+          designation: (r['Designation'] || r['designation'] || '').toString().trim() || null,
+          company_name: (r['Company Name'] || r['company_name'] || r['Company'] || '').toString().trim() || null,
+          has_credit_card: (r['Already Has Credit Card'] || r['has_credit_card'] || 'No').toString().trim(),
+          monthly_income: rawMonthlyInc || null,
+          income_range: (r['Income Range'] || r['income_range'] || '3-6 LPA').toString().trim(),
+          city: matchedAgent.locations?.[0] || 'Head Office',
+          agent_id: matchedAgent.id,
+          agent_name: matchedAgent.name,
+          agent_location: matchedAgent.locations?.[0] || 'Head Office',
+          card_id: cardId,
+          card_name: finalCardName,
+          card_bank: finalCardBank,
+          source: 'agent',
+          consent: (r['Consent'] || r['consent'] || 'Yes').toString().trim().toLowerCase() !== 'no',
+          application_id: appId || null,
+          ...trackingData
+        };
+        validLeads.push(leadObj);
+      }
+    }
+
+    // Save all valid leads into DB
+    for (const leadObj of validLeads) {
+      try {
+        await db.addLead(leadObj);
+        createdCount++;
+      } catch (insertErr) {
+        failedCount++;
+        errors.push(`Lead (${leadObj.full_name}): Database insertion error - ${insertErr.message}`);
+      }
+    }
+
+    invalidateMISCache();
+    broadcast({ type: 'LEADS_UPDATED' });
+
+    return res.json({
+      success: true,
+      total: totalRows,
+      created: createdCount,
+      failed: failedCount,
+      errors
+    });
+  } catch (err) {
+    console.error('[Upload Manual Leads] Error:', err);
+    return res.status(500).json({ error: 'Failed to process Excel/CSV file: ' + err.message });
+  }
+});
+
+// Developer Agent Permissions Toggle
+app.put('/api/agents/:id/permissions', authenticateToken, requireAdmin, async (req, res) => {
+  if (!req.user.canDelete) {
+    return res.status(403).json({ error: 'Only Developer (Lakshay@123) can manage agent permissions.' });
+  }
+
+  const { can_create_leads } = req.body;
+  const agentId = req.params.id;
+
+  try {
+    const updated = await db.updateAgent(agentId, { can_create_leads: !!can_create_leads });
+    if (!updated) return res.status(404).json({ error: 'Agent not found' });
+    return res.json({ success: true, agent: updated });
+  } catch (err) {
+    console.error('[Agent Permissions] Error:', err);
+    return res.status(500).json({ error: 'Failed to update agent permissions' });
+  }
+});
+
+// Get/Set Custom Lead Template Settings
+app.get('/api/settings/lead-template', authenticateToken, async (req, res) => {
+  try {
+    const allSettings = await db.getSettings();
+    const val = allSettings ? allSettings.lead_upload_template_schema : null;
+    const data = val ? JSON.parse(val) : { headers: null, require_agent: true };
+    return res.json(data);
+  } catch(e) {
+    return res.json({ headers: null, require_agent: true });
+  }
+});
+
+app.post('/api/settings/lead-template', authenticateToken, requireAdmin, async (req, res) => {
+  if (!req.user.canDelete) {
+    return res.status(403).json({ error: 'Only Developer (Lakshay@123) can modify template settings.' });
+  }
+
+  try {
+    const { headers, require_agent } = req.body;
+    const config = { headers: headers || null, require_agent: require_agent !== undefined ? require_agent : true };
+    await db.saveSetting('lead_upload_template_schema', JSON.stringify(config));
+    return res.json({ success: true, config });
+  } catch(e) {
+    return res.status(500).json({ error: 'Failed to save template settings' });
+  }
 });
 
 // Fetch Leads (Admin or Agent)
