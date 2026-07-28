@@ -4,6 +4,11 @@ git pull origin main
 cd server && npm install && cd ..
 cd client && npm run build && cd ..
 
+# Deploy built static files to Nginx web root /var/www/finmantra
+sudo mkdir -p /var/www/finmantra
+sudo cp -r client/dist/* /var/www/finmantra/
+sudo chown -R www-data:www-data /var/www/finmantra
+
 # Ensure python3, pandas, and openpyxl are installed for ultra-fast lead & MIS processing
 if command -v python3 &>/dev/null; then
   python3 -m pip install pandas openpyxl --quiet 2>/dev/null || sudo apt-get update && sudo apt-get install -y python3-pandas python3-openpyxl 2>/dev/null || true
