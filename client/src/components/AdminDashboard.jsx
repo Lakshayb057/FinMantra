@@ -2702,24 +2702,20 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', marginLeft: 'auto', flexShrink: 0 }}>
             {activeTab === 'leads' && (
               <>
-                {(canDelete || canCreateLeads) && (
-                  <>
-                    <button 
-                      onClick={() => setShowCreateLeadModal(true)} 
-                      className="btn-primary" 
-                      style={{ padding: '0.4rem 0.85rem', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', height: '34px', borderRadius: '4px', cursor: 'pointer', whiteSpace: 'nowrap', background: 'var(--gold-deep)', color: '#fff' }}
-                    >
-                      <UserPlus size={14} /> Create Lead
-                    </button>
-                    <button 
-                      onClick={() => setShowUploadLeadsModal(true)} 
-                      className="btn-secondary" 
-                      style={{ padding: '0.4rem 0.85rem', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', height: '34px', borderRadius: '4px', cursor: 'pointer', whiteSpace: 'nowrap' }}
-                    >
-                      <FileSpreadsheet size={14} /> Upload Leads
-                    </button>
-                  </>
-                )}
+                <button 
+                  onClick={() => setShowCreateLeadModal(true)} 
+                  className="btn-primary" 
+                  style={{ padding: '0.4rem 0.85rem', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', height: '34px', borderRadius: '4px', cursor: 'pointer', whiteSpace: 'nowrap', background: 'var(--gold-deep)', color: '#fff' }}
+                >
+                  <UserPlus size={14} /> Create Lead
+                </button>
+                <button 
+                  onClick={() => setShowUploadLeadsModal(true)} 
+                  className="btn-secondary" 
+                  style={{ padding: '0.4rem 0.85rem', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', height: '34px', borderRadius: '4px', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                >
+                  <FileSpreadsheet size={14} /> Upload Leads
+                </button>
                 {canDelete && selectedLeads.length > 0 && (
                   <button onClick={handleBulkDeleteLeads} className="btn-secondary" style={{ background: 'rgba(209, 67, 67, 0.15)', color: 'var(--err)', border: '1px solid rgba(209, 67, 67, 0.2)', padding: '0.4rem 0.85rem', fontSize: '0.82rem', height: '34px', borderRadius: '2px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
                     <Trash2 size={14} /> Delete ({selectedLeads.length})
