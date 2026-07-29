@@ -127,7 +127,7 @@ def process_lead_file(file_path, agent_map, card_map, user_role='admin', user_id
         clean_phone = re.sub(r'\D', '', raw_phone)
         email = get_col('Email', 'email')
         agent_identifier = get_col('Agent ID', 'agent_id', 'AgentsId', 'Source Agent', 'Agent')
-        app_id = get_col('Application ID', 'application_id', 'App ID')
+        app_id = get_col('Application ID', 'application_id', 'App ID', 'Application No', 'application_no', 'App No', 'Application Number', 'app_number', 'App Number', 'Application Ref No', 'Appl ID', 'Ref No')
 
         # 1. Full Name Validation (Mandatory)
         if not full_name:

@@ -975,7 +975,10 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
     current_address,
     designation,
     company,
-    company_name
+    company_name,
+    application_id,
+    application_no,
+    app_id
   } = req.body;
 
   const trimmedName = full_name ? String(full_name).trim() : '';
@@ -1226,6 +1229,7 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
     current_address: current_address || null,
     designation: designation || null,
     company_name: company || company_name || null,
+    application_id: application_id || application_no || app_id || null,
     ip_address: (() => {
       let clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
       if (clientIp.includes(',')) {
@@ -3493,7 +3497,7 @@ app.post('/api/leads/upload-manual', authenticateToken, upload.single('file'), a
         let finalCardBank = matchedCard ? matchedCard.bank : (r['Card Bank'] || r['card_bank'] || '');
 
         const trackingData = extractAndMapAllTrackingParams(r, matchedCard);
-        const appId = (r['Application ID'] || r['application_id'] || r['App ID'] || '').toString().trim();
+        const appId = (r['Application ID'] || r['application_id'] || r['App ID'] || r['Application No'] || r['application_no'] || r['App No'] || r['Application Number'] || r['app_number'] || r['App Number'] || r['Application Ref No'] || r['Appl ID'] || r['Ref No'] || '').toString().trim();
 
         const leadObj = {
           full_name: fullName,

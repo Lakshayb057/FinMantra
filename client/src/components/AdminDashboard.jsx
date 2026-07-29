@@ -958,7 +958,9 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       dob: lead.dob || '',
       mother_name: lead.mother_name || '',
       current_address: lead.current_address || '',
-      designation: lead.designation || ''
+      designation: lead.designation || '',
+      company_name: lead.company_name || '',
+      application_id: lead.application_id || ''
     });
 
     const standardKeys = [
@@ -6241,6 +6243,12 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
             <h3 style={{ fontSize: '1.5rem', marginBottom: '0.2rem', color: 'hsl(var(--text-primary))' }}>Lead Details</h3>
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: 'var(--gold-deep)', marginBottom: '1.5rem', display: 'flex', gap: '1rem' }}>
               <span>URN: {selectedLeadDetails.urn}</span>
+              {selectedLeadDetails.application_id && (
+                <>
+                  <span>•</span>
+                  <span style={{ color: 'var(--mint)', fontWeight: 700 }}>App ID: {selectedLeadDetails.application_id}</span>
+                </>
+              )}
               <span>•</span>
               <span>Date: {formatDateTime(selectedLeadDetails.created_at)}</span>
             </div>
@@ -6252,6 +6260,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                   <div>
                     <h4 style={{ fontSize: '1rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.5rem', marginBottom: '0.8rem', color: 'hsl(var(--primary))' }}>Customer Details</h4>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.9rem' }}>
+                      <div><strong>Application ID:</strong> <code style={{ color: 'var(--mint)', fontWeight: 700 }}>{selectedLeadDetails.application_id || 'N/A'}</code></div>
                       <div><strong>Name:</strong> {selectedLeadDetails.full_name}</div>
                       <div><strong>Phone:</strong> +91 {selectedLeadDetails.phone}</div>
                       <div><strong>Email:</strong> {selectedLeadDetails.email}</div>
@@ -6381,6 +6390,17 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                   <div>
                     <h4 style={{ fontSize: '1rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.5rem', marginBottom: '0.8rem', color: 'hsl(var(--primary))' }}>Customer Details</h4>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>Application ID</label>
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          placeholder="e.g. APP100293"
+                          style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem', fontFamily: 'var(--font-mono)' }} 
+                          value={editLeadForm.application_id || ''} 
+                          onChange={(e) => handleEditLeadFormChange('application_id', e.target.value)} 
+                        />
+                      </div>
                       <div className="form-group" style={{ marginBottom: 0 }}>
                         <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>Name</label>
                         <input 
