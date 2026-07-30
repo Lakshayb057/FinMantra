@@ -1989,6 +1989,8 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   const dashStats = useMemo(() => {
     let approvedCount = 0, rejectedCount = 0, pendingCount = 0;
     let funnelIpa = 0, funnelKyc = 0, funnelDecision = 0, funnelActive = 0;
+    let funnelBankRef = 0, funnelCurrentState = 0, funnelWinningBank = 0;
+    let funnelSoftDecision = 0, funnelWorkFlow = 0, funnelFinalStatus = 0, funnelCardGen = 0;
     let ipaApproved = 0, ipaDeclined = 0;
     const kycDist = {}, srcDist = {}, cardTypeDist = {}, custTypeDist = {};
     const actDist = {}, pinDist = {}, prodDist = {};
