@@ -1884,7 +1884,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       const match = cards.find(c => c.name === lead.card_name);
       if (match && match.bank) return cleanBankCode(match.bank);
     }
-    return cleanBankCode(lead.card_bank) || '';
+    return cleanBankCode(lead.card_bank) || 'HDFC';
   }, [cards]);
 
   // ===== MEMOIZED LEADS DASHBOARD COMPUTATIONS =====
