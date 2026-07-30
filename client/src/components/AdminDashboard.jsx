@@ -3675,6 +3675,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                             </div>
                           </div>
                         </div>
+                      </div>
                       )}
 
                       {/* Visual 3: Bar Chart - KYC Status */}
@@ -3695,6 +3696,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                             );
                           })}
                         </div>
+                      </div>
                       )}
 
                       {/* Visual 4: Pie Chart - Source Type */}
@@ -3738,6 +3740,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                             );
                           })}
                         </div>
+                      </div>
                       )}
 
                       {/* Visual 6: Pie Chart - Customer Type */}
@@ -3762,6 +3765,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                             })}
                           </div>
                         </div>
+                      </div>
                       )}
 
                       {/* Visual 7: Bar Chart - Card Activation Status */}
@@ -3782,6 +3786,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                             );
                           })}
                         </div>
+                      </div>
                       )}
 
                       {/* Visual 8: India Map Pincode Heatmap */}
