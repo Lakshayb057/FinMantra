@@ -185,7 +185,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   const [isUploadingManualLeads, setIsUploadingManualLeads] = useState(false);
 
   // ── Database Banks & MIS Auto-Sync States ──
-  const [dbBankList, setDbBankList] = useState(['SBI', 'KIWI', 'HDFC', 'AXIS', 'ICICI', 'YES', 'IDFC', 'INDUSIND', 'AU', 'BOB', 'KOTAK', 'STANDARD CHARTERED', 'HSBC', 'FEDERAL']);
+  const [dbBankList, setDbBankList] = useState(['HDFC', 'SBI']);
   const [notifications, setNotifications] = useState([]);
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
   const [showNotifDrawer, setShowNotifDrawer] = useState(false);
@@ -251,7 +251,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   const [showManualUploadResultModal, setShowManualUploadResultModal] = useState(false);
   
   // Dashboard Filters
-  const [dashSelectedBank, setDashSelectedBank] = useState('HDFC');
+  const [dashSelectedBank, setDashSelectedBank] = useState('All');
   const [dashCreatedDate, setDashCreatedDate] = useState('');
   const [dashDateTo, setDashDateTo] = useState('');
   const [dashCardType, setDashCardType] = useState('');
@@ -1862,30 +1862,19 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   const cleanBankCode = (val) => {
     if (!val || !val.trim()) return '';
     let str = val.trim().replace(/\s+bank$/i, '').trim();
+    if (str.toUpperCase() === 'ALL') return 'ALL';
     if (str.toUpperCase().includes('KIWI')) return 'KIWI';
     if (str.toLowerCase() === 'n/a' || str.toLowerCase() === 'na') return 'N/A';
     return str.toUpperCase();
   };
 
   const getBankOptions = useCallback(() => {
-    const set = new Set(dbBankList || []);
-    if (settings && settings.card_manager_banks) {
-      settings.card_manager_banks.split(',').map(cleanBankCode).filter(Boolean).forEach(b => set.add(b));
+    if (settings && settings.card_manager_banks !== undefined && settings.card_manager_banks !== null) {
+      return settings.card_manager_banks.split(',').map(cleanBankCode).filter(Boolean);
     }
-    if (cards && Array.isArray(cards)) {
-      cards.forEach(c => {
-        const b = cleanBankCode(c.bank);
-        if (b) set.add(b);
-      });
-    }
-    if (misStats && Array.isArray(misStats.mappedLeadsList)) {
-      misStats.mappedLeadsList.forEach(l => {
-        const b = cleanBankCode(l.mis_data?.mis_bank_name || l.card_bank);
-        if (b) set.add(b);
-      });
-    }
+    const set = new Set(dbBankList || ['HDFC', 'SBI']);
     return Array.from(set).sort();
-  }, [dbBankList, settings, cards, misStats]);
+  }, [dbBankList, settings]);
 
   const getLeadBank = useCallback((lead) => {
     if (lead.mis_data && lead.mis_data.mis_bank_name) {
@@ -1972,7 +1961,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       if (dashVkycStatus && lead.mis_data?.vkyc_status !== dashVkycStatus) return false;
       if (dashAgent && lead.agent_name !== dashAgent) return false;
       if (dashSourceType && lead.mis_data?.source_type !== dashSourceType) return false;
-      if (normSelectedBank) {
+      if (normSelectedBank && normSelectedBank !== 'ALL') {
         const leadBank = getLeadBank(lead);
         if (leadBank !== normSelectedBank) return false;
       }
@@ -3381,7 +3370,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                         )}
 
                         <div style={{ display: 'inline-flex', gap: '0.25rem', padding: '2px', background: 'var(--paper-2)', borderRadius: '20px', border: '1px solid var(--line)', marginLeft: '0.5rem', flexWrap: 'wrap' }}>
-                          {getBankOptions().map((b, idx) => (
+                          {['All', ...getBankOptions()].map((b, idx) => (
                             <button key={idx} type="button" onClick={() => setDashSelectedBank(b)}
                               style={{
                                 padding: '0.25rem 0.65rem', fontSize: '0.7rem', borderRadius: '12px', border: 'none', cursor: 'pointer', fontWeight: 600,

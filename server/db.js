@@ -540,6 +540,17 @@ async function initPgSchema() {
     const cardBanksCheck = await client.query("SELECT COUNT(*) FROM settings WHERE key = 'card_manager_banks'");
     if (parseInt(cardBanksCheck.rows[0].count, 10) === 0) {
       await client.query("INSERT INTO settings (key, value) VALUES ('card_manager_banks', 'HDFC,SBI')");
+    } else {
+      const existingCardBanks = await client.query("SELECT value FROM settings WHERE key = 'card_manager_banks'");
+      if (existingCardBanks.rows.length > 0) {
+        const val = existingCardBanks.rows[0].value || '';
+        const unwanted = ['AU', 'AXIS', 'BOB', 'FEDERAL', 'HSBC', 'ICICI', 'IDFC', 'INDUSIND', 'KIWI', 'KIWI YES BANK', 'KOTAK', 'N/A', 'STANDARD CHARTERED', 'YES'];
+        const filtered = val.split(',')
+          .map(b => b.trim())
+          .filter(b => b && !unwanted.includes(b.toUpperCase()));
+        const cleanedStr = Array.from(new Set(filtered.length > 0 ? filtered : ['HDFC', 'SBI'])).join(',');
+        await client.query("UPDATE settings SET value = $1 WHERE key = 'card_manager_banks'", [cleanedStr]);
+      }
     }
     const linkedinCheck = await client.query("SELECT COUNT(*) FROM settings WHERE key = 'linkedin_partner_id'");
     if (parseInt(linkedinCheck.rows[0].count, 10) === 0) {
@@ -1209,34 +1220,14 @@ const db = {
 
   async getAllDatabaseBanks() {
     try {
-      const bankSet = new Set(['SBI', 'KIWI', 'HDFC', 'AXIS', 'ICICI', 'YES', 'IDFC', 'INDUSIND', 'AU', 'BOB', 'KOTAK', 'STANDARD CHARTERED', 'HSBC', 'FEDERAL']);
-
-      const cardBanks = await pool.query(`SELECT DISTINCT bank FROM cards WHERE bank IS NOT NULL AND bank != ''`);
-      cardBanks.rows.forEach(r => {
-        if (r.bank && r.bank.trim()) bankSet.add(r.bank.trim().toUpperCase());
-      });
-
-      const leadBanks = await pool.query(`SELECT DISTINCT card_bank FROM leads WHERE card_bank IS NOT NULL AND card_bank != ''`);
-      leadBanks.rows.forEach(r => {
-        if (r.card_bank && r.card_bank.trim()) bankSet.add(r.card_bank.trim().toUpperCase());
-      });
-
-      const misBanks = await pool.query(`SELECT DISTINCT mis_data->>'mis_bank_name' as mis_bank FROM leads WHERE mis_data->>'mis_bank_name' IS NOT NULL AND mis_data->>'mis_bank_name' != ''`);
-      misBanks.rows.forEach(r => {
-        if (r.mis_bank && r.mis_bank.trim()) bankSet.add(r.mis_bank.trim().toUpperCase());
-      });
-
       const settingsRes = await pool.query(`SELECT value FROM settings WHERE key = 'card_manager_banks'`);
       if (settingsRes.rows[0]?.value) {
-        settingsRes.rows[0].value.split(',').forEach(b => {
-          if (b && b.trim()) bankSet.add(b.trim().toUpperCase());
-        });
+        return settingsRes.rows[0].value.split(',').map(b => b.trim()).filter(Boolean).sort();
       }
-
-      return Array.from(bankSet).sort();
+      return ['HDFC', 'SBI'];
     } catch (e) {
       console.error('[DB Error] getAllDatabaseBanks failed:', e.message);
-      return ['SBI', 'KIWI', 'HDFC', 'AXIS', 'ICICI', 'YES', 'IDFC', 'INDUSIND', 'AU', 'BOB', 'KOTAK'];
+      return ['HDFC', 'SBI'];
     }
   },
 
@@ -1297,11 +1288,10 @@ const db = {
     const [totalLeadsRes, mappedLeadsListRes] = await Promise.all([
       pool.query('SELECT COUNT(*) FROM leads'),
       pool.query(`
-        SELECT id, urn, full_name, phone, mis_status, mis_mapped_at, mis_data,
+        SELECT id, urn, full_name, phone, COALESCE(mis_status, 'Pending') as mis_status, mis_mapped_at, mis_data,
                agent_name, pincode, card_bank, source
         FROM leads
-        WHERE mis_status IS NOT NULL
-        ORDER BY mis_mapped_at DESC
+        ORDER BY created_at DESC
       `)
     ]);
     const totalLeads = parseInt(totalLeadsRes.rows[0].count, 10);
