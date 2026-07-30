@@ -3504,7 +3504,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                   Loading dashboard charts...
                 </div>
               ) : (() => {
-                const { totalSubmit, approvedCount, rejectedCount, pendingCount, approvalRate, funnelIpa, funnelKyc, funnelDecision, funnelActive, ipaApproved, ipaDeclined, kycDist, srcDist, cardTypeDist, custTypeDist, actDist, prodDist, topPincodes } = dashStats;
+                const { totalSubmit, approvedCount, rejectedCount, pendingCount, approvalRate, funnelIpa, funnelKyc, funnelDecision, funnelActive, funnelBankRef, funnelCurrentState, funnelWinningBank, funnelSoftDecision, funnelWorkFlow, funnelFinalStatus, funnelCardGen, ipaApproved, ipaDeclined, kycDist, srcDist, cardTypeDist, custTypeDist, actDist, prodDist, topPincodes } = dashStats;
                 const { stateLeadCounts, maxStateLeads, topStates } = dashGeoData;
                 return (
                   <>
