@@ -251,7 +251,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   const [showManualUploadResultModal, setShowManualUploadResultModal] = useState(false);
   
   // Dashboard Filters
-  const [dashSelectedBank, setDashSelectedBank] = useState('All');
+  const [dashSelectedBank, setDashSelectedBank] = useState('');
   const [dashCreatedDate, setDashCreatedDate] = useState('');
   const [dashDateTo, setDashDateTo] = useState('');
   const [dashCardType, setDashCardType] = useState('');
@@ -1920,6 +1920,18 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
     return opts;
   }, [allMappedLeads]);
 
+  // Default dashSelectedBank
+  useEffect(() => {
+    if (!dashSelectedBank || dashSelectedBank === 'All') {
+      const opts = getBankOptions();
+      if (opts.length > 0) {
+        setDashSelectedBank(opts[0]);
+      } else {
+        setDashSelectedBank('HDFC');
+      }
+    }
+  }, [getBankOptions, dashSelectedBank]);
+
   // 3. Memoize the filtered list — only recompute when data or filters change
   const filteredMappedLeads = useMemo(() => {
     const searchLower = debouncedDashSearch ? debouncedDashSearch.toLowerCase() : '';
@@ -1964,6 +1976,10 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       if (normSelectedBank && normSelectedBank !== 'ALL') {
         const leadBank = getLeadBank(lead);
         if (leadBank !== normSelectedBank) return false;
+      } else if (!normSelectedBank || normSelectedBank === 'ALL') {
+        // Since we removed 'All', if it somehow gets here without a bank selected, we don't return all leads anymore to avoid user confusion
+        // But if we want to ensure it works, we should just return false until a bank is selected
+        return false;
       }
       return true;
     });
@@ -2063,7 +2079,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
   // 7. Active filter count
   const activeFilterCount = useMemo(() => {
-    return [dashCreatedDate, dashDateTo, dashCardType, dashState, dashKycStatus, dashIpaStatus, dashFinalDecision, dashCardName, dashCustomerType, dashCurrentStage, dashCardActivation, dashVkycStatus, dashAgent, dashSourceType, debouncedDashSearch].filter(Boolean).length + (dashSelectedBank !== 'All' ? 1 : 0);
+    return [dashCreatedDate, dashDateTo, dashCardType, dashState, dashKycStatus, dashIpaStatus, dashFinalDecision, dashCardName, dashCustomerType, dashCurrentStage, dashCardActivation, dashVkycStatus, dashAgent, dashSourceType, debouncedDashSearch].filter(Boolean).length;
   }, [dashCreatedDate, dashDateTo, dashCardType, dashState, dashKycStatus, dashIpaStatus, dashFinalDecision, dashCardName, dashCustomerType, dashCurrentStage, dashCardActivation, dashVkycStatus, dashAgent, dashSourceType, debouncedDashSearch, dashSelectedBank]);
 
   const handleSaveBanks = async (updatedBanks) => {
@@ -3370,7 +3386,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                         )}
 
                         <div style={{ display: 'inline-flex', gap: '0.25rem', padding: '2px', background: 'var(--paper-2)', borderRadius: '20px', border: '1px solid var(--line)', marginLeft: '0.5rem', flexWrap: 'wrap' }}>
-                          {['All', ...getBankOptions()].map((b, idx) => (
+                          {getBankOptions().map((b, idx) => (
                             <button key={idx} type="button" onClick={() => setDashSelectedBank(b)}
                               style={{
                                 padding: '0.25rem 0.65rem', fontSize: '0.7rem', borderRadius: '12px', border: 'none', cursor: 'pointer', fontWeight: 600,
@@ -3393,7 +3409,8 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                             setDashKycStatus(''); setDashIpaStatus(''); setDashFinalDecision(''); setDashCardName('');
                             setDashCustomerType(''); setDashCurrentStage(''); setDashCardActivation('');
                             setDashVkycStatus(''); setDashAgent(''); setDashSourceType(''); setDashSearch('');
-                            setDashSelectedBank('HDFC Bank');
+                            const opts = getBankOptions();
+                            setDashSelectedBank(opts.length > 0 ? opts[0] : 'HDFC');
                           }}
                           className="btn-secondary"
                           style={{ padding: '0.35rem 0.75rem', fontSize: '0.72rem', opacity: activeFilterCount > 0 ? 1 : 0.5 }}

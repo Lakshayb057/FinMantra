@@ -1288,10 +1288,10 @@ const db = {
     const [totalLeadsRes, mappedLeadsListRes] = await Promise.all([
       pool.query('SELECT COUNT(*) FROM leads'),
       pool.query(`
-        SELECT id, urn, full_name, phone, mis_status, mis_mapped_at, mis_data,
+        SELECT id, urn, full_name, phone, COALESCE(mis_status, 'Pending') as mis_status, mis_mapped_at, mis_data,
                agent_name, pincode, card_bank, source
         FROM leads
-        WHERE mis_status IS NOT NULL
+        WHERE mis_mapped_at IS NOT NULL
         ORDER BY mis_mapped_at DESC
       `)
     ]);
