@@ -2002,7 +2002,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       else if (l.mis_status === 'Rejected') rejectedCount++;
       else if (l.mis_status === 'Pending') pendingCount++;
 
-      // Funnel counts
+      // Funnel counts (Generic / HDFC)
       const ipaLower = String(md.ipa_status || '').toLowerCase();
       if (ipaLower.includes('approve') || ipaLower.includes('success')) { funnelIpa++; ipaApproved++; }
       if (ipaLower.includes('decline') || ipaLower.includes('reject') || ipaLower.includes('cancel')) ipaDeclined++;
@@ -2017,6 +2017,23 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
       const actLower = String(md.card_activation_status || '').toLowerCase();
       if (actLower.includes('active') || actLower === 'yes') funnelActive++;
+
+      // Funnel counts (KIWI)
+      if (md.bank_reference_number && String(md.bank_reference_number).trim() !== '') funnelBankRef++;
+      const kiwiState = String(md.current_state || '').toLowerCase();
+      if (kiwiState !== 'not_started' && kiwiState !== '') funnelCurrentState++;
+      const winning = String(md.winning_bank || '').toLowerCase();
+      if (winning === 'yes' || winning === 'au' || winning === 'pnb') funnelWinningBank++;
+
+      // Funnel counts (SBI)
+      const sdType = String(md.SOFT_DECISION_TYPE || '').toLowerCase();
+      if (sdType.includes('approve') || sdType.includes('pass') || sdType.includes('eligible')) funnelSoftDecision++;
+      const wfStatus = String(md.WORK_FLOW_STATUS || md.WORKFLOW_STATUS || md.STATUS || '').toLowerCase();
+      if (wfStatus && wfStatus !== 'pending' && wfStatus !== 'null') funnelWorkFlow++;
+      const finalStatus = String(md.FINAL_STATUS || md.FINAL_DECISION || '').toLowerCase();
+      if (finalStatus.includes('approve') || finalStatus.includes('success')) funnelFinalStatus++;
+      const cardGen = String(md.CARD_GEN_STATUS || '').toLowerCase();
+      if (cardGen.includes('yes') || cardGen.includes('generated')) funnelCardGen++;
 
       // Distributions (single pass)
       const kycKey = md.kyc_status || 'Unknown';
@@ -2053,6 +2070,8 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
     return {
       totalSubmit, approvedCount, rejectedCount, pendingCount, approvalRate,
       funnelIpa, funnelKyc, funnelDecision, funnelActive,
+      funnelBankRef, funnelCurrentState, funnelWinningBank,
+      funnelSoftDecision, funnelWorkFlow, funnelFinalStatus, funnelCardGen,
       ipaApproved, ipaDeclined,
       kycDist, srcDist, cardTypeDist, custTypeDist, actDist, prodDist, topPincodes
     };
@@ -3522,13 +3541,33 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                         <div style={{ width: '100%', maxWidth: '600px', display: 'flex', justifyContent: 'center', overflowX: 'auto' }}>
                           <svg width="100%" viewBox="0 0 600 300" style={{ display: 'block', overflow: 'visible' }}>
                             {(() => {
-                              const stages = [
-                                { name: 'Total Application Submit', count: totalSubmit, pct: 100, color: 'var(--ink)' },
-                                { name: 'IPA Approved', count: funnelIpa, pct: totalSubmit > 0 ? Math.round((funnelIpa / totalSubmit) * 100) : 0, color: 'hsl(var(--primary))' },
-                                { name: 'KYC Success', count: funnelKyc, pct: totalSubmit > 0 ? Math.round((funnelKyc / totalSubmit) * 100) : 0, color: 'var(--gold-deep)' },
-                                { name: 'Final Decision (Approve)', count: funnelDecision, pct: totalSubmit > 0 ? Math.round((funnelDecision / totalSubmit) * 100) : 0, color: 'var(--mint)' },
-                                { name: 'Card Activation Status (TXN ACTIVE)', count: funnelActive, pct: totalSubmit > 0 ? Math.round((funnelActive / totalSubmit) * 100) : 0, color: '#10b981' }
-                              ];
+                              let stages = [];
+                              const b = dashSelectedBank || '';
+                              if (b === 'KIWI') {
+                                stages = [
+                                  { name: 'Total Application Submit', count: totalSubmit, pct: 100, color: 'var(--ink)' },
+                                  { name: 'Bank Reference Assigned', count: funnelBankRef, pct: totalSubmit > 0 ? Math.round((funnelBankRef / totalSubmit) * 100) : 0, color: 'hsl(var(--primary))' },
+                                  { name: 'IPA Approved / Valid State', count: funnelCurrentState, pct: totalSubmit > 0 ? Math.round((funnelCurrentState / totalSubmit) * 100) : 0, color: 'var(--gold-deep)' },
+                                  { name: 'Winning Bank Decided (YES/AU/PNB)', count: funnelWinningBank, pct: totalSubmit > 0 ? Math.round((funnelWinningBank / totalSubmit) * 100) : 0, color: 'var(--mint)' }
+                                ];
+                              } else if (b === 'SBI') {
+                                stages = [
+                                  { name: 'Total Application Submit', count: totalSubmit, pct: 100, color: 'var(--ink)' },
+                                  { name: 'Soft Decision Approved', count: funnelSoftDecision, pct: totalSubmit > 0 ? Math.round((funnelSoftDecision / totalSubmit) * 100) : 0, color: 'hsl(var(--primary))' },
+                                  { name: 'Work Flow Progress', count: funnelWorkFlow, pct: totalSubmit > 0 ? Math.round((funnelWorkFlow / totalSubmit) * 100) : 0, color: 'var(--gold-deep)' },
+                                  { name: 'Final Status Approved', count: funnelFinalStatus, pct: totalSubmit > 0 ? Math.round((funnelFinalStatus / totalSubmit) * 100) : 0, color: 'var(--mint)' },
+                                  { name: 'Card Generated', count: funnelCardGen, pct: totalSubmit > 0 ? Math.round((funnelCardGen / totalSubmit) * 100) : 0, color: '#10b981' }
+                                ];
+                              } else {
+                                // HDFC & generic
+                                stages = [
+                                  { name: 'Total Application Submit', count: totalSubmit, pct: 100, color: 'var(--ink)' },
+                                  { name: 'IPA Approved', count: funnelIpa, pct: totalSubmit > 0 ? Math.round((funnelIpa / totalSubmit) * 100) : 0, color: 'hsl(var(--primary))' },
+                                  { name: 'KYC Success', count: funnelKyc, pct: totalSubmit > 0 ? Math.round((funnelKyc / totalSubmit) * 100) : 0, color: 'var(--gold-deep)' },
+                                  { name: 'Final Decision (Approve)', count: funnelDecision, pct: totalSubmit > 0 ? Math.round((funnelDecision / totalSubmit) * 100) : 0, color: 'var(--mint)' },
+                                  { name: 'Card Activation Status (TXN ACTIVE)', count: funnelActive, pct: totalSubmit > 0 ? Math.round((funnelActive / totalSubmit) * 100) : 0, color: '#10b981' }
+                                ];
+                              }
 
                               return stages.map((stage, idx) => {
                                 const yStart = idx * 60;
@@ -3602,7 +3641,8 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                       </div>
 
                       {/* Visual 2: Pie Chart - IPA Approved vs Declined */}
-                      <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
+                      {(!dashSelectedBank || dashSelectedBank === 'HDFC') && (
+                        <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
                         <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>IPA Decision Breakdown</h4>
                         <div style={{ display: 'flex', flex: 1, alignItems: 'center', justifyContent: 'center', gap: '1.5rem' }}>
                           <svg width="120" height="120" viewBox="0 0 36 36">
@@ -3635,10 +3675,11 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                             </div>
                           </div>
                         </div>
-                      </div>
+                      )}
 
                       {/* Visual 3: Bar Chart - KYC Status */}
-                      <div className="glass-panel" style={{ padding: '1.5rem' }}>
+                      {(!dashSelectedBank || dashSelectedBank === 'HDFC') && (
+                        <div className="glass-panel" style={{ padding: '1.5rem' }}>
                         <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>KYC Status Distribution</h4>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '180px', overflowY: 'auto' }}>
                           {Object.entries(kycDist).map(([name, val], idx) => {
@@ -3654,7 +3695,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                             );
                           })}
                         </div>
-                      </div>
+                      )}
 
                       {/* Visual 4: Pie Chart - Source Type */}
                       <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
@@ -3680,7 +3721,8 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                       </div>
 
                       {/* Visual 5: Bar Chart - Card Type */}
-                      <div className="glass-panel" style={{ padding: '1.5rem' }}>
+                      {(!dashSelectedBank || dashSelectedBank === 'HDFC') && (
+                        <div className="glass-panel" style={{ padding: '1.5rem' }}>
                         <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>Card Type</h4>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                           {Object.entries(cardTypeDist).map(([name, val], idx) => {
@@ -3696,10 +3738,11 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                             );
                           })}
                         </div>
-                      </div>
+                      )}
 
                       {/* Visual 6: Pie Chart - Customer Type */}
-                      <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
+                      {(!dashSelectedBank || dashSelectedBank === 'HDFC') && (
+                        <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
                         <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>Customer Type</h4>
                         <div style={{ display: 'flex', flex: 1, alignItems: 'center', justifyContent: 'center', gap: '1.5rem' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.8rem', textAlign: 'left', width: '100%' }}>
@@ -3719,10 +3762,11 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                             })}
                           </div>
                         </div>
-                      </div>
+                      )}
 
                       {/* Visual 7: Bar Chart - Card Activation Status */}
-                      <div className="glass-panel" style={{ padding: '1.5rem' }}>
+                      {(!dashSelectedBank || dashSelectedBank === 'HDFC') && (
+                        <div className="glass-panel" style={{ padding: '1.5rem' }}>
                         <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>Card Activation Status</h4>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                           {Object.entries(actDist).map(([name, val], idx) => {
@@ -3738,7 +3782,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                             );
                           })}
                         </div>
-                      </div>
+                      )}
 
                       {/* Visual 8: India Map Pincode Heatmap */}
                       <div className="glass-panel" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', gridColumn: 'span 2' }}>
@@ -3912,25 +3956,27 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                       </div>
 
                       {/* Visual 9: Product Des / Card Name */}
-                      <div className="glass-panel" style={{ padding: '1.5rem', gridColumn: 'span 2' }}>
-                        <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>Product Description (Card Name Distribution)</h4>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
-                          {Object.entries(prodDist).map(([name, val], idx) => {
-                            const pct = totalSubmit > 0 ? (val / totalSubmit) * 100 : 0;
-                            return (
-                              <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', padding: '0.5rem', background: 'var(--paper-2)', borderRadius: '8px' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', fontWeight: 600 }}>
-                                  <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '160px' }}>{name}</span>
-                                  <span>{val}</span>
+                      {(!dashSelectedBank || dashSelectedBank === 'HDFC') && (
+                        <div className="glass-panel" style={{ padding: '1.5rem', gridColumn: 'span 2' }}>
+                          <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>Product Description (Card Name Distribution)</h4>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
+                            {Object.entries(prodDist).map(([name, val], idx) => {
+                              const pct = totalSubmit > 0 ? (val / totalSubmit) * 100 : 0;
+                              return (
+                                <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', padding: '0.5rem', background: 'var(--paper-2)', borderRadius: '8px' }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', fontWeight: 600 }}>
+                                    <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '160px' }}>{name}</span>
+                                    <span>{val}</span>
+                                  </div>
+                                  <div style={{ height: '8px', background: 'var(--line)', borderRadius: '3px', overflow: 'hidden' }}>
+                                    <div style={{ height: '100%', width: `${pct}%`, background: 'var(--gold)' }} />
+                                  </div>
                                 </div>
-                                <div style={{ height: '8px', background: 'var(--line)', borderRadius: '3px', overflow: 'hidden' }}>
-                                  <div style={{ height: '100%', width: `${pct}%`, background: 'var(--gold)' }} />
-                                </div>
-                              </div>
-                            );
-                          })}
+                              );
+                            })}
+                          </div>
                         </div>
-                      </div>
+                      )}
 
                     </div>
 
@@ -3971,13 +4017,46 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                                   style={{ cursor: 'pointer' }}
                                 />
                               </th>
-                              <th style={{ textAlign: 'left', padding: '0.75rem' }}>URN</th>
-                              <th style={{ textAlign: 'left', padding: '0.75rem' }}>Name</th>
-                              <th style={{ textAlign: 'left', padding: '0.75rem' }}>Bank Ref No</th>
-                              <th style={{ textAlign: 'left', padding: '0.75rem' }}>IPA Status</th>
-                              <th style={{ textAlign: 'left', padding: '0.75rem' }}>Submit Date</th>
-                              <th style={{ textAlign: 'left', padding: '0.75rem' }}>Final Decision</th>
-                              <th style={{ textAlign: 'left', padding: '0.75rem' }}>Mapping Date</th>
+                              {(() => {
+                                const b = dashSelectedBank || '';
+                                if (b === 'KIWI') {
+                                  return (
+                                    <>
+                                      <th style={{ textAlign: 'left', padding: '0.75rem' }}>URN</th>
+                                      <th style={{ textAlign: 'left', padding: '0.75rem' }}>Name</th>
+                                      <th style={{ textAlign: 'left', padding: '0.75rem' }}>Bank Ref No</th>
+                                      <th style={{ textAlign: 'left', padding: '0.75rem' }}>Current State</th>
+                                      <th style={{ textAlign: 'left', padding: '0.75rem' }}>Winning Bank</th>
+                                      <th style={{ textAlign: 'left', padding: '0.75rem' }}>IPA Status</th>
+                                      <th style={{ textAlign: 'left', padding: '0.75rem' }}>Mapping Date</th>
+                                    </>
+                                  );
+                                } else if (b === 'SBI') {
+                                  return (
+                                    <>
+                                      <th style={{ textAlign: 'left', padding: '0.75rem' }}>URN</th>
+                                      <th style={{ textAlign: 'left', padding: '0.75rem' }}>Name</th>
+                                      <th style={{ textAlign: 'left', padding: '0.75rem' }}>App Number</th>
+                                      <th style={{ textAlign: 'left', padding: '0.75rem' }}>Current Status</th>
+                                      <th style={{ textAlign: 'left', padding: '0.75rem' }}>Final Status</th>
+                                      <th style={{ textAlign: 'left', padding: '0.75rem' }}>Card Gen Status</th>
+                                      <th style={{ textAlign: 'left', padding: '0.75rem' }}>Mapping Date</th>
+                                    </>
+                                  );
+                                } else {
+                                  return (
+                                    <>
+                                      <th style={{ textAlign: 'left', padding: '0.75rem' }}>URN</th>
+                                      <th style={{ textAlign: 'left', padding: '0.75rem' }}>Name</th>
+                                      <th style={{ textAlign: 'left', padding: '0.75rem' }}>Bank Ref No</th>
+                                      <th style={{ textAlign: 'left', padding: '0.75rem' }}>IPA Status</th>
+                                      <th style={{ textAlign: 'left', padding: '0.75rem' }}>Submit Date</th>
+                                      <th style={{ textAlign: 'left', padding: '0.75rem' }}>Final Decision</th>
+                                      <th style={{ textAlign: 'left', padding: '0.75rem' }}>Mapping Date</th>
+                                    </>
+                                  );
+                                }
+                              })()}
                               <th style={{ textAlign: 'center', padding: '0.75rem' }}>Action</th>
                             </tr>
                           </thead>
@@ -3999,28 +4078,62 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                                       style={{ cursor: 'pointer' }}
                                     />
                                   </td>
-                                  <td style={{ padding: '0.75rem', fontFamily: 'var(--font-mono)' }}>{lead.urn}</td>
-                                  <td style={{ padding: '0.75rem', fontWeight: 600 }}>{lead.full_name}</td>
-                                  <td style={{ padding: '0.75rem', fontFamily: 'var(--font-mono)' }}>{lead.mis_data?.bank_reference_number || 'N/A'}</td>
-                                  <td style={{ padding: '0.75rem' }}>
-                                    <span className={`badge badge-${(() => {
-                                      const status = String(lead.mis_data?.ipa_status || '').toLowerCase();
-                                      if (status.includes('approve') || status.includes('success') || status.includes('active')) return 'success';
-                                      if (status.includes('decline') || status.includes('reject') || status.includes('cancel')) return 'danger';
-                                      return 'warning';
-                                    })()}`}>
-                                      {lead.mis_data?.ipa_status || 'N/A'}
-                                    </span>
-                                  </td>
-                                  <td style={{ padding: '0.75rem', fontSize: '0.75rem', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
-                                    {formatMISValue(lead.mis_data?.application_submit_date_time, 'application_submit_date_time')}
-                                  </td>
-                                  <td style={{ padding: '0.75rem' }}>
-                                    <span className={`badge badge-${lead.mis_status === 'Approved' ? 'success' : lead.mis_status === 'Rejected' ? 'danger' : 'warning'}`}>
-                                      {lead.mis_status}
-                                    </span>
-                                  </td>
-                                  <td style={{ padding: '0.75rem', fontSize: '0.75rem' }}>{formatDateTime(lead.mis_mapped_at)}</td>
+                                  {(() => {
+                                    const b = dashSelectedBank || '';
+                                    const md = lead.mis_data || {};
+                                    if (b === 'KIWI') {
+                                      return (
+                                        <>
+                                          <td style={{ padding: '0.75rem', fontFamily: 'var(--font-mono)' }}>{lead.urn}</td>
+                                          <td style={{ padding: '0.75rem', fontWeight: 600 }}>{lead.full_name}</td>
+                                          <td style={{ padding: '0.75rem', fontFamily: 'var(--font-mono)' }}>{md.bank_reference_number || 'N/A'}</td>
+                                          <td style={{ padding: '0.75rem' }}>{md.current_state || 'N/A'}</td>
+                                          <td style={{ padding: '0.75rem', fontWeight: 600 }}>{md.winning_bank || 'N/A'}</td>
+                                          <td style={{ padding: '0.75rem' }}>{md.ipa_status || 'N/A'}</td>
+                                          <td style={{ padding: '0.75rem', fontSize: '0.75rem' }}>{formatDateTime(lead.mis_mapped_at)}</td>
+                                        </>
+                                      );
+                                    } else if (b === 'SBI') {
+                                      return (
+                                        <>
+                                          <td style={{ padding: '0.75rem', fontFamily: 'var(--font-mono)' }}>{lead.urn}</td>
+                                          <td style={{ padding: '0.75rem', fontWeight: 600 }}>{lead.full_name}</td>
+                                          <td style={{ padding: '0.75rem', fontFamily: 'var(--font-mono)' }}>{md.APPLICATION_NUMBER || md.APP_NO || md.APP_ID || md.ARN || 'N/A'}</td>
+                                          <td style={{ padding: '0.75rem' }}>{md.CURRENT_STATUS || md.WORK_FLOW_STATUS || 'N/A'}</td>
+                                          <td style={{ padding: '0.75rem' }}>{md.FINAL_STATUS || md.FINAL_DECISION || 'N/A'}</td>
+                                          <td style={{ padding: '0.75rem' }}>{md.CARD_GEN_STATUS || 'N/A'}</td>
+                                          <td style={{ padding: '0.75rem', fontSize: '0.75rem' }}>{formatDateTime(lead.mis_mapped_at)}</td>
+                                        </>
+                                      );
+                                    } else {
+                                      return (
+                                        <>
+                                          <td style={{ padding: '0.75rem', fontFamily: 'var(--font-mono)' }}>{lead.urn}</td>
+                                          <td style={{ padding: '0.75rem', fontWeight: 600 }}>{lead.full_name}</td>
+                                          <td style={{ padding: '0.75rem', fontFamily: 'var(--font-mono)' }}>{md.bank_reference_number || 'N/A'}</td>
+                                          <td style={{ padding: '0.75rem' }}>
+                                            <span className={`badge badge-${(() => {
+                                              const status = String(md.ipa_status || '').toLowerCase();
+                                              if (status.includes('approve') || status.includes('success') || status.includes('active')) return 'success';
+                                              if (status.includes('decline') || status.includes('reject') || status.includes('cancel')) return 'danger';
+                                              return 'warning';
+                                            })()}`}>
+                                              {md.ipa_status || 'N/A'}
+                                            </span>
+                                          </td>
+                                          <td style={{ padding: '0.75rem', fontSize: '0.75rem', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
+                                            {formatMISValue(md.application_submit_date_time, 'application_submit_date_time')}
+                                          </td>
+                                          <td style={{ padding: '0.75rem' }}>
+                                            <span className={`badge badge-${lead.mis_status === 'Approved' ? 'success' : lead.mis_status === 'Rejected' ? 'danger' : 'warning'}`}>
+                                              {lead.mis_status || (md.final_decision ? md.final_decision : 'N/A')}
+                                            </span>
+                                          </td>
+                                          <td style={{ padding: '0.75rem', fontSize: '0.75rem' }}>{formatDateTime(lead.mis_mapped_at)}</td>
+                                        </>
+                                      );
+                                    }
+                                  })()}
                                   <td style={{ padding: '0.75rem' }}>
                                     <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
                                       <button 

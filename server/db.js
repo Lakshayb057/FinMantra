@@ -544,11 +544,11 @@ async function initPgSchema() {
       const existingCardBanks = await client.query("SELECT value FROM settings WHERE key = 'card_manager_banks'");
       if (existingCardBanks.rows.length > 0) {
         const val = existingCardBanks.rows[0].value || '';
-        const unwanted = ['AU', 'AXIS', 'BOB', 'FEDERAL', 'HSBC', 'ICICI', 'IDFC', 'INDUSIND', 'KIWI', 'KIWI YES BANK', 'KOTAK', 'N/A', 'STANDARD CHARTERED', 'YES'];
+        const unwanted = ['AU', 'AXIS', 'BOB', 'FEDERAL', 'HSBC', 'ICICI', 'IDFC', 'INDUSIND', 'KIWI YES BANK', 'KOTAK', 'N/A', 'STANDARD CHARTERED', 'YES'];
         const filtered = val.split(',')
           .map(b => b.trim())
           .filter(b => b && !unwanted.includes(b.toUpperCase()));
-        const cleanedStr = Array.from(new Set(filtered.length > 0 ? filtered : ['HDFC', 'SBI'])).join(',');
+        const cleanedStr = Array.from(new Set(filtered.length > 0 ? filtered : ['HDFC', 'SBI', 'KIWI'])).join(',');
         await client.query("UPDATE settings SET value = $1 WHERE key = 'card_manager_banks'", [cleanedStr]);
       }
     }
