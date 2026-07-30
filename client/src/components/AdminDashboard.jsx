@@ -5,7 +5,8 @@ import {
   Trash2, Download, Search, Plus, Edit, Check, X, RefreshCw, AlertCircle,
   QrCode, Smartphone, CheckCircle, Wifi, WifiOff, Eye, EyeOff, MessageSquare, Layers,
   ArrowUp, ArrowDown, MoreVertical, LogOut, Activity, Sun, Moon, LogIn,
-  TrendingUp, Upload, CheckCircle2, Filter, Database, UserPlus, FileSpreadsheet, FolderArchive, FolderDown, FileText
+  TrendingUp, Upload, CheckCircle2, Filter, Database, UserPlus, FileSpreadsheet, FolderArchive, FolderDown, FileText,
+  Bell, Mail, Key, AlertTriangle, Info
 } from 'lucide-react';
 
 const formatDateTime = (dateStr) => {
@@ -170,7 +171,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   const [showUploadMISModal, setShowUploadMISModal] = useState(false);
   const [selectedBankForMIS, setSelectedBankForMIS] = useState('');
   const [bankMisMappings, setBankMisMappings] = useState({});
-  const [selectedBankConfig, setSelectedBankConfig] = useState('');
+  const [selectedBankConfig, setSelectedBankConfig] = useState('SBI');
   const [misFile, setMisFile] = useState(null);
   const [misUploadResult, setMisUploadResult] = useState(null);
   const [showMISResultModal, setShowMISResultModal] = useState(false);
@@ -182,6 +183,31 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   const [showUploadLeadsModal, setShowUploadLeadsModal] = useState(false);
   const [isSubmittingLead, setIsSubmittingLead] = useState(false);
   const [isUploadingManualLeads, setIsUploadingManualLeads] = useState(false);
+
+  // ── Database Banks & MIS Auto-Sync States ──
+  const [dbBankList, setDbBankList] = useState(['SBI', 'KIWI', 'HDFC', 'AXIS', 'ICICI', 'YES', 'IDFC', 'INDUSIND', 'AU', 'BOB', 'KOTAK', 'STANDARD CHARTERED', 'HSBC', 'FEDERAL']);
+  const [notifications, setNotifications] = useState([]);
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0);
+  const [showNotifDrawer, setShowNotifDrawer] = useState(false);
+  const [isSyncingEmailMis, setIsSyncingEmailMis] = useState(false);
+  const [emailMisConfig, setEmailMisConfig] = useState({
+    receiver_email: 'spikemarketingsolutions25@gmail.com',
+    app_password: '',
+    sender_email: 'sstechnologies2017@gmail.com',
+    subject_keywords: ['LG MIS EOD', 'LG MIS 48Hourly', 'LG MIS Hourly'],
+    enabled: true
+  });
+  const [showEmailConfigModal, setShowEmailConfigModal] = useState(false);
+  const [emailConfigDevPass, setEmailConfigDevPass] = useState('');
+  const [emailConfigForm, setEmailConfigForm] = useState({
+    receiver_email: '',
+    app_password: '',
+    sender_email: '',
+    subject_keywords: '',
+    enabled: true
+  });
+  const [emailConfigError, setEmailConfigError] = useState('');
+  const [emailConfigSuccess, setEmailConfigSuccess] = useState('');
   const defaultCreateLeadForm = {
     application_id: '',
     full_name: '',
@@ -357,6 +383,8 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
             } else if (message.type === 'LEAD_UPDATED' || message.type === 'LEADS_UPDATED' || message.type === 'MIS_UPDATED') {
               fetchLeads(currentPage, leadsPerPage);
               if (activeTab === 'leads_dashboard' || activeTab === 'mis') fetchMISStats();
+            } else if (message.type === 'NOTIFICATION_ADDED' || message.type === 'NOTIFICATION_UPDATED') {
+              fetchNotifications();
             } else if (message.type === 'WA_STATUS_UPDATE') {
               setBaileysStatus(message.data);
             } else if (
@@ -495,11 +523,167 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
     }
   };
 
+  // ── Notification Center & Email MIS Handlers ──
+  const fetchNotifications = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await fetch('/api/notifications', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setNotifications(data.notifications || []);
+        setUnreadNotifCount(data.unreadCount || 0);
+      }
+    } catch (e) {
+      console.error('Fetch notifications error:', e);
+    }
+  }, [token]);
+
+  const markAllNotifsRead = async () => {
+    try {
+      await fetch('/api/notifications/read-all', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      fetchNotifications();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const clearAllNotifs = async () => {
+    try {
+      await fetch('/api/notifications', {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      fetchNotifications();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const fetchEmailConfig = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await fetch('/api/admin/email-mis-config', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setEmailMisConfig(data);
+        setEmailConfigForm({
+          receiver_email: data.receiver_email || '',
+          app_password: '',
+          sender_email: data.sender_email || '',
+          subject_keywords: Array.isArray(data.subject_keywords) ? data.subject_keywords.join(', ') : '',
+          enabled: data.enabled !== undefined ? data.enabled : true
+        });
+      }
+    } catch (e) {
+      console.error('Fetch email config error:', e);
+    }
+  }, [token]);
+
+  const triggerManualEmailSync = async () => {
+    setIsSyncingEmailMis(true);
+    try {
+      const res = await fetch('/api/admin/sync-email-mis', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(`🎉 SBI Email MIS Sync completed!\nProcessed Files: ${data.processedFiles}\nMapped Leads: ${data.mappedLeads}\nDuplicate Name Warnings: ${data.warnings}`);
+        fetchNotifications();
+        fetchMISStats();
+        fetchLeads(1, leadsPerPage);
+      } else {
+        alert(`❌ Email MIS Sync Info: ${data.error || data.reason || 'No new SBI MIS emails found'}`);
+      }
+    } catch (e) {
+      alert(`❌ Error connecting to server: ${e.message}`);
+    } finally {
+      setIsSyncingEmailMis(false);
+    }
+  };
+
+  const handleSaveEmailConfigSubmit = async (e) => {
+    e.preventDefault();
+    setEmailConfigError('');
+    setEmailConfigSuccess('');
+
+    if (!emailConfigDevPass) {
+      setEmailConfigError('Developer Authorization Password (Lakshay@123) is required!');
+      return;
+    }
+
+    try {
+      const keywordsArr = emailConfigForm.subject_keywords.split(',').map(k => k.trim()).filter(Boolean);
+      const res = await fetch('/api/admin/email-mis-config', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          devPassword: emailConfigDevPass,
+          receiver_email: emailConfigForm.receiver_email,
+          app_password: emailConfigForm.app_password,
+          sender_email: emailConfigForm.sender_email,
+          subject_keywords: keywordsArr,
+          enabled: emailConfigForm.enabled
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setEmailConfigSuccess('IMAP Email Settings saved successfully!');
+        fetchEmailConfig();
+        setTimeout(() => {
+          setShowEmailConfigModal(false);
+          setEmailConfigDevPass('');
+          setEmailConfigSuccess('');
+        }, 1500);
+      } else {
+        setEmailConfigError(data.error || 'Failed to save configuration');
+      }
+    } catch (err) {
+      setEmailConfigError(err.message || 'Server connection error');
+    }
+  };
+
+  const fetchDbBanks = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await fetch('/api/admin/banks', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.banks && Array.isArray(data.banks)) {
+          setDbBankList(data.banks);
+        }
+      }
+    } catch (e) {
+      console.error('Fetch DB banks error:', e);
+    }
+  }, [token]);
+
   useEffect(() => {
     if (activeTab === 'leads_dashboard' && isAuthenticated && token) {
       fetchMISStats();
     }
   }, [activeTab, isAuthenticated, token]);
+
+  useEffect(() => {
+    if (isAuthenticated && token) {
+      fetchNotifications();
+      fetchEmailConfig();
+      fetchDbBanks();
+    }
+  }, [isAuthenticated, token, fetchNotifications, fetchEmailConfig, fetchDbBanks]);
 
   const loadAllAdminData = async () => {
     setLoading(true);
@@ -1684,7 +1868,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   };
 
   const getBankOptions = useCallback(() => {
-    const set = new Set();
+    const set = new Set(dbBankList || []);
     if (settings && settings.card_manager_banks) {
       settings.card_manager_banks.split(',').map(cleanBankCode).filter(Boolean).forEach(b => set.add(b));
     }
@@ -1700,8 +1884,8 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
         if (b) set.add(b);
       });
     }
-    return Array.from(set);
-  }, [settings, cards, misStats]);
+    return Array.from(set).sort();
+  }, [dbBankList, settings, cards, misStats]);
 
   const getLeadBank = useCallback((lead) => {
     if (lead.mis_data && lead.mis_data.mis_bank_name) {
@@ -2222,6 +2406,51 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
             {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
           </button>
 
+          <button
+            onClick={() => {
+              setShowNotifDrawer(!showNotifDrawer);
+              if (!showNotifDrawer) fetchNotifications();
+            }}
+            title="Notification Center"
+            style={{
+              background: showNotifDrawer ? 'var(--paper)' : 'transparent',
+              border: showNotifDrawer ? '1px solid var(--gold)' : '1px solid transparent',
+              borderRadius: '8px',
+              padding: '0.4rem',
+              cursor: 'pointer',
+              color: showNotifDrawer ? 'var(--gold-deep)' : 'var(--muted)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              height: '34px',
+              width: '34px',
+              position: 'relative',
+              boxShadow: showNotifDrawer ? '0 4px 12px rgba(224, 168, 46, 0.15)' : 'none'
+            }}
+          >
+            <Bell size={18} />
+            {unreadNotifCount > 0 && (
+              <span style={{
+                position: 'absolute',
+                top: '0px',
+                right: '0px',
+                background: 'var(--err)',
+                color: '#fff',
+                fontSize: '0.55rem',
+                fontWeight: 800,
+                borderRadius: '50%',
+                width: '14px',
+                height: '14px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 2px 4px rgba(209, 67, 67, 0.4)'
+              }}>
+                {unreadNotifCount > 99 ? '99+' : unreadNotifCount}
+              </span>
+            )}
+          </button>
+
           <button 
             onClick={() => setShowMobileMenu(!showMobileMenu)}
             style={{
@@ -2459,6 +2688,54 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
               }}
             >
               <MapPin size={20} />
+            </button>
+
+            {/* Notification Center Bell Icon */}
+            <button
+              onClick={() => {
+                setShowNotifDrawer(!showNotifDrawer);
+                if (!showNotifDrawer) fetchNotifications();
+              }}
+              title="Notification Center"
+              className={`sidebar-icon-btn ${showNotifDrawer ? 'active' : ''}`}
+              style={{
+                width: '44px',
+                height: '44px',
+                borderRadius: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                position: 'relative',
+                border: showNotifDrawer ? '1px solid var(--gold)' : '1px solid transparent',
+                background: showNotifDrawer ? 'var(--paper)' : 'transparent',
+                color: showNotifDrawer ? 'var(--gold-deep)' : 'var(--muted)',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                boxShadow: showNotifDrawer ? '0 4px 12px rgba(224, 168, 46, 0.15)' : 'none'
+              }}
+            >
+              <Bell size={20} />
+              {unreadNotifCount > 0 && (
+                <span style={{
+                  position: 'absolute',
+                  top: '4px',
+                  right: '4px',
+                  background: 'var(--err)',
+                  color: '#fff',
+                  fontSize: '0.65rem',
+                  fontWeight: 800,
+                  borderRadius: '10px',
+                  minWidth: '18px',
+                  height: '18px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '0 4px',
+                  boxShadow: '0 2px 6px rgba(209, 67, 67, 0.4)'
+                }}>
+                  {unreadNotifCount > 99 ? '99+' : unreadNotifCount}
+                </span>
+              )}
             </button>
 
             <div 
@@ -5394,6 +5671,129 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                       Configure custom MIS parsing rules, URN character extraction columns (e.g. <code>contant</code> for YES Bank), and field mappings for each partner bank.
                     </p>
 
+                    {/* AUTOMATED SBI EMAIL MIS AUTO-SYNC CONTROL CARD */}
+                    <div style={{
+                      padding: '1.5rem',
+                      borderRadius: '16px',
+                      background: 'linear-gradient(135deg, rgba(224, 168, 46, 0.08) 0%, rgba(20, 24, 40, 0.4) 100%)',
+                      border: '1px solid rgba(224, 168, 46, 0.3)',
+                      marginBottom: '1.75rem',
+                      boxShadow: '0 8px 24px rgba(0,0,0,0.12)'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.25rem' }}>
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.35rem' }}>
+                            <Mail size={22} style={{ color: 'var(--gold-deep)' }} />
+                            <h4 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: 'var(--ink)' }}>
+                              Automated SBI Email MIS Fetcher & Real-Time Mapping Engine
+                            </h4>
+                          </div>
+                          <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--muted)' }}>
+                            Connects to Gmail via IMAP SSL, auto-downloads MIS attachments from <code>sstechnologies2017@gmail.com</code>, and maps all 44 fields in real time.
+                          </p>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.4rem',
+                            padding: '0.35rem 0.85rem',
+                            borderRadius: '20px',
+                            background: emailMisConfig.enabled ? 'rgba(16, 185, 129, 0.12)' : 'rgba(209, 67, 67, 0.12)',
+                            color: emailMisConfig.enabled ? 'var(--mint)' : 'var(--err)',
+                            fontSize: '0.78rem',
+                            fontWeight: 700,
+                            border: `1px solid ${emailMisConfig.enabled ? 'rgba(16, 185, 129, 0.3)' : 'rgba(209, 67, 67, 0.3)'}`
+                          }}>
+                            {emailMisConfig.enabled ? '🟢 Auto-Sync Active (Every 5 mins)' : '🔴 Auto-Sync Disabled'}
+                          </span>
+
+                          <button
+                            type="button"
+                            onClick={triggerManualEmailSync}
+                            disabled={isSyncingEmailMis}
+                            className="btn-primary"
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '0.5rem',
+                              padding: '0.55rem 1.1rem',
+                              fontSize: '0.85rem',
+                              background: 'var(--gold-deep)',
+                              color: '#fff',
+                              borderRadius: '10px'
+                            }}
+                          >
+                            <RefreshCw size={15} className={isSyncingEmailMis ? 'spin' : ''} />
+                            {isSyncingEmailMis ? 'Checking IMAP Emails...' : 'Sync Email MIS Now'}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Active Config Parameters Table */}
+                      <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                        gap: '1rem',
+                        background: 'var(--paper)',
+                        padding: '1rem',
+                        borderRadius: '12px',
+                        border: '1px solid var(--line)',
+                        marginBottom: '1rem'
+                      }}>
+                        <div>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--muted)', display: 'block', textTransform: 'uppercase', fontWeight: 700 }}>Receiver Email</span>
+                          <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--ink)' }}>{emailMisConfig.receiver_email}</span>
+                        </div>
+                        <div>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--muted)', display: 'block', textTransform: 'uppercase', fontWeight: 700 }}>Sender Filter</span>
+                          <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--ink)' }}>{emailMisConfig.sender_email}</span>
+                        </div>
+                        <div>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--muted)', display: 'block', textTransform: 'uppercase', fontWeight: 700 }}>Target Subjects</span>
+                          <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--gold-deep)' }}>
+                            {Array.isArray(emailMisConfig.subject_keywords) ? emailMisConfig.subject_keywords.join(', ') : 'LG MIS EOD'}
+                          </span>
+                        </div>
+                        <div>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--muted)', display: 'block', textTransform: 'uppercase', fontWeight: 700 }}>Gmail App Password</span>
+                          <span style={{ fontSize: '0.85rem', fontFamily: 'var(--font-mono)' }}>••••••••••••••••</span>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEmailConfigForm({
+                              receiver_email: emailMisConfig.receiver_email || 'spikemarketingsolutions25@gmail.com',
+                              app_password: '',
+                              sender_email: emailMisConfig.sender_email || 'sstechnologies2017@gmail.com',
+                              subject_keywords: Array.isArray(emailMisConfig.subject_keywords) ? emailMisConfig.subject_keywords.join(', ') : 'LG MIS EOD, LG MIS 48Hourly, LG MIS Hourly',
+                              enabled: emailMisConfig.enabled !== undefined ? emailMisConfig.enabled : true
+                            });
+                            setEmailConfigDevPass('');
+                            setEmailConfigError('');
+                            setEmailConfigSuccess('');
+                            setShowEmailConfigModal(true);
+                          }}
+                          className="btn-secondary"
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.4rem',
+                            padding: '0.45rem 1rem',
+                            fontSize: '0.8rem',
+                            borderColor: 'var(--gold)'
+                          }}
+                        >
+                          <Key size={14} style={{ color: 'var(--gold-deep)' }} />
+                          Configure Email & App Password (Lakshay@123)
+                        </button>
+                      </div>
+                    </div>
+
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                       <div className="glass-card" style={{ padding: '1.25rem' }}>
                         <div className="form-group" style={{ marginBottom: '1.25rem' }}>
@@ -7502,6 +7902,206 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
         </div>
       )}
       </main>
+
+{/* RIGHT SLIDE-OVER NOTIFICATION CENTER DRAWER */}
+      {showNotifDrawer && (
+        <div 
+          onClick={() => setShowNotifDrawer(false)}
+          style={{ 
+            position: 'fixed', 
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 99999999, 
+            display: 'flex', 
+            justifyContent: 'flex-end', 
+            background: 'rgba(0, 0, 0, 0.65)', 
+            backdropFilter: 'blur(6px)',
+            animation: 'fadeIn 0.2s ease'
+          }}
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            style={{ 
+              width: '100%', 
+              maxWidth: '440px', 
+              height: '100vh', 
+              background: 'var(--paper)', 
+              color: 'var(--ink)',
+              borderLeft: '1px solid var(--line)', 
+              padding: 'clamp(1rem, 4vw, 1.5rem)', 
+              boxSizing: 'border-box', 
+              display: 'flex', 
+              flexDirection: 'column', 
+              boxShadow: '-12px 0 48px rgba(0,0,0,0.7)',
+              animation: 'slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1)'
+            }}
+          >
+          {/* Header */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingBottom: '1.25rem', borderBottom: '1px solid var(--line)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: 'rgba(224, 168, 46, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#e0a82e' }}>
+                <Bell size={20} />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                <h3 style={{ margin: 0, fontSize: 'clamp(1rem, 3.5vw, 1.15rem)', fontWeight: 800, color: 'var(--ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Notification Center</h3>
+                <span style={{ fontSize: 'clamp(0.65rem, 2.5vw, 0.75rem)', color: 'var(--muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Real-time MIS Sync & System Notifications</span>
+              </div>
+            </div>
+            <button 
+              onClick={() => setShowNotifDrawer(false)} 
+              style={{ background: 'var(--paper-2)', border: 'none', borderRadius: '8px', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--muted)' }}
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          {/* Actions Bar */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', justifyContent: 'space-between', alignItems: 'center', padding: '0.85rem 0', borderBottom: '1px solid var(--line)', fontSize: '0.8rem' }}>
+            <span style={{ color: 'var(--muted)' }}>
+              {unreadNotifCount > 0 ? `${unreadNotifCount} unread notification(s)` : 'All notifications read'}
+            </span>
+            <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <button onClick={markAllNotifsRead} style={{ background: 'none', border: 'none', color: '#e0a82e', fontWeight: 700, cursor: 'pointer', fontSize: '0.8rem' }}>
+                ✓ Mark All Read
+              </button>
+              <button onClick={clearAllNotifs} style={{ background: 'none', border: 'none', color: '#f85149', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem' }}>
+                🗑 Clear All
+              </button>
+            </div>
+          </div>
+
+          {/* Notification Items List */}
+          <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.85rem', paddingTop: '1rem', paddingRight: '0.25rem' }}>
+            {notifications.length > 0 ? (
+              notifications.map(notif => {
+                const isWarn = notif.type === 'warning';
+                const isErr = notif.type === 'error';
+                const isSucc = notif.type === 'success';
+
+                const icon = isWarn ? <AlertTriangle size={18} style={{ color: '#e0a82e' }} /> :
+                             isErr ? <AlertCircle size={18} style={{ color: '#f85149' }} /> :
+                             isSucc ? <CheckCircle size={18} style={{ color: '#3fb950' }} /> :
+                             <Info size={18} style={{ color: '#58a6ff' }} />;
+
+                const borderCol = isWarn ? 'rgba(224, 168, 46, 0.35)' : isErr ? 'rgba(248, 81, 73, 0.35)' : isSucc ? 'rgba(63, 185, 80, 0.35)' : 'var(--line)';
+                const bgCol = isWarn ? 'rgba(224, 168, 46, 0.08)' : isErr ? 'rgba(248, 81, 73, 0.08)' : isSucc ? 'rgba(63, 185, 80, 0.08)' : 'var(--paper-2)';
+
+                return (
+                  <div 
+                    key={notif.id} 
+                    style={{ 
+                      padding: '1rem', 
+                      borderRadius: '12px', 
+                      background: bgCol, 
+                      border: `1px solid ${borderCol}`, 
+                      opacity: notif.is_read ? 0.7 : 1,
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
+                      <div style={{ marginTop: '2px' }}>{icon}</div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                          <span style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--ink)' }}>{notif.title}</span>
+                          <span style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>
+                            {notif.created_at ? new Date(notif.created_at).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' }) : ''}
+                          </span>
+                        </div>
+                        <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--ink)', lineHeight: '1.45' }}>{notif.message}</p>
+                        
+                        {notif.details && Object.keys(notif.details).length > 0 && (
+                          <details style={{ marginTop: '0.6rem', fontSize: '0.75rem', color: 'var(--muted)' }}>
+                            <summary style={{ cursor: 'pointer', fontWeight: 600, color: '#e0a82e' }}>▶ View Details</summary>
+                            <pre style={{ margin: '0.4rem 0 0 0', padding: '0.6rem', background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: '8px', overflowX: 'auto', fontSize: '0.72rem', color: 'var(--ink)' }}>
+                              {JSON.stringify(notif.details, null, 2)}
+                            </pre>
+                          </details>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <div style={{ textAlign: 'center', padding: '4rem 1rem', color: 'var(--muted)', fontSize: '0.88rem' }}>
+                <Bell size={32} style={{ color: 'var(--muted)', opacity: 0.5, marginBottom: '0.75rem', display: 'block', margin: '0 auto 0.75rem auto' }} />
+                No notifications recorded yet.
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+      )}
+
+      {/* EMAIL CONFIG DEVELOPER AUTHORIZATION MODAL (Password: Lakshay@123) */}
+      {showEmailConfigModal && (
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999999, padding: '1rem' }}>
+          <div className="glass-panel modal-content" style={{ width: '100%', maxWidth: '520px', borderRadius: '16px', background: 'var(--paper)', border: '1px solid var(--line)', padding: '1.75rem', borderTop: '4px solid var(--gold-deep)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--line)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Key size={20} style={{ color: 'var(--gold-deep)' }} />
+                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>Save SBI Email IMAP Config</h3>
+              </div>
+              <button onClick={() => setShowEmailConfigModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={20} /></button>
+            </div>
+
+            <form onSubmit={handleSaveEmailConfigSubmit}>
+              <div className="form-group" style={{ marginBottom: '1rem' }}>
+                <label className="form-label">Receiver Gmail Address</label>
+                <input type="email" className="form-input" value={emailConfigForm.receiver_email} onChange={(e) => setEmailConfigForm({ ...emailConfigForm, receiver_email: e.target.value })} required />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '1rem' }}>
+                <label className="form-label">Gmail App Password (Leave blank to keep existing)</label>
+                <input type="password" className="form-input" placeholder="e.g. rzoq njtq vpnt difd" value={emailConfigForm.app_password} onChange={(e) => setEmailConfigForm({ ...emailConfigForm, app_password: e.target.value })} />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '1rem' }}>
+                <label className="form-label">Sender Email Filter</label>
+                <input type="email" className="form-input" value={emailConfigForm.sender_email} onChange={(e) => setEmailConfigForm({ ...emailConfigForm, sender_email: e.target.value })} required />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+                <label className="form-label">Subject Keywords (Comma separated)</label>
+                <input type="text" className="form-input" value={emailConfigForm.subject_keywords} onChange={(e) => setEmailConfigForm({ ...emailConfigForm, subject_keywords: e.target.value })} required />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '1.5rem', background: 'rgba(224, 168, 46, 0.08)', padding: '0.85rem', borderRadius: '8px', border: '1px solid rgba(224, 168, 46, 0.25)' }}>
+                <label className="form-label" style={{ color: 'var(--gold-deep)', fontWeight: 800, marginBottom: '0.35rem' }}>
+                  🔑 Developer Password Required (Lakshay@123)
+                </label>
+                <input 
+                  type="password" 
+                  className="form-input" 
+                  placeholder="Enter Lakshay@123 password..."
+                  value={emailConfigDevPass} 
+                  onChange={(e) => setEmailConfigDevPass(e.target.value)} 
+                  required 
+                />
+              </div>
+
+              {emailConfigError && (
+                <div style={{ background: 'rgba(209, 67, 67, 0.08)', border: '1px solid rgba(209, 67, 67, 0.2)', padding: '0.75rem', borderRadius: '8px', color: 'var(--err)', fontSize: '0.82rem', marginBottom: '1rem' }}>
+                  {emailConfigError}
+                </div>
+              )}
+
+              {emailConfigSuccess && (
+                <div style={{ background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.2)', padding: '0.75rem', borderRadius: '8px', color: 'var(--mint)', fontSize: '0.82rem', marginBottom: '1rem' }}>
+                  {emailConfigSuccess}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+                <button type="button" onClick={() => setShowEmailConfigModal(false)} className="btn-secondary">Cancel</button>
+                <button type="submit" className="btn-primary" style={{ background: 'var(--gold-deep)', color: '#fff' }}>Confirm & Save Settings</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -8361,6 +8961,8 @@ function FormBuilderSettings({ settings, setSettings, showToast, token, API_URL 
           </div>
         </div>
       </div>
+
+      
     </div>
   );
 }

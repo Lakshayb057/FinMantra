@@ -234,6 +234,32 @@ async function initPgSchema() {
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS admin_notifications (
+        id VARCHAR(50) PRIMARY KEY,
+        type VARCHAR(50) DEFAULT 'info',
+        title VARCHAR(255) NOT NULL,
+        message TEXT NOT NULL,
+        details JSONB DEFAULT '{}',
+        is_read BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS processed_email_mis (
+        id VARCHAR(50) PRIMARY KEY,
+        message_uid VARCHAR(255) UNIQUE NOT NULL,
+        subject VARCHAR(255),
+        sender VARCHAR(255),
+        attachment_name VARCHAR(255),
+        total_processed INTEGER DEFAULT 0,
+        mapped_count INTEGER DEFAULT 0,
+        warning_count INTEGER DEFAULT 0,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
     
     await client.query(`
       CREATE TABLE IF NOT EXISTS otp_log (
@@ -244,6 +270,10 @@ async function initPgSchema() {
         attempts INTEGER DEFAULT 0
       )
     `);
+
+    try {
+      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS application_id VARCHAR(255)");
+    } catch (migErr) {}
 
     try {
       await client.query("UPDATE cards SET category = 'Offline' WHERE category NOT IN ('Offline', 'Digital')");
@@ -561,6 +591,10 @@ const db = {
       ...row,
       utm_params: typeof row.utm_params === 'string' ? JSON.parse(row.utm_params) : (row.utm_params || {})
     }));
+  },
+
+  async getAllLeadsUnfiltered() {
+    return this.getLeads();
   },
 
   async getLeadByUrn(urn) {
@@ -1148,6 +1182,64 @@ const db = {
     return this.getSettings();
   },
 
+  async saveSetting(key, val) {
+    try {
+      const valStr = typeof val === 'object' ? JSON.stringify(val) : String(val);
+      await pool.query(
+        `INSERT INTO settings (key, value) VALUES ($1, $2)
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+        [key, valStr]
+      );
+      return true;
+    } catch (e) {
+      console.error('[DB Error] saveSetting failed:', e.message);
+      return false;
+    }
+  },
+
+  async getSetting(key) {
+    try {
+      const res = await pool.query(`SELECT value FROM settings WHERE key = $1`, [key]);
+      return res.rows[0]?.value || null;
+    } catch (e) {
+      console.error('[DB Error] getSetting failed:', e.message);
+      return null;
+    }
+  },
+
+  async getAllDatabaseBanks() {
+    try {
+      const bankSet = new Set(['SBI', 'KIWI', 'HDFC', 'AXIS', 'ICICI', 'YES', 'IDFC', 'INDUSIND', 'AU', 'BOB', 'KOTAK', 'STANDARD CHARTERED', 'HSBC', 'FEDERAL']);
+
+      const cardBanks = await pool.query(`SELECT DISTINCT bank FROM cards WHERE bank IS NOT NULL AND bank != ''`);
+      cardBanks.rows.forEach(r => {
+        if (r.bank && r.bank.trim()) bankSet.add(r.bank.trim().toUpperCase());
+      });
+
+      const leadBanks = await pool.query(`SELECT DISTINCT card_bank FROM leads WHERE card_bank IS NOT NULL AND card_bank != ''`);
+      leadBanks.rows.forEach(r => {
+        if (r.card_bank && r.card_bank.trim()) bankSet.add(r.card_bank.trim().toUpperCase());
+      });
+
+      const misBanks = await pool.query(`SELECT DISTINCT mis_data->>'mis_bank_name' as mis_bank FROM leads WHERE mis_data->>'mis_bank_name' IS NOT NULL AND mis_data->>'mis_bank_name' != ''`);
+      misBanks.rows.forEach(r => {
+        if (r.mis_bank && r.mis_bank.trim()) bankSet.add(r.mis_bank.trim().toUpperCase());
+      });
+
+      const settingsRes = await pool.query(`SELECT value FROM settings WHERE key = 'card_manager_banks'`);
+      if (settingsRes.rows[0]?.value) {
+        settingsRes.rows[0].value.split(',').forEach(b => {
+          if (b && b.trim()) bankSet.add(b.trim().toUpperCase());
+        });
+      }
+
+      return Array.from(bankSet).sort();
+    } catch (e) {
+      console.error('[DB Error] getAllDatabaseBanks failed:', e.message);
+      return ['SBI', 'KIWI', 'HDFC', 'AXIS', 'ICICI', 'YES', 'IDFC', 'INDUSIND', 'AU', 'BOB', 'KOTAK'];
+    }
+  },
+
 
   // --- OTP Logging & Verification ---
   async saveOTP(phone, otp) {
@@ -1384,6 +1476,96 @@ const db = {
       `;
       
       await pool.query(queryText, queryParams);
+    }
+  },
+
+  // ── NOTIFICATION CENTER HELPERS ──
+  async createNotification({ type = 'info', title, message, details = {} }) {
+    try {
+      const id = 'notif_' + Math.random().toString(36).substring(2, 11);
+      const res = await pool.query(
+        `INSERT INTO admin_notifications (id, type, title, message, details, is_read, created_at)
+         VALUES ($1, $2, $3, $4, $5, FALSE, NOW())
+         RETURNING *`,
+        [id, type, title, message, JSON.stringify(details)]
+      );
+      return res.rows[0];
+    } catch (e) {
+      console.error('[DB] createNotification error:', e.message);
+      return null;
+    }
+  },
+
+  async getNotifications({ limit = 50, unreadOnly = false } = {}) {
+    try {
+      let query = `SELECT * FROM admin_notifications`;
+      const params = [];
+      if (unreadOnly) {
+        query += ` WHERE is_read = FALSE`;
+      }
+      query += ` ORDER BY created_at DESC LIMIT $1`;
+      params.push(limit);
+
+      const res = await pool.query(query, params);
+      const unreadRes = await pool.query(`SELECT COUNT(*)::int as count FROM admin_notifications WHERE is_read = FALSE`);
+
+      return {
+        notifications: res.rows.map(row => ({
+          ...row,
+          details: typeof row.details === 'string' ? JSON.parse(row.details) : (row.details || {})
+        })),
+        unreadCount: unreadRes.rows[0]?.count || 0
+      };
+    } catch (e) {
+      console.error('[DB] getNotifications error:', e.message);
+      return { notifications: [], unreadCount: 0 };
+    }
+  },
+
+  async markNotificationsRead() {
+    try {
+      await pool.query(`UPDATE admin_notifications SET is_read = TRUE WHERE is_read = FALSE`);
+      return true;
+    } catch (e) {
+      console.error('[DB] markNotificationsRead error:', e.message);
+      return false;
+    }
+  },
+
+  async clearNotifications() {
+    try {
+      await pool.query(`DELETE FROM admin_notifications`);
+      return true;
+    } catch (e) {
+      console.error('[DB] clearNotifications error:', e.message);
+      return false;
+    }
+  },
+
+  // ── PROCESSED EMAIL TRACKER HELPERS ──
+  async getProcessedEmailUids() {
+    try {
+      const res = await pool.query(`SELECT message_uid FROM processed_email_mis`);
+      return new Set(res.rows.map(r => String(r.message_uid)));
+    } catch (e) {
+      console.error('[DB] getProcessedEmailUids error:', e.message);
+      return new Set();
+    }
+  },
+
+  async saveProcessedEmailMis({ message_uid, subject, sender, attachment_name, total_processed, mapped_count, warning_count }) {
+    try {
+      const id = 'proc_email_' + Math.random().toString(36).substring(2, 11);
+      await pool.query(
+        `INSERT INTO processed_email_mis (id, message_uid, subject, sender, attachment_name, total_processed, mapped_count, warning_count, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+         ON CONFLICT (message_uid) DO NOTHING`,
+        [id, String(message_uid), subject || '', sender || '', attachment_name || '', total_processed || 0, mapped_count || 0, warning_count || 0]
+      );
+      return true;
+    } catch (e) {
+      console.error('[DB] saveProcessedEmailMis error:', e.message);
+      return false;
     }
   }
 }

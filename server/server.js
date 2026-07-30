@@ -15,6 +15,7 @@ const http = require('http');
 const WebSocket = require('ws');
 const db = require('./db');
 const baileys = require('./baileys');
+const sbiEmailFetcher = require('./sbiEmailFetcher');
 const multer = require('multer');
 const xlsx = require('xlsx');
 const ExcelJS = require('exceljs');
@@ -4395,6 +4396,105 @@ app.post('/api/pincodes/parse', authenticateToken, requireAdmin, upload.single('
   }
 });
 
+// ── AUTOMATED SBI EMAIL MIS AUTO-SYNC ENDPOINTS ──
+
+// Trigger Manual SBI Email MIS Sync (Admin Only)
+app.post('/api/admin/sync-email-mis', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const result = await sbiEmailFetcher.checkAndFetchEmails(broadcast);
+    return res.json(result);
+  } catch (err) {
+    console.error('[Manual Email MIS Sync] Error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Get SBI Email MIS Configuration (Admin Only)
+app.get('/api/admin/email-mis-config', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const config = await sbiEmailFetcher.getEmailConfig();
+    return res.json({
+      ...config,
+      app_password: config.app_password ? '••••••••••••••••' : ''
+    });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to fetch email config' });
+  }
+});
+
+// Save SBI Email MIS Configuration (Admin Only - Requires Lakshay@123 Developer Authorization)
+app.post('/api/admin/email-mis-config', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { devPassword, receiver_email, app_password, sender_email, subject_keywords, enabled } = req.body;
+    
+    // Strict Lakshay@123 password verification for changing IMAP settings
+    if (devPassword !== 'Lakshay@123' && !req.user.canDelete) {
+      return res.status(403).json({ error: 'Developer Authorization Password (Lakshay@123) is required to save Email IMAP settings.' });
+    }
+
+    const currentConfig = await sbiEmailFetcher.getEmailConfig();
+    const newConfig = {
+      receiver_email: receiver_email || currentConfig.receiver_email,
+      app_password: (app_password && !app_password.includes('••')) ? app_password : currentConfig.app_password,
+      sender_email: sender_email || currentConfig.sender_email,
+      subject_keywords: Array.isArray(subject_keywords) ? subject_keywords : currentConfig.subject_keywords,
+      enabled: enabled !== undefined ? Boolean(enabled) : currentConfig.enabled
+    };
+
+    await db.saveSetting('email_mis_config', JSON.stringify(newConfig));
+    return res.json({ success: true, config: { ...newConfig, app_password: '••••••••••••••••' } });
+  } catch (err) {
+    console.error('[Save Email Config Error]', err);
+    return res.status(500).json({ error: 'Failed to save email config' });
+  }
+});
+
+// Get All Database Banks List
+app.get('/api/admin/banks', authenticateToken, async (req, res) => {
+  try {
+    const banks = await db.getAllDatabaseBanks();
+    return res.json({ success: true, banks });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to fetch database banks' });
+  }
+});
+
+// ── ADMIN NOTIFICATION CENTER ENDPOINTS ──
+
+// Fetch Notifications (Admin & Agents)
+app.get('/api/notifications', authenticateToken, async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit, 10) || 50;
+    const unreadOnly = req.query.unreadOnly === 'true';
+    const data = await db.getNotifications({ limit, unreadOnly });
+    return res.json(data);
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to fetch notifications' });
+  }
+});
+
+// Mark All Notifications as Read
+app.post('/api/notifications/read-all', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    await db.markNotificationsRead();
+    broadcast({ type: 'NOTIFICATION_UPDATED' });
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to mark notifications read' });
+  }
+});
+
+// Clear All Notifications
+app.delete('/api/notifications', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    await db.clearNotifications();
+    broadcast({ type: 'NOTIFICATION_UPDATED' });
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to clear notifications' });
+  }
+});
+
 // Global exception and error handling middleware
 app.use((err, req, res, next) => {
   console.error('[Express Async Error Handler Exception]:', err);
@@ -4428,6 +4528,19 @@ server.listen(PORT, async () => {
       await baileys.stopBaileys();
       await baileys.initBaileys(broadcast);
     }
+
+    // Initialize SBI Email MIS Auto-Sync Poller (Runs 15s after boot, then every 1 min)
+    setTimeout(() => {
+      sbiEmailFetcher.checkAndFetchEmails(broadcast).catch(err => {
+        console.error('[SBI Email MIS Poller] Error:', err.message);
+      });
+    }, 15000);
+
+    setInterval(() => {
+      sbiEmailFetcher.checkAndFetchEmails(broadcast).catch(err => {
+        console.error('[SBI Email MIS Poller] Error:', err.message);
+      });
+    }, 1 * 60 * 1000);
   } catch (err) {
     console.error('====================================================================');
     console.error('[Database] WARNING: Server startup failed to initialize database connectivity.');
