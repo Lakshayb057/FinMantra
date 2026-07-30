@@ -3577,7 +3577,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                                 const yCenter = yStart + 30;
 
                                 const pctTop = stage.pct;
-                                const pctBottom = (idx < 4) ? stages[idx + 1].pct : Math.max(15, stage.pct * 0.7);
+                                const pctBottom = (idx < stages.length - 1) ? stages[idx + 1].pct : Math.max(15, stage.pct * 0.7);
 
                                 // Map percentage to width: range from 60px to 240px
                                 const wTop = (pctTop / 100) * 180 + 60;
