@@ -23,12 +23,16 @@ proxy_read_timeout 1800s;
 send_timeout 1800s;
 NGINX
 
-# Inject proxy_read_timeout directly into active site config if missing
+# Inject proxy_read_timeout and WebSocket headers directly into active site config if missing
 for site_file in /etc/nginx/sites-available/* /etc/nginx/sites-enabled/*; do
   if [ -f "$site_file" ]; then
     if ! grep -q "proxy_read_timeout" "$site_file"; then
       echo "Adding timeouts to $site_file"
       sudo sed -i '/proxy_pass/a \        proxy_connect_timeout 1800s;\n        proxy_send_timeout 1800s;\n        proxy_read_timeout 1800s;\n        send_timeout 1800s;' "$site_file"
+    fi
+    if ! grep -q "Upgrade \$http_upgrade" "$site_file"; then
+      echo "Adding WebSocket upgrade headers to $site_file"
+      sudo sed -i '/proxy_pass/a \        proxy_http_version 1.1;\n        proxy_set_header Upgrade $http_upgrade;\n        proxy_set_header Connection "upgrade";' "$site_file"
     fi
   fi
 done
