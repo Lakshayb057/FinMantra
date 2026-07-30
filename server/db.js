@@ -1292,6 +1292,13 @@ const db = {
                agent_name, pincode, card_bank, source
         FROM leads
         WHERE mis_mapped_at IS NOT NULL
+          AND (
+            (mis_data->>'bank_reference_number' IS NOT NULL AND mis_data->>'bank_reference_number' != '')
+            OR (mis_data->>'mapped_via' IS NOT NULL AND mis_data->>'mapped_via' != '')
+            OR (mis_data->>'current_state' IS NOT NULL AND mis_data->>'current_state' != '' AND mis_data->>'current_state' != 'NOT_STARTED')
+            OR (mis_data->>'ipa_status' IS NOT NULL AND mis_data->>'ipa_status' != '')
+            OR (mis_data->>'APPLICATION_REFERENCE_NUMBER' IS NOT NULL AND mis_data->>'APPLICATION_REFERENCE_NUMBER' != '')
+          )
         ORDER BY mis_mapped_at DESC
       `)
     ]);
