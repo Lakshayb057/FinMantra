@@ -2224,21 +2224,22 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       const prodKey = md.card_name || 'Unknown';
       prodDist[prodKey] = (prodDist[prodKey] || 0) + 1;
 
-      // SBI-specific distributions
-      const sdKey = String(md.SD_DECISION_CODE || md.SOFT_DECISION_TYPE || '').trim();
-      if (sdKey) sdDecisionDist[sdKey] = (sdDecisionDist[sdKey] || 0) + 1;
+      // SBI-specific distributions (account for 100% of leads)
+      const sdKey = String(md.SD_DECISION_CODE || md.SOFT_DECISION_TYPE || '').trim() || 'Unassigned / Pending';
+      sdDecisionDist[sdKey] = (sdDecisionDist[sdKey] || 0) + 1;
 
-      const kmKey = String(md.KYC_MODE || md.kyc_type || '').trim();
-      if (kmKey) kycModeDist[kmKey] = (kycModeDist[kmKey] || 0) + 1;
+      const kmKey = String(md.KYC_MODE || md.kyc_type || '').trim() || 'Unassigned';
+      kycModeDist[kmKey] = (kycModeDist[kmKey] || 0) + 1;
 
       const sfKey = String(md.STP_FLAG || md.stp_flag || '').trim();
-      if (sfKey) stpFlagDist[sfKey] = (stpFlagDist[sfKey] || 0) + 1;
+      const sfLabel = sfKey ? `STP: ${sfKey}` : 'STP: Unassigned';
+      stpFlagDist[sfLabel] = (stpFlagDist[sfLabel] || 0) + 1;
 
-      const fsKey = String(md.STAGE_IN_SALES24 || md.FINAL_STATUS || '').trim();
-      if (fsKey) finalStatusDist[fsKey] = (finalStatusDist[fsKey] || 0) + 1;
+      const fsKey = String(md.STAGE_IN_SALES24 || md.FINAL_STATUS || '').trim() || 'Unassigned';
+      finalStatusDist[fsKey] = (finalStatusDist[fsKey] || 0) + 1;
 
-      const drKey = String(md.DECISION_CODE_REASON1_WCP || md.reject_reason || '').trim();
-      if (drKey) decisionReasonDist[drKey] = (decisionReasonDist[drKey] || 0) + 1;
+      const drKey = String(md.DECISION_CODE_REASON1_WCP || md.reject_reason || '').trim() || 'None / Not Specified';
+      decisionReasonDist[drKey] = (decisionReasonDist[drKey] || 0) + 1;
 
       const chKey = String(md.CHANNEL || '').trim();
       if (chKey) channelDist[chKey] = (channelDist[chKey] || 0) + 1;
@@ -3376,9 +3377,9 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
 
                 {/* Filters */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.5rem', marginBottom: '0.75rem', alignItems: 'end', flexShrink: 0 }} className="filters-strip">
-                  <div style={{ position: 'relative', gridColumn: 'span 2' }}>
-                    <Search size={16} style={{ position: 'absolute', top: '11px', left: '12px', color: 'hsl(var(--text-muted))' }} />
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.85rem', alignItems: 'center', flexShrink: 0 }} className="filters-strip">
+                  <div style={{ position: 'relative', flex: '2 1 220px', minWidth: '190px' }}>
+                    <Search size={16} style={{ position: 'absolute', top: '10px', left: '12px', color: 'hsl(var(--text-muted))' }} />
                     <input 
                       type="text" 
                       placeholder="Search by name, phone, URN..." 
@@ -3388,18 +3389,18 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                       style={{ paddingLeft: '38px', height: '36px', fontSize: '0.8rem', width: '100%' }}
                     />
                   </div>
-                  <select className="form-select" value={filterCard} onChange={(e) => setFilterCard(e.target.value)} style={{ height: '36px', fontSize: '0.8rem' }}>
+                  <select className="form-select" value={filterCard} onChange={(e) => setFilterCard(e.target.value)} style={{ flex: '1 1 140px', minWidth: '125px', height: '36px', fontSize: '0.8rem', textOverflow: 'ellipsis' }}>
                     <option value="">Filter by Card</option>
                     {cards.map(c => <option key={c.id} value={c.id}>{c.bank} {c.name}</option>)}
                   </select>
-                  <select className="form-select" value={filterSource} onChange={(e) => setFilterSource(e.target.value)} style={{ height: '36px', fontSize: '0.8rem' }}>
+                  <select className="form-select" value={filterSource} onChange={(e) => setFilterSource(e.target.value)} style={{ flex: '1 1 140px', minWidth: '125px', height: '36px', fontSize: '0.8rem', textOverflow: 'ellipsis' }}>
                     <option value="">Filter by Source</option>
                     <option value="public">Public Website</option>
                     <option value="agent">Agent Walk-in</option>
                     <option value="kiwi">Kiwi Page</option>
                     <option value="simplyclick_sbi">SBI SimplyClick</option>
                   </select>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', width: '100%' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', flex: '1 1 140px', minWidth: '130px' }}>
                     <span style={{ fontSize: '0.72rem', color: 'hsl(var(--text-muted))', whiteSpace: 'nowrap' }}>From:</span>
                     <input 
                       type="date" 
@@ -3409,7 +3410,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                       style={{ fontSize: '0.75rem', padding: '0.35rem', height: '36px', width: '100%' }}
                     />
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', width: '100%' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', flex: '1 1 140px', minWidth: '130px' }}>
                     <span style={{ fontSize: '0.72rem', color: 'hsl(var(--text-muted))', whiteSpace: 'nowrap' }}>To:</span>
                     <input 
                       type="date" 
@@ -3419,22 +3420,22 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                       style={{ fontSize: '0.75rem', padding: '0.35rem', height: '36px', width: '100%' }}
                     />
                   </div>
-                  <select className="form-select" value={filterCampaign} onChange={(e) => setFilterCampaign(e.target.value)} style={{ height: '36px', fontSize: '0.8rem' }}>
+                  <select className="form-select" value={filterCampaign} onChange={(e) => setFilterCampaign(e.target.value)} style={{ flex: '1 1 140px', minWidth: '125px', height: '36px', fontSize: '0.8rem', textOverflow: 'ellipsis' }}>
                     <option value="">UTM Campaign</option>
                     {utmOptions.campaigns.map((c, i) => <option key={i} value={c}>{c}</option>)}
                   </select>
-                  <select className="form-select" value={filterTerm} onChange={(e) => setFilterTerm(e.target.value)} style={{ height: '36px', fontSize: '0.8rem' }}>
+                  <select className="form-select" value={filterTerm} onChange={(e) => setFilterTerm(e.target.value)} style={{ flex: '1 1 140px', minWidth: '125px', height: '36px', fontSize: '0.8rem', textOverflow: 'ellipsis' }}>
                     <option value="">UTM Term</option>
                     {utmOptions.terms.map((t, i) => <option key={i} value={t}>{t}</option>)}
                   </select>
-                  <select className="form-select" value={filterInfo} onChange={(e) => setFilterInfo(e.target.value)} style={{ height: '36px', fontSize: '0.8rem' }}>
+                  <select className="form-select" value={filterInfo} onChange={(e) => setFilterInfo(e.target.value)} style={{ flex: '1 1 140px', minWidth: '125px', height: '36px', fontSize: '0.8rem', textOverflow: 'ellipsis' }}>
                     <option value="">UTM Info</option>
                     {utmOptions.infos.map((inf, i) => <option key={i} value={inf}>{inf}</option>)}
                   </select>
                   <button 
                     onClick={() => { setSearchTerm(''); setFilterCard(''); setFilterSource(''); setFilterStartDate(''); setFilterEndDate(''); setFilterCampaign(''); setFilterTerm(''); setFilterInfo(''); }}
                     className="btn-secondary"
-                    style={{ height: '36px', fontSize: '0.75rem', whiteSpace: 'nowrap', opacity: (searchTerm || filterCard || filterSource || filterStartDate || filterEndDate || filterCampaign || filterTerm || filterInfo) ? 1 : 0.5 }}
+                    style={{ height: '36px', fontSize: '0.75rem', whiteSpace: 'nowrap', padding: '0 0.85rem', opacity: (searchTerm || filterCard || filterSource || filterStartDate || filterEndDate || filterCampaign || filterTerm || filterInfo) ? 1 : 0.5 }}
                     disabled={!(searchTerm || filterCard || filterSource || filterStartDate || filterEndDate || filterCampaign || filterTerm || filterInfo)}
                   >✕ Clear Filters</button>
                 </div>
@@ -3873,34 +3874,44 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                           <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', minHeight: '280px' }}>
                             <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>Soft Decision Breakdown</h4>
                             <div style={{ display: 'flex', flex: 1, alignItems: 'center', justifyContent: 'center', gap: '1.25rem' }}>
-                              <svg width="110" height="110" viewBox="0 0 36 36" style={{ flexShrink: 0 }}>
-                                <circle cx="18" cy="18" r="15.915" fill="none" stroke="var(--line)" strokeWidth="4.2" />
-                                {(() => {
-                                  const entries = Object.entries(sdDecisionDist);
-                                  const colors = ['var(--mint)', 'var(--err)', 'var(--gold)', '#5C6070', 'hsl(var(--primary))'];
-                                  let offset = 25;
-                                  return entries.map(([, val], idx) => {
-                                    const pct = totalSubmit > 0 ? (val / totalSubmit) * 100 : 0;
-                                    const el = <circle key={idx} cx="18" cy="18" r="15.915" fill="none" stroke={colors[idx % colors.length]} strokeWidth="4.2" strokeDasharray={`${pct} ${100 - pct}`} strokeDashoffset={offset} />;
-                                    offset -= pct;
-                                    return el;
-                                  });
-                                })()}
-                              </svg>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', fontSize: '0.78rem', width: '100%' }}>
-                                {Object.entries(sdDecisionDist).map(([name, val], idx) => {
-                                  const colors = ['var(--mint)', 'var(--err)', 'var(--gold)', '#5C6070', 'hsl(var(--primary))'];
-                                  return (
-                                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                        <span style={{ height: '8px', width: '8px', borderRadius: '50%', background: colors[idx % colors.length] }} />
-                                        <span style={{ fontWeight: 500 }}>{name}</span>
-                                      </div>
-                                      <span style={{ fontWeight: 'bold' }}>{val} ({totalSubmit > 0 ? ((val / totalSubmit) * 100).toFixed(1) : 0}%)</span>
+                              {(() => {
+                                const entries = Object.entries(sdDecisionDist);
+                                const getSdColor = (key) => {
+                                  const k = key.toUpperCase();
+                                  if (k.includes('APPROVE') || k.includes('PASS') || k.includes('ELIGIBLE')) return 'var(--mint)';
+                                  if (k.includes('DECLINE') || k.includes('REJECT')) return 'var(--err)';
+                                  if (k.includes('STP') || k.includes('REFER')) return 'var(--gold)';
+                                  return '#CBD5E1';
+                                };
+                                let offset = 25;
+                                return (
+                                  <>
+                                    <svg width="110" height="110" viewBox="0 0 36 36" style={{ flexShrink: 0 }}>
+                                      <circle cx="18" cy="18" r="15.915" fill="none" stroke="var(--line)" strokeWidth="4.2" />
+                                      {entries.map(([key, val], idx) => {
+                                        const pct = totalSubmit > 0 ? (val / totalSubmit) * 100 : 0;
+                                        const el = <circle key={idx} cx="18" cy="18" r="15.915" fill="none" stroke={getSdColor(key)} strokeWidth="4.2" strokeDasharray={`${pct} ${100 - pct}`} strokeDashoffset={offset} />;
+                                        offset -= pct;
+                                        return el;
+                                      })}
+                                    </svg>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', fontSize: '0.78rem', width: '100%' }}>
+                                      {entries.map(([name, val], idx) => {
+                                        const color = getSdColor(name);
+                                        return (
+                                          <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                              <span style={{ height: '8px', width: '8px', borderRadius: '50%', background: color }} />
+                                              <span style={{ fontWeight: 500 }}>{name}</span>
+                                            </div>
+                                            <span style={{ fontWeight: 'bold' }}>{val} ({totalSubmit > 0 ? ((val / totalSubmit) * 100).toFixed(1) : 0}%)</span>
+                                          </div>
+                                        );
+                                      })}
                                     </div>
-                                  );
-                                })}
-                              </div>
+                                  </>
+                                );
+                              })()}
                             </div>
                           </div>
 
@@ -3908,34 +3919,43 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                           <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', minHeight: '280px' }}>
                             <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>STP Flag Breakdown</h4>
                             <div style={{ display: 'flex', flex: 1, alignItems: 'center', justifyContent: 'center', gap: '1.25rem' }}>
-                              <svg width="110" height="110" viewBox="0 0 36 36" style={{ flexShrink: 0 }}>
-                                <circle cx="18" cy="18" r="15.915" fill="none" stroke="var(--line)" strokeWidth="4.2" />
-                                {(() => {
-                                  const entries = Object.entries(stpFlagDist);
-                                  const colors = ['var(--mint)', 'var(--err)', 'var(--gold)'];
-                                  let offset = 25;
-                                  return entries.map(([, val], idx) => {
-                                    const pct = totalSubmit > 0 ? (val / totalSubmit) * 100 : 0;
-                                    const el = <circle key={idx} cx="18" cy="18" r="15.915" fill="none" stroke={colors[idx % colors.length]} strokeWidth="4.2" strokeDasharray={`${pct} ${100 - pct}`} strokeDashoffset={offset} />;
-                                    offset -= pct;
-                                    return el;
-                                  });
-                                })()}
-                              </svg>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', fontSize: '0.78rem', width: '100%' }}>
-                                {Object.entries(stpFlagDist).map(([name, val], idx) => {
-                                  const colors = ['var(--mint)', 'var(--err)', 'var(--gold)'];
-                                  return (
-                                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                        <span style={{ height: '8px', width: '8px', borderRadius: '50%', background: colors[idx % colors.length] }} />
-                                        <span style={{ fontWeight: 500 }}>STP: {name}</span>
-                                      </div>
-                                      <span style={{ fontWeight: 'bold' }}>{val} ({totalSubmit > 0 ? ((val / totalSubmit) * 100).toFixed(1) : 0}%)</span>
+                              {(() => {
+                                const entries = Object.entries(stpFlagDist);
+                                const getStpColor = (key) => {
+                                  const k = key.toUpperCase();
+                                  if (k.includes('N') || k.includes('NO')) return 'var(--mint)';
+                                  if (k.includes('Y') || k.includes('YES')) return 'var(--err)';
+                                  return '#CBD5E1';
+                                };
+                                let offset = 25;
+                                return (
+                                  <>
+                                    <svg width="110" height="110" viewBox="0 0 36 36" style={{ flexShrink: 0 }}>
+                                      <circle cx="18" cy="18" r="15.915" fill="none" stroke="var(--line)" strokeWidth="4.2" />
+                                      {entries.map(([key, val], idx) => {
+                                        const pct = totalSubmit > 0 ? (val / totalSubmit) * 100 : 0;
+                                        const el = <circle key={idx} cx="18" cy="18" r="15.915" fill="none" stroke={getStpColor(key)} strokeWidth="4.2" strokeDasharray={`${pct} ${100 - pct}`} strokeDashoffset={offset} />;
+                                        offset -= pct;
+                                        return el;
+                                      })}
+                                    </svg>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', fontSize: '0.78rem', width: '100%' }}>
+                                      {entries.map(([name, val], idx) => {
+                                        const color = getStpColor(name);
+                                        return (
+                                          <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                              <span style={{ height: '8px', width: '8px', borderRadius: '50%', background: color }} />
+                                              <span style={{ fontWeight: 500 }}>{name}</span>
+                                            </div>
+                                            <span style={{ fontWeight: 'bold' }}>{val} ({totalSubmit > 0 ? ((val / totalSubmit) * 100).toFixed(1) : 0}%)</span>
+                                          </div>
+                                        );
+                                      })}
                                     </div>
-                                  );
-                                })}
-                              </div>
+                                  </>
+                                );
+                              })()}
                             </div>
                           </div>
 
