@@ -141,6 +141,10 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCard, setFilterCard] = useState('');
   const [filterSource, setFilterSource] = useState('');
+  const [filterCampaign, setFilterCampaign] = useState('');
+  const [filterTerm, setFilterTerm] = useState('');
+  const [filterInfo, setFilterInfo] = useState('');
+  const [utmOptions, setUtmOptions] = useState({ campaigns: [], terms: [], infos: [] });
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -185,7 +189,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   const [isUploadingManualLeads, setIsUploadingManualLeads] = useState(false);
 
   // ── Database Banks & MIS Auto-Sync States ──
-  const [dbBankList, setDbBankList] = useState(['HDFC', 'SBI']);
+  const [dbBankList, setDbBankList] = useState(['HDFC', 'SBI', 'KIWI']);
   const [notifications, setNotifications] = useState([]);
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
   const [showNotifDrawer, setShowNotifDrawer] = useState(false);
@@ -208,6 +212,28 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   });
   const [emailConfigError, setEmailConfigError] = useState('');
   const [emailConfigSuccess, setEmailConfigSuccess] = useState('');
+
+  // ── KIWI MIS Auto-Sync States ──
+  const [isSyncingKiwiEmailMis, setIsSyncingKiwiEmailMis] = useState(false);
+  const [kiwiEmailMisConfig, setKiwiEmailMisConfig] = useState({
+    receiver_email: 'spikemarketingsolutions25@gmail.com',
+    app_password: '',
+    sender_email: 'harbans.anand@mymoneymantra.com',
+    subject_keywords: ['kiwi mis'],
+    enabled: true
+  });
+  const [showKiwiEmailConfigModal, setShowKiwiEmailConfigModal] = useState(false);
+  const [kiwiEmailConfigDevPass, setKiwiEmailConfigDevPass] = useState('');
+  const [kiwiEmailConfigForm, setKiwiEmailConfigForm] = useState({
+    receiver_email: '',
+    app_password: '',
+    sender_email: '',
+    subject_keywords: '',
+    enabled: true
+  });
+  const [kiwiEmailConfigError, setKiwiEmailConfigError] = useState('');
+  const [kiwiEmailConfigSuccess, setKiwiEmailConfigSuccess] = useState('');
+
   const defaultCreateLeadForm = {
     application_id: '',
     full_name: '',
@@ -266,6 +292,13 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   const [dashVkycStatus, setDashVkycStatus] = useState('');
   const [dashAgent, setDashAgent] = useState('');
   const [dashSourceType, setDashSourceType] = useState('');
+  const [dashSoftDecision, setDashSoftDecision] = useState('');
+  const [dashSoftDecisionDate, setDashSoftDecisionDate] = useState('');
+  const [dashKycType, setDashKycType] = useState('');
+  const [dashStpFlag, setDashStpFlag] = useState('');
+  const [dashFinalStatus, setDashFinalStatus] = useState('');
+  const [dashDecisionReason, setDashDecisionReason] = useState('');
+  const [dashChannel, setDashChannel] = useState('');
   const [dashSearch, setDashSearch] = useState('');
   const [debouncedDashSearch, setDebouncedDashSearch] = useState('');
   const [dashFiltersExpanded, setDashFiltersExpanded] = useState(false);
@@ -490,7 +523,10 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
         card: filterCard,
         source: filterSource,
         startDate: filterStartDate,
-        endDate: filterEndDate
+        endDate: filterEndDate,
+        campaign: filterCampaign,
+        term: filterTerm,
+        info: filterInfo
       });
       const res = await fetch(`${API_URL}/leads?${queryParams.toString()}`, { headers });
       if (res.ok) {
@@ -586,6 +622,28 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
     }
   }, [token]);
 
+  const fetchKiwiEmailConfig = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await fetch('/api/admin/kiwi-email-mis-config', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setKiwiEmailMisConfig(data);
+        setKiwiEmailConfigForm({
+          receiver_email: data.receiver_email || '',
+          app_password: '',
+          sender_email: data.sender_email || '',
+          subject_keywords: Array.isArray(data.subject_keywords) ? data.subject_keywords.join(', ') : '',
+          enabled: data.enabled !== undefined ? data.enabled : true
+        });
+      }
+    } catch (e) {
+      console.error('Fetch kiwi email config error:', e);
+    }
+  }, [token]);
+
   const triggerManualEmailSync = async () => {
     setIsSyncingEmailMis(true);
     try {
@@ -606,6 +664,89 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       alert(`❌ Error connecting to server: ${e.message}`);
     } finally {
       setIsSyncingEmailMis(false);
+    }
+  };
+
+  const triggerManualKiwiEmailSync = async () => {
+    setIsSyncingKiwiEmailMis(true);
+    try {
+      const res = await fetch('/api/admin/sync-kiwi-email-mis', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(`🎉 KIWI Email MIS Sync completed!\nProcessed Files: ${data.processedFiles}\nMapped Leads: ${data.mappedLeads}`);
+        fetchNotifications();
+        fetchMISStats();
+        fetchLeads(1, leadsPerPage);
+      } else {
+        alert(`❌ KIWI Email MIS Sync Info: ${data.error || data.reason || 'No new KIWI MIS emails found'}`);
+      }
+    } catch (e) {
+      alert(`❌ Error connecting to server: ${e.message}`);
+    } finally {
+      setIsSyncingKiwiEmailMis(false);
+    }
+  };
+
+  const triggerRemoveDuplicates = async () => {
+    if (!window.confirm('Are you sure you want to run deduplication? This will permanently delete duplicate leads.')) return;
+    try {
+      const res = await fetch('/api/admin/remove-duplicates', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(`🎉 Deduplication completed! Removed ${data.removedCount} duplicate leads.`);
+        fetchLeads(1, leadsPerPage);
+      } else {
+        alert(`❌ Error: ${data.error || 'Failed to remove duplicates'}`);
+      }
+    } catch (e) {
+      alert(`❌ Error connecting to server: ${e.message}`);
+    }
+  };
+
+  const handleSaveKiwiEmailConfigSubmit = async (e) => {
+    e.preventDefault();
+    setKiwiEmailConfigError('');
+    setKiwiEmailConfigSuccess('');
+
+    if (!kiwiEmailConfigDevPass) {
+      setKiwiEmailConfigError('Developer Authorization Password (Lakshay@123) is required!');
+      return;
+    }
+
+    try {
+      const keywordsArr = kiwiEmailConfigForm.subject_keywords.split(',').map(k => k.trim()).filter(Boolean);
+      const res = await fetch('/api/admin/kiwi-email-mis-config', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          devPassword: kiwiEmailConfigDevPass,
+          receiver_email: kiwiEmailConfigForm.receiver_email,
+          app_password: kiwiEmailConfigForm.app_password,
+          sender_email: kiwiEmailConfigForm.sender_email,
+          subject_keywords: keywordsArr,
+          enabled: kiwiEmailConfigForm.enabled
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setKiwiEmailConfigSuccess('KIWI IMAP configuration updated successfully!');
+        setKiwiEmailMisConfig(data.config);
+        setTimeout(() => setShowKiwiEmailConfigModal(false), 1500);
+      } else {
+        setKiwiEmailConfigError(data.error || 'Failed to save configuration');
+      }
+    } catch (e) {
+      setKiwiEmailConfigError(`Network Error: ${e.message}`);
     }
   };
 
@@ -681,9 +822,10 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
     if (isAuthenticated && token) {
       fetchNotifications();
       fetchEmailConfig();
+      fetchKiwiEmailConfig();
       fetchDbBanks();
     }
-  }, [isAuthenticated, token, fetchNotifications, fetchEmailConfig, fetchDbBanks]);
+  }, [isAuthenticated, token, fetchNotifications, fetchEmailConfig, fetchKiwiEmailConfig, fetchDbBanks]);
 
   const loadAllAdminData = async () => {
     setLoading(true);
@@ -697,16 +839,20 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
         card: filterCard,
         source: filterSource,
         startDate: filterStartDate,
-        endDate: filterEndDate
+        endDate: filterEndDate,
+        campaign: filterCampaign,
+        term: filterTerm,
+        info: filterInfo
       });
 
-      const [leadsRes, cardsRes, agentsRes, locsRes, settingsRes, baileysRes] = await Promise.all([
+      const [leadsRes, cardsRes, agentsRes, locsRes, settingsRes, baileysRes, utmRes] = await Promise.all([
         fetch(`${API_URL}/leads?${queryParams.toString()}`, { headers }),
         fetch(`${API_URL}/admin/cards`, { headers }),
         fetch(`${API_URL}/agents`, { headers }),
         fetch(`${API_URL}/locations`),
         fetch(`${API_URL}/settings`),
-        fetch(`${API_URL}/whatsapp/status`, { headers })
+        fetch(`${API_URL}/whatsapp/status`, { headers }),
+        fetch(`${API_URL}/leads/utm-options`, { headers })
       ]);
 
       if (leadsRes.status === 401 || leadsRes.status === 403) {
@@ -723,6 +869,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       const locsData = await locsRes.json();
       const settingsData = await settingsRes.json();
       const baileysData = baileysRes.ok ? await baileysRes.json() : { status: 'DISCONNECTED', qrCodeDataUrl: '', phone: '' };
+      const utmData = utmRes.ok ? await utmRes.json() : { campaigns: [], terms: [], infos: [] };
 
       setLeads(leadsData.leads || []);
       setCurrentPage(leadsData.page || 1);
@@ -735,6 +882,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       setLocations(Array.isArray(locsData) ? locsData : []);
       setSettings(settingsData);
       setBaileysStatus(baileysData);
+      setUtmOptions(utmData);
     } catch (err) {
       console.error('Error fetching admin dashboard details:', err);
       if (String(err).includes('Failed to fetch')) {
@@ -750,7 +898,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   // Reset page to 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, filterCard, filterSource, filterStartDate, filterEndDate]);
+  }, [searchTerm, filterCard, filterSource, filterStartDate, filterEndDate, filterCampaign, filterTerm, filterInfo]);
 
   // Refetch leads when pagination/filters change (debounced for search)
   useEffect(() => {
@@ -759,7 +907,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       fetchLeads(currentPage, leadsPerPage);
     }, searchTerm ? 400 : 0); // Debounce search, instant for other filters
     return () => clearTimeout(timer);
-  }, [currentPage, leadsPerPage, searchTerm, filterCard, filterSource, filterStartDate, filterEndDate, isAuthenticated, token]);
+  }, [currentPage, leadsPerPage, searchTerm, filterCard, filterSource, filterStartDate, filterEndDate, filterCampaign, filterTerm, filterInfo, isAuthenticated, token]);
 
   const showToast = (text, type = 'success') => {
     setMessage({ text, type });
@@ -1872,7 +2020,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
     if (settings && settings.card_manager_banks !== undefined && settings.card_manager_banks !== null) {
       return settings.card_manager_banks.split(',').map(cleanBankCode).filter(Boolean);
     }
-    const set = new Set(dbBankList || ['HDFC', 'SBI']);
+    const set = new Set(dbBankList || ['HDFC', 'SBI', 'KIWI']);
     return Array.from(set).sort();
   }, [dbBankList, settings]);
 
@@ -1900,7 +2048,9 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       card_type: new Set(), state: new Set(), kyc_status: new Set(),
       ipa_status: new Set(), final_decision: new Set(), card_name: new Set(),
       customer_type: new Set(), current_stage: new Set(), card_activation_status: new Set(),
-      vkyc_status: new Set(), source_type: new Set()
+      vkyc_status: new Set(), source_type: new Set(),
+      sd_decision_code: new Set(), kyc_mode: new Set(), stp_flag: new Set(),
+      stage_in_sales24: new Set(), decision_code_reason1_wcp: new Set(), channel: new Set()
     };
     for (let i = 0; i < allMappedLeads.length; i++) {
       const l = allMappedLeads[i];
@@ -1908,8 +2058,14 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       const md = l.mis_data;
       if (md) {
         for (const field in fieldSets) {
-          const v = md[field];
-          if (v && String(v).trim()) fieldSets[field].add(v);
+          const v = md[field] || md[field.toUpperCase()] || 
+            (field === 'sd_decision_code' ? (md.SD_DECISION_CODE || md.SOFT_DECISION_TYPE) : null) || 
+            (field === 'stage_in_sales24' ? (md.STAGE_IN_SALES24 || md.FINAL_STATUS) : null) || 
+            (field === 'kyc_mode' ? (md.KYC_MODE || md.kyc_type) : null) || 
+            (field === 'stp_flag' ? (md.STP_FLAG || md.stp_flag) : null) || 
+            (field === 'decision_code_reason1_wcp' ? (md.DECISION_CODE_REASON1_WCP || md.reject_reason) : null) || 
+            (field === 'channel' ? (md.CHANNEL || md.source_type) : null);
+          if (v && String(v).trim()) fieldSets[field].add(String(v).trim());
         }
       }
     }
@@ -1973,6 +2129,13 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       if (dashVkycStatus && lead.mis_data?.vkyc_status !== dashVkycStatus) return false;
       if (dashAgent && lead.agent_name !== dashAgent) return false;
       if (dashSourceType && lead.mis_data?.source_type !== dashSourceType) return false;
+      if (dashSoftDecision && String(lead.mis_data?.SD_DECISION_CODE || lead.mis_data?.SOFT_DECISION_TYPE || '').toLowerCase() !== dashSoftDecision.toLowerCase()) return false;
+      if (dashSoftDecisionDate && String(lead.mis_data?.SD_DECISION_DATE || '').split('T')[0] !== dashSoftDecisionDate) return false;
+      if (dashKycType && String(lead.mis_data?.KYC_MODE || lead.mis_data?.kyc_type || '').toLowerCase() !== dashKycType.toLowerCase()) return false;
+      if (dashStpFlag && String(lead.mis_data?.STP_FLAG || lead.mis_data?.stp_flag || '').toLowerCase() !== dashStpFlag.toLowerCase()) return false;
+      if (dashFinalStatus && String(lead.mis_data?.STAGE_IN_SALES24 || lead.mis_data?.FINAL_STATUS || '').toLowerCase() !== dashFinalStatus.toLowerCase()) return false;
+      if (dashDecisionReason && String(lead.mis_data?.DECISION_CODE_REASON1_WCP || lead.mis_data?.reject_reason || '').toLowerCase() !== dashDecisionReason.toLowerCase()) return false;
+      if (dashChannel && String(lead.mis_data?.CHANNEL || lead.mis_data?.source_type || '').toLowerCase() !== dashChannel.toLowerCase()) return false;
       if (normSelectedBank && normSelectedBank !== 'ALL') {
         const leadBank = getLeadBank(lead);
         if (leadBank !== normSelectedBank) return false;
@@ -1983,7 +2146,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       }
       return true;
     });
-  }, [allMappedLeads, debouncedDashSearch, dashCreatedDate, dashDateTo, dashCardType, dashState, dashKycStatus, dashIpaStatus, dashFinalDecision, dashCardName, dashCustomerType, dashCurrentStage, dashCardActivation, dashVkycStatus, dashAgent, dashSourceType, dashSelectedBank, getLeadBank]);
+  }, [allMappedLeads, debouncedDashSearch, dashCreatedDate, dashDateTo, dashCardType, dashState, dashKycStatus, dashIpaStatus, dashFinalDecision, dashCardName, dashCustomerType, dashCurrentStage, dashCardActivation, dashVkycStatus, dashAgent, dashSourceType, dashSelectedBank, getLeadBank, dashSoftDecision, dashSoftDecisionDate, dashKycType, dashStpFlag, dashFinalStatus, dashDecisionReason, dashChannel]);
 
   // 4. Single-pass stats computation — replaces 8 forEach + 6 filter calls
   const dashStats = useMemo(() => {
@@ -1994,6 +2157,9 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
     let ipaApproved = 0, ipaDeclined = 0;
     const kycDist = {}, srcDist = {}, cardTypeDist = {}, custTypeDist = {};
     const actDist = {}, pinDist = {}, prodDist = {};
+    // SBI-specific distributions
+    const sdDecisionDist = {}, kycModeDist = {}, stpFlagDist = {};
+    const finalStatusDist = {}, decisionReasonDist = {}, channelDist = {};
 
     for (let i = 0; i < filteredMappedLeads.length; i++) {
       const l = filteredMappedLeads[i];
@@ -2028,14 +2194,12 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       if (winning === 'yes' || winning === 'au' || winning === 'pnb') funnelWinningBank++;
 
       // Funnel counts (SBI)
-      const sdType = String(md.SOFT_DECISION_TYPE || '').toLowerCase();
+      const sdType = String(md.SD_DECISION_CODE || md.SOFT_DECISION_TYPE || '').toLowerCase();
       if (sdType.includes('approve') || sdType.includes('pass') || sdType.includes('eligible')) funnelSoftDecision++;
-      const wfStatus = String(md.WORK_FLOW_STATUS || md.WORKFLOW_STATUS || md.STATUS || '').toLowerCase();
-      if (wfStatus && wfStatus !== 'pending' && wfStatus !== 'null') funnelWorkFlow++;
-      const finalStatus = String(md.FINAL_STATUS || md.FINAL_DECISION || '').toLowerCase();
-      if (finalStatus.includes('approve') || finalStatus.includes('success')) funnelFinalStatus++;
-      const cardGen = String(md.CARD_GEN_STATUS || '').toLowerCase();
-      if (cardGen.includes('yes') || cardGen.includes('generated')) funnelCardGen++;
+      const stpFlagVal = String(md.STP_FLAG || md.stp_flag || '').toLowerCase();
+      if (stpFlagVal === 'yes' || stpFlagVal === 'y' || stpFlagVal === '1' || stpFlagVal === 'true') funnelWorkFlow++;
+      const finalStatus = String(md.STAGE_IN_SALES24 || md.FINAL_STATUS || md.FINAL_DECISION || '').toLowerCase();
+      if (finalStatus.includes('appl') || finalStatus.includes('file generated') || finalStatus.includes('generated') || finalStatus.includes('approve') || finalStatus.includes('success')) funnelFinalStatus++;
 
       // Distributions (single pass)
       const kycKey = md.kyc_status || 'Unknown';
@@ -2059,6 +2223,25 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
       const prodKey = md.card_name || 'Unknown';
       prodDist[prodKey] = (prodDist[prodKey] || 0) + 1;
+
+      // SBI-specific distributions
+      const sdKey = String(md.SD_DECISION_CODE || md.SOFT_DECISION_TYPE || '').trim();
+      if (sdKey) sdDecisionDist[sdKey] = (sdDecisionDist[sdKey] || 0) + 1;
+
+      const kmKey = String(md.KYC_MODE || md.kyc_type || '').trim();
+      if (kmKey) kycModeDist[kmKey] = (kycModeDist[kmKey] || 0) + 1;
+
+      const sfKey = String(md.STP_FLAG || md.stp_flag || '').trim();
+      if (sfKey) stpFlagDist[sfKey] = (stpFlagDist[sfKey] || 0) + 1;
+
+      const fsKey = String(md.STAGE_IN_SALES24 || md.FINAL_STATUS || '').trim();
+      if (fsKey) finalStatusDist[fsKey] = (finalStatusDist[fsKey] || 0) + 1;
+
+      const drKey = String(md.DECISION_CODE_REASON1_WCP || md.reject_reason || '').trim();
+      if (drKey) decisionReasonDist[drKey] = (decisionReasonDist[drKey] || 0) + 1;
+
+      const chKey = String(md.CHANNEL || '').trim();
+      if (chKey) channelDist[chKey] = (channelDist[chKey] || 0) + 1;
     }
 
     const totalSubmit = filteredMappedLeads.length;
@@ -2075,7 +2258,8 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       funnelBankRef, funnelCurrentState, funnelWinningBank,
       funnelSoftDecision, funnelWorkFlow, funnelFinalStatus, funnelCardGen,
       ipaApproved, ipaDeclined,
-      kycDist, srcDist, cardTypeDist, custTypeDist, actDist, prodDist, topPincodes
+      kycDist, srcDist, cardTypeDist, custTypeDist, actDist, prodDist, topPincodes,
+      sdDecisionDist, kycModeDist, stpFlagDist, finalStatusDist, decisionReasonDist, channelDist
     };
   }, [filteredMappedLeads]);
 
@@ -2100,8 +2284,8 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
   // 7. Active filter count
   const activeFilterCount = useMemo(() => {
-    return [dashCreatedDate, dashDateTo, dashCardType, dashState, dashKycStatus, dashIpaStatus, dashFinalDecision, dashCardName, dashCustomerType, dashCurrentStage, dashCardActivation, dashVkycStatus, dashAgent, dashSourceType, debouncedDashSearch].filter(Boolean).length;
-  }, [dashCreatedDate, dashDateTo, dashCardType, dashState, dashKycStatus, dashIpaStatus, dashFinalDecision, dashCardName, dashCustomerType, dashCurrentStage, dashCardActivation, dashVkycStatus, dashAgent, dashSourceType, debouncedDashSearch, dashSelectedBank]);
+    return [dashCreatedDate, dashDateTo, dashCardType, dashState, dashKycStatus, dashIpaStatus, dashFinalDecision, dashCardName, dashCustomerType, dashCurrentStage, dashCardActivation, dashVkycStatus, dashAgent, dashSourceType, debouncedDashSearch, dashSoftDecision, dashSoftDecisionDate, dashKycType, dashStpFlag, dashFinalStatus, dashDecisionReason, dashChannel].filter(Boolean).length;
+  }, [dashCreatedDate, dashDateTo, dashCardType, dashState, dashKycStatus, dashIpaStatus, dashFinalDecision, dashCardName, dashCustomerType, dashCurrentStage, dashCardActivation, dashVkycStatus, dashAgent, dashSourceType, debouncedDashSearch, dashSelectedBank, dashSoftDecision, dashSoftDecisionDate, dashKycType, dashStpFlag, dashFinalStatus, dashDecisionReason, dashChannel]);
 
   const handleSaveBanks = async (updatedBanks) => {
     setIsSubmitting(true);
@@ -2370,6 +2554,13 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       </div>
     );
   }
+
+  const hasData = (val) => {
+    if (val === null || val === undefined) return false;
+    const str = String(val).trim().toLowerCase();
+    if (str === '' || str === 'n/a' || str === 'none' || str === 'null') return false;
+    return true;
+  };
 
   return (
     <div className={`admin-layout ${['leads', 'cards', 'agents', 'locations', 'settings'].includes(activeTab) ? 'desktop-no-scroll-layout' : ''}`} style={{ display: 'flex', width: '100%', background: 'var(--paper)', color: 'var(--ink)', minHeight: '100vh' }}>
@@ -3185,8 +3376,8 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
 
                 {/* Filters */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1.2fr 1.2fr', gap: '0.75rem', marginBottom: '1rem', alignItems: 'center', flexShrink: 0 }} className="filters-strip">
-                  <div style={{ position: 'relative' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.5rem', marginBottom: '0.75rem', alignItems: 'end', flexShrink: 0 }} className="filters-strip">
+                  <div style={{ position: 'relative', gridColumn: 'span 2' }}>
                     <Search size={16} style={{ position: 'absolute', top: '11px', left: '12px', color: 'hsl(var(--text-muted))' }} />
                     <input 
                       type="text" 
@@ -3194,7 +3385,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                       className="form-input" 
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
-                      style={{ paddingLeft: '38px', height: '36px', fontSize: '0.8rem' }}
+                      style={{ paddingLeft: '38px', height: '36px', fontSize: '0.8rem', width: '100%' }}
                     />
                   </div>
                   <select className="form-select" value={filterCard} onChange={(e) => setFilterCard(e.target.value)} style={{ height: '36px', fontSize: '0.8rem' }}>
@@ -3215,7 +3406,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                       className="form-input" 
                       value={filterStartDate}
                       onChange={(e) => setFilterStartDate(e.target.value)}
-                      style={{ fontSize: '0.75rem', padding: '0.35rem', height: '36px' }}
+                      style={{ fontSize: '0.75rem', padding: '0.35rem', height: '36px', width: '100%' }}
                     />
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', width: '100%' }}>
@@ -3225,9 +3416,27 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                       className="form-input" 
                       value={filterEndDate}
                       onChange={(e) => setFilterEndDate(e.target.value)}
-                      style={{ fontSize: '0.75rem', padding: '0.35rem', height: '36px' }}
+                      style={{ fontSize: '0.75rem', padding: '0.35rem', height: '36px', width: '100%' }}
                     />
                   </div>
+                  <select className="form-select" value={filterCampaign} onChange={(e) => setFilterCampaign(e.target.value)} style={{ height: '36px', fontSize: '0.8rem' }}>
+                    <option value="">UTM Campaign</option>
+                    {utmOptions.campaigns.map((c, i) => <option key={i} value={c}>{c}</option>)}
+                  </select>
+                  <select className="form-select" value={filterTerm} onChange={(e) => setFilterTerm(e.target.value)} style={{ height: '36px', fontSize: '0.8rem' }}>
+                    <option value="">UTM Term</option>
+                    {utmOptions.terms.map((t, i) => <option key={i} value={t}>{t}</option>)}
+                  </select>
+                  <select className="form-select" value={filterInfo} onChange={(e) => setFilterInfo(e.target.value)} style={{ height: '36px', fontSize: '0.8rem' }}>
+                    <option value="">UTM Info</option>
+                    {utmOptions.infos.map((inf, i) => <option key={i} value={inf}>{inf}</option>)}
+                  </select>
+                  <button 
+                    onClick={() => { setSearchTerm(''); setFilterCard(''); setFilterSource(''); setFilterStartDate(''); setFilterEndDate(''); setFilterCampaign(''); setFilterTerm(''); setFilterInfo(''); }}
+                    className="btn-secondary"
+                    style={{ height: '36px', fontSize: '0.75rem', whiteSpace: 'nowrap', opacity: (searchTerm || filterCard || filterSource || filterStartDate || filterEndDate || filterCampaign || filterTerm || filterInfo) ? 1 : 0.5 }}
+                    disabled={!(searchTerm || filterCard || filterSource || filterStartDate || filterEndDate || filterCampaign || filterTerm || filterInfo)}
+                  >✕ Clear Filters</button>
                 </div>
 
                 {/* Scrollable Table Container */}
@@ -3430,6 +3639,8 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                             setDashKycStatus(''); setDashIpaStatus(''); setDashFinalDecision(''); setDashCardName('');
                             setDashCustomerType(''); setDashCurrentStage(''); setDashCardActivation('');
                             setDashVkycStatus(''); setDashAgent(''); setDashSourceType(''); setDashSearch('');
+                            setDashSoftDecision(''); setDashSoftDecisionDate(''); setDashKycType(''); setDashStpFlag('');
+                            setDashFinalStatus(''); setDashDecisionReason(''); setDashChannel('');
                             const opts = getBankOptions();
                             setDashSelectedBank(opts.length > 0 ? opts[0] : 'HDFC');
                           }}
@@ -3484,29 +3695,43 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                             <FS label="Final Decision" value={dashFinalDecision} onChange={setDashFinalDecision} options={filterOptions.final_decision} placeholder="All Decisions" />
                           </div>
 
-                          {dashFiltersExpanded && (
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem', alignItems: 'end', marginTop: '0.85rem', paddingTop: '0.85rem', borderTop: '1px solid var(--line)' }} className="leads-filter-grid">
-                              <FS label="Card Name" value={dashCardName} onChange={setDashCardName} options={filterOptions.card_name} placeholder="All Cards" />
-                              <FS label="KYC Status" value={dashKycStatus} onChange={setDashKycStatus} options={filterOptions.kyc_status} placeholder="All KYC" />
-                              <FS label="Customer Type" value={dashCustomerType} onChange={setDashCustomerType} options={filterOptions.customer_type} placeholder="All Customers" />
-                              <FS label="Current Stage" value={dashCurrentStage} onChange={setDashCurrentStage} options={filterOptions.current_stage} placeholder="All Stages" />
-                              <FS label="Card Activation" value={dashCardActivation} onChange={setDashCardActivation} options={filterOptions.card_activation_status} placeholder="All Status" />
-                              <FS label="VKYC Status" value={dashVkycStatus} onChange={setDashVkycStatus} options={filterOptions.vkyc_status} placeholder="All VKYC" />
-                              <FS label="Agent" value={dashAgent} onChange={setDashAgent} options={filterOptions.agents} placeholder="All Agents" />
-                              <FS label="Source Type" value={dashSourceType} onChange={setDashSourceType} options={filterOptions.source_type} placeholder="All Sources" />
-                            </div>
-                          )}
+                            {dashFiltersExpanded && (
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem', alignItems: 'end', marginTop: '0.85rem', paddingTop: '0.85rem', borderTop: '1px solid var(--line)' }} className="leads-filter-grid">
+                                <FS label="Card Name" value={dashCardName} onChange={setDashCardName} options={filterOptions.card_name} placeholder="All Cards" />
+                                <FS label="KYC Status" value={dashKycStatus} onChange={setDashKycStatus} options={filterOptions.kyc_status} placeholder="All KYC" />
+                                {dashSelectedBank === 'SBI' && (
+                                  <>
+                                    <FS label="Soft Decision Filter" value={dashSoftDecision} onChange={setDashSoftDecision} options={filterOptions.sd_decision_code || []} placeholder="All Soft Decisions" />
+                                    <div className="form-group" style={{ marginBottom: 0 }}>
+                                      <label className="form-label" style={fll}>Soft Decision Date</label>
+                                      <input type="date" className="form-input" style={fls} value={dashSoftDecisionDate} onChange={(e) => setDashSoftDecisionDate(e.target.value)} />
+                                    </div>
+                                    <FS label="KYC Type Filter" value={dashKycType} onChange={setDashKycType} options={filterOptions.kyc_mode || []} placeholder="All KYC Modes" />
+                                    <FS label="STP Flag" value={dashStpFlag} onChange={setDashStpFlag} options={filterOptions.stp_flag || []} placeholder="All STP Flags" />
+                                    <FS label="Final Status" value={dashFinalStatus} onChange={setDashFinalStatus} options={filterOptions.stage_in_sales24 || []} placeholder="All Final Statuses" />
+                                    <FS label="Decision Reason" value={dashDecisionReason} onChange={setDashDecisionReason} options={filterOptions.decision_code_reason1_wcp || []} placeholder="All Reasons" />
+                                    <FS label="Channel Filter" value={dashChannel} onChange={setDashChannel} options={filterOptions.channel || []} placeholder="All Channels" />
+                                  </>
+                                )}
+                                <FS label="Customer Type" value={dashCustomerType} onChange={setDashCustomerType} options={filterOptions.customer_type} placeholder="All Customers" />
+                                <FS label="Current Stage" value={dashCurrentStage} onChange={setDashCurrentStage} options={filterOptions.current_stage} placeholder="All Stages" />
+                                <FS label="Card Activation" value={dashCardActivation} onChange={setDashCardActivation} options={filterOptions.card_activation_status} placeholder="All Status" />
+                                <FS label="VKYC Status" value={dashVkycStatus} onChange={setDashVkycStatus} options={filterOptions.vkyc_status} placeholder="All VKYC" />
+                                <FS label="Agent" value={dashAgent} onChange={setDashAgent} options={filterOptions.agents} placeholder="All Agents" />
+                                <FS label="Source Type" value={dashSourceType} onChange={setDashSourceType} options={filterOptions.source_type} placeholder="All Sources" />
+                              </div>
+                            )}
                         </>
                       );
                     })()}
               </div>
 
-              {loadingMISStats || !misStats ? (
+              {!misStats && loadingMISStats ? (
                 <div style={{ textAlign: 'center', padding: '5rem', color: 'hsl(var(--text-muted))' }} className="glass-panel">
                   Loading dashboard charts...
                 </div>
               ) : (() => {
-                const { totalSubmit, approvedCount, rejectedCount, pendingCount, approvalRate, funnelIpa, funnelKyc, funnelDecision, funnelActive, funnelBankRef, funnelCurrentState, funnelWinningBank, funnelSoftDecision, funnelWorkFlow, funnelFinalStatus, funnelCardGen, ipaApproved, ipaDeclined, kycDist, srcDist, cardTypeDist, custTypeDist, actDist, prodDist, topPincodes } = dashStats;
+                const { totalSubmit, approvedCount, rejectedCount, pendingCount, approvalRate, funnelIpa, funnelKyc, funnelDecision, funnelActive, funnelBankRef, funnelCurrentState, funnelWinningBank, funnelSoftDecision, funnelWorkFlow, funnelFinalStatus, funnelCardGen, ipaApproved, ipaDeclined, kycDist, srcDist, cardTypeDist, custTypeDist, actDist, prodDist, topPincodes, sdDecisionDist, kycModeDist, stpFlagDist, finalStatusDist, decisionReasonDist, channelDist } = dashStats;
                 const { stateLeadCounts, maxStateLeads, topStates } = dashGeoData;
                 return (
                   <>
@@ -3554,11 +3779,10 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                                 ];
                               } else if (b === 'SBI') {
                                 stages = [
-                                  { name: 'Total Application Submit', count: totalSubmit, pct: 100, color: 'var(--ink)' },
-                                  { name: 'Soft Decision Approved', count: funnelSoftDecision, pct: totalSubmit > 0 ? Math.round((funnelSoftDecision / totalSubmit) * 100) : 0, color: 'hsl(var(--primary))' },
-                                  { name: 'Work Flow Progress', count: funnelWorkFlow, pct: totalSubmit > 0 ? Math.round((funnelWorkFlow / totalSubmit) * 100) : 0, color: 'var(--gold-deep)' },
-                                  { name: 'Final Status Approved', count: funnelFinalStatus, pct: totalSubmit > 0 ? Math.round((funnelFinalStatus / totalSubmit) * 100) : 0, color: 'var(--mint)' },
-                                  { name: 'Card Generated', count: funnelCardGen, pct: totalSubmit > 0 ? Math.round((funnelCardGen / totalSubmit) * 100) : 0, color: '#10b981' }
+                                  { name: 'Total Application (APPLICATION_NUMBER)', count: totalSubmit, pct: 100, color: 'var(--ink)' },
+                                  { name: 'Soft Approved (SD_DECISION_CODE)', count: funnelSoftDecision, pct: totalSubmit > 0 ? Math.round((funnelSoftDecision / totalSubmit) * 100) : 0, color: 'hsl(var(--primary))' },
+                                  { name: 'STP flag Yes (STP_FLAG)', count: funnelWorkFlow, pct: totalSubmit > 0 ? Math.round((funnelWorkFlow / totalSubmit) * 100) : 0, color: 'var(--gold-deep)' },
+                                  { name: 'Final Decision - APPL File generated (STAGE_IN_SALES24)', count: funnelFinalStatus, pct: totalSubmit > 0 ? Math.round((funnelFinalStatus / totalSubmit) * 100) : 0, color: 'var(--mint)' }
                                 ];
                               } else {
                                 // HDFC & generic
@@ -3642,153 +3866,315 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                         </div>
                       </div>
 
-                      {/* Visual 2: Pie Chart - IPA Approved vs Declined */}
-                      {(!dashSelectedBank || dashSelectedBank === 'HDFC') && (
-                        <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
-                        <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>IPA Decision Breakdown</h4>
-                        <div style={{ display: 'flex', flex: 1, alignItems: 'center', justifyContent: 'center', gap: '1.5rem' }}>
-                          <svg width="120" height="120" viewBox="0 0 36 36">
-                            <circle cx="18" cy="18" r="15.915" fill="none" stroke="var(--line)" strokeWidth="4.2" />
-                            {totalSubmit > 0 && (() => {
-                              const ipaAppPct = (ipaApproved / totalSubmit) * 100;
-                              const ipaDecPct = (ipaDeclined / totalSubmit) * 100;
-                              const ipaOthPct = 100 - ipaAppPct - ipaDecPct;
-                              return (
-                                <>
-                                  <circle cx="18" cy="18" r="15.915" fill="none" stroke="var(--mint)" strokeWidth="4.2" strokeDasharray={`${ipaAppPct} ${100 - ipaAppPct}`} strokeDashoffset="25" />
-                                  <circle cx="18" cy="18" r="15.915" fill="none" stroke="var(--err)" strokeWidth="4.2" strokeDasharray={`${ipaDecPct} ${100 - ipaDecPct}`} strokeDashoffset={25 - ipaAppPct} />
-                                  <circle cx="18" cy="18" r="15.915" fill="none" stroke="var(--line)" strokeWidth="4.2" strokeDasharray={`${ipaOthPct} ${100 - ipaOthPct}`} strokeDashoffset={25 - ipaAppPct - ipaDecPct} />
-                                </>
-                              );
-                            })()}
-                          </svg>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.8rem', textAlign: 'left' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                              <span style={{ height: '10px', width: '10px', borderRadius: '50%', background: 'var(--mint)' }} />
-                              <span>Approved: {ipaApproved}</span>
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                              <span style={{ height: '10px', width: '10px', borderRadius: '50%', background: 'var(--err)' }} />
-                              <span>Declined: {ipaDeclined}</span>
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                              <span style={{ height: '10px', width: '10px', borderRadius: '50%', background: 'var(--line)' }} />
-                              <span>Other/Pending: {totalSubmit - ipaApproved - ipaDeclined}</span>
+                      {/* === SBI-SPECIFIC VISUALS === */}
+                      {dashSelectedBank === 'SBI' && (
+                        <>
+                          {/* SBI: Soft Decision (SD_DECISION_CODE) Pie */}
+                          <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', minHeight: '280px' }}>
+                            <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>Soft Decision Breakdown</h4>
+                            <div style={{ display: 'flex', flex: 1, alignItems: 'center', justifyContent: 'center', gap: '1.25rem' }}>
+                              <svg width="110" height="110" viewBox="0 0 36 36" style={{ flexShrink: 0 }}>
+                                <circle cx="18" cy="18" r="15.915" fill="none" stroke="var(--line)" strokeWidth="4.2" />
+                                {(() => {
+                                  const entries = Object.entries(sdDecisionDist);
+                                  const colors = ['var(--mint)', 'var(--err)', 'var(--gold)', '#5C6070', 'hsl(var(--primary))'];
+                                  let offset = 25;
+                                  return entries.map(([, val], idx) => {
+                                    const pct = totalSubmit > 0 ? (val / totalSubmit) * 100 : 0;
+                                    const el = <circle key={idx} cx="18" cy="18" r="15.915" fill="none" stroke={colors[idx % colors.length]} strokeWidth="4.2" strokeDasharray={`${pct} ${100 - pct}`} strokeDashoffset={offset} />;
+                                    offset -= pct;
+                                    return el;
+                                  });
+                                })()}
+                              </svg>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', fontSize: '0.78rem', width: '100%' }}>
+                                {Object.entries(sdDecisionDist).map(([name, val], idx) => {
+                                  const colors = ['var(--mint)', 'var(--err)', 'var(--gold)', '#5C6070', 'hsl(var(--primary))'];
+                                  return (
+                                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                        <span style={{ height: '8px', width: '8px', borderRadius: '50%', background: colors[idx % colors.length] }} />
+                                        <span style={{ fontWeight: 500 }}>{name}</span>
+                                      </div>
+                                      <span style={{ fontWeight: 'bold' }}>{val} ({totalSubmit > 0 ? ((val / totalSubmit) * 100).toFixed(1) : 0}%)</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </div>
-                      )}
 
-                      {/* Visual 3: Bar Chart - KYC Status */}
-                      {(!dashSelectedBank || dashSelectedBank === 'HDFC') && (
-                        <div className="glass-panel" style={{ padding: '1.5rem' }}>
-                        <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>KYC Status Distribution</h4>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '180px', overflowY: 'auto' }}>
-                          {Object.entries(kycDist).map(([name, val], idx) => {
-                            const pct = totalSubmit > 0 ? (val / totalSubmit) * 100 : 0;
-                            return (
-                              <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem' }}>
-                                <div style={{ width: '80px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', textAlign: 'right' }}>{name}</div>
-                                <div style={{ flex: 1, height: '14px', background: 'var(--paper-2)', borderRadius: '4px', overflow: 'hidden' }}>
-                                  <div style={{ height: '100%', width: `${pct}%`, background: 'var(--gold)' }} />
-                                </div>
-                                <div style={{ width: '40px', fontWeight: 'bold' }}>{val}</div>
+                          {/* SBI: STP Flag Pie */}
+                          <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', minHeight: '280px' }}>
+                            <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>STP Flag Breakdown</h4>
+                            <div style={{ display: 'flex', flex: 1, alignItems: 'center', justifyContent: 'center', gap: '1.25rem' }}>
+                              <svg width="110" height="110" viewBox="0 0 36 36" style={{ flexShrink: 0 }}>
+                                <circle cx="18" cy="18" r="15.915" fill="none" stroke="var(--line)" strokeWidth="4.2" />
+                                {(() => {
+                                  const entries = Object.entries(stpFlagDist);
+                                  const colors = ['var(--mint)', 'var(--err)', 'var(--gold)'];
+                                  let offset = 25;
+                                  return entries.map(([, val], idx) => {
+                                    const pct = totalSubmit > 0 ? (val / totalSubmit) * 100 : 0;
+                                    const el = <circle key={idx} cx="18" cy="18" r="15.915" fill="none" stroke={colors[idx % colors.length]} strokeWidth="4.2" strokeDasharray={`${pct} ${100 - pct}`} strokeDashoffset={offset} />;
+                                    offset -= pct;
+                                    return el;
+                                  });
+                                })()}
+                              </svg>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', fontSize: '0.78rem', width: '100%' }}>
+                                {Object.entries(stpFlagDist).map(([name, val], idx) => {
+                                  const colors = ['var(--mint)', 'var(--err)', 'var(--gold)'];
+                                  return (
+                                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                        <span style={{ height: '8px', width: '8px', borderRadius: '50%', background: colors[idx % colors.length] }} />
+                                        <span style={{ fontWeight: 500 }}>STP: {name}</span>
+                                      </div>
+                                      <span style={{ fontWeight: 'bold' }}>{val} ({totalSubmit > 0 ? ((val / totalSubmit) * 100).toFixed(1) : 0}%)</span>
+                                    </div>
+                                  );
+                                })}
                               </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                      )}
+                            </div>
+                          </div>
 
-                      {/* Visual 4: Pie Chart - Source Type */}
-                      <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
-                        <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>Source Type</h4>
-                        <div style={{ display: 'flex', flex: 1, alignItems: 'center', justifyContent: 'center', gap: '1.5rem' }}>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.8rem', textAlign: 'left', width: '100%' }}>
-                            {Object.entries(srcDist).map(([name, val], idx) => {
-                              const colors = ['#E0A82E', '#16A37B', '#11132B', '#5C6070', '#D14343'];
-                              const color = colors[idx % colors.length];
-                              const pct = totalSubmit > 0 ? ((val / totalSubmit) * 100).toFixed(1) : 0;
-                              return (
-                                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                    <span style={{ height: '8px', width: '8px', borderRadius: '50%', background: color }} />
-                                    <span>{name}</span>
+                          {/* SBI: KYC Mode (KYC_MODE) Bar */}
+                          <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', minHeight: '280px' }}>
+                            <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>KYC Mode Distribution</h4>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', overflowY: 'auto', flex: 1 }}>
+                              {Object.entries(kycModeDist).sort((a, b) => b[1] - a[1]).map(([name, val], idx) => {
+                                const pct = totalSubmit > 0 ? (val / totalSubmit) * 100 : 0;
+                                return (
+                                  <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.78rem' }}>
+                                    <div style={{ width: '90px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', textAlign: 'right', fontWeight: 600 }} title={name}>{name}</div>
+                                    <div style={{ flex: 1, height: '14px', background: 'var(--paper-2)', borderRadius: '4px', overflow: 'hidden' }}>
+                                      <div style={{ height: '100%', width: `${pct}%`, background: 'hsl(var(--primary))', borderRadius: '4px', transition: 'width 0.4s' }} />
+                                    </div>
+                                    <div style={{ width: '55px', fontWeight: 'bold', fontSize: '0.75rem', textAlign: 'right' }}>{val} ({pct.toFixed(0)}%)</div>
                                   </div>
-                                  <span style={{ fontWeight: 'bold' }}>{val} ({pct}%)</span>
-                                </div>
-                              );
-                            })}
+                                );
+                              })}
+                            </div>
                           </div>
-                        </div>
-                      </div>
 
-                      {/* Visual 5: Bar Chart - Card Type */}
-                      {(!dashSelectedBank || dashSelectedBank === 'HDFC') && (
-                        <div className="glass-panel" style={{ padding: '1.5rem' }}>
-                        <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>Card Type</h4>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                          {Object.entries(cardTypeDist).map(([name, val], idx) => {
-                            const pct = totalSubmit > 0 ? (val / totalSubmit) * 100 : 0;
-                            return (
-                              <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem' }}>
-                                <div style={{ width: '80px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', textAlign: 'right' }}>{name}</div>
-                                <div style={{ flex: 1, height: '14px', background: 'var(--paper-2)', borderRadius: '4px', overflow: 'hidden' }}>
-                                  <div style={{ height: '100%', width: `${pct}%`, background: 'var(--ink)' }} />
-                                </div>
-                                <div style={{ width: '40px', fontWeight: 'bold' }}>{val}</div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                      )}
-
-                      {/* Visual 6: Pie Chart - Customer Type */}
-                      {(!dashSelectedBank || dashSelectedBank === 'HDFC') && (
-                        <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
-                        <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>Customer Type</h4>
-                        <div style={{ display: 'flex', flex: 1, alignItems: 'center', justifyContent: 'center', gap: '1.5rem' }}>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.8rem', textAlign: 'left', width: '100%' }}>
-                            {Object.entries(custTypeDist).map(([name, val], idx) => {
-                              const colors = ['#16A37B', '#D14343', '#E0A82E', '#11132B'];
-                              const color = colors[idx % colors.length];
-                              const pct = totalSubmit > 0 ? ((val / totalSubmit) * 100).toFixed(1) : 0;
-                              return (
-                                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                    <span style={{ height: '8px', width: '8px', borderRadius: '50%', background: color }} />
-                                    <span>{name}</span>
+                          {/* SBI: Final Status (STAGE_IN_SALES24) Bar */}
+                          <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', minHeight: '280px' }}>
+                            <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>Final Status Distribution</h4>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', overflowY: 'auto', flex: 1 }}>
+                              {Object.entries(finalStatusDist).sort((a, b) => b[1] - a[1]).map(([name, val], idx) => {
+                                const pct = totalSubmit > 0 ? (val / totalSubmit) * 100 : 0;
+                                return (
+                                  <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.78rem' }}>
+                                    <div style={{ width: '100px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', textAlign: 'right', fontWeight: 600 }} title={name}>{name}</div>
+                                    <div style={{ flex: 1, height: '14px', background: 'var(--paper-2)', borderRadius: '4px', overflow: 'hidden' }}>
+                                      <div style={{ height: '100%', width: `${pct}%`, background: 'var(--gold-deep)', borderRadius: '4px', transition: 'width 0.4s' }} />
+                                    </div>
+                                    <div style={{ width: '55px', fontWeight: 'bold', fontSize: '0.75rem', textAlign: 'right' }}>{val} ({pct.toFixed(0)}%)</div>
                                   </div>
-                                  <span style={{ fontWeight: 'bold' }}>{val} ({pct}%)</span>
-                                </div>
-                              );
-                            })}
+                                );
+                              })}
+                            </div>
                           </div>
-                        </div>
-                      </div>
+
+                          {/* SBI: Decision Reason (DECISION_CODE_REASON1_WCP) Bar */}
+                          <div className="glass-panel" style={{ padding: '1.5rem', gridColumn: 'span 2', display: 'flex', flexDirection: 'column', minHeight: '280px' }}>
+                            <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>Decision Reason Breakdown</h4>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '210px', overflowY: 'auto', paddingRight: '0.25rem' }}>
+                              {Object.entries(decisionReasonDist).sort((a, b) => b[1] - a[1]).map(([name, val], idx) => {
+                                const pct = totalSubmit > 0 ? (val / totalSubmit) * 100 : 0;
+                                return (
+                                  <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.78rem', background: 'var(--paper-2)', padding: '0.4rem 0.65rem', borderRadius: '6px' }}>
+                                    <div style={{ flex: 1, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', fontWeight: 600, color: 'var(--ink)' }} title={name}>{name}</div>
+                                    <div style={{ width: '120px', height: '10px', background: 'var(--line)', borderRadius: '3px', overflow: 'hidden' }}>
+                                      <div style={{ height: '100%', width: `${pct}%`, background: 'var(--err)', transition: 'width 0.4s' }} />
+                                    </div>
+                                    <div style={{ width: '65px', fontWeight: 'bold', fontSize: '0.75rem', textAlign: 'right', fontFamily: 'var(--font-mono)' }}>{val} ({pct.toFixed(1)}%)</div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* SBI: Summary Comparison Table */}
+                          <div className="glass-panel" style={{ padding: '1.5rem', gridColumn: 'span 2', display: 'flex', flexDirection: 'column' }}>
+                            <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>SBI MIS Summary Table</h4>
+                            <div style={{ overflowX: 'auto', flex: 1 }}>
+                              <table className="data-table" style={{ fontSize: '0.78rem', width: '100%' }}>
+                                <thead>
+                                  <tr>
+                                    <th style={{ textAlign: 'left', padding: '0.5rem 0.75rem' }}>Metric</th>
+                                    <th style={{ textAlign: 'center', padding: '0.5rem 0.75rem' }}>Count</th>
+                                    <th style={{ textAlign: 'center', padding: '0.5rem 0.75rem' }}>% of Total</th>
+                                    <th style={{ textAlign: 'left', padding: '0.5rem 0.75rem' }}>Status</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {[
+                                    { label: 'Total Applications', count: totalSubmit, status: '—' },
+                                    { label: 'Soft Decision Approved', count: funnelSoftDecision, status: funnelSoftDecision > 0 ? '✅ Active' : '⚪ None' },
+                                    { label: 'STP Flag = Yes', count: funnelWorkFlow, status: funnelWorkFlow > 0 ? '✅ Active' : '⚪ None' },
+                                    { label: 'Final Status (APPL File Gen)', count: funnelFinalStatus, status: funnelFinalStatus > 0 ? '✅ Active' : '⚪ None' },
+                                    { label: 'Approved', count: approvedCount, status: approvedCount > 0 ? '🟢 Processed' : '⚪ None' },
+                                    { label: 'Rejected', count: rejectedCount, status: rejectedCount > 0 ? '🔴 Declined' : '⚪ None' },
+                                    { label: 'Pending', count: pendingCount, status: pendingCount > 0 ? '🟡 In Progress' : '⚪ None' },
+                                  ].map((row, idx) => (
+                                    <tr key={idx} style={{ borderBottom: '1px solid var(--line)' }}>
+                                      <td style={{ padding: '0.55rem 0.75rem', fontWeight: 600 }}>{row.label}</td>
+                                      <td style={{ padding: '0.55rem 0.75rem', textAlign: 'center', fontWeight: 800, fontSize: '0.85rem', fontFamily: 'var(--font-mono)' }}>{row.count}</td>
+                                      <td style={{ padding: '0.55rem 0.75rem', textAlign: 'center', color: 'hsl(var(--text-muted))' }}>{totalSubmit > 0 ? ((row.count / totalSubmit) * 100).toFixed(1) : 0}%</td>
+                                      <td style={{ padding: '0.55rem 0.75rem' }}>{row.status}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        </>
                       )}
 
-                      {/* Visual 7: Bar Chart - Card Activation Status */}
+                      {/* === HDFC-SPECIFIC VISUALS === */}
                       {(!dashSelectedBank || dashSelectedBank === 'HDFC') && (
-                        <div className="glass-panel" style={{ padding: '1.5rem' }}>
-                        <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>Card Activation Status</h4>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                          {Object.entries(actDist).map(([name, val], idx) => {
-                            const pct = totalSubmit > 0 ? (val / totalSubmit) * 100 : 0;
-                            return (
-                              <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem' }}>
-                                <div style={{ width: '100px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', textAlign: 'right' }}>{name}</div>
-                                <div style={{ flex: 1, height: '14px', background: 'var(--paper-2)', borderRadius: '4px', overflow: 'hidden' }}>
-                                  <div style={{ height: '100%', width: `${pct}%`, background: 'var(--mint)' }} />
-                                </div>
-                                <div style={{ width: '40px', fontWeight: 'bold' }}>{val}</div>
+                        <>
+                          {/* HDFC: IPA Decision Breakdown */}
+                          <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
+                            <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>IPA Decision Breakdown</h4>
+                            <div style={{ display: 'flex', flex: 1, alignItems: 'center', justifyContent: 'center', gap: '1.5rem' }}>
+                              <svg width="120" height="120" viewBox="0 0 36 36">
+                                <circle cx="18" cy="18" r="15.915" fill="none" stroke="var(--line)" strokeWidth="4.2" />
+                                {totalSubmit > 0 && (() => {
+                                  const ipaAppPct = (ipaApproved / totalSubmit) * 100;
+                                  const ipaDecPct = (ipaDeclined / totalSubmit) * 100;
+                                  const ipaOthPct = 100 - ipaAppPct - ipaDecPct;
+                                  return (
+                                    <>
+                                      <circle cx="18" cy="18" r="15.915" fill="none" stroke="var(--mint)" strokeWidth="4.2" strokeDasharray={`${ipaAppPct} ${100 - ipaAppPct}`} strokeDashoffset="25" />
+                                      <circle cx="18" cy="18" r="15.915" fill="none" stroke="var(--err)" strokeWidth="4.2" strokeDasharray={`${ipaDecPct} ${100 - ipaDecPct}`} strokeDashoffset={25 - ipaAppPct} />
+                                      <circle cx="18" cy="18" r="15.915" fill="none" stroke="var(--line)" strokeWidth="4.2" strokeDasharray={`${ipaOthPct} ${100 - ipaOthPct}`} strokeDashoffset={25 - ipaAppPct - ipaDecPct} />
+                                    </>
+                                  );
+                                })()}
+                              </svg>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.8rem', textAlign: 'left' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><span style={{ height: '10px', width: '10px', borderRadius: '50%', background: 'var(--mint)' }} /><span>Approved: {ipaApproved}</span></div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><span style={{ height: '10px', width: '10px', borderRadius: '50%', background: 'var(--err)' }} /><span>Declined: {ipaDeclined}</span></div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><span style={{ height: '10px', width: '10px', borderRadius: '50%', background: 'var(--line)' }} /><span>Other/Pending: {totalSubmit - ipaApproved - ipaDeclined}</span></div>
                               </div>
-                            );
-                          })}
+                            </div>
+                          </div>
+
+                          {/* HDFC: KYC Status Distribution */}
+                          <div className="glass-panel" style={{ padding: '1.5rem' }}>
+                            <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>KYC Status Distribution</h4>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '180px', overflowY: 'auto' }}>
+                              {Object.entries(kycDist).map(([name, val], idx) => {
+                                const pct = totalSubmit > 0 ? (val / totalSubmit) * 100 : 0;
+                                return (
+                                  <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem' }}>
+                                    <div style={{ width: '80px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', textAlign: 'right' }}>{name}</div>
+                                    <div style={{ flex: 1, height: '14px', background: 'var(--paper-2)', borderRadius: '4px', overflow: 'hidden' }}><div style={{ height: '100%', width: `${pct}%`, background: 'var(--gold)' }} /></div>
+                                    <div style={{ width: '40px', fontWeight: 'bold' }}>{val}</div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* HDFC: Card Type */}
+                          <div className="glass-panel" style={{ padding: '1.5rem' }}>
+                            <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>Card Type</h4>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                              {Object.entries(cardTypeDist).map(([name, val], idx) => {
+                                const pct = totalSubmit > 0 ? (val / totalSubmit) * 100 : 0;
+                                return (
+                                  <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem' }}>
+                                    <div style={{ width: '80px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', textAlign: 'right' }}>{name}</div>
+                                    <div style={{ flex: 1, height: '14px', background: 'var(--paper-2)', borderRadius: '4px', overflow: 'hidden' }}><div style={{ height: '100%', width: `${pct}%`, background: 'var(--ink)' }} /></div>
+                                    <div style={{ width: '40px', fontWeight: 'bold' }}>{val}</div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* HDFC: Customer Type */}
+                          <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
+                            <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>Customer Type</h4>
+                            <div style={{ display: 'flex', flex: 1, alignItems: 'center', justifyContent: 'center', gap: '1.5rem' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.8rem', textAlign: 'left', width: '100%' }}>
+                                {Object.entries(custTypeDist).map(([name, val], idx) => {
+                                  const colors = ['#16A37B', '#D14343', '#E0A82E', '#11132B'];
+                                  return (
+                                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><span style={{ height: '8px', width: '8px', borderRadius: '50%', background: colors[idx % colors.length] }} /><span>{name}</span></div>
+                                      <span style={{ fontWeight: 'bold' }}>{val} ({totalSubmit > 0 ? ((val / totalSubmit) * 100).toFixed(1) : 0}%)</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* HDFC: Card Activation Status */}
+                          <div className="glass-panel" style={{ padding: '1.5rem' }}>
+                            <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>Card Activation Status</h4>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                              {Object.entries(actDist).map(([name, val], idx) => {
+                                const pct = totalSubmit > 0 ? (val / totalSubmit) * 100 : 0;
+                                return (
+                                  <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem' }}>
+                                    <div style={{ width: '100px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', textAlign: 'right' }}>{name}</div>
+                                    <div style={{ flex: 1, height: '14px', background: 'var(--paper-2)', borderRadius: '4px', overflow: 'hidden' }}><div style={{ height: '100%', width: `${pct}%`, background: 'var(--mint)' }} /></div>
+                                    <div style={{ width: '40px', fontWeight: 'bold' }}>{val}</div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* HDFC: Product Description */}
+                          <div className="glass-panel" style={{ padding: '1.5rem', gridColumn: 'span 2' }}>
+                            <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>Product Description (Card Name Distribution)</h4>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
+                              {Object.entries(prodDist).map(([name, val], idx) => {
+                                const pct = totalSubmit > 0 ? (val / totalSubmit) * 100 : 0;
+                                return (
+                                  <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', padding: '0.5rem', background: 'var(--paper-2)', borderRadius: '8px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', fontWeight: 600 }}>
+                                      <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '160px' }}>{name}</span>
+                                      <span>{val}</span>
+                                    </div>
+                                    <div style={{ height: '8px', background: 'var(--line)', borderRadius: '3px', overflow: 'hidden' }}>
+                                      <div style={{ height: '100%', width: `${pct}%`, background: 'var(--gold)' }} />
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </>
+                      )}
+
+                      {/* === UNIVERSAL VISUALS (all banks) === */}
+                      {/* Source Type */}
+                      {dashSelectedBank !== 'SBI' && (
+                        <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
+                          <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>Source Type</h4>
+                          <div style={{ display: 'flex', flex: 1, alignItems: 'center', justifyContent: 'center', gap: '1.5rem' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.8rem', textAlign: 'left', width: '100%' }}>
+                              {Object.entries(srcDist).map(([name, val], idx) => {
+                                const colors = ['#E0A82E', '#16A37B', '#11132B', '#5C6070', '#D14343'];
+                                const pct = totalSubmit > 0 ? ((val / totalSubmit) * 100).toFixed(1) : 0;
+                                return (
+                                  <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><span style={{ height: '8px', width: '8px', borderRadius: '50%', background: colors[idx % colors.length] }} /><span>{name}</span></div>
+                                    <span style={{ fontWeight: 'bold' }}>{val} ({pct}%)</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
                         </div>
-                      </div>
                       )}
 
                       {/* Visual 8: India Map Pincode Heatmap */}
@@ -3962,28 +4348,6 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                         </div>
                       </div>
 
-                      {/* Visual 9: Product Des / Card Name */}
-                      {(!dashSelectedBank || dashSelectedBank === 'HDFC') && (
-                        <div className="glass-panel" style={{ padding: '1.5rem', gridColumn: 'span 2' }}>
-                          <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>Product Description (Card Name Distribution)</h4>
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
-                            {Object.entries(prodDist).map(([name, val], idx) => {
-                              const pct = totalSubmit > 0 ? (val / totalSubmit) * 100 : 0;
-                              return (
-                                <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', padding: '0.5rem', background: 'var(--paper-2)', borderRadius: '8px' }}>
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', fontWeight: 600 }}>
-                                    <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '160px' }}>{name}</span>
-                                    <span>{val}</span>
-                                  </div>
-                                  <div style={{ height: '8px', background: 'var(--line)', borderRadius: '3px', overflow: 'hidden' }}>
-                                    <div style={{ height: '100%', width: `${pct}%`, background: 'var(--gold)' }} />
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
 
                     </div>
 
@@ -5193,6 +5557,16 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                       </div>
                     </div>
 
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.03)', padding: '1.25rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)', margin: '1rem 0 2rem 0' }}>
+                      <div>
+                        <h4 style={{ margin: '0 0 0.35rem 0', fontSize: '1.05rem', color: 'hsl(var(--err))' }}>Deduplicate Leads (Database Cleanup)</h4>
+                        <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-muted)' }}>Removes duplicate leads based on phone number and bank, keeping the most recently updated and best mapped record.</p>
+                      </div>
+                      <button type="button" className="btn-secondary" onClick={triggerRemoveDuplicates} style={{ padding: '0.5rem 1.25rem', border: '1px solid hsl(var(--err))', color: 'hsl(var(--err))' }}>
+                        Run Deduplication
+                      </button>
+                    </div>
+
                     <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                       <button type="submit" className="btn-primary" style={{ padding: '0.75rem 2rem' }} disabled={isSubmitting}>
                         {isSubmitting ? 'Saving...' : 'Save General & Legal Settings'}
@@ -5797,126 +6171,265 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                       Configure custom MIS parsing rules, URN character extraction columns (e.g. <code>contant</code> for YES Bank), and field mappings for each partner bank.
                     </p>
 
-                    {/* AUTOMATED SBI EMAIL MIS AUTO-SYNC CONTROL CARD */}
+                    {/* AUTOMATED SBI & KIWI EMAIL MIS AUTO-SYNC CONTROL CARDS (GRID SIDE-BY-SIDE) */}
                     <div style={{
-                      padding: '1.5rem',
-                      borderRadius: '16px',
-                      background: 'linear-gradient(135deg, rgba(224, 168, 46, 0.08) 0%, rgba(20, 24, 40, 0.4) 100%)',
-                      border: '1px solid rgba(224, 168, 46, 0.3)',
-                      marginBottom: '1.75rem',
-                      boxShadow: '0 8px 24px rgba(0,0,0,0.12)'
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))',
+                      gap: '1.5rem',
+                      marginBottom: '1.75rem'
                     }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.25rem' }}>
+                      {/* AUTOMATED SBI EMAIL MIS AUTO-SYNC CONTROL CARD */}
+                      <div style={{
+                        padding: '1.5rem',
+                        borderRadius: '16px',
+                        background: 'linear-gradient(135deg, rgba(224, 168, 46, 0.08) 0%, rgba(20, 24, 40, 0.4) 100%)',
+                        border: '1px solid rgba(224, 168, 46, 0.3)',
+                        boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justify: 'space-between'
+                      }}>
                         <div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.35rem' }}>
-                            <Mail size={22} style={{ color: 'var(--gold-deep)' }} />
-                            <h4 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: 'var(--ink)' }}>
-                              Automated SBI Email MIS Fetcher & Real-Time Mapping Engine
-                            </h4>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.25rem' }}>
+                            <div style={{ flex: 1, minWidth: '220px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.35rem' }}>
+                                <Mail size={22} style={{ color: 'var(--gold-deep)' }} />
+                                <h4 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: 'var(--ink)' }}>
+                                  Automated SBI Email MIS Fetcher
+                                </h4>
+                              </div>
+                              <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--muted)' }}>
+                                Connects to Gmail via IMAP SSL, auto-downloads MIS attachments for SBI (from <code>sstechnologies2017@gmail.com</code>), mapping leads in real time.
+                              </p>
+                            </div>
+
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem' }}>
+                              <span style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.4rem',
+                                padding: '0.3rem 0.75rem',
+                                borderRadius: '20px',
+                                background: emailMisConfig.enabled ? 'rgba(16, 185, 129, 0.12)' : 'rgba(209, 67, 67, 0.12)',
+                                color: emailMisConfig.enabled ? 'var(--mint)' : 'var(--err)',
+                                fontSize: '0.75rem',
+                                fontWeight: 700,
+                                border: `1px solid ${emailMisConfig.enabled ? 'rgba(16, 185, 129, 0.3)' : 'rgba(209, 67, 67, 0.3)'}`
+                              }}>
+                                {emailMisConfig.enabled ? '🟢 Auto-Sync Active' : '🔴 Auto-Sync Disabled'}
+                              </span>
+
+                              <button
+                                type="button"
+                                onClick={triggerManualEmailSync}
+                                disabled={isSyncingEmailMis}
+                                className="btn-primary"
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '0.4rem',
+                                  padding: '0.45rem 0.9rem',
+                                  fontSize: '0.8rem',
+                                  background: 'var(--gold-deep)',
+                                  color: '#fff',
+                                  borderRadius: '8px'
+                                }}
+                              >
+                                <RefreshCw size={14} className={isSyncingEmailMis ? 'spin' : ''} />
+                                {isSyncingEmailMis ? 'Syncing...' : 'Sync Email MIS Now'}
+                              </button>
+                            </div>
                           </div>
-                          <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--muted)' }}>
-                            Connects to Gmail via IMAP SSL, auto-downloads MIS attachments from <code>sstechnologies2017@gmail.com</code>, and maps all 44 fields in real time.
-                          </p>
+
+                          {/* Active Config Parameters Table */}
+                          <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                            gap: '0.75rem',
+                            background: 'var(--paper)',
+                            padding: '0.85rem',
+                            borderRadius: '12px',
+                            border: '1px solid var(--line)',
+                            marginBottom: '1rem'
+                          }}>
+                            <div>
+                              <span style={{ fontSize: '0.7rem', color: 'var(--muted)', display: 'block', textTransform: 'uppercase', fontWeight: 700 }}>Receiver Email</span>
+                              <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--ink)', wordBreak: 'break-all' }}>{emailMisConfig.receiver_email}</span>
+                            </div>
+                            <div>
+                              <span style={{ fontSize: '0.7rem', color: 'var(--muted)', display: 'block', textTransform: 'uppercase', fontWeight: 700 }}>Sender Filter</span>
+                              <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--ink)', wordBreak: 'break-all' }}>{emailMisConfig.sender_email}</span>
+                            </div>
+                            <div>
+                              <span style={{ fontSize: '0.7rem', color: 'var(--muted)', display: 'block', textTransform: 'uppercase', fontWeight: 700 }}>Target Subjects</span>
+                              <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--gold-deep)' }}>
+                                {Array.isArray(emailMisConfig.subject_keywords) ? emailMisConfig.subject_keywords.join(', ') : 'LG MIS EOD'}
+                              </span>
+                            </div>
+                            <div>
+                              <span style={{ fontSize: '0.7rem', color: 'var(--muted)', display: 'block', textTransform: 'uppercase', fontWeight: 700 }}>Gmail App Password</span>
+                              <span style={{ fontSize: '0.8rem', fontFamily: 'var(--font-mono)' }}>••••••••••••••••</span>
+                            </div>
+                          </div>
                         </div>
 
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                          <span style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '0.4rem',
-                            padding: '0.35rem 0.85rem',
-                            borderRadius: '20px',
-                            background: emailMisConfig.enabled ? 'rgba(16, 185, 129, 0.12)' : 'rgba(209, 67, 67, 0.12)',
-                            color: emailMisConfig.enabled ? 'var(--mint)' : 'var(--err)',
-                            fontSize: '0.78rem',
-                            fontWeight: 700,
-                            border: `1px solid ${emailMisConfig.enabled ? 'rgba(16, 185, 129, 0.3)' : 'rgba(209, 67, 67, 0.3)'}`
-                          }}>
-                            {emailMisConfig.enabled ? '🟢 Auto-Sync Active (Every 5 mins)' : '🔴 Auto-Sync Disabled'}
-                          </span>
-
+                        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                           <button
                             type="button"
-                            onClick={triggerManualEmailSync}
-                            disabled={isSyncingEmailMis}
-                            className="btn-primary"
+                            onClick={() => {
+                              setEmailConfigForm({
+                                receiver_email: emailMisConfig.receiver_email || 'spikemarketingsolutions25@gmail.com',
+                                app_password: '',
+                                sender_email: emailMisConfig.sender_email || 'sstechnologies2017@gmail.com',
+                                subject_keywords: Array.isArray(emailMisConfig.subject_keywords) ? emailMisConfig.subject_keywords.join(', ') : 'LG MIS EOD, LG MIS 48Hourly, LG MIS Hourly',
+                                enabled: emailMisConfig.enabled !== undefined ? emailMisConfig.enabled : true
+                              });
+                              setEmailConfigDevPass('');
+                              setEmailConfigError('');
+                              setEmailConfigSuccess('');
+                              setShowEmailConfigModal(true);
+                            }}
+                            className="btn-secondary"
                             style={{
                               display: 'flex',
                               alignItems: 'center',
-                              gap: '0.5rem',
-                              padding: '0.55rem 1.1rem',
-                              fontSize: '0.85rem',
-                              background: 'var(--gold-deep)',
-                              color: '#fff',
-                              borderRadius: '10px'
+                              gap: '0.4rem',
+                              padding: '0.4rem 0.85rem',
+                              fontSize: '0.78rem',
+                              borderColor: 'var(--gold)'
                             }}
                           >
-                            <RefreshCw size={15} className={isSyncingEmailMis ? 'spin' : ''} />
-                            {isSyncingEmailMis ? 'Checking IMAP Emails...' : 'Sync Email MIS Now'}
+                            <Key size={13} style={{ color: 'var(--gold-deep)' }} />
+                            Configure Email & Password
                           </button>
                         </div>
                       </div>
 
-                      {/* Active Config Parameters Table */}
+                      {/* AUTOMATED KIWI EMAIL MIS AUTO-SYNC CONTROL CARD */}
                       <div style={{
-                        display: 'grid',
-                        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-                        gap: '1rem',
-                        background: 'var(--paper)',
-                        padding: '1rem',
-                        borderRadius: '12px',
-                        border: '1px solid var(--line)',
-                        marginBottom: '1rem'
+                        padding: '1.5rem',
+                        borderRadius: '16px',
+                        background: 'linear-gradient(135deg, rgba(224, 168, 46, 0.08) 0%, rgba(20, 24, 40, 0.4) 100%)',
+                        border: '1px solid rgba(224, 168, 46, 0.3)',
+                        boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justify: 'space-between'
                       }}>
                         <div>
-                          <span style={{ fontSize: '0.72rem', color: 'var(--muted)', display: 'block', textTransform: 'uppercase', fontWeight: 700 }}>Receiver Email</span>
-                          <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--ink)' }}>{emailMisConfig.receiver_email}</span>
-                        </div>
-                        <div>
-                          <span style={{ fontSize: '0.72rem', color: 'var(--muted)', display: 'block', textTransform: 'uppercase', fontWeight: 700 }}>Sender Filter</span>
-                          <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--ink)' }}>{emailMisConfig.sender_email}</span>
-                        </div>
-                        <div>
-                          <span style={{ fontSize: '0.72rem', color: 'var(--muted)', display: 'block', textTransform: 'uppercase', fontWeight: 700 }}>Target Subjects</span>
-                          <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--gold-deep)' }}>
-                            {Array.isArray(emailMisConfig.subject_keywords) ? emailMisConfig.subject_keywords.join(', ') : 'LG MIS EOD'}
-                          </span>
-                        </div>
-                        <div>
-                          <span style={{ fontSize: '0.72rem', color: 'var(--muted)', display: 'block', textTransform: 'uppercase', fontWeight: 700 }}>Gmail App Password</span>
-                          <span style={{ fontSize: '0.85rem', fontFamily: 'var(--font-mono)' }}>••••••••••••••••</span>
-                        </div>
-                      </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.25rem' }}>
+                            <div style={{ flex: 1, minWidth: '220px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.35rem' }}>
+                                <Mail size={22} style={{ color: 'var(--gold-deep)' }} />
+                                <h4 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: 'var(--ink)' }}>
+                                  Automated KIWI Email MIS Fetcher
+                                </h4>
+                              </div>
+                              <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--muted)' }}>
+                                Connects to Gmail via IMAP SSL, auto-downloads MIS attachments for KIWI (from <code>harbans.anand@mymoneymantra.com</code>), mapping leads in real time.
+                              </p>
+                            </div>
 
-                      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEmailConfigForm({
-                              receiver_email: emailMisConfig.receiver_email || 'spikemarketingsolutions25@gmail.com',
-                              app_password: '',
-                              sender_email: emailMisConfig.sender_email || 'sstechnologies2017@gmail.com',
-                              subject_keywords: Array.isArray(emailMisConfig.subject_keywords) ? emailMisConfig.subject_keywords.join(', ') : 'LG MIS EOD, LG MIS 48Hourly, LG MIS Hourly',
-                              enabled: emailMisConfig.enabled !== undefined ? emailMisConfig.enabled : true
-                            });
-                            setEmailConfigDevPass('');
-                            setEmailConfigError('');
-                            setEmailConfigSuccess('');
-                            setShowEmailConfigModal(true);
-                          }}
-                          className="btn-secondary"
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.4rem',
-                            padding: '0.45rem 1rem',
-                            fontSize: '0.8rem',
-                            borderColor: 'var(--gold)'
-                          }}
-                        >
-                          <Key size={14} style={{ color: 'var(--gold-deep)' }} />
-                          Configure Email & App Password (Lakshay@123)
-                        </button>
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem' }}>
+                              <span style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.4rem',
+                                padding: '0.3rem 0.75rem',
+                                borderRadius: '20px',
+                                background: kiwiEmailMisConfig.enabled ? 'rgba(16, 185, 129, 0.12)' : 'rgba(209, 67, 67, 0.12)',
+                                color: kiwiEmailMisConfig.enabled ? 'var(--mint)' : 'var(--err)',
+                                fontSize: '0.75rem',
+                                fontWeight: 700,
+                                border: `1px solid ${kiwiEmailMisConfig.enabled ? 'rgba(16, 185, 129, 0.3)' : 'rgba(209, 67, 67, 0.3)'}`
+                              }}>
+                                {kiwiEmailMisConfig.enabled ? '🟢 Auto-Sync Active' : '🔴 Auto-Sync Disabled'}
+                              </span>
+
+                              <button
+                                type="button"
+                                onClick={triggerManualKiwiEmailSync}
+                                disabled={isSyncingKiwiEmailMis}
+                                className="btn-primary"
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '0.4rem',
+                                  padding: '0.45rem 0.9rem',
+                                  fontSize: '0.8rem',
+                                  background: 'var(--gold-deep)',
+                                  color: '#fff',
+                                  borderRadius: '8px'
+                                }}
+                              >
+                                <RefreshCw size={14} className={isSyncingKiwiEmailMis ? 'spin' : ''} />
+                                {isSyncingKiwiEmailMis ? 'Syncing...' : 'Sync Email MIS Now'}
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Active Config Parameters Table */}
+                          <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                            gap: '0.75rem',
+                            background: 'var(--paper)',
+                            padding: '0.85rem',
+                            borderRadius: '12px',
+                            border: '1px solid var(--line)',
+                            marginBottom: '1rem'
+                          }}>
+                            <div>
+                              <span style={{ fontSize: '0.7rem', color: 'var(--muted)', display: 'block', textTransform: 'uppercase', fontWeight: 700 }}>Receiver Email</span>
+                              <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--ink)', wordBreak: 'break-all' }}>{kiwiEmailMisConfig.receiver_email}</span>
+                            </div>
+                            <div>
+                              <span style={{ fontSize: '0.7rem', color: 'var(--muted)', display: 'block', textTransform: 'uppercase', fontWeight: 700 }}>Sender Filter</span>
+                              <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--ink)', wordBreak: 'break-all' }}>{kiwiEmailMisConfig.sender_email}</span>
+                            </div>
+                            <div>
+                              <span style={{ fontSize: '0.7rem', color: 'var(--muted)', display: 'block', textTransform: 'uppercase', fontWeight: 700 }}>Target Subjects</span>
+                              <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--gold-deep)' }}>
+                                {Array.isArray(kiwiEmailMisConfig.subject_keywords) ? kiwiEmailMisConfig.subject_keywords.join(', ') : 'kiwi mis'}
+                              </span>
+                            </div>
+                            <div>
+                              <span style={{ fontSize: '0.7rem', color: 'var(--muted)', display: 'block', textTransform: 'uppercase', fontWeight: 700 }}>Gmail App Password</span>
+                              <span style={{ fontSize: '0.8rem', fontFamily: 'var(--font-mono)' }}>••••••••••••••••</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setKiwiEmailConfigForm({
+                                receiver_email: kiwiEmailMisConfig.receiver_email || 'spikemarketingsolutions25@gmail.com',
+                                app_password: '',
+                                sender_email: kiwiEmailMisConfig.sender_email || 'harbans.anand@mymoneymantra.com',
+                                subject_keywords: Array.isArray(kiwiEmailMisConfig.subject_keywords) ? kiwiEmailMisConfig.subject_keywords.join(', ') : 'kiwi mis',
+                                enabled: kiwiEmailMisConfig.enabled !== undefined ? kiwiEmailMisConfig.enabled : true
+                              });
+                              setKiwiEmailConfigDevPass('');
+                              setKiwiEmailConfigError('');
+                              setKiwiEmailConfigSuccess('');
+                              setShowKiwiEmailConfigModal(true);
+                            }}
+                            className="btn-secondary"
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '0.4rem',
+                              padding: '0.4rem 0.85rem',
+                              fontSize: '0.78rem',
+                              borderColor: 'var(--gold)'
+                            }}
+                          >
+                            <Key size={13} style={{ color: 'var(--gold-deep)' }} />
+                            Configure Email & Password
+                          </button>
+                        </div>
                       </div>
                     </div>
 
@@ -6781,98 +7294,109 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
             {!isEditingLead ? (
               <>
-                {/* VIEW MODE */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '2rem', textAlign: 'left' }} className="admin-split-grid">
-                  <div>
-                    <h4 style={{ fontSize: '1rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.5rem', marginBottom: '0.8rem', color: 'hsl(var(--primary))' }}>Customer Details</h4>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.9rem' }}>
-                      <div><strong>Application ID:</strong> <code style={{ color: 'var(--mint)', fontWeight: 700 }}>{selectedLeadDetails.application_id || 'N/A'}</code></div>
-                      <div><strong>Name:</strong> {selectedLeadDetails.full_name}</div>
-                      <div><strong>Phone:</strong> +91 {selectedLeadDetails.phone}</div>
-                      <div><strong>Email:</strong> {selectedLeadDetails.email}</div>
-                      <div><strong>PAN Number:</strong> <code style={{ color: 'var(--gold-deep)', fontWeight: 600 }}>{selectedLeadDetails.pan_no || 'N/A'}</code></div>
-                      <div><strong>Employment Type:</strong> {selectedLeadDetails.employment || 'N/A'}</div>
-                      <div><strong>Designation:</strong> {selectedLeadDetails.designation || 'N/A'}</div>
-                      <div><strong>Company / Employer:</strong> {selectedLeadDetails.company_name || 'N/A'}</div>
-                      <div><strong>Already Has Credit Card?</strong> {selectedLeadDetails.has_credit_card || 'N/A'}</div>
-                      <div><strong>Residence Pincode:</strong> <code>{selectedLeadDetails.pincode || 'N/A'}</code></div>
-                      <div><strong>Net Monthly Income:</strong> {selectedLeadDetails.monthly_income ? `₹${selectedLeadDetails.monthly_income}` : 'N/A'}</div>
-                      <div><strong>Date of Birth:</strong> {selectedLeadDetails.dob || 'N/A'}</div>
-                      <div><strong>Mother's Name:</strong> {selectedLeadDetails.mother_name || 'N/A'}</div>
-                      <div><strong>Current Address:</strong> {selectedLeadDetails.current_address || 'N/A'}</div>
-                      <div>
-                        <strong>Consent:</strong>{' '}
-                        <span style={{ color: selectedLeadDetails.consent ? 'var(--mint)' : 'var(--err)', fontWeight: 600 }}>
-                          {selectedLeadDetails.consent ? 'Accepted' : 'No Consent'}
-                        </span>
+                  {/* VIEW MODE */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '2rem', textAlign: 'left' }} className="admin-split-grid">
+                    <div>
+                      <h4 style={{ fontSize: '1rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.5rem', marginBottom: '0.8rem', color: 'hsl(var(--primary))' }}>Customer Details</h4>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.9rem' }}>
+                        {hasData(selectedLeadDetails.application_id) && <div><strong>Application ID:</strong> <code style={{ color: 'var(--mint)', fontWeight: 700 }}>{selectedLeadDetails.application_id}</code></div>}
+                        {hasData(selectedLeadDetails.full_name) && <div><strong>Name:</strong> {selectedLeadDetails.full_name}</div>}
+                        {hasData(selectedLeadDetails.phone) && <div><strong>Phone:</strong> +91 {selectedLeadDetails.phone}</div>}
+                        {hasData(selectedLeadDetails.email) && <div><strong>Email:</strong> {selectedLeadDetails.email}</div>}
+                        {hasData(selectedLeadDetails.pan_no) && <div><strong>PAN Number:</strong> <code style={{ color: 'var(--gold-deep)', fontWeight: 600 }}>{selectedLeadDetails.pan_no}</code></div>}
+                        {hasData(selectedLeadDetails.employment) && <div><strong>Employment Type:</strong> {selectedLeadDetails.employment}</div>}
+                        {hasData(selectedLeadDetails.designation) && <div><strong>Designation:</strong> {selectedLeadDetails.designation}</div>}
+                        {hasData(selectedLeadDetails.company_name) && <div><strong>Company / Employer:</strong> {selectedLeadDetails.company_name}</div>}
+                        {hasData(selectedLeadDetails.has_credit_card) && <div><strong>Already Has Credit Card?</strong> {selectedLeadDetails.has_credit_card}</div>}
+                        {hasData(selectedLeadDetails.pincode) && <div><strong>Residence Pincode:</strong> <code>{selectedLeadDetails.pincode}</code></div>}
+                        {hasData(selectedLeadDetails.monthly_income) && <div><strong>Net Monthly Income:</strong> ₹{selectedLeadDetails.monthly_income}</div>}
+                        {hasData(selectedLeadDetails.dob) && <div><strong>Date of Birth:</strong> {selectedLeadDetails.dob}</div>}
+                        {hasData(selectedLeadDetails.mother_name) && <div><strong>Mother's Name:</strong> {selectedLeadDetails.mother_name}</div>}
+                        {hasData(selectedLeadDetails.current_address) && <div><strong>Current Address:</strong> {selectedLeadDetails.current_address}</div>}
+                        {hasData(selectedLeadDetails.consent) && (
+                          <div>
+                            <strong>Consent:</strong>{' '}
+                            <span style={{ color: 'var(--mint)', fontWeight: 600 }}>Accepted</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  
+                    <div>
+                      <h4 style={{ fontSize: '1rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.5rem', marginBottom: '0.8rem', color: 'hsl(var(--primary))' }}>Registration Info</h4>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.9rem' }}>
+                        {hasData(selectedLeadDetails.card_name) && <div><strong>Selected Card:</strong> {selectedLeadDetails.card_name}</div>}
+                        {hasData(selectedLeadDetails.card_bank) && <div><strong>Bank:</strong> {selectedLeadDetails.card_bank}</div>}
+                        {hasData(selectedLeadDetails.source) && <div><strong>Source:</strong> <span className="badge badge-info">{selectedLeadDetails.source}</span></div>}
+                        {selectedLeadDetails.source === 'agent' && (
+                          <>
+                            {hasData(selectedLeadDetails.agent_name) && <div><strong>Agent:</strong> {selectedLeadDetails.agent_name} ({selectedLeadDetails.agent_id || 'N/A'})</div>}
+                            {hasData(selectedLeadDetails.agent_location) && <div><strong>Kiosk Location:</strong> {selectedLeadDetails.agent_location}</div>}
+                          </>
+                        )}
+                        {hasData(selectedLeadDetails.redirect_url) && <div><strong>Redirect URL:</strong> <a href={selectedLeadDetails.redirect_url} target="_blank" rel="noopener noreferrer" style={{ color: 'hsl(var(--primary))', textDecoration: 'underline', wordBreak: 'break-all' }}>Open Link</a></div>}
                       </div>
                     </div>
                   </div>
-                  
-                  <div>
-                    <h4 style={{ fontSize: '1rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.5rem', marginBottom: '0.8rem', color: 'hsl(var(--primary))' }}>Registration Info</h4>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.9rem' }}>
-                      <div><strong>Selected Card:</strong> {selectedLeadDetails.card_name || 'N/A'}</div>
-                      <div><strong>Bank:</strong> {selectedLeadDetails.card_bank || 'N/A'}</div>
-                      <div><strong>Source:</strong> <span className="badge badge-info">{selectedLeadDetails.source}</span></div>
-                      {selectedLeadDetails.source === 'agent' && (
-                        <>
-                          <div><strong>Agent:</strong> {selectedLeadDetails.agent_name || 'Staff'} ({selectedLeadDetails.agent_id || 'N/A'})</div>
-                          <div><strong>Kiosk Location:</strong> {selectedLeadDetails.agent_location || 'N/A'}</div>
-                        </>
-                      )}
-                      <div><strong>Redirect URL:</strong> {selectedLeadDetails.redirect_url ? <a href={selectedLeadDetails.redirect_url} target="_blank" rel="noopener noreferrer" style={{ color: 'hsl(var(--primary))', textDecoration: 'underline', wordBreak: 'break-all' }}>Open Link</a> : 'N/A'}</div>
-                    </div>
-                  </div>
-                </div>
 
                 <div style={{ textAlign: 'left' }}>
-                  <h4 style={{ fontSize: '1rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.5rem', marginBottom: '0.8rem', color: 'hsl(var(--primary))' }}>Marketing & Tracking Parameters</h4>
-                  
-                  <div className="settings-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.8rem 1.5rem', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
-                    <div><strong>UTM Channel:</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_channel || 'N/A'}</span></div>
-                    <div><strong>UTM Medium:</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_medium || 'N/A'}</span></div>
-                    <div><strong>UTM Source:</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_source || 'N/A'}</span></div>
-                    <div><strong>UTM Category:</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_category || 'N/A'}</span></div>
-                    <div><strong>UTM Campaign:</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_campaign || 'N/A'}</span></div>
-                    <div><strong>UTM Term:</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_term || 'N/A'}</span></div>
-                    <div><strong>UTM Content:</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_content || 'N/A'}</span></div>
-                    <div><strong>UTM Creative Format:</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_creative_format || 'N/A'}</span></div>
-                    <div><strong>UTM Info:</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_info || 'N/A'}</span></div>
-                    <div><strong>UTM Campaign ID (utm_id):</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_id || 'N/A'}</span></div>
-                    <div><strong>UTM Ad ID (utm_creative):</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_creative || 'N/A'}</span></div>
-                    <div><strong>UTM Internal:</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_internal || 'N/A'}</span></div>
-                    <div><strong>UTM Keyword (utm_keyword):</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_keyword || 'N/A'}</span></div>
-                    <div><strong>UTM Matchtype (utm_matchtype):</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_matchtype || 'N/A'}</span></div>
-                    <div><strong>UTM Network (utm_network):</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_network || 'N/A'}</span></div>
-                    <div><strong>UTM Placement (utm_placement):</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_placement || 'N/A'}</span></div>
-                    <div><strong>UTM Device (utm_device):</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_device || 'N/A'}</span></div>
-                    <div><strong>UTM Location (utm_location):</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_location || 'N/A'}</span></div>
-                  </div>
+                  {(hasData(selectedLeadDetails.utm_channel) || hasData(selectedLeadDetails.utm_medium) || hasData(selectedLeadDetails.utm_source) || hasData(selectedLeadDetails.utm_category) || hasData(selectedLeadDetails.utm_campaign) || hasData(selectedLeadDetails.utm_term) || hasData(selectedLeadDetails.utm_content) || hasData(selectedLeadDetails.utm_creative_format) || hasData(selectedLeadDetails.utm_info) || hasData(selectedLeadDetails.utm_id) || hasData(selectedLeadDetails.utm_creative) || hasData(selectedLeadDetails.utm_internal) || hasData(selectedLeadDetails.utm_keyword) || hasData(selectedLeadDetails.utm_matchtype) || hasData(selectedLeadDetails.utm_network) || hasData(selectedLeadDetails.utm_placement) || hasData(selectedLeadDetails.utm_device) || hasData(selectedLeadDetails.utm_location)) && (
+                    <>
+                      <h4 style={{ fontSize: '1rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.5rem', marginBottom: '0.8rem', color: 'hsl(var(--primary))' }}>Marketing & Tracking Parameters</h4>
+                      <div className="settings-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.8rem 1.5rem', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
+                        {hasData(selectedLeadDetails.utm_channel) && <div><strong>UTM Channel:</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_channel}</span></div>}
+                        {hasData(selectedLeadDetails.utm_medium) && <div><strong>UTM Medium:</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_medium}</span></div>}
+                        {hasData(selectedLeadDetails.utm_source) && <div><strong>UTM Source:</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_source}</span></div>}
+                        {hasData(selectedLeadDetails.utm_category) && <div><strong>UTM Category:</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_category}</span></div>}
+                        {hasData(selectedLeadDetails.utm_campaign) && <div><strong>UTM Campaign:</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_campaign}</span></div>}
+                        {hasData(selectedLeadDetails.utm_term) && <div><strong>UTM Term:</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_term}</span></div>}
+                        {hasData(selectedLeadDetails.utm_content) && <div><strong>UTM Content:</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_content}</span></div>}
+                        {hasData(selectedLeadDetails.utm_creative_format) && <div><strong>UTM Creative Format:</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_creative_format}</span></div>}
+                        {hasData(selectedLeadDetails.utm_info) && <div><strong>UTM Info:</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_info}</span></div>}
+                        {hasData(selectedLeadDetails.utm_id) && <div><strong>UTM Campaign ID (utm_id):</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_id}</span></div>}
+                        {hasData(selectedLeadDetails.utm_creative) && <div><strong>UTM Ad ID (utm_creative):</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_creative}</span></div>}
+                        {hasData(selectedLeadDetails.utm_internal) && <div><strong>UTM Internal:</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_internal}</span></div>}
+                        {hasData(selectedLeadDetails.utm_keyword) && <div><strong>UTM Keyword (utm_keyword):</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_keyword}</span></div>}
+                        {hasData(selectedLeadDetails.utm_matchtype) && <div><strong>UTM Matchtype (utm_matchtype):</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_matchtype}</span></div>}
+                        {hasData(selectedLeadDetails.utm_network) && <div><strong>UTM Network (utm_network):</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_network}</span></div>}
+                        {hasData(selectedLeadDetails.utm_placement) && <div><strong>UTM Placement (utm_placement):</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_placement}</span></div>}
+                        {hasData(selectedLeadDetails.utm_device) && <div><strong>UTM Device (utm_device):</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_device}</span></div>}
+                        {hasData(selectedLeadDetails.utm_location) && <div><strong>UTM Location (utm_location):</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_location}</span></div>}
+                      </div>
+                    </>
+                  )}
 
-                  <h5 style={{ fontSize: '0.9rem', marginBottom: '0.5rem', color: 'hsl(var(--text-primary))', marginTop: '1rem' }}>Session & Entry Attribution</h5>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.8rem', background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)', marginBottom: '1.5rem' }}>
-                    <div><strong>Landing Page URL:</strong> <span style={{ color: 'var(--gold-deep)', wordBreak: 'break-all' }}>{selectedLeadDetails.landing_page || 'N/A'}</span></div>
-                    <div><strong>Redirect URL:</strong> <span style={{ color: 'var(--gold-deep)', wordBreak: 'break-all' }}>{selectedLeadDetails.redirect_url || 'N/A'}</span></div>
-                    <div><strong>Referrer Source:</strong> <span style={{ color: 'var(--gold-deep)', wordBreak: 'break-all' }}>{selectedLeadDetails.referrer || 'N/A'}</span></div>
-                  </div>
+                  {(hasData(selectedLeadDetails.landing_page) || hasData(selectedLeadDetails.redirect_url) || hasData(selectedLeadDetails.referrer)) && (
+                    <>
+                      <h5 style={{ fontSize: '0.9rem', marginBottom: '0.5rem', color: 'hsl(var(--text-primary))', marginTop: '1rem' }}>Session & Entry Attribution</h5>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.8rem', background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)', marginBottom: '1.5rem' }}>
+                        {hasData(selectedLeadDetails.landing_page) && <div><strong>Landing Page URL:</strong> <span style={{ color: 'var(--gold-deep)', wordBreak: 'break-all' }}>{selectedLeadDetails.landing_page}</span></div>}
+                        {hasData(selectedLeadDetails.redirect_url) && <div><strong>Redirect URL:</strong> <span style={{ color: 'var(--gold-deep)', wordBreak: 'break-all' }}>{selectedLeadDetails.redirect_url}</span></div>}
+                        {hasData(selectedLeadDetails.referrer) && <div><strong>Referrer Source:</strong> <span style={{ color: 'var(--gold-deep)', wordBreak: 'break-all' }}>{selectedLeadDetails.referrer}</span></div>}
+                      </div>
+                    </>
+                  )}
 
-                  <h5 style={{ fontSize: '0.9rem', marginBottom: '0.5rem', color: 'hsl(var(--text-primary))' }}>Ad Network Click Identifiers</h5>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.8rem', background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)', marginBottom: '1.5rem' }}>
-                    <div><strong>FBCLID (Facebook):</strong> <span style={{ fontFamily: 'var(--font-mono)', wordBreak: 'break-all', color: 'var(--gold-deep)' }}>{selectedLeadDetails.fbclid || 'None'}</span></div>
-                    <div><strong>GCLID (Google):</strong> <span style={{ fontFamily: 'var(--font-mono)', wordBreak: 'break-all', color: 'var(--gold-deep)' }}>{selectedLeadDetails.gclid || 'None'}</span></div>
-                    <div><strong>GBRAID (Google App iOS):</strong> <span style={{ fontFamily: 'var(--font-mono)', wordBreak: 'break-all', color: 'var(--gold-deep)' }}>{selectedLeadDetails.gbraid || 'None'}</span></div>
-                    <div><strong>WBRAID (Google App Web):</strong> <span style={{ fontFamily: 'var(--font-mono)', wordBreak: 'break-all', color: 'var(--gold-deep)' }}>{selectedLeadDetails.wbraid || 'None'}</span></div>
-                    <div><strong>GCLSRC (Google Click Source):</strong> <span style={{ fontFamily: 'var(--font-mono)', wordBreak: 'break-all', color: 'var(--gold-deep)' }}>{selectedLeadDetails.gclsrc || 'None'}</span></div>
-                    <div><strong>DCLID (Google Display):</strong> <span style={{ fontFamily: 'var(--font-mono)', wordBreak: 'break-all', color: 'var(--gold-deep)' }}>{selectedLeadDetails.dclid || 'None'}</span></div>
-                    <div><strong>MSCLKID (Bing):</strong> <span style={{ fontFamily: 'var(--font-mono)', wordBreak: 'break-all', color: 'var(--gold-deep)' }}>{selectedLeadDetails.msclkid || 'None'}</span></div>
-                    <div><strong>TTCLID (TikTok):</strong> <span style={{ fontFamily: 'var(--font-mono)', wordBreak: 'break-all', color: 'var(--gold-deep)' }}>{selectedLeadDetails.ttclid || 'None'}</span></div>
-                    <div><strong>TWCLID (Twitter):</strong> <span style={{ fontFamily: 'var(--font-mono)', wordBreak: 'break-all', color: 'var(--gold-deep)' }}>{selectedLeadDetails.twclid || 'None'}</span></div>
-                    <div><strong>LI_FAT_ID (LinkedIn):</strong> <span style={{ fontFamily: 'var(--font-mono)', wordBreak: 'break-all', color: 'var(--gold-deep)' }}>{selectedLeadDetails.li_fat_id || 'None'}</span></div>
-                  </div>
+                  {(hasData(selectedLeadDetails.fbclid) || hasData(selectedLeadDetails.gclid) || hasData(selectedLeadDetails.gbraid) || hasData(selectedLeadDetails.wbraid) || hasData(selectedLeadDetails.gclsrc) || hasData(selectedLeadDetails.dclid) || hasData(selectedLeadDetails.msclkid) || hasData(selectedLeadDetails.ttclid) || hasData(selectedLeadDetails.twclid) || hasData(selectedLeadDetails.li_fat_id)) && (
+                    <>
+                      <h5 style={{ fontSize: '0.9rem', marginBottom: '0.5rem', color: 'hsl(var(--text-primary))' }}>Ad Network Click Identifiers</h5>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.8rem', background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)', marginBottom: '1.5rem' }}>
+                        {hasData(selectedLeadDetails.fbclid) && <div><strong>FBCLID (Facebook):</strong> <span style={{ fontFamily: 'var(--font-mono)', wordBreak: 'break-all', color: 'var(--gold-deep)' }}>{selectedLeadDetails.fbclid}</span></div>}
+                        {hasData(selectedLeadDetails.gclid) && <div><strong>GCLID (Google):</strong> <span style={{ fontFamily: 'var(--font-mono)', wordBreak: 'break-all', color: 'var(--gold-deep)' }}>{selectedLeadDetails.gclid}</span></div>}
+                        {hasData(selectedLeadDetails.gbraid) && <div><strong>GBRAID (Google App iOS):</strong> <span style={{ fontFamily: 'var(--font-mono)', wordBreak: 'break-all', color: 'var(--gold-deep)' }}>{selectedLeadDetails.gbraid}</span></div>}
+                        {hasData(selectedLeadDetails.wbraid) && <div><strong>WBRAID (Google App Web):</strong> <span style={{ fontFamily: 'var(--font-mono)', wordBreak: 'break-all', color: 'var(--gold-deep)' }}>{selectedLeadDetails.wbraid}</span></div>}
+                        {hasData(selectedLeadDetails.gclsrc) && <div><strong>GCLSRC (Google Click Source):</strong> <span style={{ fontFamily: 'var(--font-mono)', wordBreak: 'break-all', color: 'var(--gold-deep)' }}>{selectedLeadDetails.gclsrc}</span></div>}
+                        {hasData(selectedLeadDetails.dclid) && <div><strong>DCLID (Google Display):</strong> <span style={{ fontFamily: 'var(--font-mono)', wordBreak: 'break-all', color: 'var(--gold-deep)' }}>{selectedLeadDetails.dclid}</span></div>}
+                        {hasData(selectedLeadDetails.msclkid) && <div><strong>MSCLKID (Bing):</strong> <span style={{ fontFamily: 'var(--font-mono)', wordBreak: 'break-all', color: 'var(--gold-deep)' }}>{selectedLeadDetails.msclkid}</span></div>}
+                        {hasData(selectedLeadDetails.ttclid) && <div><strong>TTCLID (TikTok):</strong> <span style={{ fontFamily: 'var(--font-mono)', wordBreak: 'break-all', color: 'var(--gold-deep)' }}>{selectedLeadDetails.ttclid}</span></div>}
+                        {hasData(selectedLeadDetails.twclid) && <div><strong>TWCLID (Twitter):</strong> <span style={{ fontFamily: 'var(--font-mono)', wordBreak: 'break-all', color: 'var(--gold-deep)' }}>{selectedLeadDetails.twclid}</span></div>}
+                        {hasData(selectedLeadDetails.li_fat_id) && <div><strong>LI_FAT_ID (LinkedIn):</strong> <span style={{ fontFamily: 'var(--font-mono)', wordBreak: 'break-all', color: 'var(--gold-deep)' }}>{selectedLeadDetails.li_fat_id}</span></div>}
+                      </div>
+                    </>
+                  )}
 
                   {/* Display other custom query parameters if any */}
-                  {selectedLeadDetails.utm_params && Object.keys(selectedLeadDetails.utm_params).some(k => ![
+                  {selectedLeadDetails.utm_params && Object.entries(selectedLeadDetails.utm_params).filter(([k, v]) => hasData(v)).some(([k]) => ![
                     'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 
                     'utm_channel', 'utm_category', 'utm_info', 'utm_creative_format', 
                     'utm_id', 'utm_creative', 'ad_id', 'utm_internal', 'utm_keyword', 'utm_matchtype', 'utm_network', 'utm_placement',
@@ -6884,7 +7408,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                       <h5 style={{ fontSize: '0.9rem', marginBottom: '0.5rem', color: 'hsl(var(--text-primary))' }}>Custom / Other Query Parameters</h5>
                       <div style={{ background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)', fontSize: '0.8rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                         {Object.entries(selectedLeadDetails.utm_params)
-                          .filter(([k]) => ![
+                          .filter(([k, v]) => hasData(v) && ![
                             'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 
                             'utm_channel', 'utm_category', 'utm_info', 'utm_creative_format', 
                             'utm_id', 'utm_creative', 'ad_id', 'utm_internal', 'utm_keyword', 'utm_matchtype', 'utm_network', 'utm_placement',
@@ -6897,6 +7421,26 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                               <strong>{k}:</strong> <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--gold-deep)' }}>{String(v)}</span>
                             </div>
                           ))}
+                      </div>
+                    </>
+                  )}
+
+                  {(hasData(selectedLeadDetails.city) || hasData(selectedLeadDetails.income_range) || hasData(selectedLeadDetails.card_id) || hasData(selectedLeadDetails.ad_id) || hasData(selectedLeadDetails.ip_address) || hasData(selectedLeadDetails.user_agent) || hasData(selectedLeadDetails.capi_status) || hasData(selectedLeadDetails.capi_response) || hasData(selectedLeadDetails.mis_status) || hasData(selectedLeadDetails.mis_mapped_at) || hasData(selectedLeadDetails.created_at)) && (
+                    <>
+                      <h4 style={{ fontSize: '1rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.5rem', marginBottom: '0.8rem', color: 'hsl(var(--primary))', marginTop: '1.5rem' }}>Additional Technical Metadata</h4>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.85rem' }}>
+                        {hasData(selectedLeadDetails.city) && <div><strong>City:</strong> {selectedLeadDetails.city}</div>}
+                        {hasData(selectedLeadDetails.income_range) && <div><strong>Income Range:</strong> {selectedLeadDetails.income_range}</div>}
+                        {hasData(selectedLeadDetails.card_id) && <div><strong>Card ID:</strong> <span style={{ fontFamily: 'var(--font-mono)' }}>{selectedLeadDetails.card_id}</span></div>}
+                        {hasData(selectedLeadDetails.ad_id) && <div><strong>Ad ID:</strong> <span style={{ fontFamily: 'var(--font-mono)' }}>{selectedLeadDetails.ad_id}</span></div>}
+                        {hasData(selectedLeadDetails.ip_address) && <div><strong>IP Address:</strong> <span style={{ fontFamily: 'var(--font-mono)' }}>{selectedLeadDetails.ip_address}</span></div>}
+                        {hasData(selectedLeadDetails.user_agent) && <div><strong>User Agent:</strong> <span style={{ fontSize: '0.75rem', wordBreak: 'break-all' }}>{selectedLeadDetails.user_agent}</span></div>}
+                        {hasData(selectedLeadDetails.capi_status) && <div><strong>CAPI Status:</strong> {selectedLeadDetails.capi_status}</div>}
+                        {hasData(selectedLeadDetails.capi_response) && <div><strong>CAPI Response:</strong> <pre style={{ background: 'rgba(255,255,255,0.05)', padding: '0.5rem', borderRadius: '4px', fontSize: '0.75rem', overflowX: 'auto' }}>{typeof selectedLeadDetails.capi_response === 'object' ? JSON.stringify(selectedLeadDetails.capi_response, null, 2) : selectedLeadDetails.capi_response}</pre></div>}
+                        {hasData(selectedLeadDetails.mis_status) && <div><strong>MIS Status:</strong> {selectedLeadDetails.mis_status}</div>}
+                        {hasData(selectedLeadDetails.mis_mapped_at) && <div><strong>MIS Mapped At:</strong> {selectedLeadDetails.mis_mapped_at}</div>}
+                        {hasData(selectedLeadDetails.mis_data) && <div><strong>Raw MIS Data:</strong> <pre style={{ background: 'rgba(255,255,255,0.05)', padding: '0.5rem', borderRadius: '4px', fontSize: '0.75rem', overflowX: 'auto' }}>{typeof selectedLeadDetails.mis_data === 'object' ? JSON.stringify(selectedLeadDetails.mis_data, null, 2) : selectedLeadDetails.mis_data}</pre></div>}
+                        {hasData(selectedLeadDetails.created_at) && <div><strong>Created At:</strong> {selectedLeadDetails.created_at}</div>}
                       </div>
                     </>
                   )}
@@ -8222,6 +8766,74 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
                 <button type="button" onClick={() => setShowEmailConfigModal(false)} className="btn-secondary">Cancel</button>
+                <button type="submit" className="btn-primary" style={{ background: 'var(--gold-deep)', color: '#fff' }}>Confirm & Save Settings</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* KIWI EMAIL CONFIG DEVELOPER AUTHORIZATION MODAL (Password: Lakshay@123) */}
+      {showKiwiEmailConfigModal && (
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999999, padding: '1rem' }}>
+          <div className="glass-panel modal-content" style={{ width: '100%', maxWidth: '520px', borderRadius: '16px', background: 'var(--paper)', border: '1px solid var(--line)', padding: '1.75rem', borderTop: '4px solid var(--gold-deep)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--line)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Key size={20} style={{ color: 'var(--gold-deep)' }} />
+                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>Save KIWI Email IMAP Config</h3>
+              </div>
+              <button onClick={() => setShowKiwiEmailConfigModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={20} /></button>
+            </div>
+
+            <form onSubmit={handleSaveKiwiEmailConfigSubmit}>
+              <div className="form-group" style={{ marginBottom: '1rem' }}>
+                <label className="form-label">Receiver Gmail Address</label>
+                <input type="email" className="form-input" value={kiwiEmailConfigForm.receiver_email} onChange={(e) => setKiwiEmailConfigForm({ ...kiwiEmailConfigForm, receiver_email: e.target.value })} required />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '1rem' }}>
+                <label className="form-label">Gmail App Password (Leave blank to keep existing)</label>
+                <input type="password" className="form-input" placeholder="e.g. rzoq njtq vpnt difd" value={kiwiEmailConfigForm.app_password} onChange={(e) => setKiwiEmailConfigForm({ ...kiwiEmailConfigForm, app_password: e.target.value })} />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '1rem' }}>
+                <label className="form-label">Sender Email Filter</label>
+                <input type="email" className="form-input" value={kiwiEmailConfigForm.sender_email} onChange={(e) => setKiwiEmailConfigForm({ ...kiwiEmailConfigForm, sender_email: e.target.value })} required />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+                <label className="form-label">Subject Keywords (Comma separated)</label>
+                <input type="text" className="form-input" value={kiwiEmailConfigForm.subject_keywords} onChange={(e) => setKiwiEmailConfigForm({ ...kiwiEmailConfigForm, subject_keywords: e.target.value })} required />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '1.5rem', background: 'rgba(224, 168, 46, 0.08)', padding: '0.85rem', borderRadius: '8px', border: '1px solid rgba(224, 168, 46, 0.25)' }}>
+                <label className="form-label" style={{ color: 'var(--gold-deep)', fontWeight: 800, marginBottom: '0.35rem' }}>
+                  🔑 Developer Password Required (Lakshay@123)
+                </label>
+                <input 
+                  type="password" 
+                  className="form-input" 
+                  placeholder="Enter Lakshay@123 password..."
+                  value={kiwiEmailConfigDevPass} 
+                  onChange={(e) => setKiwiEmailConfigDevPass(e.target.value)} 
+                  required 
+                />
+              </div>
+
+              {kiwiEmailConfigError && (
+                <div style={{ background: 'rgba(209, 67, 67, 0.08)', border: '1px solid rgba(209, 67, 67, 0.2)', padding: '0.75rem', borderRadius: '8px', color: 'var(--err)', fontSize: '0.82rem', marginBottom: '1rem' }}>
+                  {kiwiEmailConfigError}
+                </div>
+              )}
+
+              {kiwiEmailConfigSuccess && (
+                <div style={{ background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.2)', padding: '0.75rem', borderRadius: '8px', color: 'var(--mint)', fontSize: '0.82rem', marginBottom: '1rem' }}>
+                  {kiwiEmailConfigSuccess}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+                <button type="button" onClick={() => setShowKiwiEmailConfigModal(false)} className="btn-secondary">Cancel</button>
                 <button type="submit" className="btn-primary" style={{ background: 'var(--gold-deep)', color: '#fff' }}>Confirm & Save Settings</button>
               </div>
             </form>

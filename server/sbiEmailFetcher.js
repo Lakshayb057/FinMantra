@@ -210,7 +210,7 @@ async function processSbiMisRows(rows, attachmentName, broadcastFn = null) {
   const updates = [];
   const matchedDetails = [];
 
-  // Group DB leads by normalized Name + Date key for SSAA1 fast lookup
+  // Group DB leads by normalized Name + Date key for fallback fast lookup
   // Key format: "name_dd/mm/yyyy"
   const nameDateLeadMap = new Map();
   dbLeads.forEach(lead => {
@@ -225,7 +225,7 @@ async function processSbiMisRows(rows, attachmentName, broadcastFn = null) {
     }
   });
 
-  // Group DB leads by Application ID / Reference / URN for SSAR1 fast lookup
+  // Group DB leads by Application ID / Reference / URN for primary fast lookup
   const appIdLeadMap = new Map();
   dbLeads.forEach(lead => {
     const appIds = [
@@ -246,22 +246,22 @@ async function processSbiMisRows(rows, attachmentName, broadcastFn = null) {
     const row = rows[i];
     const fields = extract44Fields(row);
     
-    const gemId1 = (fields.GEMID_1 || fields.LEAD_GEMID_1 || fields.GEMID_2 || '').toUpperCase();
-    const isSSAR1 = gemId1.includes('SSAR1') || gemId1.includes('MANUAL') || gemId1.includes('OFFLINE');
-    const isSSAA1 = gemId1.includes('SSAA1') || gemId1.includes('DIGITAL') || gemId1.includes('PUBLIC') || !isSSAR1;
-
-    let matchedLead = null;
-
-    // Case 1: SSAR1 (Agent Manual / Offline Leads) -> Lookup via APPLICATION_NUMBER
-    if (isSSAR1) {
-      const appNo = (fields.APPLICATION_NUMBER || fields.LRN_NUMBER || '').trim().toUpperCase();
-      if (appNo && appIdLeadMap.has(appNo)) {
-        matchedLead = appIdLeadMap.get(appNo);
-      }
+    const appNo = (fields.APPLICATION_NUMBER || fields.LRN_NUMBER || '').trim().toUpperCase();
+    
+    // Ignore all rows that do NOT have an APPLICATION_NUMBER in the attachment
+    if (!appNo) {
+      continue;
     }
 
-    // Case 2: SSAA1 (Digital / Public Meta Leads) -> Lookup via Name + Creation Date
-    if (!matchedLead && isSSAA1) {
+    let matchedLead = null;
+    let mappedVia = '';
+
+    // First attempt: Map via APPLICATION_NUMBER
+    if (appIdLeadMap.has(appNo)) {
+      matchedLead = appIdLeadMap.get(appNo);
+      mappedVia = 'APPLICATION_NUMBER';
+    } else {
+      // Fallback attempt: Map via Name + Creation Date
       const rowName = normalizeName(fields.FULL_NAME);
       const rowDate = normalizeDateStr(fields.LEAD_CREATION_DATE);
 
@@ -271,9 +271,11 @@ async function processSbiMisRows(rows, attachmentName, broadcastFn = null) {
 
         if (matchingLeads.length === 1) {
           matchedLead = matchingLeads[0];
+          mappedVia = 'NAME_DATE_FALLBACK';
         } else if (matchingLeads.length > 1) {
-          // Multiple leads found with exact same name on same date!
+          // Multiple leads found with exact same name on same date
           matchedLead = matchingLeads[0]; // Map to first/newest lead
+          mappedVia = 'NAME_DATE_FALLBACK';
           warningCount++;
 
           const warningMessage = `⚠️ Duplicate Name Conflict on SBI MIS Sync: Found ${matchingLeads.length} leads matching name "${fields.FULL_NAME}" created on ${rowDate}. Auto-mapped to lead ID ${matchedLead.urn || matchedLead.id}.`;
@@ -297,14 +299,6 @@ async function processSbiMisRows(rows, attachmentName, broadcastFn = null) {
       }
     }
 
-    // Fallback: Check if application number matches any lead
-    if (!matchedLead && fields.APPLICATION_NUMBER) {
-      const appNo = String(fields.APPLICATION_NUMBER).trim().toUpperCase();
-      if (appIdLeadMap.has(appNo)) {
-        matchedLead = appIdLeadMap.get(appNo);
-      }
-    }
-
     // If matched, prepare DB update object with all 44 fields
     if (matchedLead) {
       mappedCount++;
@@ -315,7 +309,7 @@ async function processSbiMisRows(rows, attachmentName, broadcastFn = null) {
         ...fields,
         mis_bank_name: 'SBI',
         mis_file_name: attachmentName,
-        mapped_via: isSSAR1 ? 'SSAR1_APP_ID' : 'SSAA1_NAME_DATE'
+        mapped_via: mappedVia
       };
 
       updates.push({
@@ -323,13 +317,14 @@ async function processSbiMisRows(rows, attachmentName, broadcastFn = null) {
         status: derivedStatus,
         data: updatedMisData,
         agent_id: matchedLead.agent_id,
-        agent_name: matchedLead.agent_name
+        agent_name: matchedLead.agent_name,
+        application_id: appNo // Provide application_id to be updated in db
       });
 
       matchedDetails.push({
         urn: matchedLead.urn,
         name: matchedLead.full_name,
-        appId: fields.APPLICATION_NUMBER || matchedLead.application_id,
+        appId: appNo,
         status: derivedStatus
       });
     }
@@ -341,7 +336,7 @@ async function processSbiMisRows(rows, attachmentName, broadcastFn = null) {
   }
 
   return {
-    total: rows.length,
+    total: rows.length, // total processed rows
     mapped: mappedCount,
     warnings: warningCount,
     matchedDetails
@@ -365,6 +360,10 @@ async function checkAndFetchEmails(broadcastFn = null) {
       pass: config.app_password
     },
     logger: false
+  });
+
+  client.on('error', err => {
+    console.error('[SBI Email Fetcher] ImapFlow Client Error:', err.message);
   });
 
   let totalMappedInSync = 0;
@@ -470,12 +469,7 @@ async function checkAndFetchEmails(broadcastFn = null) {
 
   } catch (err) {
     console.error('[SBI Email Fetcher] IMAP Error:', err.message);
-    await db.createNotification({
-      type: 'error',
-      title: '❌ SBI Email MIS Sync Failed',
-      message: `Failed to connect to IMAP or process email attachments: ${err.message}`,
-      details: { error: err.message }
-    });
+    // Silent error logging to console — do not flood Notification Center on routine IMAP timeouts/failures
     return { success: false, error: err.message };
   }
 }

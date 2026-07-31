@@ -85,11 +85,11 @@ const pgConnectionString = require('pg-connection-string');
 const pgConfig = pgConnectionString.parse(connectionUrl);
 pgConfig.ssl = sslConfig;
 pgConfig.max = 25;
-pgConfig.idleTimeoutMillis = 20000;
-pgConfig.connectionTimeoutMillis = 5000;
+pgConfig.idleTimeoutMillis = 30000;
+pgConfig.connectionTimeoutMillis = 15000;
 pgConfig.keepAlive = true;
 pgConfig.keepAliveInitialDelayMillis = 10000;
-pgConfig.statement_timeout = 30000; // Kill queries running >30s
+pgConfig.statement_timeout = 120000; // 2 minutes statement timeout for heavy queries
 
 const pool = new Pool(pgConfig);
 
@@ -246,6 +246,9 @@ async function initPgSchema() {
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    // Clean up existing repetitive failed sync notifications
+    await client.query(`DELETE FROM admin_notifications WHERE title LIKE '%SBI Email MIS Sync Failed%'`);
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS processed_email_mis (
@@ -628,7 +631,20 @@ const db = {
     };
   },
 
-  async getLeadsFiltered({ agentId = null, bankMisFilter = null, page = 1, limit = 50, search = '', card = '', source = '', startDate = '', endDate = '' }) {
+  async getUTMFilterOptions() {
+    const [campRes, termRes, infoRes] = await Promise.all([
+      pool.query(`SELECT DISTINCT utm_campaign FROM leads WHERE utm_campaign IS NOT NULL AND utm_campaign != '' ORDER BY utm_campaign`),
+      pool.query(`SELECT DISTINCT utm_term FROM leads WHERE utm_term IS NOT NULL AND utm_term != '' ORDER BY utm_term`),
+      pool.query(`SELECT DISTINCT utm_info FROM leads WHERE utm_info IS NOT NULL AND utm_info != '' ORDER BY utm_info`)
+    ]);
+    return {
+      campaigns: campRes.rows.map(r => r.utm_campaign),
+      terms: termRes.rows.map(r => r.utm_term),
+      infos: infoRes.rows.map(r => r.utm_info)
+    };
+  },
+
+  async getLeadsFiltered({ agentId = null, bankMisFilter = null, page = 1, limit = 50, search = '', card = '', source = '', startDate = '', endDate = '', campaign = '', term = '', info = '' }) {
     const LEAD_COLUMNS = `id, urn, full_name, phone, email, city, employment, income_range,
       card_id, card_name, card_bank, source, agent_id, agent_name, agent_location, consent, application_id,
       created_at, mis_status, mis_mapped_at, pan_no, pincode, has_credit_card, monthly_income,
@@ -700,6 +716,18 @@ const db = {
       params.push(endDate + ' 23:59:59+05:30');
       clauses.push(`created_at <= $${params.length}::timestamptz`);
     }
+    if (campaign) {
+      params.push(`%${campaign.trim().toLowerCase()}%`);
+      clauses.push(`LOWER(utm_campaign) LIKE $${params.length}`);
+    }
+    if (term) {
+      params.push(`%${term.trim().toLowerCase()}%`);
+      clauses.push(`LOWER(utm_term) LIKE $${params.length}`);
+    }
+    if (info) {
+      params.push(`%${info.trim().toLowerCase()}%`);
+      clauses.push(`LOWER(utm_info) LIKE $${params.length}`);
+    }
     
     if (clauses.length > 0) {
       whereClause = ' WHERE ' + clauses.join(' AND ');
@@ -751,7 +779,7 @@ const db = {
     };
   },
 
-  async getLeadsForExport({ search = '', card = '', source = '', startDate = '', endDate = '' }) {
+  async getLeadsForExport({ search = '', card = '', source = '', startDate = '', endDate = '', campaign = '', term = '', info = '' }) {
     let query = 'SELECT * FROM leads';
     const params = [];
     const clauses = [];
@@ -775,6 +803,18 @@ const db = {
     if (endDate) {
       params.push(endDate + ' 23:59:59+05:30');
       clauses.push(`created_at <= $${params.length}::timestamptz`);
+    }
+    if (campaign) {
+      params.push(`%${campaign.trim().toLowerCase()}%`);
+      clauses.push(`LOWER(utm_campaign) LIKE $${params.length}`);
+    }
+    if (term) {
+      params.push(`%${term.trim().toLowerCase()}%`);
+      clauses.push(`LOWER(utm_term) LIKE $${params.length}`);
+    }
+    if (info) {
+      params.push(`%${info.trim().toLowerCase()}%`);
+      clauses.push(`LOWER(utm_info) LIKE $${params.length}`);
     }
     
     if (clauses.length > 0) {
@@ -1224,10 +1264,10 @@ const db = {
       if (settingsRes.rows[0]?.value) {
         return settingsRes.rows[0].value.split(',').map(b => b.trim()).filter(Boolean).sort();
       }
-      return ['HDFC', 'SBI'];
+      return ['HDFC', 'SBI', 'KIWI'];
     } catch (e) {
       console.error('[DB Error] getAllDatabaseBanks failed:', e.message);
-      return ['HDFC', 'SBI'];
+      return ['HDFC', 'SBI', 'KIWI'];
     }
   },
 
@@ -1284,7 +1324,7 @@ const db = {
   },
 
   async getMISStats() {
-    // Run count and mapped leads queries in parallel for speed
+    // Run count and mapped leads queries in parallel for ultra-fast speed
     const [totalLeadsRes, mappedLeadsListRes] = await Promise.all([
       pool.query('SELECT COUNT(*) FROM leads'),
       pool.query(`
@@ -1292,13 +1332,6 @@ const db = {
                agent_name, pincode, card_bank, source
         FROM leads
         WHERE mis_mapped_at IS NOT NULL
-          AND (
-            (mis_data->>'bank_reference_number' IS NOT NULL AND mis_data->>'bank_reference_number' != '')
-            OR (mis_data->>'mapped_via' IS NOT NULL AND mis_data->>'mapped_via' != '')
-            OR (mis_data->>'current_state' IS NOT NULL AND mis_data->>'current_state' != '' AND mis_data->>'current_state' != 'NOT_STARTED')
-            OR (mis_data->>'ipa_status' IS NOT NULL AND mis_data->>'ipa_status' != '')
-            OR (mis_data->>'APPLICATION_REFERENCE_NUMBER' IS NOT NULL AND mis_data->>'APPLICATION_REFERENCE_NUMBER' != '')
-          )
         ORDER BY mis_mapped_at DESC
       `)
     ]);
@@ -1445,35 +1478,46 @@ const db = {
 
   async bulkUpdateLeadMISStatus(updates, agentId = null, agentName = null) {
     if (!updates || updates.length === 0) return;
-    const batchSize = 200;
-    for (let i = 0; i < updates.length; i += batchSize) {
-      const batch = updates.slice(i, i + batchSize);
-      const valueLines = [];
-      const queryParams = [];
-      let paramIndex = 1;
-      
-      batch.forEach(up => {
-        valueLines.push(`($${paramIndex}::varchar, $${paramIndex + 1}::varchar, $${paramIndex + 2}::jsonb, $${paramIndex + 3}::varchar, $${paramIndex + 4}::varchar)`);
-        queryParams.push(up.id);
-        queryParams.push(up.status);
-        queryParams.push(JSON.stringify(up.data));
-        queryParams.push(up.agent_id || agentId || null);
-        queryParams.push(up.agent_name || agentName || null);
-        paramIndex += 5;
-      });
-      
-      const queryText = `
-        UPDATE leads AS l
-        SET mis_status = tmp.mis_status,
-            mis_mapped_at = NOW(),
-            mis_data = tmp.mis_data,
-            agent_id = COALESCE(l.agent_id, tmp.agent_id),
-            agent_name = COALESCE(l.agent_name, tmp.agent_name)
-        FROM (VALUES ${valueLines.join(', ')}) AS tmp(id, mis_status, mis_data, agent_id, agent_name)
-        WHERE l.id = tmp.id
-      `;
-      
-      await pool.query(queryText, queryParams);
+    const client = await pool.connect();
+    try {
+      await client.query("SET statement_timeout = 300000");
+      const batchSize = 50;
+      for (let i = 0; i < updates.length; i += batchSize) {
+        const batch = updates.slice(i, i + batchSize);
+        const valueLines = [];
+        const queryParams = [];
+        let paramIndex = 1;
+        
+        batch.forEach(up => {
+          valueLines.push(`($${paramIndex}::varchar, $${paramIndex + 1}::varchar, $${paramIndex + 2}::jsonb, $${paramIndex + 3}::varchar, $${paramIndex + 4}::varchar, $${paramIndex + 5}::varchar)`);
+          queryParams.push(up.id);
+          queryParams.push(up.status);
+          queryParams.push(JSON.stringify(up.data));
+          queryParams.push(up.agent_id || agentId || null);
+          queryParams.push(up.agent_name || agentName || null);
+          queryParams.push(up.application_id || null);
+          paramIndex += 6;
+        });
+        
+        const queryText = `
+          UPDATE leads AS l
+          SET mis_status = tmp.mis_status,
+              mis_mapped_at = NOW(),
+              mis_data = tmp.mis_data,
+              agent_id = COALESCE(l.agent_id, tmp.agent_id),
+              agent_name = COALESCE(l.agent_name, tmp.agent_name),
+              application_id = COALESCE(l.application_id, COALESCE(tmp.app_id, l.application_id))
+          FROM (VALUES ${valueLines.join(', ')}) AS tmp(id, mis_status, mis_data, agent_id, agent_name, app_id)
+          WHERE l.id = tmp.id
+        `;
+        
+        await client.query(queryText, queryParams);
+      }
+    } catch (e) {
+      console.error('[DB] bulkUpdateLeadMISStatus error:', e.message);
+      throw e;
+    } finally {
+      client.release();
     }
   },
 
@@ -1563,6 +1607,95 @@ const db = {
       return true;
     } catch (e) {
       console.error('[DB] saveProcessedEmailMis error:', e.message);
+      return false;
+    }
+  },
+
+  async removeDuplicateLeads() {
+    try {
+      const allLeads = await this.getAllLeadsUnfiltered();
+      const grouped = new Map();
+      
+      allLeads.forEach(lead => {
+        if (!lead.phone) return;
+        const bankName = String(lead.bank_name || (lead.mis_data && lead.mis_data.mis_bank_name) || '').toUpperCase().trim();
+        if (!bankName) return;
+        const key = `${lead.phone}_${bankName}`;
+        if (!grouped.has(key)) {
+          grouped.set(key, []);
+        }
+        grouped.get(key).push(lead);
+      });
+
+      const idsToDelete = [];
+      for (const [key, leads] of grouped.entries()) {
+        if (leads.length > 1) {
+          // Sort leads to find the "best mapped" one.
+          // Criteria: mapped (has mis_status or mis_data) is better than unmapped.
+          // Newer is better than older.
+          leads.sort((a, b) => {
+            const aMapped = a.mis_status || (a.mis_data && Object.keys(a.mis_data).length > 0) ? 1 : 0;
+            const bMapped = b.mis_status || (b.mis_data && Object.keys(b.mis_data).length > 0) ? 1 : 0;
+            if (aMapped !== bMapped) {
+              return bMapped - aMapped; // Mapped comes first
+            }
+            // If same mapped status, newer comes first
+            const dateA = new Date(a.created_at || 0).getTime();
+            const dateB = new Date(b.created_at || 0).getTime();
+            return dateB - dateA;
+          });
+
+          // leads[0] is the best one. The rest will be deleted.
+          for (let i = 1; i < leads.length; i++) {
+            idsToDelete.push(leads[i].id);
+          }
+        }
+      }
+
+      if (idsToDelete.length > 0) {
+        // Delete in chunks to avoid query size limits
+        const chunkSize = 100;
+        for (let i = 0; i < idsToDelete.length; i += chunkSize) {
+          const chunk = idsToDelete.slice(i, i + chunkSize);
+          await pool.query('DELETE FROM leads WHERE id = ANY($1::varchar[])', [chunk]);
+        }
+        await this.createNotification({
+          type: 'warning',
+          title: '🧹 Duplicate Leads Cleaned',
+          message: `Deduplication engine removed ${idsToDelete.length} duplicate lead(s) with matching phone & bank.`,
+          details: { removedCount: idsToDelete.length }
+        });
+      }
+      return { success: true, removedCount: idsToDelete.length };
+    } catch (e) {
+      console.error('[DB] removeDuplicateLeads error:', e.message);
+      return { success: false, error: e.message };
+    }
+  },
+
+  async getLeadVisibilityConfig() {
+    try {
+      const res = await pool.query('SELECT value FROM settings WHERE key = $1', ['lead_visibility_config']);
+      if (res.rows.length > 0) {
+        return JSON.parse(res.rows[0].value);
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  },
+
+  async setLeadVisibilityConfig(config) {
+    try {
+      const configStr = JSON.stringify(config);
+      await pool.query(
+        `INSERT INTO settings (key, value, updated_at) VALUES ('lead_visibility_config', $1, NOW())
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+        [configStr]
+      );
+      return true;
+    } catch (e) {
+      console.error('[DB] setLeadVisibilityConfig error:', e.message);
       return false;
     }
   }

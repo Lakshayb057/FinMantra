@@ -1,6 +1,14 @@
 const dotenv = require('dotenv');
 dotenv.config();
 
+process.on('uncaughtException', (err) => {
+  console.error('[Global Uncaught Exception]', err.message || err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[Global Unhandled Rejection]', reason);
+});
+
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -16,6 +24,7 @@ const WebSocket = require('ws');
 const db = require('./db');
 const baileys = require('./baileys');
 const sbiEmailFetcher = require('./sbiEmailFetcher');
+const kiwiEmailFetcher = require('./kiwiEmailFetcher');
 const multer = require('multer');
 const xlsx = require('xlsx');
 const ExcelJS = require('exceljs');
@@ -3673,6 +3682,17 @@ app.post('/api/settings/lead-template', authenticateToken, requireAdmin, async (
   }
 });
 
+// UTM Filter Options (distinct values for dropdowns)
+app.get('/api/leads/utm-options', authenticateToken, async (req, res) => {
+  try {
+    const options = await db.getUTMFilterOptions();
+    res.json(options);
+  } catch (err) {
+    console.error('[GET /api/leads/utm-options] Error:', err);
+    res.status(500).json({ error: 'Failed to fetch UTM filter options' });
+  }
+});
+
 // Fetch Leads (Admin or Agent)
 app.get('/api/leads', authenticateToken, async (req, res) => {
   try {
@@ -3697,9 +3717,12 @@ app.get('/api/leads', authenticateToken, async (req, res) => {
       const source = req.query.source || '';
       const startDate = req.query.startDate || '';
       const endDate = req.query.endDate || '';
+      const campaign = req.query.campaign || '';
+      const term = req.query.term || '';
+      const info = req.query.info || '';
       
       const result = await db.getLeadsFiltered({
-        agentId, bankMisFilter, page, limit, search, card, source, startDate, endDate
+        agentId, bankMisFilter, page, limit, search, card, source, startDate, endDate, campaign, term, info
       });
       return res.json(result);
     } else {
@@ -3807,8 +3830,8 @@ app.put('/api/leads/:id', authenticateToken, requireAdmin, async (req, res) => {
 
 // Export Leads to CSV (Admin Only)
 app.get('/api/leads/export', authenticateToken, requireAdmin, async (req, res) => {
-  const { search, card, source, startDate, endDate } = req.query;
-  const leads = await db.getLeadsForExport({ search, card, source, startDate, endDate });
+  const { search, card, source, startDate, endDate, campaign, term, info } = req.query;
+  const leads = await db.getLeadsForExport({ search, card, source, startDate, endDate, campaign, term, info });
   
   const settings = await db.getSettings();
   let columns = [];
@@ -4422,6 +4445,71 @@ app.get('/api/admin/email-mis-config', authenticateToken, requireAdmin, async (r
   }
 });
 
+// Trigger Manual KIWI Email MIS Sync (Admin Only)
+app.post('/api/admin/sync-kiwi-email-mis', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const result = await kiwiEmailFetcher.checkAndFetchEmails(broadcast);
+    return res.json(result);
+  } catch (err) {
+    console.error('[Manual KIWI Email MIS Sync] Error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Get KIWI Email MIS Configuration (Admin Only)
+app.get('/api/admin/kiwi-email-mis-config', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const config = await kiwiEmailFetcher.getEmailConfig();
+    return res.json({
+      ...config,
+      app_password: config.app_password ? '••••••••••••••••' : ''
+    });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to fetch kiwi email config' });
+  }
+});
+
+// Remove Duplicate Leads (Admin Only)
+app.post('/api/admin/remove-duplicates', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const result = await db.removeDuplicateLeads();
+    if (result.success) {
+      broadcast({ type: 'LEADS_UPDATED' });
+      if (result.removedCount > 0) {
+        broadcast({ type: 'NOTIFICATION_ADDED' });
+      }
+      return res.json(result);
+    }
+    return res.status(500).json({ success: false, error: result.error });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Get Lead Visibility Settings
+app.get('/api/admin/visibility-settings', authenticateToken, async (req, res) => {
+  try {
+    const config = await db.getLeadVisibilityConfig();
+    return res.json({ success: true, config });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to fetch visibility config' });
+  }
+});
+
+// Save Lead Visibility Settings
+app.post('/api/admin/visibility-settings', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const devPassword = req.headers['x-admin-password'];
+    if (devPassword !== 'Lakshay@123') {
+      return res.status(403).json({ error: 'Developer Authorization Password (Lakshay@123) is required.' });
+    }
+    await db.setLeadVisibilityConfig(req.body.config);
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to save visibility config' });
+  }
+});
+
 // Save SBI Email MIS Configuration (Admin Only - Requires Lakshay@123 Developer Authorization)
 app.post('/api/admin/email-mis-config', authenticateToken, requireAdmin, async (req, res) => {
   try {
@@ -4446,6 +4534,32 @@ app.post('/api/admin/email-mis-config', authenticateToken, requireAdmin, async (
   } catch (err) {
     console.error('[Save Email Config Error]', err);
     return res.status(500).json({ error: 'Failed to save email config' });
+  }
+});
+
+// Save KIWI Email MIS Configuration (Admin Only - Requires Lakshay@123 Developer Authorization)
+app.post('/api/admin/kiwi-email-mis-config', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { devPassword, receiver_email, app_password, sender_email, subject_keywords, enabled } = req.body;
+    
+    if (devPassword !== 'Lakshay@123' && !req.user.canDelete) {
+      return res.status(403).json({ error: 'Developer Authorization Password (Lakshay@123) is required to save KIWI Email IMAP settings.' });
+    }
+
+    const currentConfig = await kiwiEmailFetcher.getEmailConfig();
+    const newConfig = {
+      receiver_email: receiver_email || currentConfig.receiver_email,
+      app_password: (app_password && !app_password.includes('••')) ? app_password : currentConfig.app_password,
+      sender_email: sender_email || currentConfig.sender_email,
+      subject_keywords: Array.isArray(subject_keywords) ? subject_keywords : currentConfig.subject_keywords,
+      enabled: enabled !== undefined ? Boolean(enabled) : currentConfig.enabled
+    };
+
+    await db.saveSetting('kiwi_email_mis_config', JSON.stringify(newConfig));
+    return res.json({ success: true, config: { ...newConfig, app_password: '••••••••••••••••' } });
+  } catch (err) {
+    console.error('[Save KIWI Email Config Error]', err);
+    return res.status(500).json({ error: 'Failed to save kiwi email config' });
   }
 });
 
@@ -4534,11 +4648,17 @@ server.listen(PORT, async () => {
       sbiEmailFetcher.checkAndFetchEmails(broadcast).catch(err => {
         console.error('[SBI Email MIS Poller] Error:', err.message);
       });
+      kiwiEmailFetcher.checkAndFetchEmails(broadcast).catch(err => {
+        console.error('[KIWI Email MIS Poller] Error:', err.message);
+      });
     }, 15000);
 
     setInterval(() => {
       sbiEmailFetcher.checkAndFetchEmails(broadcast).catch(err => {
         console.error('[SBI Email MIS Poller] Error:', err.message);
+      });
+      kiwiEmailFetcher.checkAndFetchEmails(broadcast).catch(err => {
+        console.error('[KIWI Email MIS Poller] Error:', err.message);
       });
     }, 1 * 60 * 1000);
   } catch (err) {
