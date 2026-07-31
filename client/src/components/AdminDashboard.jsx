@@ -845,14 +845,15 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
         info: filterInfo
       });
 
-      const [leadsRes, cardsRes, agentsRes, locsRes, settingsRes, baileysRes, utmRes] = await Promise.all([
+      const [leadsRes, cardsRes, agentsRes, locsRes, settingsRes, baileysRes, utmRes, misRes] = await Promise.all([
         fetch(`${API_URL}/leads?${queryParams.toString()}`, { headers }),
         fetch(`${API_URL}/admin/cards`, { headers }),
         fetch(`${API_URL}/agents`, { headers }),
         fetch(`${API_URL}/locations`),
         fetch(`${API_URL}/settings`),
         fetch(`${API_URL}/whatsapp/status`, { headers }),
-        fetch(`${API_URL}/leads/utm-options`, { headers })
+        fetch(`${API_URL}/leads/utm-options`, { headers }),
+        fetch(`${API_URL}/leads/mis-stats`, { headers })
       ]);
 
       if (leadsRes.status === 401 || leadsRes.status === 403) {
@@ -870,6 +871,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       const settingsData = await settingsRes.json();
       const baileysData = baileysRes.ok ? await baileysRes.json() : { status: 'DISCONNECTED', qrCodeDataUrl: '', phone: '' };
       const utmData = utmRes.ok ? await utmRes.json() : { campaigns: [], terms: [], infos: [] };
+      const misData = misRes.ok ? await misRes.json() : null;
 
       setLeads(leadsData.leads || []);
       setCurrentPage(leadsData.page || 1);
@@ -883,6 +885,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       setSettings(settingsData);
       setBaileysStatus(baileysData);
       setUtmOptions(utmData);
+      if (misData) setMisStats(misData);
     } catch (err) {
       console.error('Error fetching admin dashboard details:', err);
       if (String(err).includes('Failed to fetch')) {

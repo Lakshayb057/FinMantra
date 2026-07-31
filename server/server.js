@@ -2653,7 +2653,7 @@ app.post('/api/leads/upload-mis', authenticateToken, upload.single('file'), asyn
 // ── MIS Stats Cache (30s TTL) ──
 let misStatsCache = null;
 let misStatsCacheTime = 0;
-const MIS_CACHE_TTL_MS = 30000; // 30 seconds
+const MIS_CACHE_TTL_MS = 300000; // 5 minutes (invalidated instantly on any write/upload)
 
 function invalidateMISCache() { misStatsCache = null; misStatsCacheTime = 0; }
 

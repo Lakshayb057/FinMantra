@@ -364,10 +364,11 @@ async function initPgSchema() {
       )
     `);
 
-    // Performance indexes for dashboard queries
+    // Performance indexes for high-speed dashboard & repository queries
     try {
       await client.query("CREATE INDEX IF NOT EXISTS idx_leads_mis_status ON leads (mis_status) WHERE mis_status IS NOT NULL");
       await client.query("CREATE INDEX IF NOT EXISTS idx_leads_mis_mapped_at ON leads (mis_mapped_at DESC) WHERE mis_status IS NOT NULL");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_mis_mapped_at_all ON leads (mis_mapped_at DESC)");
       await client.query("CREATE INDEX IF NOT EXISTS idx_leads_created_at ON leads (created_at DESC)");
       await client.query("CREATE INDEX IF NOT EXISTS idx_leads_agent_id ON leads (agent_id)");
       await client.query("CREATE INDEX IF NOT EXISTS idx_leads_application_id ON leads (application_id) WHERE application_id IS NOT NULL");
@@ -376,6 +377,11 @@ async function initPgSchema() {
       await client.query("CREATE INDEX IF NOT EXISTS idx_leads_source ON leads (source)");
       await client.query("CREATE INDEX IF NOT EXISTS idx_leads_phone ON leads (phone)");
       await client.query("CREATE INDEX IF NOT EXISTS idx_leads_urn ON leads (urn)");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_pan_no ON leads (pan_no) WHERE pan_no IS NOT NULL");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_utm_campaign ON leads (utm_campaign) WHERE utm_campaign IS NOT NULL AND utm_campaign != ''");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_utm_term ON leads (utm_term) WHERE utm_term IS NOT NULL AND utm_term != ''");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_utm_info ON leads (utm_info) WHERE utm_info IS NOT NULL AND utm_info != ''");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_card_bank ON leads (card_bank)");
     } catch (migErr) {}
 
     try {
@@ -577,6 +583,9 @@ async function initPgSchema() {
   }
 }
 
+let _utmOptionsCache = null;
+let _utmOptionsCacheTime = 0;
+
 const db = {
   pool,
   // Initialize Database Schema (PG only) with connection retry safety
@@ -632,16 +641,27 @@ const db = {
   },
 
   async getUTMFilterOptions() {
+    const now = Date.now();
+    if (_utmOptionsCache && (now - _utmOptionsCacheTime) < 10 * 60 * 1000) {
+      return _utmOptionsCache;
+    }
     const [campRes, termRes, infoRes] = await Promise.all([
       pool.query(`SELECT DISTINCT utm_campaign FROM leads WHERE utm_campaign IS NOT NULL AND utm_campaign != '' ORDER BY utm_campaign`),
       pool.query(`SELECT DISTINCT utm_term FROM leads WHERE utm_term IS NOT NULL AND utm_term != '' ORDER BY utm_term`),
       pool.query(`SELECT DISTINCT utm_info FROM leads WHERE utm_info IS NOT NULL AND utm_info != '' ORDER BY utm_info`)
     ]);
-    return {
+    _utmOptionsCache = {
       campaigns: campRes.rows.map(r => r.utm_campaign),
       terms: termRes.rows.map(r => r.utm_term),
       infos: infoRes.rows.map(r => r.utm_info)
     };
+    _utmOptionsCacheTime = now;
+    return _utmOptionsCache;
+  },
+
+  clearUTMCache() {
+    _utmOptionsCache = null;
+    _utmOptionsCacheTime = 0;
   },
 
   async getLeadsFiltered({ agentId = null, bankMisFilter = null, page = 1, limit = 50, search = '', card = '', source = '', startDate = '', endDate = '', campaign = '', term = '', info = '' }) {
