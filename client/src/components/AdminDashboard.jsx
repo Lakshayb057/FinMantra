@@ -2023,22 +2023,51 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
   const getLeadBank = useCallback((lead) => {
     const md = lead.mis_data || {};
-    if (md.mis_bank_name) {
+    
+    // 1. Explicit MIS Bank Name saved during upload/mapping
+    if (md.mis_bank_name && String(md.mis_bank_name).trim() !== '') {
       return cleanBankCode(md.mis_bank_name);
     }
-    // Check KIWI specific fields in MIS data
-    if (md.winning_bank || md.kiwi_bank || md.kiwi_winning_bank || md.bank_reference_number || md.current_state !== undefined || md.first_txn !== undefined || md.Card_Created !== undefined) {
+
+    // 2. Distinctive KIWI MIS fields (only set when KIWI MIS is uploaded)
+    if (
+      (md.winning_bank && String(md.winning_bank).trim() !== '') ||
+      (md.kiwi_bank && String(md.kiwi_bank).trim() !== '') ||
+      (md.kiwi_winning_bank && String(md.kiwi_winning_bank).trim() !== '') ||
+      (md.kiwi_yes_status && String(md.kiwi_yes_status).trim() !== '') ||
+      (md.kiwi_au_status && String(md.kiwi_au_status).trim() !== '') ||
+      (md.kiwi_pnb_status && String(md.kiwi_pnb_status).trim() !== '') ||
+      (md.first_txn && String(md.first_txn).trim() !== '') ||
+      (md.VKYC && String(md.VKYC).trim() !== '') ||
+      (md.Card_Created && String(md.Card_Created).trim() !== '')
+    ) {
       return 'KIWI';
     }
-    // Check SBI specific fields in MIS data
-    if (md.SD_DECISION_CODE || md.STAGE_IN_SALES24 || md.DECISION_CODE_REASON1_WCP || md.GEMID_1 || md.LEAD_GEMID_1 || md.APPLICATION_NUMBER) {
+
+    // 3. Distinctive SBI MIS fields (only set when SBI MIS is uploaded)
+    if (
+      (md.SD_DECISION_CODE && String(md.SD_DECISION_CODE).trim() !== '') ||
+      (md.STAGE_IN_SALES24 && String(md.STAGE_IN_SALES24).trim() !== '') ||
+      (md.DECISION_CODE_REASON1_WCP && String(md.DECISION_CODE_REASON1_WCP).trim() !== '') ||
+      (md.GEMID_1 && String(md.GEMID_1).trim() !== '') ||
+      (md.LEAD_GEMID_1 && String(md.LEAD_GEMID_1).trim() !== '') ||
+      (md.APPLICATION_NUMBER && String(md.APPLICATION_NUMBER).trim() !== '') ||
+      (md.STP_FLAG && String(md.STP_FLAG).trim() !== '')
+    ) {
       return 'SBI';
     }
+
+    // 4. Check card_name or card_bank on lead object
     if (lead.card_name) {
       const match = cards.find(c => c.name === lead.card_name);
       if (match && match.bank) return cleanBankCode(match.bank);
     }
-    return cleanBankCode(lead.card_bank) || 'HDFC';
+
+    const cBank = cleanBankCode(lead.card_bank);
+    if (cBank && cBank !== 'N/A') return cBank;
+
+    // Default to HDFC
+    return 'HDFC';
   }, [cards]);
 
   // ===== MEMOIZED LEADS DASHBOARD COMPUTATIONS =====
