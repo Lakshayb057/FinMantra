@@ -2152,11 +2152,13 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
     let funnelBankRef = 0, funnelCurrentState = 0, funnelWinningBank = 0;
     let funnelSoftDecision = 0, funnelWorkFlow = 0, funnelFinalStatus = 0, funnelCardGen = 0;
     let ipaApproved = 0, ipaDeclined = 0;
+    let kiwiSoftApproved = 0, kiwiVkycApproved = 0, kiwiCardCreated = 0, kiwiFirstTxn = 0;
+    let sdApprovedCount = 0, sbiFinalApprovedCount = 0;
     const kycDist = {}, srcDist = {}, cardTypeDist = {}, custTypeDist = {};
     const actDist = {}, pinDist = {}, prodDist = {};
     // SBI-specific distributions
     const sdDecisionDist = {}, kycModeDist = {}, stpFlagDist = {};
-    const finalStatusDist = {}, decisionReasonDist = {}, channelDist = {};
+    const finalStatusDist = {}, decisionReasonDist = {}, channelDist = {}, leadCreationDist = {};
 
     for (let i = 0; i < filteredMappedLeads.length; i++) {
       const l = filteredMappedLeads[i];
@@ -2169,7 +2171,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
       // Funnel counts (Generic / HDFC)
       const ipaLower = String(md.ipa_status || '').toLowerCase();
-      if (ipaLower.includes('approve') || ipaLower.includes('success')) { funnelIpa++; ipaApproved++; }
+      if (ipaLower.includes('approve') || ipaLower.includes('pass') || ipaLower.includes('eligible') || ipaLower.includes('success')) { funnelIpa++; ipaApproved++; }
       if (ipaLower.includes('decline') || ipaLower.includes('reject') || ipaLower.includes('cancel')) ipaDeclined++;
 
       const ksLower = String(md.kyc_status || '').toLowerCase();
@@ -2183,7 +2185,23 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       const actLower = String(md.card_activation_status || '').toLowerCase();
       if (actLower.includes('active') || actLower === 'yes') funnelActive++;
 
-      // Funnel counts (KIWI)
+      // Funnel counts (KIWI per Screenshot 2)
+      const kiwiIpa = String(md.ipa || md.ipa_status || md.SOFT_DECISION || '').toLowerCase();
+      const isKiwiSoftApprove = kiwiIpa.includes('approve') || kiwiIpa.includes('pass') || kiwiIpa.includes('success') || kiwiIpa.includes('eligible') || (md.ipa_date && String(md.ipa_date).trim() !== '');
+      if (isKiwiSoftApprove) kiwiSoftApproved++;
+
+      const kiwiKyc = String(md.VKYC || md.vkyc_status || md.kyc_status || '').toLowerCase();
+      const isKiwiVkycApprove = kiwiKyc.includes('approve') || kiwiKyc.includes('complete') || kiwiKyc.includes('success') || kiwiKyc.includes('pass');
+      if (isKiwiVkycApprove) kiwiVkycApproved++;
+
+      const kiwiCard = String(md.Card_Created || md.card_activation_status || md.card_created || '').toLowerCase();
+      const isKiwiCardCreated = kiwiCard.includes('yes') || kiwiCard.includes('approve') || kiwiCard.includes('active') || kiwiCard.includes('created') || kiwiCard === '1';
+      if (isKiwiCardCreated) kiwiCardCreated++;
+
+      const kiwiTxn = String(md.first_txn || md.first_transaction || '').toLowerCase();
+      const isKiwiTxn = kiwiTxn.includes('yes') || kiwiTxn.includes('complete') || kiwiTxn === '1' || kiwiTxn.includes('active');
+      if (isKiwiTxn) kiwiFirstTxn++;
+
       if (md.bank_reference_number && String(md.bank_reference_number).trim() !== '') funnelBankRef++;
       const kiwiState = String(md.current_state || '').toLowerCase();
       if (kiwiState !== 'not_started' && kiwiState !== '') funnelCurrentState++;
@@ -2192,11 +2210,17 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
       // Funnel counts (SBI)
       const sdType = String(md.SD_DECISION_CODE || md.SOFT_DECISION_TYPE || '').toLowerCase();
-      if (sdType.includes('approve') || sdType.includes('pass') || sdType.includes('eligible')) funnelSoftDecision++;
+      if (sdType.includes('approve') || sdType.includes('pass') || sdType.includes('eligible')) {
+        funnelSoftDecision++;
+        sdApprovedCount++;
+      }
       const stpFlagVal = String(md.STP_FLAG || md.stp_flag || '').toLowerCase();
       if (stpFlagVal === 'yes' || stpFlagVal === 'y' || stpFlagVal === '1' || stpFlagVal === 'true') funnelWorkFlow++;
       const finalStatus = String(md.STAGE_IN_SALES24 || md.FINAL_STATUS || md.FINAL_DECISION || '').toLowerCase();
-      if (finalStatus.includes('appl') || finalStatus.includes('file generated') || finalStatus.includes('generated') || finalStatus.includes('approve') || finalStatus.includes('success')) funnelFinalStatus++;
+      if (finalStatus.includes('appl') || finalStatus.includes('file generated') || finalStatus.includes('generated') || finalStatus.includes('approve') || finalStatus.includes('success')) {
+        funnelFinalStatus++;
+        sbiFinalApprovedCount++;
+      }
 
       // Distributions (single pass)
       const kycKey = md.kyc_status || 'Unknown';
@@ -2240,6 +2264,12 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
       const chKey = String(md.CHANNEL || '').trim();
       if (chKey) channelDist[chKey] = (channelDist[chKey] || 0) + 1;
+
+      const gemId = String(md.LEAD_GEMID_1 || md.gem_id || '').toUpperCase();
+      let creationType = 'Other';
+      if (gemId.includes('SSAA1')) creationType = 'Digital (SSAA1)';
+      else if (gemId.includes('SSAR1')) creationType = 'Agents (SSAR1)';
+      leadCreationDist[creationType] = (leadCreationDist[creationType] || 0) + 1;
     }
 
     const totalSubmit = filteredMappedLeads.length;
@@ -2256,8 +2286,10 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       funnelBankRef, funnelCurrentState, funnelWinningBank,
       funnelSoftDecision, funnelWorkFlow, funnelFinalStatus, funnelCardGen,
       ipaApproved, ipaDeclined,
+      kiwiSoftApproved, kiwiVkycApproved, kiwiCardCreated, kiwiFirstTxn,
+      sdApprovedCount, sbiFinalApprovedCount,
       kycDist, srcDist, cardTypeDist, custTypeDist, actDist, prodDist, topPincodes,
-      sdDecisionDist, kycModeDist, stpFlagDist, finalStatusDist, decisionReasonDist, channelDist
+      sdDecisionDist, kycModeDist, stpFlagDist, finalStatusDist, decisionReasonDist, channelDist, leadCreationDist
     };
   }, [filteredMappedLeads]);
 
@@ -3697,7 +3729,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem', alignItems: 'end', marginTop: '0.85rem', paddingTop: '0.85rem', borderTop: '1px solid var(--line)' }} className="leads-filter-grid">
                                 <FS label="Card Name" value={dashCardName} onChange={setDashCardName} options={filterOptions.card_name} placeholder="All Cards" />
                                 <FS label="KYC Status" value={dashKycStatus} onChange={setDashKycStatus} options={filterOptions.kyc_status} placeholder="All KYC" />
-                                {dashSelectedBank === 'SBI' && (
+                                 {dashSelectedBank === 'SBI' && (
                                   <>
                                     <FS label="Soft Decision Filter" value={dashSoftDecision} onChange={setDashSoftDecision} options={filterOptions.sd_decision_code || []} placeholder="All Soft Decisions" />
                                     <div className="form-group" style={{ marginBottom: 0 }}>
@@ -3708,7 +3740,29 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                                     <FS label="STP Flag" value={dashStpFlag} onChange={setDashStpFlag} options={filterOptions.stp_flag || []} placeholder="All STP Flags" />
                                     <FS label="Final Status" value={dashFinalStatus} onChange={setDashFinalStatus} options={filterOptions.stage_in_sales24 || []} placeholder="All Final Statuses" />
                                     <FS label="Decision Reason" value={dashDecisionReason} onChange={setDashDecisionReason} options={filterOptions.decision_code_reason1_wcp || []} placeholder="All Reasons" />
-                                    <FS label="Channel Filter" value={dashChannel} onChange={setDashChannel} options={filterOptions.channel || []} placeholder="All Channels" />
+                                    <div className="form-group" style={{ marginBottom: 0 }}>
+                                      <label className="form-label" style={fll}>Lead Creation Type</label>
+                                      <select className="form-select" style={fls} value={dashChannel} onChange={(e) => setDashChannel(e.target.value)}>
+                                        <option value="">All Lead Types</option>
+                                        <option value="SSAA1">Digital (SSAA1)</option>
+                                        <option value="SSAR1">Agents (SSAR1)</option>
+                                      </select>
+                                    </div>
+                                  </>
+                                )}
+                                {dashSelectedBank === 'KIWI' && (
+                                  <>
+                                    <FS label="Channel Filter" value={dashChannel} onChange={setDashChannel} options={['Digital', 'Offline']} placeholder="All Channels" />
+                                    <FS label="Soft Decision Filter" value={dashSoftDecision} onChange={setDashSoftDecision} options={filterOptions.ipa_status || ['Approve', 'Decline', 'Blank']} placeholder="All Soft Decisions" />
+                                    <div className="form-group" style={{ marginBottom: 0 }}>
+                                      <label className="form-label" style={fll}>Soft Decision Date</label>
+                                      <input type="date" className="form-input" style={fls} value={dashSoftDecisionDate} onChange={(e) => setDashSoftDecisionDate(e.target.value)} />
+                                    </div>
+                                    <FS label="KYC Type Filter" value={dashKycType} onChange={setDashKycType} options={filterOptions.vkyc_status || ['Approve', 'Decline', 'Blank']} placeholder="All KYC Types" />
+                                    <FS label="Card Created" value={dashCardActivation} onChange={setDashCardActivation} options={['Approve', 'Decline', 'Blank']} placeholder="All Card Created" />
+                                    <FS label="Current Status" value={dashCurrentStage} onChange={setDashCurrentStage} options={filterOptions.current_stage || []} placeholder="All Current Statuses" />
+                                    <FS label="Reject Reason" value={dashDecisionReason} onChange={setDashDecisionReason} options={filterOptions.reject_reason || []} placeholder="All Reject Reasons" />
+                                    <FS label="Bank Name" value={dashCardName} onChange={setDashCardName} options={['Yes', 'AU', 'PNB']} placeholder="All Banks" />
                                   </>
                                 )}
                                 <FS label="Customer Type" value={dashCustomerType} onChange={setDashCustomerType} options={filterOptions.customer_type} placeholder="All Customers" />
@@ -3716,7 +3770,9 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                                 <FS label="Card Activation" value={dashCardActivation} onChange={setDashCardActivation} options={filterOptions.card_activation_status} placeholder="All Status" />
                                 <FS label="VKYC Status" value={dashVkycStatus} onChange={setDashVkycStatus} options={filterOptions.vkyc_status} placeholder="All VKYC" />
                                 <FS label="Agent" value={dashAgent} onChange={setDashAgent} options={filterOptions.agents} placeholder="All Agents" />
-                                <FS label="Source Type" value={dashSourceType} onChange={setDashSourceType} options={filterOptions.source_type} placeholder="All Sources" />
+                                {dashSelectedBank !== 'SBI' && (
+                                  <FS label="Source Type" value={dashSourceType} onChange={setDashSourceType} options={filterOptions.source_type} placeholder="All Sources" />
+                                )}
                               </div>
                             )}
                         </>
@@ -3729,7 +3785,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                   Loading dashboard charts...
                 </div>
               ) : (() => {
-                const { totalSubmit, approvedCount, rejectedCount, pendingCount, approvalRate, funnelIpa, funnelKyc, funnelDecision, funnelActive, funnelBankRef, funnelCurrentState, funnelWinningBank, funnelSoftDecision, funnelWorkFlow, funnelFinalStatus, funnelCardGen, ipaApproved, ipaDeclined, kycDist, srcDist, cardTypeDist, custTypeDist, actDist, prodDist, topPincodes, sdDecisionDist, kycModeDist, stpFlagDist, finalStatusDist, decisionReasonDist, channelDist } = dashStats;
+                const { totalSubmit, approvedCount, rejectedCount, pendingCount, approvalRate, funnelIpa, funnelKyc, funnelDecision, funnelActive, funnelBankRef, funnelCurrentState, funnelWinningBank, funnelSoftDecision, funnelWorkFlow, funnelFinalStatus, funnelCardGen, ipaApproved, ipaDeclined, kiwiSoftApproved, kiwiVkycApproved, kiwiCardCreated, kiwiFirstTxn, sdApprovedCount, sbiFinalApprovedCount, kycDist, srcDist, cardTypeDist, custTypeDist, actDist, prodDist, topPincodes, sdDecisionDist, kycModeDist, stpFlagDist, finalStatusDist, decisionReasonDist, channelDist, leadCreationDist } = dashStats;
                 const { stateLeadCounts, maxStateLeads, topStates } = dashGeoData;
                 return (
                   <>
@@ -3740,16 +3796,89 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                         <div style={{ fontSize: '2rem', fontWeight: 800, margin: '0.25rem 0' }}>{totalSubmit}</div>
                         <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>Matched from MIS</div>
                       </div>
-                      <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid var(--mint)' }}>
-                        <div style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Approved rate</div>
-                        <div style={{ fontSize: '2rem', fontWeight: 800, margin: '0.25rem 0', color: 'var(--mint)' }}>{approvalRate}%</div>
-                        <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>{approvedCount} of {totalSubmit} approved</div>
-                      </div>
-                      <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid var(--err)' }}>
-                        <div style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Rejected applications</div>
-                        <div style={{ fontSize: '2rem', fontWeight: 800, margin: '0.25rem 0', color: 'var(--err)' }}>{rejectedCount}</div>
-                        <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>Declined by partner bank</div>
-                      </div>
+
+                      {dashSelectedBank === 'SBI' ? (
+                        <>
+                          <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid hsl(var(--primary))' }}>
+                            <div style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Soft Approved (SD_DECISION_CODE)</div>
+                            <div style={{ fontSize: '2rem', fontWeight: 800, margin: '0.25rem 0', color: 'hsl(var(--primary))' }}>
+                              {totalSubmit > 0 ? ((sdApprovedCount / totalSubmit) * 100).toFixed(1) : 0}%
+                            </div>
+                            <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>{sdApprovedCount} of {totalSubmit} soft approved</div>
+                          </div>
+                          <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid var(--gold-deep)' }}>
+                            <div style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Final Decision - APPL File generated</div>
+                            <div style={{ fontSize: '2rem', fontWeight: 800, margin: '0.25rem 0', color: 'var(--gold-deep)' }}>
+                              {totalSubmit > 0 ? ((sbiFinalApprovedCount / totalSubmit) * 100).toFixed(1) : 0}%
+                            </div>
+                            <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>{sbiFinalApprovedCount} of {totalSubmit} file generated</div>
+                          </div>
+                          <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid var(--mint)' }}>
+                            <div style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Final approval rate</div>
+                            <div style={{ fontSize: '2rem', fontWeight: 800, margin: '0.25rem 0', color: 'var(--mint)' }}>{approvalRate}%</div>
+                            <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>{approvedCount} of {totalSubmit} final approved</div>
+                          </div>
+                          <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid var(--err)' }}>
+                            <div style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Final rejected applications</div>
+                            <div style={{ fontSize: '2rem', fontWeight: 800, margin: '0.25rem 0', color: 'var(--err)' }}>{rejectedCount}</div>
+                            <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>Declined by partner bank</div>
+                          </div>
+                        </>
+                      ) : dashSelectedBank === 'KIWI' ? (
+                        <>
+                          <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid hsl(var(--primary))' }}>
+                            <div style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Soft Decision Approved</div>
+                            <div style={{ fontSize: '2rem', fontWeight: 800, margin: '0.25rem 0', color: 'hsl(var(--primary))' }}>
+                              {totalSubmit > 0 ? ((kiwiSoftApproved / totalSubmit) * 100).toFixed(1) : 0}%
+                            </div>
+                            <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>{kiwiSoftApproved} of {totalSubmit} soft approved</div>
+                          </div>
+                          <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid var(--gold-deep)' }}>
+                            <div style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>VKYC Approved</div>
+                            <div style={{ fontSize: '2rem', fontWeight: 800, margin: '0.25rem 0', color: 'var(--gold-deep)' }}>
+                              {totalSubmit > 0 ? ((kiwiVkycApproved / totalSubmit) * 100).toFixed(1) : 0}%
+                            </div>
+                            <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>{kiwiVkycApproved} of {totalSubmit} VKYC approved</div>
+                          </div>
+                          <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid var(--mint)' }}>
+                            <div style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Card Created</div>
+                            <div style={{ fontSize: '2rem', fontWeight: 800, margin: '0.25rem 0', color: 'var(--mint)' }}>{kiwiCardCreated}</div>
+                            <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>{totalSubmit > 0 ? ((kiwiCardCreated / totalSubmit) * 100).toFixed(1) : 0}% cards generated</div>
+                          </div>
+                          <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid #10b981' }}>
+                            <div style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>First Transaction</div>
+                            <div style={{ fontSize: '2rem', fontWeight: 800, margin: '0.25rem 0', color: '#10b981' }}>{kiwiFirstTxn}</div>
+                            <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>Active card transactions</div>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          {/* HDFC & Generic */}
+                          <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid hsl(var(--primary))' }}>
+                            <div style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Soft approval rate</div>
+                            <div style={{ fontSize: '2rem', fontWeight: 800, margin: '0.25rem 0', color: 'hsl(var(--primary))' }}>
+                              {totalSubmit > 0 ? ((ipaApproved / totalSubmit) * 100).toFixed(1) : 0}%
+                            </div>
+                            <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>{ipaApproved} of {totalSubmit} soft approved</div>
+                          </div>
+                          <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid #94A3B8' }}>
+                            <div style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Initial Rejected applications</div>
+                            <div style={{ fontSize: '2rem', fontWeight: 800, margin: '0.25rem 0', color: '#64748B' }}>{ipaDeclined}</div>
+                            <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>Declined at soft decision</div>
+                          </div>
+                          <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid var(--mint)' }}>
+                            <div style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Final approval rate</div>
+                            <div style={{ fontSize: '2rem', fontWeight: 800, margin: '0.25rem 0', color: 'var(--mint)' }}>{approvalRate}%</div>
+                            <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>{approvedCount} of {totalSubmit} final approved</div>
+                          </div>
+                          <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid var(--err)' }}>
+                            <div style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Final rejected applications</div>
+                            <div style={{ fontSize: '2rem', fontWeight: 800, margin: '0.25rem 0', color: 'var(--err)' }}>{rejectedCount}</div>
+                            <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>Declined by partner bank</div>
+                          </div>
+                        </>
+                      )}
+
                       <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid #E0A82E' }}>
                         <div style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Pending status</div>
                         <div style={{ fontSize: '2rem', fontWeight: 800, margin: '0.25rem 0', color: 'var(--gold-deep)' }}>{pendingCount}</div>
@@ -3770,10 +3899,11 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                               const b = dashSelectedBank || '';
                               if (b === 'KIWI') {
                                 stages = [
-                                  { name: 'Total Application Submit', count: totalSubmit, pct: 100, color: 'var(--ink)' },
-                                  { name: 'Bank Reference Assigned', count: funnelBankRef, pct: totalSubmit > 0 ? Math.round((funnelBankRef / totalSubmit) * 100) : 0, color: 'hsl(var(--primary))' },
-                                  { name: 'IPA Approved / Valid State', count: funnelCurrentState, pct: totalSubmit > 0 ? Math.round((funnelCurrentState / totalSubmit) * 100) : 0, color: 'var(--gold-deep)' },
-                                  { name: 'Winning Bank Decided (YES/AU/PNB)', count: funnelWinningBank, pct: totalSubmit > 0 ? Math.round((funnelWinningBank / totalSubmit) * 100) : 0, color: 'var(--mint)' }
+                                  { name: 'Total Applications (content)', count: totalSubmit, pct: 100, color: 'var(--ink)' },
+                                  { name: 'Soft Decision Approved (ipa)', count: kiwiSoftApproved, pct: totalSubmit > 0 ? Math.round((kiwiSoftApproved / totalSubmit) * 100) : 0, color: 'hsl(var(--primary))' },
+                                  { name: 'VKYC Approved (VKYC)', count: kiwiVkycApproved, pct: totalSubmit > 0 ? Math.round((kiwiVkycApproved / totalSubmit) * 100) : 0, color: 'var(--gold-deep)' },
+                                  { name: 'Card Created (Card_Created)', count: kiwiCardCreated, pct: totalSubmit > 0 ? Math.round((kiwiCardCreated / totalSubmit) * 100) : 0, color: 'var(--mint)' },
+                                  { name: 'First transaction (first_txn)', count: kiwiFirstTxn, pct: totalSubmit > 0 ? Math.round((kiwiFirstTxn / totalSubmit) * 100) : 0, color: '#10b981' }
                                 ];
                               } else if (b === 'SBI') {
                                 stages = [
@@ -7464,7 +7594,20 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                 </div>
 
                 <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
-                  
+                  <button 
+                    onClick={() => { 
+                      setEditLeadForm({ 
+                        ...selectedLeadDetails,
+                        application_id: selectedLeadDetails.application_id || '',
+                        full_name: selectedLeadDetails.full_name || ''
+                      }); 
+                      setIsEditingLead(true); 
+                    }} 
+                    className="btn-primary" 
+                    style={{ padding: '0.6rem 1.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+                  >
+                    <Edit3 size={15} /> Edit Lead Details
+                  </button>
                   <button onClick={() => { setSelectedLeadDetails(null); setIsEditingLead(false); }} className="btn-secondary" style={{ padding: '0.6rem 1.5rem' }}>
                     Close Details
                   </button>
