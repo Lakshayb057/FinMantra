@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { INDIA_STATES_SVG, aggregateLeadsByState, getHeatColor, pincodeToState } from '../utils/indiaMap.js';
 import { 
   Users, CreditCard, MapPin, Settings as SettingsIcon, ShieldAlert, BarChart3, 
-  Trash2, Download, Search, Plus, Edit, Edit3, Check, X, RefreshCw, AlertCircle,
+  Trash2, Download, Search, Plus, Edit, Check, X, RefreshCw, AlertCircle,
   QrCode, Smartphone, CheckCircle, Wifi, WifiOff, Eye, EyeOff, MessageSquare, Layers,
   ArrowUp, ArrowDown, MoreVertical, LogOut, Activity, Sun, Moon, LogIn,
   TrendingUp, Upload, CheckCircle2, Filter, Database, UserPlus, FileSpreadsheet, FolderArchive, FolderDown, FileText,
@@ -7650,7 +7650,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                     className="btn-primary" 
                     style={{ padding: '0.6rem 1.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
                   >
-                    <Edit3 size={15} /> Edit Lead Details
+                    <Edit size={15} /> Edit Lead Details
                   </button>
                   <button onClick={() => { setSelectedLeadDetails(null); setIsEditingLead(false); }} className="btn-secondary" style={{ padding: '0.6rem 1.5rem' }}>
                     Close Details
