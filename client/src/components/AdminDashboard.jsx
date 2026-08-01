@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { INDIA_STATES_SVG, aggregateLeadsByState, getHeatColor, pincodeToState } from '../utils/indiaMap.js';
 import { 
   Users, CreditCard, MapPin, Settings as SettingsIcon, ShieldAlert, BarChart3, 
-  Trash2, Download, Search, Plus, Edit, Check, X, RefreshCw, AlertCircle,
+  Trash2, Download, Search, Plus, Edit, Edit3, Check, X, RefreshCw, AlertCircle,
   QrCode, Smartphone, CheckCircle, Wifi, WifiOff, Eye, EyeOff, MessageSquare, Layers,
   ArrowUp, ArrowDown, MoreVertical, LogOut, Activity, Sun, Moon, LogIn,
   TrendingUp, Upload, CheckCircle2, Filter, Database, UserPlus, FileSpreadsheet, FolderArchive, FolderDown, FileText,
