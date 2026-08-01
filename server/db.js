@@ -1371,6 +1371,13 @@ const db = {
       } catch (e) {
         misDataObj = {};
       }
+      
+      // Prevent massive JSON payload causing OOM crash
+      if (misDataObj) {
+        delete misDataObj['_rawRowValues'];
+        delete misDataObj['All Tracking Parameters (JSON)'];
+      }
+
       expandedList[i] = {
         id: row.id, urn: row.urn, full_name: row.full_name, phone: row.phone,
         mis_status: row.mis_status, mis_mapped_at: row.mis_mapped_at,
