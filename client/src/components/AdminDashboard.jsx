@@ -2023,16 +2023,9 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
   const getLeadBank = useCallback((lead) => {
     const md = lead.mis_data || {};
-    const cBank = cleanBankCode(lead.card_bank);
-    const cNameLower = String(lead.card_name || '').toLowerCase();
-
-    // 1. Top Priority: Lead's actual requested card / bank (HDFC, SBI, or KIWI/Yes)
-    if (cBank === 'HDFC' || cNameLower.includes('hdfc')) return 'HDFC';
-    if (cBank === 'SBI' || cNameLower.includes('sbi')) return 'SBI';
-    if (cBank === 'KIWI' || cBank.includes('KIWI') || cBank === 'YES' || cNameLower.includes('kiwi')) return 'KIWI';
-
-    // 2. Explicit MIS Bank Name saved during MIS upload
     const bankName = String(md.mis_bank_name || '').toUpperCase().trim();
+
+    // 1. Explicit MIS Bank Name saved during Upload MIS / Automated Email MIS fetchers
     if (bankName) {
       if (bankName.includes('KIWI')) return 'KIWI';
       if (bankName.includes('SBI')) return 'SBI';
@@ -2040,12 +2033,41 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       return cleanBankCode(bankName);
     }
 
-    // 3. Fallback to card_bank if present
+    // 2. Distinctive KIWI MIS metadata
+    if (
+      md.kiwi_metadata ||
+      (md.kiwi_bank && String(md.kiwi_bank).trim() !== '') ||
+      (md.kiwi_winning_bank && String(md.kiwi_winning_bank).trim() !== '')
+    ) {
+      return 'KIWI';
+    }
+
+    // 3. Distinctive SBI MIS metadata
+    if (
+      (md.SD_DECISION_CODE && String(md.SD_DECISION_CODE).trim() !== '') ||
+      (md.STAGE_IN_SALES24 && String(md.STAGE_IN_SALES24).trim() !== '') ||
+      (md.GEMID_1 && String(md.GEMID_1).trim() !== '') ||
+      (md.LEAD_GEMID_1 && String(md.LEAD_GEMID_1).trim() !== '') ||
+      (md.APPLICATION_NUMBER && String(md.APPLICATION_NUMBER).trim() !== '')
+    ) {
+      return 'SBI';
+    }
+
+    // 4. Card name / Card bank matching fallback
+    if (lead.card_name) {
+      const cNameLower = String(lead.card_name).toLowerCase();
+      if (cNameLower.includes('kiwi')) return 'KIWI';
+      if (cNameLower.includes('sbi')) return 'SBI';
+      if (cNameLower.includes('hdfc')) return 'HDFC';
+      const match = cards.find(c => String(c.name).toLowerCase() === cNameLower);
+      if (match && match.bank) return cleanBankCode(match.bank);
+    }
+
+    const cBank = cleanBankCode(lead.card_bank);
     if (cBank && cBank !== 'N/A' && cBank !== 'UNKNOWN') {
       return cBank;
     }
 
-    // Default fallback
     return 'HDFC';
   }, [cards]);
 
