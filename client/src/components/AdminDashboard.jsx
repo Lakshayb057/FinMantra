@@ -2022,8 +2022,17 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   }, [dbBankList, settings]);
 
   const getLeadBank = useCallback((lead) => {
-    if (lead.mis_data && lead.mis_data.mis_bank_name) {
-      return cleanBankCode(lead.mis_data.mis_bank_name);
+    const md = lead.mis_data || {};
+    if (md.mis_bank_name) {
+      return cleanBankCode(md.mis_bank_name);
+    }
+    // Check KIWI specific fields in MIS data
+    if (md.winning_bank || md.kiwi_bank || md.kiwi_winning_bank || md.bank_reference_number || md.current_state !== undefined || md.first_txn !== undefined || md.Card_Created !== undefined) {
+      return 'KIWI';
+    }
+    // Check SBI specific fields in MIS data
+    if (md.SD_DECISION_CODE || md.STAGE_IN_SALES24 || md.DECISION_CODE_REASON1_WCP || md.GEMID_1 || md.LEAD_GEMID_1 || md.APPLICATION_NUMBER) {
+      return 'SBI';
     }
     if (lead.card_name) {
       const match = cards.find(c => c.name === lead.card_name);
@@ -2132,7 +2141,12 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       if (dashStpFlag && String(lead.mis_data?.STP_FLAG || lead.mis_data?.stp_flag || '').toLowerCase() !== dashStpFlag.toLowerCase()) return false;
       if (dashFinalStatus && String(lead.mis_data?.STAGE_IN_SALES24 || lead.mis_data?.FINAL_STATUS || '').toLowerCase() !== dashFinalStatus.toLowerCase()) return false;
       if (dashDecisionReason && String(lead.mis_data?.DECISION_CODE_REASON1_WCP || lead.mis_data?.reject_reason || '').toLowerCase() !== dashDecisionReason.toLowerCase()) return false;
-      if (dashChannel && String(lead.mis_data?.CHANNEL || lead.mis_data?.source_type || '').toLowerCase() !== dashChannel.toLowerCase()) return false;
+      if (dashChannel) {
+        const gemId = String(lead.mis_data?.GEMID_1 || lead.mis_data?.LEAD_GEMID_1 || lead.mis_data?.gem_id || lead.mis_data?.CHANNEL || lead.mis_data?.source_type || '').toUpperCase();
+        if (dashChannel === 'SSAA1' && !gemId.includes('SSAA1')) return false;
+        if (dashChannel === 'SSAR1' && !gemId.includes('SSAR1')) return false;
+        if (dashChannel !== 'SSAA1' && dashChannel !== 'SSAR1' && !gemId.toLowerCase().includes(dashChannel.toLowerCase())) return false;
+      }
       if (normSelectedBank && normSelectedBank !== 'ALL') {
         const leadBank = getLeadBank(lead);
         if (leadBank !== normSelectedBank) return false;
