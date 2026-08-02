@@ -2272,9 +2272,9 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       const stpFlagVal = String(md.STP_FLAG || md.stp_flag || '').toLowerCase();
       if (stpFlagVal === 'yes' || stpFlagVal === 'y' || stpFlagVal === '1' || stpFlagVal === 'true') funnelWorkFlow++;
       
-      // SBI Final Decision strictly from STAGE_IN_SALES24
-      const stageSalesVal = String(md.STAGE_IN_SALES24 || '').trim().toLowerCase();
-      if (stageSalesVal.includes('appl') || stageSalesVal.includes('file generated') || stageSalesVal.includes('generated') || stageSalesVal.includes('approve') || stageSalesVal.includes('success')) {
+      // SBI Final Decision strictly from STAGE_IN_SALES24 presence
+      const stageSalesVal = String(md.STAGE_IN_SALES24 || '').trim();
+      if (stageSalesVal && stageSalesVal !== '' && stageSalesVal.toLowerCase() !== 'null' && stageSalesVal.toLowerCase() !== 'undefined') {
         funnelFinalStatus++;
         sbiFinalApprovedCount++;
       }
