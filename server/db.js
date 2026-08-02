@@ -4,6 +4,7 @@ require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const DEFAULT_CSV_TEMPLATE = JSON.stringify([
   { id: "urn", header: "URN", source: "urn" },
+  { id: "application_id", header: "Application ID", source: "application_id" },
   { id: "created_at", header: "Creation Date/Time", source: "created_at" },
   { id: "full_name", header: "Full Name", source: "full_name" },
   { id: "phone", header: "Phone", source: "phone" },
@@ -451,6 +452,7 @@ async function initPgSchema() {
         if (Array.isArray(currentCols)) {
           let updated = false;
           const targetFields = [
+            { id: "application_id", header: "Application ID", source: "application_id" },
             { id: "has_credit_card", header: "Already Has Credit Card?", source: "has_credit_card" },
             { id: "pincode", header: "Residence Pincode", source: "pincode" },
             { id: "monthly_income", header: "Monthly Income", source: "monthly_income" },

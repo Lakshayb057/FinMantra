@@ -2037,7 +2037,16 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
     if (
       md.kiwi_metadata ||
       (md.kiwi_bank && String(md.kiwi_bank).trim() !== '') ||
-      (md.kiwi_winning_bank && String(md.kiwi_winning_bank).trim() !== '')
+      (md.kiwi_winning_bank && String(md.kiwi_winning_bank).trim() !== '') ||
+      (md.kiwi_user_id && String(md.kiwi_user_id).trim() !== '') ||
+      (md.user_id && String(md.user_id).trim() !== '') ||
+      (md.winning_bank && String(md.winning_bank).trim() !== '') ||
+      (md.yes_state && String(md.yes_state).trim() !== '') ||
+      (md.au_state && String(md.au_state).trim() !== '') ||
+      (md.pnb_state && String(md.pnb_state).trim() !== '') ||
+      (md.Card_Created && String(md.Card_Created).trim() !== '') ||
+      (md.VKYC && String(md.VKYC).trim() !== '') ||
+      (md.first_txn && String(md.first_txn).trim() !== '')
     ) {
       return 'KIWI';
     }
@@ -2203,6 +2212,8 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
     // SBI-specific distributions
     const sdDecisionDist = {}, kycModeDist = {}, stpFlagDist = {};
     const finalStatusDist = {}, decisionReasonDist = {}, channelDist = {}, leadCreationDist = {};
+    // Kiwi-specific distributions
+    const kiwiSoftDist = {}, kiwiVkycDist = {}, kiwiCardDist = {}, kiwiBankDist = {};
 
     for (let i = 0; i < filteredMappedLeads.length; i++) {
       const l = filteredMappedLeads[i];
@@ -2252,7 +2263,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       const winning = String(md.winning_bank || '').toLowerCase();
       if (winning === 'yes' || winning === 'au' || winning === 'pnb') funnelWinningBank++;
 
-      // Funnel counts (SBI)
+      // Funnel counts (SBI - STAGE_IN_SALES24 only for Final Decision)
       const sdType = String(md.SD_DECISION_CODE || md.SOFT_DECISION_TYPE || '').toLowerCase();
       if (sdType.includes('approve') || sdType.includes('pass') || sdType.includes('eligible')) {
         funnelSoftDecision++;
@@ -2260,8 +2271,10 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       }
       const stpFlagVal = String(md.STP_FLAG || md.stp_flag || '').toLowerCase();
       if (stpFlagVal === 'yes' || stpFlagVal === 'y' || stpFlagVal === '1' || stpFlagVal === 'true') funnelWorkFlow++;
-      const finalStatus = String(md.STAGE_IN_SALES24 || md.FINAL_STATUS || md.FINAL_DECISION || '').toLowerCase();
-      if (finalStatus.includes('appl') || finalStatus.includes('file generated') || finalStatus.includes('generated') || finalStatus.includes('approve') || finalStatus.includes('success')) {
+      
+      // SBI Final Decision strictly from STAGE_IN_SALES24
+      const stageSalesVal = String(md.STAGE_IN_SALES24 || '').trim().toLowerCase();
+      if (stageSalesVal.includes('appl') || stageSalesVal.includes('file generated') || stageSalesVal.includes('generated') || stageSalesVal.includes('approve') || stageSalesVal.includes('success')) {
         funnelFinalStatus++;
         sbiFinalApprovedCount++;
       }
@@ -2300,7 +2313,8 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       const sfLabel = sfKey ? `STP: ${sfKey}` : 'STP: Unassigned';
       stpFlagDist[sfLabel] = (stpFlagDist[sfLabel] || 0) + 1;
 
-      const fsKey = String(md.STAGE_IN_SALES24 || md.FINAL_STATUS || '').trim() || 'Unassigned';
+      // Strictly STAGE_IN_SALES24 for SBI final status distribution
+      const fsKey = String(md.STAGE_IN_SALES24 || '').trim() || 'Unassigned';
       finalStatusDist[fsKey] = (finalStatusDist[fsKey] || 0) + 1;
 
       const drKey = String(md.DECISION_CODE_REASON1_WCP || md.reject_reason || '').trim() || 'None / Not Specified';
@@ -2314,6 +2328,19 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       if (gemId.includes('SSAA1')) creationType = 'Digital (SSAA1)';
       else if (gemId.includes('SSAR1')) creationType = 'Agents (SSAR1)';
       leadCreationDist[creationType] = (leadCreationDist[creationType] || 0) + 1;
+
+      // Kiwi-specific distributions
+      const kSoftKey = String(md.ipa || md.ipa_status || md.SOFT_DECISION || '').trim() || 'Unassigned / Pending';
+      kiwiSoftDist[kSoftKey] = (kiwiSoftDist[kSoftKey] || 0) + 1;
+
+      const kVkycKey = String(md.VKYC || md.vkyc_status || md.kyc_status || '').trim() || 'Unassigned';
+      kiwiVkycDist[kVkycKey] = (kiwiVkycDist[kVkycKey] || 0) + 1;
+
+      const kCardKey = String(md.Card_Created || md.card_activation_status || md.card_created || '').trim() || 'Unassigned';
+      kiwiCardDist[kCardKey] = (kiwiCardDist[kCardKey] || 0) + 1;
+
+      const kBankKey = String(md.winning_bank || md.kiwi_winning_bank || md.kiwi_bank || '').trim() || 'YES';
+      kiwiBankDist[kBankKey] = (kiwiBankDist[kBankKey] || 0) + 1;
     }
 
     const totalSubmit = filteredMappedLeads.length;
@@ -2333,7 +2360,8 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       kiwiSoftApproved, kiwiVkycApproved, kiwiCardCreated, kiwiFirstTxn,
       sdApprovedCount, sbiFinalApprovedCount,
       kycDist, srcDist, cardTypeDist, custTypeDist, actDist, prodDist, topPincodes,
-      sdDecisionDist, kycModeDist, stpFlagDist, finalStatusDist, decisionReasonDist, channelDist, leadCreationDist
+      sdDecisionDist, kycModeDist, stpFlagDist, finalStatusDist, decisionReasonDist, channelDist, leadCreationDist,
+      kiwiSoftDist, kiwiVkycDist, kiwiCardDist, kiwiBankDist
     };
   }, [filteredMappedLeads]);
 
@@ -3766,7 +3794,18 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                             <FS label="Card Type" value={dashCardType} onChange={setDashCardType} options={filterOptions.card_type} placeholder="All Card Types" />
                             <FS label="State" value={dashState} onChange={setDashState} options={filterOptions.state} placeholder="All States" />
                             <FS label="IPA Status" value={dashIpaStatus} onChange={setDashIpaStatus} options={filterOptions.ipa_status} placeholder="All IPA" />
-                            <FS label="Final Decision" value={dashFinalDecision} onChange={setDashFinalDecision} options={filterOptions.final_decision} placeholder="All Decisions" />
+                            {dashSelectedBank === 'SBI' ? (
+                              <div className="form-group" style={{ marginBottom: 0 }}>
+                                <label className="form-label" style={fll}>Lead Creation Type</label>
+                                <select className="form-select" style={fls} value={dashChannel} onChange={(e) => setDashChannel(e.target.value)}>
+                                  <option value="">All Lead Types</option>
+                                  <option value="SSAA1">Digital (SSAA1)</option>
+                                  <option value="SSAR1">Agents (SSAR1)</option>
+                                </select>
+                              </div>
+                            ) : (
+                              <FS label="Final Decision" value={dashFinalDecision} onChange={setDashFinalDecision} options={filterOptions.final_decision} placeholder="All Decisions" />
+                            )}
                           </div>
 
                             {dashFiltersExpanded && (
@@ -3784,14 +3823,6 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                                     <FS label="STP Flag" value={dashStpFlag} onChange={setDashStpFlag} options={filterOptions.stp_flag || []} placeholder="All STP Flags" />
                                     <FS label="Final Status" value={dashFinalStatus} onChange={setDashFinalStatus} options={filterOptions.stage_in_sales24 || []} placeholder="All Final Statuses" />
                                     <FS label="Decision Reason" value={dashDecisionReason} onChange={setDashDecisionReason} options={filterOptions.decision_code_reason1_wcp || []} placeholder="All Reasons" />
-                                    <div className="form-group" style={{ marginBottom: 0 }}>
-                                      <label className="form-label" style={fll}>Lead Creation Type</label>
-                                      <select className="form-select" style={fls} value={dashChannel} onChange={(e) => setDashChannel(e.target.value)}>
-                                        <option value="">All Lead Types</option>
-                                        <option value="SSAA1">Digital (SSAA1)</option>
-                                        <option value="SSAR1">Agents (SSAR1)</option>
-                                      </select>
-                                    </div>
                                   </>
                                 )}
                                 {dashSelectedBank === 'KIWI' && (
@@ -3829,7 +3860,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                   Loading dashboard charts...
                 </div>
               ) : (() => {
-                const { totalSubmit, approvedCount, rejectedCount, pendingCount, approvalRate, funnelIpa, funnelKyc, funnelDecision, funnelActive, funnelBankRef, funnelCurrentState, funnelWinningBank, funnelSoftDecision, funnelWorkFlow, funnelFinalStatus, funnelCardGen, ipaApproved, ipaDeclined, kiwiSoftApproved, kiwiVkycApproved, kiwiCardCreated, kiwiFirstTxn, sdApprovedCount, sbiFinalApprovedCount, kycDist, srcDist, cardTypeDist, custTypeDist, actDist, prodDist, topPincodes, sdDecisionDist, kycModeDist, stpFlagDist, finalStatusDist, decisionReasonDist, channelDist, leadCreationDist } = dashStats;
+                const { totalSubmit, approvedCount, rejectedCount, pendingCount, approvalRate, funnelIpa, funnelKyc, funnelDecision, funnelActive, funnelBankRef, funnelCurrentState, funnelWinningBank, funnelSoftDecision, funnelWorkFlow, funnelFinalStatus, funnelCardGen, ipaApproved, ipaDeclined, kiwiSoftApproved, kiwiVkycApproved, kiwiCardCreated, kiwiFirstTxn, sdApprovedCount, sbiFinalApprovedCount, kycDist, srcDist, cardTypeDist, custTypeDist, actDist, prodDist, topPincodes, sdDecisionDist, kycModeDist, stpFlagDist, finalStatusDist, decisionReasonDist, channelDist, leadCreationDist, kiwiSoftDist, kiwiVkycDist, kiwiCardDist, kiwiBankDist } = dashStats;
                 const { stateLeadCounts, maxStateLeads, topStates } = dashGeoData;
                 return (
                   <>
@@ -4206,6 +4237,147 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                                     { label: 'Soft Decision Approved', count: funnelSoftDecision, status: funnelSoftDecision > 0 ? '✅ Active' : '⚪ None' },
                                     { label: 'STP Flag = Yes', count: funnelWorkFlow, status: funnelWorkFlow > 0 ? '✅ Active' : '⚪ None' },
                                     { label: 'Final Status (APPL File Gen)', count: funnelFinalStatus, status: funnelFinalStatus > 0 ? '✅ Active' : '⚪ None' },
+                                    { label: 'Approved', count: approvedCount, status: approvedCount > 0 ? '🟢 Processed' : '⚪ None' },
+                                    { label: 'Rejected', count: rejectedCount, status: rejectedCount > 0 ? '🔴 Declined' : '⚪ None' },
+                                    { label: 'Pending', count: pendingCount, status: pendingCount > 0 ? '🟡 In Progress' : '⚪ None' },
+                                  ].map((row, idx) => (
+                                    <tr key={idx} style={{ borderBottom: '1px solid var(--line)' }}>
+                                      <td style={{ padding: '0.55rem 0.75rem', fontWeight: 600 }}>{row.label}</td>
+                                      <td style={{ padding: '0.55rem 0.75rem', textAlign: 'center', fontWeight: 800, fontSize: '0.85rem', fontFamily: 'var(--font-mono)' }}>{row.count}</td>
+                                      <td style={{ padding: '0.55rem 0.75rem', textAlign: 'center', color: 'hsl(var(--text-muted))' }}>{totalSubmit > 0 ? ((row.count / totalSubmit) * 100).toFixed(1) : 0}%</td>
+                                      <td style={{ padding: '0.55rem 0.75rem' }}>{row.status}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        </>
+                      )}
+
+                      {/* === KIWI-SPECIFIC VISUALS === */}
+                      {dashSelectedBank === 'KIWI' && (
+                        <>
+                          {/* Kiwi: Soft Decision Breakdown (IPA) Pie */}
+                          <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', minHeight: '280px' }}>
+                            <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>Soft Decision Breakdown (IPA)</h4>
+                            <div style={{ display: 'flex', flex: 1, alignItems: 'center', justifyContent: 'center', gap: '1.25rem' }}>
+                              {(() => {
+                                const entries = Object.entries(kiwiSoftDist || {});
+                                const getSoftColor = (key) => {
+                                  const k = String(key).toLowerCase();
+                                  if (k.includes('approve') || k.includes('pass') || k.includes('success') || k.includes('eligible')) return 'hsl(var(--primary))';
+                                  if (k.includes('decline') || k.includes('reject')) return 'var(--err)';
+                                  return 'var(--gold-deep)';
+                                };
+                                let cumPct = 0;
+                                return (
+                                  <>
+                                    <svg width="120" height="120" viewBox="0 0 36 36">
+                                      <circle cx="18" cy="18" r="15.915" fill="none" stroke="var(--line)" strokeWidth="4.2" />
+                                      {totalSubmit > 0 && entries.map(([key, val], i) => {
+                                        const pct = (val / totalSubmit) * 100;
+                                        if (pct <= 0) return null;
+                                        const dashArr = `${pct} ${100 - pct}`;
+                                        const offset = 100 - cumPct + 25;
+                                        cumPct += pct;
+                                        return (
+                                          <circle key={i} cx="18" cy="18" r="15.915" fill="none" stroke={getSoftColor(key)} strokeWidth="4.2" strokeDasharray={dashArr} strokeDashoffset={offset} />
+                                        );
+                                      })}
+                                    </svg>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', fontSize: '0.78rem' }}>
+                                      {entries.map(([key, val], i) => (
+                                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                          <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: getSoftColor(key) }} />
+                                          <span style={{ fontWeight: 600 }}>{key}:</span>
+                                          <span style={{ color: 'hsl(var(--text-muted))' }}>{val} ({totalSubmit > 0 ? ((val / totalSubmit) * 100).toFixed(0) : 0}%)</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </>
+                                );
+                              })()}
+                            </div>
+                          </div>
+
+                          {/* Kiwi: Winning Bank Distribution Bar */}
+                          <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', minHeight: '280px' }}>
+                            <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>Winning Bank Distribution</h4>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', overflowY: 'auto', flex: 1 }}>
+                              {Object.entries(kiwiBankDist || {}).sort((a, b) => b[1] - a[1]).map(([name, val], idx) => {
+                                const pct = totalSubmit > 0 ? (val / totalSubmit) * 100 : 0;
+                                return (
+                                  <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.78rem' }}>
+                                    <div style={{ width: '90px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', textAlign: 'right', fontWeight: 600 }} title={name}>{name}</div>
+                                    <div style={{ flex: 1, height: '14px', background: 'var(--paper-2)', borderRadius: '4px', overflow: 'hidden' }}>
+                                      <div style={{ height: '100%', width: `${pct}%`, background: 'hsl(var(--primary))', borderRadius: '4px', transition: 'width 0.4s' }} />
+                                    </div>
+                                    <div style={{ width: '55px', fontWeight: 'bold', fontSize: '0.75rem', textAlign: 'right' }}>{val} ({pct.toFixed(0)}%)</div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* Kiwi: VKYC Status Distribution Bar */}
+                          <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', minHeight: '280px' }}>
+                            <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>VKYC Status Distribution</h4>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', overflowY: 'auto', flex: 1 }}>
+                              {Object.entries(kiwiVkycDist || {}).sort((a, b) => b[1] - a[1]).map(([name, val], idx) => {
+                                const pct = totalSubmit > 0 ? (val / totalSubmit) * 100 : 0;
+                                return (
+                                  <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.78rem' }}>
+                                    <div style={{ width: '100px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', textAlign: 'right', fontWeight: 600 }} title={name}>{name}</div>
+                                    <div style={{ flex: 1, height: '14px', background: 'var(--paper-2)', borderRadius: '4px', overflow: 'hidden' }}>
+                                      <div style={{ height: '100%', width: `${pct}%`, background: 'var(--gold-deep)', borderRadius: '4px', transition: 'width 0.4s' }} />
+                                    </div>
+                                    <div style={{ width: '55px', fontWeight: 'bold', fontSize: '0.75rem', textAlign: 'right' }}>{val} ({pct.toFixed(0)}%)</div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* Kiwi: Card Created Breakdown Bar */}
+                          <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', minHeight: '280px' }}>
+                            <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>Card Created Status</h4>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', overflowY: 'auto', flex: 1 }}>
+                              {Object.entries(kiwiCardDist || {}).sort((a, b) => b[1] - a[1]).map(([name, val], idx) => {
+                                const pct = totalSubmit > 0 ? (val / totalSubmit) * 100 : 0;
+                                return (
+                                  <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.78rem' }}>
+                                    <div style={{ width: '100px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', textAlign: 'right', fontWeight: 600 }} title={name}>{name}</div>
+                                    <div style={{ flex: 1, height: '14px', background: 'var(--paper-2)', borderRadius: '4px', overflow: 'hidden' }}>
+                                      <div style={{ height: '100%', width: `${pct}%`, background: 'var(--mint)', borderRadius: '4px', transition: 'width 0.4s' }} />
+                                    </div>
+                                    <div style={{ width: '55px', fontWeight: 'bold', fontSize: '0.75rem', textAlign: 'right' }}>{val} ({pct.toFixed(0)}%)</div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* Kiwi: Summary Comparison Table */}
+                          <div className="glass-panel" style={{ padding: '1.5rem', gridColumn: 'span 2', display: 'flex', flexDirection: 'column' }}>
+                            <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>Kiwi MIS Summary Table</h4>
+                            <div style={{ overflowX: 'auto', flex: 1 }}>
+                              <table className="data-table" style={{ fontSize: '0.78rem', width: '100%' }}>
+                                <thead>
+                                  <tr>
+                                    <th style={{ textAlign: 'left', padding: '0.5rem 0.75rem' }}>Metric</th>
+                                    <th style={{ textAlign: 'center', padding: '0.5rem 0.75rem' }}>Count</th>
+                                    <th style={{ textAlign: 'center', padding: '0.5rem 0.75rem' }}>% of Total</th>
+                                    <th style={{ textAlign: 'left', padding: '0.5rem 0.75rem' }}>Status</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {[
+                                    { label: 'Total Mapped Applications', count: totalSubmit, status: '—' },
+                                    { label: 'Soft Decision Approved (IPA)', count: kiwiSoftApproved, status: kiwiSoftApproved > 0 ? '✅ Active' : '⚪ None' },
+                                    { label: 'VKYC Approved', count: kiwiVkycApproved, status: kiwiVkycApproved > 0 ? '✅ Active' : '⚪ None' },
+                                    { label: 'Card Created', count: kiwiCardCreated, status: kiwiCardCreated > 0 ? '🟢 Issued' : '⚪ None' },
+                                    { label: 'First Transaction', count: kiwiFirstTxn, status: kiwiFirstTxn > 0 ? '🔥 Active' : '⚪ None' },
                                     { label: 'Approved', count: approvedCount, status: approvedCount > 0 ? '🟢 Processed' : '⚪ None' },
                                     { label: 'Rejected', count: rejectedCount, status: rejectedCount > 0 ? '🔴 Declined' : '⚪ None' },
                                     { label: 'Pending', count: pendingCount, status: pendingCount > 0 ? '🟡 In Progress' : '⚪ None' },

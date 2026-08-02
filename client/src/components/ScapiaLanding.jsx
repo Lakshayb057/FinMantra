@@ -10,6 +10,7 @@ export default function ScapiaLanding({ navigateTo, utmParams }) {
   // Form State
   const [formData, setFormData] = useState({
     fullName: '',
+    pan_no: '',
     phone: '', // WhatsApp No
     email: '',
     pincode: '',
@@ -95,6 +96,13 @@ export default function ScapiaLanding({ navigateTo, utmParams }) {
       return;
     }
 
+    if (name === 'pan_no') {
+      const cleanVal = value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
+      setFormData(prev => ({ ...prev, [name]: cleanVal }));
+      validateField(name, cleanVal);
+      return;
+    }
+
     if (name === 'phone' || name === 'pincode') {
       const cleanVal = value.replace(/\D/g, '').slice(0, name === 'phone' ? 10 : 6);
       setFormData(prev => ({ ...prev, [name]: cleanVal }));
@@ -112,6 +120,9 @@ export default function ScapiaLanding({ navigateTo, utmParams }) {
       const parts = value.trim().split(/\s+/);
       if (!value || parts.length < 2 || parts.some(p => p.length === 0)) errorText = 'Enter both first and last name.';
     }
+    if (name === 'pan_no') {
+      if (!value || !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(value)) errorText = 'Enter a valid 10-character PAN number (e.g. ABCDE1234F).';
+    }
     if (name === 'phone') {
       if (!value || !/^[6-9]\d{9}$/.test(value)) errorText = 'Enter a valid 10-digit whatsapp number.';
     }
@@ -128,6 +139,7 @@ export default function ScapiaLanding({ navigateTo, utmParams }) {
     const newErrors = {};
     const nameParts = formData.fullName ? formData.fullName.trim().split(/\s+/) : [];
     if (!formData.fullName || nameParts.length < 2 || nameParts.some(p => p.length === 0)) newErrors.fullName = 'Enter both first and last name.';
+    if (!formData.pan_no || !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(formData.pan_no)) newErrors.pan_no = 'Enter a valid 10-character PAN number (e.g. ABCDE1234F).';
     if (!formData.phone || !/^[6-9]\d{9}$/.test(formData.phone)) newErrors.phone = 'Enter a valid 10-digit whatsapp number.';
     if (!formData.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) newErrors.email = 'Enter a valid email address.';
     if (!formData.pincode || !/^\d{6}$/.test(formData.pincode)) newErrors.pincode = 'Enter a valid 6-digit pincode.';
@@ -257,6 +269,7 @@ export default function ScapiaLanding({ navigateTo, utmParams }) {
 
       const payload = {
         full_name: formData.fullName.trim(),
+        pan_no: formData.pan_no.trim().toUpperCase(),
         phone: formData.phone.trim(),
         email: formData.email.trim().toLowerCase(),
         pincode: formData.pincode.trim(),
@@ -451,6 +464,12 @@ export default function ScapiaLanding({ navigateTo, utmParams }) {
                     <label htmlFor="fullName">Full name</label>
                     <input id="fullName" name="fullName" autoComplete="name" placeholder="As mentioned on PAN" value={formData.fullName} onChange={handleInputChange} className={errors.fullName ? 'scapia-err' : ''} />
                     <span className="scapia-field-error">{errors.fullName}</span>
+                  </div>
+
+                  <div className="scapia-field">
+                    <label htmlFor="pan_no">PAN number</label>
+                    <input id="pan_no" name="pan_no" maxLength="10" autoCapitalize="characters" autoComplete="off" placeholder="ABCDE1234F" value={formData.pan_no} onChange={handleInputChange} className={errors.pan_no ? 'scapia-err' : ''} />
+                    <span className="scapia-field-error">{errors.pan_no}</span>
                   </div>
                   
                   <div className="scapia-field-row">
