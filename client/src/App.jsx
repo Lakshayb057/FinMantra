@@ -9,6 +9,7 @@ import PrivacyPolicyPage from './components/PrivacyPolicyPage';
 import TermsPage from './components/TermsPage';
 import KiwiLanding from './components/KiwiLanding';
 import SimplyClickSbi from './components/SimplyClickSbi';
+import ScapiaLanding from './components/ScapiaLanding';
 import { resolveRedirectUrl } from './utils/analytics';
 // Cookie helper functions
 function setCookie(name, value, days) {
@@ -37,7 +38,7 @@ export default function App() {
   const [theme, setTheme] = useState(localStorage.getItem('finmantra_theme') || 'light');
   
   useEffect(() => {
-    if (currentPath.startsWith('/kiwi') || currentPath.startsWith('/simplyclick_sbi')) {
+    if (currentPath.startsWith('/kiwi') || currentPath.startsWith('/simplyclick_sbi') || currentPath.startsWith('/scapia')) {
       document.documentElement.setAttribute('data-theme', 'light');
     } else {
       document.documentElement.setAttribute('data-theme', theme);
@@ -187,6 +188,19 @@ export default function App() {
       }
     }
 
+    if (path.startsWith('/scapia/')) {
+      const rest = path.substring(8); // everything after "/scapia/"
+      if (rest.includes('=')) {
+        const pairs = rest.split('&');
+        pairs.forEach(pair => {
+          const [k, v] = pair.split('=');
+          if (k && v) {
+            params[k.trim()] = decodeURIComponent(v.trim());
+          }
+        });
+      }
+    }
+
     // Explicitly guarantee utm_source and standard code usage fields exist
     if (!params.utm_source) params.utm_source = searchParams.get('utm_source') || '';
     if (!params.utm_medium) params.utm_medium = searchParams.get('utm_medium') || searchParams.get('utm_medem') || '';
@@ -228,6 +242,9 @@ export default function App() {
     if (pathParts[1] === 'simplyclick_sbi') {
       return <SimplyClickSbi navigateTo={navigateTo} utmParams={utmParams} />;
     }
+    if (pathParts[1] === 'scapia') {
+      return <ScapiaLanding navigateTo={navigateTo} utmParams={utmParams} />;
+    }
     if (currentPath === '/agent') {
       return <AgentPortal navigateTo={navigateTo} theme={theme} toggleTheme={toggleTheme} />;
     }
@@ -263,7 +280,7 @@ export default function App() {
       )}
 
       {/* Header / Navbar - Hide on admin, agent portals, kiwi, and sbi pages to avoid duplicates */}
-      {currentPath !== '/admin' && currentPath !== '/agent' && !currentPath.startsWith('/kiwi') && !currentPath.startsWith('/simplyclick_sbi') && (
+      {currentPath !== '/admin' && currentPath !== '/agent' && !currentPath.startsWith('/kiwi') && !currentPath.startsWith('/simplyclick_sbi') && !currentPath.startsWith('/scapia') && (
         <header className="navbar">
           <div className="nav-logo" onClick={() => navigateTo('/')} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}>
             <img src="/logo.jpg" alt="FinMantra Logo" style={{ height: '44px', width: '44px', borderRadius: '10px', objectFit: 'cover', boxShadow: '0 3px 10px rgba(224, 168, 46, 0.3)' }} />

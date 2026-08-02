@@ -1310,7 +1310,7 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
 
   // Send WhatsApp Referral Notification with Tracking URL for agent/kiwi/simplyclick_sbi sources or Kiwi matched cards on creation
   const isKiwiCard = card && (card.id === 'card_yomuvufqh' || card.name.toLowerCase().includes('kiwi') || String(card.id).includes('kiwi'));
-  const isSingleStepLead = (source === 'agent' || source === 'kiwi' || source === 'simplyclick_sbi' || pan_no || monthly_income || employment || isKiwiCard);
+  const isSingleStepLead = (source === 'agent' || source === 'kiwi' || source === 'simplyclick_sbi' || source === 'scapia' || pan_no || monthly_income || employment || isKiwiCard);
   if (isSingleStepLead) {
     console.log(`[WhatsApp Lead Creation] Triggering referral link dispatch for single-step lead: ${trimmedPhone}`);
     const agentCode = source === 'agent' ? (agent_id || 'active') : 'public';
