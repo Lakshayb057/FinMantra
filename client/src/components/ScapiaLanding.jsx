@@ -461,31 +461,31 @@ export default function ScapiaLanding({ navigateTo, utmParams }) {
 
         /* sections */
         .scapia-app-root section{padding:80px 0;border-top:1px solid var(--line)}
-        .scapia-app-root .kicker{font-size:12px;color:var(--ember);margin-bottom:14px}
+        .scapia-app-root .kicker{font-size:12px;color:var(--ember);margin-bottom:14px;text-align:left;}
         .scapia-app-root h2{font-family:var(--display);font-weight:800;letter-spacing:-.02em;
-          font-size:clamp(32px,4.4vw,48px);line-height:1.0;max-width:18ch}
-        .scapia-app-root h2 .accent{color:var(--amber)}
-        .scapia-app-root .section-sub{color:var(--haze2);max-width:54ch;margin-top:16px;font-size:17px}
+          font-size:clamp(32px,4.4vw,48px);line-height:1.05;max-width:24ch;color:#ffffff !important;text-align:left;}
+        .scapia-app-root h2 .accent{color:var(--amber) !important;}
+        .scapia-app-root .section-sub{color:var(--haze2);max-width:54ch;margin-top:16px;font-size:17px;text-align:left;}
 
         .scapia-app-root .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:44px}
-        .scapia-app-root .bcard{background:var(--card-bg);border:1px solid var(--line);border-radius:16px;padding:26px; transition: transform 0.2s, border-color 0.2s;}
+        .scapia-app-root .bcard{background:var(--card-bg);border:1px solid var(--line);border-radius:16px;padding:26px; transition: transform 0.2s, border-color 0.2s;text-align:left;}
         .scapia-app-root .bcard:hover{transform: translateY(-4px); border-color: rgba(255,255,255,0.3);}
         .scapia-app-root .bcard .n{font-family:var(--mono);font-size:12px;color:var(--amber);letter-spacing:.16em}
-        .scapia-app-root .bcard h3{font-family:var(--display);font-weight:700;font-size:21px;margin:14px 0 8px;letter-spacing:-.01em}
-        .scapia-app-root .bcard p{color:var(--haze2);font-size:14.5px}
+        .scapia-app-root .bcard h3{font-family:var(--display);font-weight:700;font-size:21px;margin:14px 0 8px;letter-spacing:-.01em;color:#ffffff !important;}
+        .scapia-app-root .bcard p{color:var(--haze2);font-size:14.5px;line-height:1.5;}
         .scapia-app-root .bcard .foot{margin-top:12px;font-size:11px;color:var(--haze2);
           font-family:var(--mono);letter-spacing:.06em}
 
         .scapia-app-root .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:44px}
-        .scapia-app-root .step{padding-top:20px;border-top:2px solid var(--ember)}
+        .scapia-app-root .step{padding-top:20px;border-top:2px solid var(--ember);text-align:left;}
         .scapia-app-root .step .num{font-family:var(--mono);font-size:12px;color:var(--ember);letter-spacing:.18em}
-        .scapia-app-root .step h3{font-family:var(--display);font-weight:700;font-size:23px;margin:12px 0 6px;letter-spacing:-.01em}
-        .scapia-app-root .step p{color:var(--haze2);font-size:15px}
-        .scapia-app-root .cta-row{margin-top:46px}
+        .scapia-app-root .step h3{font-family:var(--display);font-weight:700;font-size:23px;margin:12px 0 6px;letter-spacing:-.01em;color:#ffffff !important;}
+        .scapia-app-root .step p{color:var(--haze2);font-size:15px;line-height:1.5;}
+        .scapia-app-root .cta-row{margin-top:46px;text-align:left;}
 
         .scapia-app-root footer{padding:52px 0 66px;border-top:1px solid var(--line);color:var(--haze2)}
         .scapia-app-root .foot-top{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:22px}
-        .scapia-app-root .legal{font-size:12.5px;line-height:1.75;max-width:82ch}
+        .scapia-app-root .legal{font-size:12.5px;line-height:1.75;max-width:82ch;text-align:left;}
         .scapia-app-root .legal b{color:var(--haze)}
 
         @media(max-width:900px){
