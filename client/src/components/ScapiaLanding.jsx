@@ -14,6 +14,7 @@ export default function ScapiaLanding({ navigateTo, utmParams }) {
     phone: '',
     email: '',
     pincode: '',
+    employment: '',
     address_city: '',
     address_state: '',
     address_locality: '',
@@ -135,6 +136,9 @@ export default function ScapiaLanding({ navigateTo, utmParams }) {
     if (name === 'pincode') {
       if (!value || !/^\d{6}$/.test(value)) errorText = 'Enter a valid 6-digit pincode.';
     }
+    if (name === 'employment') {
+      if (!value) errorText = 'Please choose an option.';
+    }
     setErrors(prev => ({ ...prev, [name]: errorText, [(name === 'fullName' ? 'name' : name)]: errorText }));
   };
 
@@ -157,6 +161,9 @@ export default function ScapiaLanding({ navigateTo, utmParams }) {
     }
     if (!formData.pincode || !/^\d{6}$/.test(formData.pincode)) {
       newErrors.pincode = 'Enter a valid 6-digit pincode.';
+    }
+    if (!formData.employment) {
+      newErrors.employment = 'Please choose an option.';
     }
     if (!formData.consent) {
       newErrors.consent = 'Please accept the consent to continue.';
@@ -289,6 +296,7 @@ export default function ScapiaLanding({ navigateTo, utmParams }) {
         phone: formData.phone.trim(),
         email: formData.email.trim().toLowerCase(),
         pincode: formData.pincode.trim(),
+        employment: formData.employment,
         consent: formData.consent,
         source: 'scapia',
         product: "Scapia Federal Credit Card",
@@ -357,6 +365,7 @@ export default function ScapiaLanding({ navigateTo, utmParams }) {
           phone: '',
           email: '',
           pincode: '',
+          employment: '',
           consent: false,
           company: ''
         });
@@ -591,21 +600,19 @@ export default function ScapiaLanding({ navigateTo, utmParams }) {
                   <span className="msg" style={{display: errors.fullName || errors.name ? 'block' : 'none'}}>{errors.fullName || errors.name}</span>
                 </div>
 
-                <div className="two">
-                  <div className={`field ${errors.pan_no ? 'err' : ''}`}>
-                    <label htmlFor="pan_no">PAN Number</label>
-                    <input id="pan_no" name="pan_no" type="text" maxLength="10" autoCapitalize="characters" placeholder="ABCDE1234F" autoComplete="off" value={formData.pan_no} onChange={handleInputChange} />
-                    <span className="msg" style={{display: errors.pan_no ? 'block' : 'none'}}>{errors.pan_no}</span>
-                  </div>
+                <div className={`field ${errors.pan_no ? 'err' : ''}`}>
+                  <label htmlFor="pan_no">PAN Number</label>
+                  <input id="pan_no" name="pan_no" type="text" maxLength="10" autoCapitalize="characters" placeholder="ABCDE1234F" autoComplete="off" value={formData.pan_no} onChange={handleInputChange} />
+                  <span className="msg" style={{display: errors.pan_no ? 'block' : 'none'}}>{errors.pan_no}</span>
+                </div>
 
+                <div className="two">
                   <div className={`field ${errors.phone || errors.mobile ? 'err' : ''}`}>
                     <label htmlFor="mobile">Mobile</label>
                     <input id="mobile" name="phone" type="tel" inputMode="numeric" maxLength="10" placeholder="10-digit number" autoComplete="tel" value={formData.phone} onChange={handleInputChange} />
                     <span className="msg" style={{display: errors.phone || errors.mobile ? 'block' : 'none'}}>{errors.phone || errors.mobile}</span>
                   </div>
-                </div>
 
-                <div className="two">
                   <div className={`field ${errors.pincode || pincodeError ? 'err' : ''}`}>
                     <label htmlFor="pincode">Pincode</label>
                     <input id="pincode" name="pincode" type="text" inputMode="numeric" maxLength="6" placeholder="6 digits" autoComplete="postal-code" value={formData.pincode} onChange={handleInputChange} />
@@ -613,12 +620,24 @@ export default function ScapiaLanding({ navigateTo, utmParams }) {
                     {pincodeLoading && <span style={{fontSize: '11px', color: 'var(--haze2)', display: 'block', marginTop: '4px'}}>Looking up...</span>}
                     {pincodeLocationText && !pincodeError && <span style={{fontSize: '11px', color: '#4ade80', display: 'block', marginTop: '4px'}}>{pincodeLocationText}</span>}
                   </div>
+                </div>
 
-                  <div className={`field ${errors.email ? 'err' : ''}`}>
-                    <label htmlFor="email">Email</label>
-                    <input id="email" name="email" type="email" placeholder="you@email.com" autoComplete="email" value={formData.email} onChange={handleInputChange} />
-                    <span className="msg" style={{display: errors.email ? 'block' : 'none'}}>{errors.email}</span>
-                  </div>
+                <div className={`field ${errors.email ? 'err' : ''}`}>
+                  <label htmlFor="email">Email</label>
+                  <input id="email" name="email" type="email" placeholder="you@email.com" autoComplete="email" value={formData.email} onChange={handleInputChange} />
+                  <span className="msg" style={{display: errors.email ? 'block' : 'none'}}>{errors.email}</span>
+                </div>
+
+                <div className={`field ${errors.employment ? 'err' : ''}`}>
+                  <label htmlFor="employment">You are</label>
+                  <select id="employment" name="employment" value={formData.employment} onChange={handleInputChange}>
+                    <option value="">Select one</option>
+                    <option value="Salaried">Salaried</option>
+                    <option value="Self-employed">Self-employed</option>
+                    <option value="Student">Student</option>
+                    <option value="Other">Other</option>
+                  </select>
+                  <span className="msg" style={{display: errors.employment ? 'block' : 'none'}}>{errors.employment}</span>
                 </div>
 
                 <label className="consent" style={{color: errors.consent ? '#ff9a9a' : ''}}>
