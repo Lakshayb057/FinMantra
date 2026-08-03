@@ -427,8 +427,8 @@ export default function ScapiaLanding({ navigateTo, utmParams }) {
           display:grid;grid-template-columns:1.06fr .94fr;gap:52px;align-items:center}
         .scapia-app-root .eyebrow{font-size:12px;color:var(--haze2)}
         .scapia-app-root h1{font-family:var(--display);font-weight:800;letter-spacing:-.03em;line-height:.95;
-          font-size:clamp(48px,6.6vw,88px);margin:16px 0 14px}
-        .scapia-app-root h1 .em{color:var(--ember)}
+          font-size:clamp(48px,6.6vw,88px);margin:16px 0 14px;color:#ffffff !important;}
+        .scapia-app-root h1 .em{color:var(--ember) !important;}
         .scapia-app-root .tagline{font-size:clamp(19px,2.4vw,24px);color:var(--amber);margin-bottom:18px}
         .scapia-app-root .lede{font-size:clamp(16px,1.4vw,18px);color:var(--haze2);max-width:44ch;margin-bottom:26px}
         .scapia-app-root .trust{display:flex;gap:10px;flex-wrap:wrap}
