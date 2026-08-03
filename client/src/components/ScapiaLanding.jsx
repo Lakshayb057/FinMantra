@@ -14,7 +14,6 @@ export default function ScapiaLanding({ navigateTo, utmParams }) {
     phone: '',
     email: '',
     pincode: '',
-    employment: '',
     address_city: '',
     address_state: '',
     address_locality: '',
@@ -136,9 +135,6 @@ export default function ScapiaLanding({ navigateTo, utmParams }) {
     if (name === 'pincode') {
       if (!value || !/^\d{6}$/.test(value)) errorText = 'Enter a valid 6-digit pincode.';
     }
-    if (name === 'employment') {
-      if (!value) errorText = 'Please choose an option.';
-    }
     setErrors(prev => ({ ...prev, [name]: errorText, [(name === 'fullName' ? 'name' : name)]: errorText }));
   };
 
@@ -161,9 +157,6 @@ export default function ScapiaLanding({ navigateTo, utmParams }) {
     }
     if (!formData.pincode || !/^\d{6}$/.test(formData.pincode)) {
       newErrors.pincode = 'Enter a valid 6-digit pincode.';
-    }
-    if (!formData.employment) {
-      newErrors.employment = 'Please choose an option.';
     }
     if (!formData.consent) {
       newErrors.consent = 'Please accept the consent to continue.';
@@ -296,7 +289,6 @@ export default function ScapiaLanding({ navigateTo, utmParams }) {
         phone: formData.phone.trim(),
         email: formData.email.trim().toLowerCase(),
         pincode: formData.pincode.trim(),
-        employment: formData.employment,
         consent: formData.consent,
         source: 'scapia',
         product: "Scapia Federal Credit Card",
@@ -365,7 +357,6 @@ export default function ScapiaLanding({ navigateTo, utmParams }) {
           phone: '',
           email: '',
           pincode: '',
-          employment: '',
           consent: false,
           company: ''
         });
@@ -626,18 +617,6 @@ export default function ScapiaLanding({ navigateTo, utmParams }) {
                   <label htmlFor="email">Email</label>
                   <input id="email" name="email" type="email" placeholder="you@email.com" autoComplete="email" value={formData.email} onChange={handleInputChange} />
                   <span className="msg" style={{display: errors.email ? 'block' : 'none'}}>{errors.email}</span>
-                </div>
-
-                <div className={`field ${errors.employment ? 'err' : ''}`}>
-                  <label htmlFor="employment">You are</label>
-                  <select id="employment" name="employment" value={formData.employment} onChange={handleInputChange}>
-                    <option value="">Select one</option>
-                    <option value="Salaried">Salaried</option>
-                    <option value="Self-employed">Self-employed</option>
-                    <option value="Student">Student</option>
-                    <option value="Other">Other</option>
-                  </select>
-                  <span className="msg" style={{display: errors.employment ? 'block' : 'none'}}>{errors.employment}</span>
                 </div>
 
                 <label className="consent" style={{color: errors.consent ? '#ff9a9a' : ''}}>
