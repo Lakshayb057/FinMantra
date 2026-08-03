@@ -1786,6 +1786,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
   const STANDARD_FIELD_OPTIONS = [
     { value: 'urn', label: 'URN' },
+    { value: 'application_id', label: 'Application ID' },
     { value: 'created_at', label: 'Creation Date/Time' },
     { value: 'full_name', label: 'Full Name' },
     { value: 'phone', label: 'Phone Number' },
@@ -2444,6 +2445,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
     // Define columns to export
     const columns = [
       { header: 'URN', getValue: l => l.urn },
+      { header: 'Application ID', getValue: l => l.application_id || l.mis_data?.application_id || l.mis_data?.APPLICATION_NUMBER || l.mis_data?.application_id_bank_2 || l.mis_data?.user_id || 'N/A' },
       { header: 'Client Name', getValue: l => l.full_name },
       { header: 'Phone', getValue: l => l.phone || 'N/A' },
       { header: 'Email', getValue: l => l.email || 'N/A' },
@@ -3500,6 +3502,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                     <option value="agent">Agent Walk-in</option>
                     <option value="kiwi">Kiwi Page</option>
                     <option value="simplyclick_sbi">SBI SimplyClick</option>
+                    <option value="scapia">Scapia Landing Page</option>
                   </select>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', flex: '1 1 140px', minWidth: '130px' }}>
                     <span style={{ fontSize: '0.72rem', color: 'hsl(var(--text-muted))', whiteSpace: 'nowrap' }}>From:</span>

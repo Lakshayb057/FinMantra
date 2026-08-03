@@ -3910,7 +3910,9 @@ app.get('/api/leads/export', authenticateToken, requireAdmin, async (req, res) =
     const rowValues = columns.map(col => {
       let val = '';
       const source = col.source;
-      if (source === 'created_at') {
+      if (source === 'application_id') {
+        val = l.application_id || (l.mis_data && (l.mis_data.application_id || l.mis_data.APPLICATION_NUMBER || l.mis_data.application_id_bank_2 || l.mis_data.user_id || l.mis_data.LRN_NUMBER)) || '';
+      } else if (source === 'created_at') {
         if (l.created_at) {
           const d = new Date(l.created_at);
           try {
@@ -3935,9 +3937,11 @@ app.get('/api/leads/export', authenticateToken, requireAdmin, async (req, res) =
         }
       } else if (source === 'utm_params') {
         val = l.utm_params ? JSON.stringify(l.utm_params) : '{}';
-      } else if (l[source] !== undefined && l[source] !== null) {
+      } else if (l[source] !== undefined && l[source] !== null && String(l[source]).trim() !== '') {
         val = String(l[source]);
-      } else if (l.utm_params && l.utm_params[source] !== undefined && l.utm_params[source] !== null) {
+      } else if (l.mis_data && l.mis_data[source] !== undefined && l.mis_data[source] !== null && String(l.mis_data[source]).trim() !== '') {
+        val = String(l.mis_data[source]);
+      } else if (l.utm_params && l.utm_params[source] !== undefined && l.utm_params[source] !== null && String(l.utm_params[source]).trim() !== '') {
         val = String(l.utm_params[source]);
       }
       return val.replace(/"/g, '""');
