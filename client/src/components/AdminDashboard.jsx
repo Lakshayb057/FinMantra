@@ -2016,69 +2016,39 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
   const getBankOptions = useCallback(() => {
     if (settings && settings.card_manager_banks !== undefined && settings.card_manager_banks !== null) {
-      return settings.card_manager_banks.split(',').map(cleanBankCode).filter(Boolean);
+      const list = settings.card_manager_banks.split(',').map(cleanBankCode).filter(Boolean);
+      if (!list.includes('OTHER')) list.push('OTHER');
+      return list;
     }
-    const set = new Set(dbBankList || ['HDFC', 'SBI', 'KIWI']);
-    return Array.from(set).sort();
+    const set = new Set(dbBankList || ['HDFC', 'SBI', 'KIWI', 'SCAPIA']);
+    const list = Array.from(set).filter(b => b !== 'OTHER').sort();
+    list.push('OTHER');
+    return list;
   }, [dbBankList, settings]);
 
   const getLeadBank = useCallback((lead) => {
     const md = lead.mis_data || {};
     const bankName = String(md.mis_bank_name || '').toUpperCase().trim();
 
-    // 1. Explicit MIS Bank Name saved during Upload MIS / Automated Email MIS fetchers
+    // 1. Explicit mis_bank_name saved in DB takes top priority
     if (bankName) {
       if (bankName.includes('KIWI')) return 'KIWI';
       if (bankName.includes('SBI')) return 'SBI';
-      if (bankName.includes('HDFC')) return 'HDFC';
-      return cleanBankCode(bankName);
+      if (bankName.includes('HDFC') || bankName.includes('PIXEL')) return 'HDFC';
+      if (bankName.includes('SCAPIA')) return 'SCAPIA';
+      if (bankName.includes('OTHER')) return 'OTHER';
     }
 
-    // 2. Distinctive KIWI MIS metadata
-    if (
-      md.kiwi_metadata ||
-      (md.kiwi_bank && String(md.kiwi_bank).trim() !== '') ||
-      (md.kiwi_winning_bank && String(md.kiwi_winning_bank).trim() !== '') ||
-      (md.kiwi_user_id && String(md.kiwi_user_id).trim() !== '') ||
-      (md.user_id && String(md.user_id).trim() !== '') ||
-      (md.winning_bank && String(md.winning_bank).trim() !== '') ||
-      (md.yes_state && String(md.yes_state).trim() !== '') ||
-      (md.au_state && String(md.au_state).trim() !== '') ||
-      (md.pnb_state && String(md.pnb_state).trim() !== '') ||
-      (md.Card_Created && String(md.Card_Created).trim() !== '') ||
-      (md.VKYC && String(md.VKYC).trim() !== '') ||
-      (md.first_txn && String(md.first_txn).trim() !== '')
-    ) {
-      return 'KIWI';
-    }
+    const cName = String(lead.card_name || '').toLowerCase();
+    const cBank = String(lead.card_bank || '').toLowerCase();
+    const src = String(lead.source || '').toLowerCase();
 
-    // 3. Distinctive SBI MIS metadata
-    if (
-      (md.SD_DECISION_CODE && String(md.SD_DECISION_CODE).trim() !== '') ||
-      (md.STAGE_IN_SALES24 && String(md.STAGE_IN_SALES24).trim() !== '') ||
-      (md.GEMID_1 && String(md.GEMID_1).trim() !== '') ||
-      (md.LEAD_GEMID_1 && String(md.LEAD_GEMID_1).trim() !== '') ||
-      (md.APPLICATION_NUMBER && String(md.APPLICATION_NUMBER).trim() !== '')
-    ) {
-      return 'SBI';
-    }
+    if (cName.includes('kiwi') || cBank.includes('kiwi') || src.includes('kiwi')) return 'KIWI';
+    if (cName.includes('sbi') || cBank.includes('sbi') || src.includes('sbi')) return 'SBI';
+    if (cName.includes('hdfc') || cBank.includes('hdfc') || src.includes('hdfc')) return 'HDFC';
+    if (cName.includes('scapia') || cBank.includes('scapia') || src.includes('scapia')) return 'SCAPIA';
 
-    // 4. Card name / Card bank matching fallback
-    if (lead.card_name) {
-      const cNameLower = String(lead.card_name).toLowerCase();
-      if (cNameLower.includes('kiwi')) return 'KIWI';
-      if (cNameLower.includes('sbi')) return 'SBI';
-      if (cNameLower.includes('hdfc')) return 'HDFC';
-      const match = cards.find(c => String(c.name).toLowerCase() === cNameLower);
-      if (match && match.bank) return cleanBankCode(match.bank);
-    }
-
-    const cBank = cleanBankCode(lead.card_bank);
-    if (cBank && cBank !== 'N/A' && cBank !== 'UNKNOWN') {
-      return cBank;
-    }
-
-    return 'HDFC';
+    return 'OTHER';
   }, [cards]);
 
   // ===== MEMOIZED LEADS DASHBOARD COMPUTATIONS =====
@@ -2242,20 +2212,20 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       if (actLower.includes('active') || actLower === 'yes') funnelActive++;
 
       // Funnel counts (KIWI per Screenshot 2)
-      const kiwiIpa = String(md.ipa || md.ipa_status || md.SOFT_DECISION || '').toLowerCase();
-      const isKiwiSoftApprove = kiwiIpa.includes('approve') || kiwiIpa.includes('pass') || kiwiIpa.includes('success') || kiwiIpa.includes('eligible') || (md.ipa_date && String(md.ipa_date).trim() !== '');
+      const kiwiIpa = (String(md.ipa || md.ipa_status || md.SOFT_DECISION || md.ipa_state || '') + ' ' + String(md.pnb_state || '') + ' ' + String(md.yes_state || '') + ' ' + String(md.au_state || '')).toLowerCase();
+      const isKiwiSoftApprove = kiwiIpa.includes('approve') || kiwiIpa.includes('pass') || kiwiIpa.includes('success') || kiwiIpa.includes('eligible') || kiwiIpa.includes('doc_upload') || kiwiIpa.includes('in_progress') || (md.ipa_date && String(md.ipa_date).trim() !== '');
       if (isKiwiSoftApprove) kiwiSoftApproved++;
 
-      const kiwiKyc = String(md.VKYC || md.vkyc_status || md.kyc_status || '').toLowerCase();
-      const isKiwiVkycApprove = kiwiKyc.includes('approve') || kiwiKyc.includes('complete') || kiwiKyc.includes('success') || kiwiKyc.includes('pass');
+      const kiwiKyc = (String(md.VKYC || md.vkyc_status || md.kyc_status || md.vkyc_state || md.kyc_state || '') + ' ' + String(md.pnb_state || '') + ' ' + String(md.yes_state || '') + ' ' + String(md.au_state || '')).toLowerCase();
+      const isKiwiVkycApprove = kiwiKyc.includes('approve') || kiwiKyc.includes('complete') || kiwiKyc.includes('success') || kiwiKyc.includes('pass') || kiwiKyc.includes('vkyc') || kiwiKyc.includes('kyc');
       if (isKiwiVkycApprove) kiwiVkycApproved++;
 
-      const kiwiCard = String(md.Card_Created || md.card_activation_status || md.card_created || '').toLowerCase();
-      const isKiwiCardCreated = kiwiCard.includes('yes') || kiwiCard.includes('approve') || kiwiCard.includes('active') || kiwiCard.includes('created') || kiwiCard === '1';
+      const kiwiCard = (String(md.Card_Created || md.card_activation_status || md.card_created || md.card_state || md.current_state || md.winning_state || md.mis_status || l.mis_status || '') + ' ' + String(md.pnb_state || '') + ' ' + String(md.yes_state || '') + ' ' + String(md.au_state || '')).toLowerCase();
+      const isKiwiCardCreated = kiwiCard.includes('yes') || kiwiCard.includes('approve') || kiwiCard.includes('active') || kiwiCard.includes('created') || kiwiCard.includes('issued') || kiwiCard.includes('disbursed') || kiwiCard.includes('card_created') || kiwiCard === '1';
       if (isKiwiCardCreated) kiwiCardCreated++;
 
-      const kiwiTxn = String(md.first_txn || md.first_transaction || '').toLowerCase();
-      const isKiwiTxn = kiwiTxn.includes('yes') || kiwiTxn.includes('complete') || kiwiTxn === '1' || kiwiTxn.includes('active');
+      const kiwiTxn = (String(md.first_txn || md.first_transaction || md.txn_state || md.card_activation_status || '') + ' ' + String(md.pnb_state || '') + ' ' + String(md.yes_state || '') + ' ' + String(md.au_state || '')).toLowerCase();
+      const isKiwiTxn = kiwiTxn.includes('yes') || kiwiTxn.includes('complete') || kiwiTxn === '1' || kiwiTxn.includes('active') || kiwiTxn.includes('txn') || kiwiTxn.includes('activated');
       if (isKiwiTxn) kiwiFirstTxn++;
 
       if (md.bank_reference_number && String(md.bank_reference_number).trim() !== '') funnelBankRef++;

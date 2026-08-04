@@ -177,7 +177,14 @@ async function processKiwiMisBuffer(buffer, attachmentName, broadcastFn = null) 
     return { total: 0, mapped: 0, warnings: 0, matchedDetails: [] };
   }
 
-  const dbLeads = await db.getAllLeadsUnfiltered();
+  const allLeads = await db.getAllLeadsUnfiltered();
+  const dbLeads = allLeads.filter(lead => {
+    const src = String(lead.source || '').toLowerCase();
+    const cName = String(lead.card_name || '').toLowerCase();
+    const cBank = String(lead.card_bank || '').toLowerCase();
+    return src.includes('kiwi') || cName.includes('kiwi') || cBank.includes('kiwi');
+  });
+
   const dbUrnMap = new Map();
   const dbSuffixMap = new Map();
   const dbNumericSuffixMap = new Map();

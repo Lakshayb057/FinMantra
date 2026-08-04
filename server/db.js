@@ -1351,7 +1351,7 @@ const db = {
       pool.query('SELECT COUNT(*) FROM leads'),
       pool.query(`
         SELECT id, urn, full_name, phone, COALESCE(mis_status, 'Pending') as mis_status, mis_mapped_at, mis_data,
-               agent_name, pincode, card_bank, source
+               agent_name, pincode, card_bank, card_name, source
         FROM leads
         WHERE mis_mapped_at IS NOT NULL
         ORDER BY mis_mapped_at DESC
@@ -1384,7 +1384,7 @@ const db = {
         id: row.id, urn: row.urn, full_name: row.full_name, phone: row.phone,
         mis_status: row.mis_status, mis_mapped_at: row.mis_mapped_at,
         mis_data: misDataObj, agent_name: row.agent_name,
-        pincode: row.pincode, card_bank: row.card_bank, source: row.source
+        pincode: row.pincode, card_bank: row.card_bank, card_name: row.card_name, source: row.source
       };
     }
 
