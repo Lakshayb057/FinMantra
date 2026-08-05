@@ -10,105 +10,64 @@ const uatPool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-// Set DATABASE_URL and import db module to run initPgSchema on UAT database
 process.env.DATABASE_URL = 'postgresql://postgres:FinMantra123!@finmantra-db.cnm6keucqfmp.ap-south-1.rds.amazonaws.com:5432/finmantra_uat';
 const db = require('./db.js');
 
-async function syncSeedData() {
+async function copyTable(tableName, primaryKey = 'id') {
+  try {
+    const res = await prodPool.query(`SELECT * FROM "${tableName}"`);
+    console.log(`[Sync] Found ${res.rows.length} rows in Production database table "${tableName}".`);
+    if (res.rows.length === 0) return;
+
+    const cols = Object.keys(res.rows[0]);
+    const colNames = cols.map(c => `"${c}"`).join(', ');
+    const valPlaceholders = cols.map((_, i) => `$${i + 1}`).join(', ');
+
+    let conflictClause = `ON CONFLICT DO NOTHING`;
+    if (primaryKey && cols.includes(primaryKey)) {
+      const updateCols = cols.filter(c => c !== primaryKey);
+      if (updateCols.length > 0) {
+        const updateClause = updateCols.map(c => `"${c}" = EXCLUDED."${c}"`).join(', ');
+        conflictClause = `ON CONFLICT ("${primaryKey}") DO UPDATE SET ${updateClause}`;
+      } else {
+        conflictClause = `ON CONFLICT ("${primaryKey}") DO NOTHING`;
+      }
+    }
+
+    const insertQuery = `INSERT INTO "${tableName}" (${colNames}) VALUES (${valPlaceholders}) ${conflictClause}`;
+
+    for (const row of res.rows) {
+      const values = cols.map(c => row[c]);
+      await uatPool.query(insertQuery, values);
+    }
+    console.log(`[Sync] ✅ Table "${tableName}" (${res.rows.length} rows) copied successfully!`);
+  } catch (err) {
+    console.error(`[Sync Table "${tableName}" Error]:`, err.message);
+  }
+}
+
+async function syncAllData() {
   console.log('[Sync] Initializing UAT PostgreSQL schema & migrations...');
   try {
     await db.init();
-    console.log('[Sync] ✅ UAT Schema initialized with all columns!');
+    console.log('[Sync] ✅ UAT Schema initialized with all tables & columns!');
   } catch (e) {
     console.log('[Sync Schema Note]:', e.message);
   }
 
-  console.log('[Sync] Starting seed data copy from Production (postgres) to UAT (finmantra_uat)...');
+  console.log('[Sync] Copying all master data from Production to UAT...');
 
-  // 1. Sync Cards Catalog
-  try {
-    const cards = await prodPool.query('SELECT * FROM cards');
-    console.log(`[Sync] Found ${cards.rows.length} cards in Production database.`);
-    for (const card of cards.rows) {
-      await uatPool.query(
-        `INSERT INTO cards (id, name, bank, redirect_url, is_active, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
-         ON CONFLICT (id) DO UPDATE SET
-           name = EXCLUDED.name,
-           bank = EXCLUDED.bank,
-           redirect_url = EXCLUDED.redirect_url,
-           is_active = EXCLUDED.is_active,
-           updated_at = EXCLUDED.updated_at`,
-        [card.id, card.name, card.bank, card.redirect_url, card.is_active, card.created_at, card.updated_at]
-      );
-    }
-    console.log('[Sync] ✅ Cards catalog (8 cards) synced successfully!');
-  } catch (err) {
-    console.error('[Sync Cards Error]:', err.message);
-  }
-
-  // 2. Sync Locations
-  try {
-    const locs = await prodPool.query('SELECT * FROM locations');
-    console.log(`[Sync] Found ${locs.rows.length} locations in Production database.`);
-    for (const loc of locs.rows) {
-      await uatPool.query(
-        `INSERT INTO locations (id, name, is_active, created_at)
-         VALUES ($1, $2, $3, $4)
-         ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, is_active = EXCLUDED.is_active`,
-        [loc.id, loc.name, loc.is_active, loc.created_at]
-      );
-    }
-    console.log('[Sync] ✅ Locations synced successfully!');
-  } catch (err) {
-    console.error('[Sync Locations Error]:', err.message);
-  }
-
-  // 3. Sync Agents
-  try {
-    const agents = await prodPool.query('SELECT * FROM agents');
-    console.log(`[Sync] Found ${agents.rows.length} agents in Production database.`);
-    for (const ag of agents.rows) {
-      await uatPool.query(
-        `INSERT INTO agents (id, name, passcode, location, phone_number, is_active, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
-         ON CONFLICT (id) DO UPDATE SET
-           name = EXCLUDED.name,
-           passcode = EXCLUDED.passcode,
-           location = EXCLUDED.location,
-           phone_number = EXCLUDED.phone_number,
-           is_active = EXCLUDED.is_active`,
-        [ag.id, ag.name, ag.passcode, ag.location, ag.phone_number, ag.is_active, ag.created_at]
-      );
-    }
-    console.log('[Sync] ✅ Agents (19 agents) synced successfully!');
-  } catch (err) {
-    console.error('[Sync Agents Error]:', err.message);
-  }
-
-  // 4. Sync Settings
-  try {
-    const settings = await prodPool.query('SELECT * FROM settings');
-    console.log(`[Sync] Found ${settings.rows.length} settings in Production database.`);
-    for (const s of settings.rows) {
-      await uatPool.query(
-        `INSERT INTO settings (key, value)
-         VALUES ($1, $2)
-         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
-        [s.key, s.value]
-      );
-    }
-    console.log('[Sync] ✅ Settings (29 settings) synced successfully!');
-  } catch (err) {
-    console.error('[Sync Settings Error]:', err.message);
-  }
+  await copyTable('locations', 'id');
+  await copyTable('cards', 'id');
+  await copyTable('agents', 'id');
+  await copyTable('settings', 'key');
 
   await prodPool.end();
   await uatPool.end();
   console.log('====================================================');
-  console.log('[Sync] 🎉 COMPLETE: All Cards, Locations, Agents, and Settings copied to UAT!');
+  console.log('[Sync] 🎉 COMPLETE: All Locations, Cards, Agents, and Settings copied to UAT!');
   console.log('====================================================');
   process.exit(0);
 }
 
-syncSeedData();
+syncAllData();
