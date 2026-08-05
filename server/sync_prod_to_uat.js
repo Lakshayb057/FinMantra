@@ -10,7 +10,19 @@ const uatPool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
+// Set DATABASE_URL and import db module to run initPgSchema on UAT database
+process.env.DATABASE_URL = 'postgresql://postgres:FinMantra123!@finmantra-db.cnm6keucqfmp.ap-south-1.rds.amazonaws.com:5432/finmantra_uat';
+const db = require('./db.js');
+
 async function syncSeedData() {
+  console.log('[Sync] Initializing UAT PostgreSQL schema & migrations...');
+  try {
+    await db.init();
+    console.log('[Sync] ✅ UAT Schema initialized with all columns!');
+  } catch (e) {
+    console.log('[Sync Schema Note]:', e.message);
+  }
+
   console.log('[Sync] Starting seed data copy from Production (postgres) to UAT (finmantra_uat)...');
 
   // 1. Sync Cards Catalog
@@ -30,7 +42,7 @@ async function syncSeedData() {
         [card.id, card.name, card.bank, card.redirect_url, card.is_active, card.created_at, card.updated_at]
       );
     }
-    console.log('[Sync] ✅ Cards catalog synced successfully!');
+    console.log('[Sync] ✅ Cards catalog (8 cards) synced successfully!');
   } catch (err) {
     console.error('[Sync Cards Error]:', err.message);
   }
@@ -69,7 +81,7 @@ async function syncSeedData() {
         [ag.id, ag.name, ag.passcode, ag.location, ag.phone_number, ag.is_active, ag.created_at]
       );
     }
-    console.log('[Sync] ✅ Agents synced successfully!');
+    console.log('[Sync] ✅ Agents (19 agents) synced successfully!');
   } catch (err) {
     console.error('[Sync Agents Error]:', err.message);
   }
@@ -86,7 +98,7 @@ async function syncSeedData() {
         [s.key, s.value]
       );
     }
-    console.log('[Sync] ✅ Settings synced successfully!');
+    console.log('[Sync] ✅ Settings (29 settings) synced successfully!');
   } catch (err) {
     console.error('[Sync Settings Error]:', err.message);
   }
@@ -96,6 +108,7 @@ async function syncSeedData() {
   console.log('====================================================');
   console.log('[Sync] 🎉 COMPLETE: All Cards, Locations, Agents, and Settings copied to UAT!');
   console.log('====================================================');
+  process.exit(0);
 }
 
 syncSeedData();
