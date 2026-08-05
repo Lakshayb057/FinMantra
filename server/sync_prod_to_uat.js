@@ -87,17 +87,22 @@ async function syncAllData() {
     console.log('[Sync Schema Note]:', e.message);
   }
 
-  console.log('[Sync] Copying all master data from Production to UAT...');
+  console.log('[Sync] Copying ALL database tables from Production to UAT...');
 
   await copyTable('locations', 'id');
   await copyTable('cards', 'id');
   await copyTable('agents', 'id');
   await copyTable('settings', 'key');
+  await copyTable('leads', 'id');
+  await copyTable('admin_notifications', 'id');
+  await copyTable('processed_email_mis', 'id');
+  await copyTable('uploaded_lead_files', 'id');
+  await copyTable('otp_log', 'id');
 
   await prodPool.end();
   await uatPool.end();
   console.log('====================================================');
-  console.log('[Sync] 🎉 COMPLETE: All Locations, Cards, Agents, and Settings copied to UAT!');
+  console.log('[Sync] 🎉 COMPLETE: All Database Tables copied to UAT!');
   console.log('====================================================');
   process.exit(0);
 }
