@@ -253,6 +253,16 @@ async function processKiwiMisBuffer(buffer, attachmentName, broadcastFn = null) 
         final_decision: row.current_state || '',
         bank_reference_number: String(row._extractedUrn || row.APPLICATION_REFERENCE_NUMBER || '').trim(),
         application_submit_date_time: String(row.form_submit || row.registration || '').trim(),
+        registration: row.registration || '',
+        pan_submit: row.pan_submit || '',
+        form_fetch: row.form_fetch || '',
+        form_submit: row.form_submit || '',
+        ipa: row.ipa || '',
+        card_created: row.card_created || '',
+        vkyc: row.vkyc || '',
+        reject_reason: row.reject_reason || '',
+        application_id_bank_2: row.application_id_bank_2 || '',
+        first_txn: row.first_txn || '',
       };
 
       const finalDecision = misData.final_decision;

@@ -73,7 +73,7 @@ def extract_urn(val):
     s = str(val).strip()
     if not s:
         return None
-    m = re.search(r'FM\d{4}[A-Z]\d{7}', s, re.IGNORECASE) or \
+    m = re.search(r'FM\d{4}[A-Z0-9]\d{6,12}', s, re.IGNORECASE) or \
         re.search(r'FM\d{4}\d{6,12}', s, re.IGNORECASE) or \
         re.search(r'FM[0-9A-Z]{8,18}', s, re.IGNORECASE)
     return m.group(0).upper() if m else None
@@ -154,6 +154,13 @@ def get_state_val(row_dict):
 def get_user_id_val(row_dict):
     if not row_dict:
         return ''
+    # Prioritize exact lower 'user_id' over upper 'USER_ID' if present
+    for k, v in row_dict.items():
+        if k.strip() == 'user_id' and v:
+            return str(v).strip()
+    for k, v in row_dict.items():
+        if k.strip().lower() == 'user_id' and v:
+            return str(v).strip()
     for target in ('user_id', 'userid', 'user_identifier', 'useridentifier', 'user'):
         val = get_row_value(row_dict, target)
         if val:
