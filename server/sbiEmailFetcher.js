@@ -333,18 +333,6 @@ async function processSbiMisRows(rows, attachmentName, broadcastFn = null) {
   // Execute bulk updates in PostgreSQL
   if (updates.length > 0) {
     await db.bulkUpdateLeadMISStatus(updates);
-
-    // Trigger Meta CAPI Event dispatches asynchronously for SBI mapped leads
-    const updatedIds = updates.map(u => u.id);
-    db.pool.query('SELECT * FROM leads WHERE id = ANY($1::varchar[])', [updatedIds]).then(res => {
-      const serverModule = require('./server');
-      res.rows.forEach(lead => {
-        const { eventName, value } = serverModule.categorizeMISStatus(lead.mis_status, 'SBI');
-        serverModule.sendMetaCapiEvent(lead, eventName, value, 'SBI').catch(err => {
-          console.error(`[SBI CAPI Error] Lead ${lead.id}:`, err.message);
-        });
-      });
-    }).catch(err => console.error('[SBI CAPI Lead Query Error]:', err.message));
   }
 
   return {

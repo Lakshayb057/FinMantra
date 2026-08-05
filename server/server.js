@@ -838,90 +838,14 @@ function sha256Hash(text) {
   return crypto.createHash('sha256').update(String(text).trim().toLowerCase()).digest('hex');
 }
 
-// Bank-wise status classifier for Meta CAPI Events
-function categorizeMISStatus(rawStatus, bankName = '') {
-  if (!rawStatus) return { eventName: 'Soft Decline', value: 0 };
-  
-  const statusUpper = String(rawStatus).trim().toUpperCase();
-  const bankUpper = String(bankName).trim().toUpperCase();
-
-  // SBI mapping
-  if (bankUpper.includes('SBI') || bankUpper.includes('SIMPLYCLICK')) {
-    if (['APPROVE', 'APPROVED', 'ACCOUNT CREATED', 'AC_CREATED', 'CARD ISSUED', 'DISBURSED', 'CARD_GEN', 'CARD CREATED', 'CARD GENERATED', 'SUCCESS', 'TXN ACTIVE'].some(s => statusUpper.includes(s))) {
-      return { eventName: 'Final Approved', value: 2600 };
-    }
-    if (['IPA APPROVED', 'SOFT PASS', 'PRE-APPROVED', 'SOFT APPROVED', 'APPROVE'].some(s => statusUpper.includes(s))) {
-      return { eventName: 'Soft Approved', value: 1 };
-    }
-    if (['DECLINE', 'FINAL DECLINE', 'POST-KYC DECLINE', 'REJECTED', 'REJECT'].some(s => statusUpper.includes(s))) {
-      return { eventName: 'Final Decline', value: 2 };
-    }
-    return { eventName: 'Soft Decline', value: 0 };
-  }
-
-  // KIWI mapping
-  if (bankUpper.includes('KIWI') || bankUpper.includes('YES') || bankUpper.includes('AU') || bankUpper.includes('PNB')) {
-    if (['APPROVE', 'APPROVED', 'CARD CREATED', 'ACTIVE', 'FIRST TXN', 'CARD_CREATED', 'SUCCESS'].some(s => statusUpper.includes(s))) {
-      return { eventName: 'Final Approved', value: 2000 };
-    }
-    if (['IPA APPROVED', 'SOFT APPROVED', 'FORM FETCH PASS'].some(s => statusUpper.includes(s))) {
-      return { eventName: 'Soft Approved', value: 1 };
-    }
-    if (['DECLINE', 'FINAL DECLINE', 'REJECT', 'REJECTED'].some(s => statusUpper.includes(s))) {
-      return { eventName: 'Final Decline', value: 2 };
-    }
-    return { eventName: 'Soft Decline', value: 0 };
-  }
-
-  // Scapia mapping
-  if (bankUpper.includes('SCAPIA') || bankUpper.includes('FEDERAL')) {
-    if (['APPROVE', 'APPROVED', 'FINAL APPROVED', 'CARD ACTIVATED', 'SUCCESS'].some(s => statusUpper.includes(s))) {
-      return { eventName: 'Final Approved', value: 1900 };
-    }
-    if (['SOFT APPROVED', 'VKYC PENDING', 'IPA APPROVED'].some(s => statusUpper.includes(s))) {
-      return { eventName: 'Soft Approved', value: 1 };
-    }
-    if (['DECLINE', 'FINAL DECLINE', 'REJECT', 'REJECTED'].some(s => statusUpper.includes(s))) {
-      return { eventName: 'Final Decline', value: 2 };
-    }
-    return { eventName: 'Soft Decline', value: 0 };
-  }
-
-  // HDFC mapping
-  if (bankUpper.includes('HDFC')) {
-    if (['APPROVE', 'APPROVED', 'ACCOUNT CREATED', 'AC_CREATED', 'SUCCESS'].some(s => statusUpper.includes(s))) {
-      return { eventName: 'Final Approved', value: 2600 };
-    }
-    if (['IPA APPROVED', 'SOFT APPROVED'].some(s => statusUpper.includes(s))) {
-      return { eventName: 'Soft Approved', value: 1 };
-    }
-    if (['DECLINE', 'FINAL DECLINE', 'REJECT', 'REJECTED'].some(s => statusUpper.includes(s))) {
-      return { eventName: 'Final Decline', value: 2 };
-    }
-    return { eventName: 'Soft Decline', value: 0 };
-  }
-
-  // Generic Fallback Rule
-  if (['APPROVE', 'APPROVED', 'CARD CREATED', 'ACCOUNT CREATED', 'SUCCESS', 'DISBURSED', 'ACTIVE'].some(s => statusUpper.includes(s))) {
-    return { eventName: 'Final Approved', value: 2000 };
-  }
-  if (['SOFT APPROVED', 'IPA APPROVED', 'PRE-APPROVED', 'PASS'].some(s => statusUpper.includes(s))) {
-    return { eventName: 'Soft Approved', value: 1 };
-  }
-  if (['FINAL DECLINE', 'REJECTED', 'DECLINE'].some(s => statusUpper.includes(s))) {
-    return { eventName: 'Final Decline', value: 2 };
-  }
-
-  return { eventName: 'Soft Decline', value: 0 };
-}
-
 // Send server-side event to Meta Conversions API (CAPI)
-async function sendMetaCapiEvent(lead, eventName = 'Lead', customValue = null, bankName = null, testEventCode = null) {
+async function sendMetaCapiEvent(lead, eventName = 'Lead', testEventCode = null) {
   try {
     const settings = await db.getSettings().catch(() => ({}));
     const pixelId = getSettingVal(settings, 'meta_pixel_id', 'META_PIXEL_ID');
     const accessToken = getSettingVal(settings, 'meta_access_token', 'META_ACCESS_TOKEN');
 
+    
     if (!pixelId || !accessToken) {
       console.log('[Meta CAPI] Skipped: META_PIXEL_ID or META_ACCESS_TOKEN not set.');
       return { status: 'skipped', error: 'Missing API credentials' };
@@ -934,16 +858,9 @@ async function sendMetaCapiEvent(lead, eventName = 'Lead', customValue = null, b
       rawPhone = '91' + rawPhone; // Default country code for India
     }
 
-    // Split name into first and last name for CAPI matching
-    const nameParts = (lead.full_name || '').trim().split(/\s+/);
-    const firstName = nameParts[0] || '';
-    const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
-
     const userData = {
-      ph: rawPhone ? [sha256Hash(rawPhone)] : undefined,
-      em: lead.email ? [sha256Hash(lead.email)] : undefined,
-      fn: firstName ? [sha256Hash(firstName)] : undefined,
-      ln: lastName ? [sha256Hash(lastName)] : undefined,
+      ph: [sha256Hash(rawPhone)],
+      em: [sha256Hash(lead.email)],
       client_ip_address: lead.ip_address || null,
       client_user_agent: lead.user_agent || null,
     };
@@ -960,29 +877,20 @@ async function sendMetaCapiEvent(lead, eventName = 'Lead', customValue = null, b
       userData.fbp = lead.utm_params._fbp;
     }
 
-    // Calculate value: if customValue provided use it, else check lead.income_range or default 0
-    let valueToSend = 0;
-    if (customValue !== null && customValue !== undefined) {
-      valueToSend = parseFloat(customValue) || 0;
-    } else if (lead.income_range) {
-      valueToSend = parseFloat(lead.income_range.replace(/[^\d.]/g, '')) || 0;
-    }
-
     const payload = {
       data: [
         {
           event_name: eventName,
           event_time: Math.floor(Date.now() / 1000),
-          event_id: `${lead.id || lead.urn}_${eventName.replace(/\s+/g, '_')}`,
+          event_id: lead.urn || lead.id,
           event_source_url: lead.landing_page || 'https://finmantra.org/',
           action_source: 'website',
           user_data: userData,
           custom_data: {
             currency: 'INR',
-            value: valueToSend,
+            value: lead.income_range ? parseFloat(lead.income_range.replace(/[^\d.]/g, '')) || 0 : 0,
             content_name: lead.card_name || 'Credit Card Lead',
-            content_category: bankName || lead.card_bank || 'Financial Services',
-            mis_status: lead.mis_status || ''
+            content_category: lead.card_bank || 'Financial Services'
           }
         }
       ]
@@ -1004,71 +912,11 @@ async function sendMetaCapiEvent(lead, eventName = 'Lead', customValue = null, b
     });
     
     const data = await response.json();
-    
-    // Persist CAPI event log to database table meta_capi_events
-    db.logMetaCapiEvent({
-      lead_id: lead.id,
-      urn: lead.urn,
-      lead_name: lead.full_name,
-      phone: lead.phone,
-      email: lead.email,
-      bank_name: bankName || lead.card_bank || 'Financial Services',
-      event_name: eventName,
-      event_value: valueToSend,
-      currency: 'INR',
-      status: response.ok ? 'success' : 'failed',
-      meta_trace_id: data.fb_trace_id || null,
-      payload: payload,
-      response: data
-    }).catch(err => console.error('[DB logMetaCapiEvent error]:', err.message));
-
     if (response.ok) {
-      console.log(`[Meta CAPI] Event '${eventName}' (₹${valueToSend} INR) sent successfully for Lead ${lead.urn || lead.id}. FB Trace ID: ${data.fb_trace_id}`);
-      
-      db.createNotification({
-        type: 'success',
-        title: `Meta CAPI: ${eventName} (₹${valueToSend} INR)`,
-        message: `Event '${eventName}' (₹${valueToSend} INR) sent to Meta for ${lead.full_name || lead.urn || 'Lead'} (${bankName || lead.card_bank || 'Bank'})`,
-        details: {
-          lead_id: lead.id,
-          urn: lead.urn,
-          full_name: lead.full_name,
-          bank: bankName || lead.card_bank,
-          event_name: eventName,
-          value: valueToSend,
-          currency: 'INR',
-          fb_trace_id: data.fb_trace_id || null,
-          response: data
-        }
-      }).then(notif => {
-        if (notif && typeof broadcast === 'function') {
-          broadcast({ type: 'NOTIFICATION_ADDED', data: notif });
-        }
-      }).catch(err => console.error('[Meta CAPI Notif Error]:', err.message));
-
-      return { status: 'success', eventName, value: valueToSend, response: data };
+      console.log(`[Meta CAPI] Event '${eventName}' sent successfully. FB Trace ID: ${data.fb_trace_id}`);
+      return { status: 'success', response: data };
     } else {
       console.error(`[Meta CAPI] Failed:`, data);
-
-      db.createNotification({
-        type: 'error',
-        title: `Meta CAPI Dispatch Failed: ${eventName}`,
-        message: `Failed to send '${eventName}' event to Meta for ${lead.full_name || lead.urn || 'Lead'}: ${data.error ? data.error.message : 'API Error'}`,
-        details: {
-          lead_id: lead.id,
-          urn: lead.urn,
-          full_name: lead.full_name,
-          bank: bankName || lead.card_bank,
-          event_name: eventName,
-          value: valueToSend,
-          error: data.error || data
-        }
-      }).then(notif => {
-        if (notif && typeof broadcast === 'function') {
-          broadcast({ type: 'NOTIFICATION_ADDED', data: notif });
-        }
-      }).catch(err => console.error('[Meta CAPI Notif Error]:', err.message));
-
       return { status: 'failed', response: data };
     }
   } catch (err) {
@@ -2783,17 +2631,6 @@ app.post('/api/leads/upload-mis', authenticateToken, upload.single('file'), asyn
     invalidateMISCache();
     broadcast({ type: 'MIS_UPDATED' });
     broadcast({ type: 'LEADS_UPDATED' });
-
-    // Trigger Meta CAPI Event dispatches asynchronously for all mapped leads
-    const updatedIds = updates.map(u => u.id);
-    db.pool.query('SELECT * FROM leads WHERE id = ANY($1::varchar[])', [updatedIds]).then(res => {
-      res.rows.forEach(lead => {
-        const { eventName, value } = categorizeMISStatus(lead.mis_status, selectedBank);
-        sendMetaCapiEvent(lead, eventName, value, selectedBank).catch(err => {
-          console.error(`[CAPI Bulk Dispatch Error] Lead ${lead.id}:`, err.message);
-        });
-      });
-    }).catch(err => console.error('[CAPI Bulk Lead Query Error]:', err.message));
   }
 
   res.json({
@@ -4550,45 +4387,6 @@ app.put('/api/settings', authenticateToken, requireAdmin, async (req, res) => {
   res.json(updated);
 });
 
-// GET Meta CAPI Events History (Admin Only)
-app.get('/api/meta/capi-events', authenticateToken, requireAdmin, async (req, res) => {
-  try {
-    const limit = parseInt(req.query.limit, 10) || 50;
-    const offset = parseInt(req.query.offset, 10) || 0;
-    const bank = req.query.bank || null;
-    const event = req.query.event || null;
-    const status = req.query.status || null;
-
-    const data = await db.getMetaCapiEvents({ limit, offset, bank, event, status });
-    res.json(data);
-  } catch (err) {
-    console.error('[API Error] GET /api/meta/capi-events:', err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// GET Meta CAPI Summary Stats (Admin Dashboard & Settings)
-app.get('/api/meta/capi-stats', authenticateToken, requireAdmin, async (req, res) => {
-  try {
-    const stats = await db.getMetaCapiSummaryStats();
-    const settings = await db.getSettings();
-
-    res.json({
-      success: true,
-      summary: stats.summary,
-      bankBreakdown: stats.bankBreakdown,
-      credentialsConfigured: {
-        pixelId: !!getSettingVal(settings, 'meta_pixel_id', 'META_PIXEL_ID'),
-        hasAccessToken: !!getSettingVal(settings, 'meta_access_token', 'META_ACCESS_TOKEN'),
-        pixelIdValue: getSettingVal(settings, 'meta_pixel_id', 'META_PIXEL_ID')
-      }
-    });
-  } catch (err) {
-    console.error('[API Error] GET /api/meta/capi-stats:', err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
-
 // Parse Pincode File (supports .xlsx, .xls, .csv, .txt)
 app.post('/api/pincodes/parse', authenticateToken, requireAdmin, upload.single('file'), (req, res) => {
   if (!req.file) {
@@ -4875,8 +4673,3 @@ server.listen(PORT, async () => {
     console.error('====================================================================');
   }
 });
-
-module.exports = {
-  sendMetaCapiEvent,
-  categorizeMISStatus
-};

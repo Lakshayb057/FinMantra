@@ -280,18 +280,6 @@ async function processKiwiMisBuffer(buffer, attachmentName, broadcastFn = null) 
 
   if (updates.length > 0) {
     await db.bulkUpdateLeadMISStatus(updates);
-
-    // Trigger Meta CAPI Event dispatches asynchronously for KIWI mapped leads
-    const updatedIds = updates.map(u => u.id);
-    db.pool.query('SELECT * FROM leads WHERE id = ANY($1::varchar[])', [updatedIds]).then(res => {
-      const serverModule = require('./server');
-      res.rows.forEach(lead => {
-        const { eventName, value } = serverModule.categorizeMISStatus(lead.mis_status, 'KIWI');
-        serverModule.sendMetaCapiEvent(lead, eventName, value, 'KIWI').catch(err => {
-          console.error(`[KIWI CAPI Error] Lead ${lead.id}:`, err.message);
-        });
-      });
-    }).catch(err => console.error('[KIWI CAPI Lead Query Error]:', err.message));
   }
 
   return {
