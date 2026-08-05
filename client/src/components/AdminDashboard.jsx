@@ -387,9 +387,9 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   useEffect(() => {
     if (!isAuthenticated) return;
 
-    let isCleaningUp = false;
-    const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const wsProto = (window.location.protocol === 'https:' || !isLocal) ? 'wss:' : 'ws:';
+    const wsUrl = isLocal
       ? `ws://${window.location.hostname}:5000` 
       : `${wsProto}//${window.location.host}/api/ws`;
     let socket;

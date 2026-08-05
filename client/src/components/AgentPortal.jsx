@@ -845,9 +845,9 @@ FM2026G2800079,APP10002,DVRPA5807A,IMTIYAZ AHMED,9785197812,SBI,DECLINE,Declined
     if (!isAuthenticated) return;
 
     let isCleaningUp = false;
-    let reconnectTimer;
-    const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = window.location.hostname === 'localhost' 
+    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const wsProto = (window.location.protocol === 'https:' || !isLocal) ? 'wss:' : 'ws:';
+    const wsUrl = isLocal 
       ? `ws://${window.location.hostname}:5000` 
       : `${wsProto}//${window.location.host}/api/ws`;
     let socket;
