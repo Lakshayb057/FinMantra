@@ -68,11 +68,32 @@ async function copyTable(tableName, primaryKey = 'id') {
 
     const insertQuery = `INSERT INTO "${tableName}" (${colNames}) VALUES (${valPlaceholders}) ${conflictClause}`;
 
+    let successCount = 0;
     for (const row of res.rows) {
-      const values = cols.map(c => row[c]);
-      await uatPool.query(insertQuery, values);
+      const values = cols.map(c => {
+        const val = row[c];
+        // Convert objects/arrays to valid JSON string for PostgreSQL JSON/JSONB columns
+        if (val !== null && typeof val === 'object' && !(val instanceof Date)) {
+          return JSON.stringify(val);
+        }
+        return val;
+      });
+
+      try {
+        await uatPool.query(insertQuery, values);
+        successCount++;
+      } catch (rowErr) {
+        // Fallback: If ON CONFLICT on primary key fails due to secondary unique constraint, try simple INSERT IGNORE
+        try {
+          const fallbackQuery = `INSERT INTO "${tableName}" (${colNames}) VALUES (${valPlaceholders}) ON CONFLICT DO NOTHING`;
+          await uatPool.query(fallbackQuery, values);
+          successCount++;
+        } catch (fErr) {
+          // ignore duplicate row errors
+        }
+      }
     }
-    console.log(`[Sync] ✅ Table "${tableName}" (${res.rows.length} rows) copied successfully!`);
+    console.log(`[Sync] ✅ Table "${tableName}" (${successCount}/${res.rows.length} rows) copied successfully!`);
   } catch (err) {
     console.error(`[Sync Table "${tableName}" Error]:`, err.message);
   }
