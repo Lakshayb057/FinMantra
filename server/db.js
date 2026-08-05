@@ -85,18 +85,29 @@ if (!isLocalhost && !connectionUrl.includes('sslmode=')) {
 const pgConnectionString = require('pg-connection-string');
 const pgConfig = pgConnectionString.parse(connectionUrl);
 pgConfig.ssl = sslConfig;
-pgConfig.max = 25;
-pgConfig.idleTimeoutMillis = 30000;
-pgConfig.connectionTimeoutMillis = 15000;
+pgConfig.max = 10;
+pgConfig.idleTimeoutMillis = 0; // Never kill idle connections (we manage via heartbeat)
+pgConfig.connectionTimeoutMillis = 20000;
 pgConfig.keepAlive = true;
 pgConfig.keepAliveInitialDelayMillis = 10000;
 pgConfig.statement_timeout = 120000; // 2 minutes statement timeout for heavy queries
+pgConfig.allowExitOnIdle = false;
 
 const pool = new Pool(pgConfig);
 
 pool.on('error', (err) => {
   console.error('[Database] Unexpected error on idle PostgreSQL client:', err.message || err);
 });
+
+// Heartbeat: ping the database every 2 minutes to keep connections alive
+// This prevents cloud PostgreSQL providers (Supabase/Neon/RDS) from killing idle connections
+setInterval(async () => {
+  try {
+    await pool.query('SELECT 1');
+  } catch (err) {
+    console.error('[Database] Heartbeat failed:', err.message);
+  }
+}, 120000); // every 2 minutes
 
 console.log(`[Database] Configured to connect to PostgreSQL (SSL: ${!!sslConfig}, Hostname: ${isLocalhost ? 'localhost' : 'remote'}).`);
 
