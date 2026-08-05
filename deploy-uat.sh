@@ -39,6 +39,10 @@ fi
 # Step 3: Install backend dependencies
 echo "[3/9] Installing backend dependencies..."
 cd /home/ubuntu/finmantra-uat/server
+if [ ! -f "node_modules/express/package.json" ] || [ ! -f "node_modules/debug/package.json" ]; then
+    echo "Cleaning incomplete node_modules..."
+    rm -rf node_modules
+fi
 npm install
 
 # Step 4: Setup .env file for UAT
