@@ -376,6 +376,26 @@ async function initPgSchema() {
       )
     `);
 
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS meta_capi_events (
+        id VARCHAR(100) PRIMARY KEY,
+        lead_id VARCHAR(50),
+        urn VARCHAR(100),
+        lead_name VARCHAR(255),
+        phone VARCHAR(50),
+        email VARCHAR(255),
+        bank_name VARCHAR(100),
+        event_name VARCHAR(100),
+        event_value NUMERIC(12,2) DEFAULT 0,
+        currency VARCHAR(10) DEFAULT 'INR',
+        status VARCHAR(50),
+        meta_trace_id VARCHAR(255),
+        payload JSONB DEFAULT '{}'::jsonb,
+        response JSONB DEFAULT '{}'::jsonb,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // Performance indexes for high-speed dashboard & repository queries
     try {
       await client.query("CREATE INDEX IF NOT EXISTS idx_leads_mis_status ON leads (mis_status) WHERE mis_status IS NOT NULL");
@@ -1738,7 +1758,105 @@ const db = {
       console.error('[DB] setLeadVisibilityConfig error:', e.message);
       return false;
     }
-  }
+  },
+
+  async logMetaCapiEvent(data) {
+    try {
+      const id = 'capi_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now();
+      const res = await pool.query(
+        `INSERT INTO meta_capi_events (id, lead_id, urn, lead_name, phone, email, bank_name, event_name, event_value, currency, status, meta_trace_id, payload, response, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW())
+         RETURNING *`,
+        [
+          id,
+          data.lead_id || null,
+          data.urn || null,
+          data.lead_name || null,
+          data.phone || null,
+          data.email || null,
+          data.bank_name || null,
+          data.event_name || null,
+          data.event_value || 0,
+          data.currency || 'INR',
+          data.status || 'success',
+          data.meta_trace_id || null,
+          JSON.stringify(data.payload || {}),
+          JSON.stringify(data.response || {})
+        ]
+      );
+      return res.rows[0];
+    } catch (e) {
+      console.error('[DB] logMetaCapiEvent error:', e.message);
+      return null;
+    }
+  },
+
+  async getMetaCapiEvents({ limit = 50, offset = 0, bank = null, event = null, status = null } = {}) {
+    try {
+      let query = `SELECT * FROM meta_capi_events WHERE 1=1`;
+      const params = [];
+      let paramIdx = 1;
+
+      if (bank) {
+        query += ` AND bank_name ILIKE $${paramIdx++}`;
+        params.push(`%${bank}%`);
+      }
+      if (event) {
+        query += ` AND event_name ILIKE $${paramIdx++}`;
+        params.push(`%${event}%`);
+      }
+      if (status) {
+        query += ` AND status = $${paramIdx++}`;
+        params.push(status);
+      }
+
+      query += ` ORDER BY created_at DESC LIMIT $${paramIdx++} OFFSET $${paramIdx++}`;
+      params.push(limit, offset);
+
+      const res = await pool.query(query, params);
+      const countRes = await pool.query(`SELECT COUNT(*) FROM meta_capi_events`);
+      return {
+        events: res.rows,
+        total: parseInt(countRes.rows[0].count, 10)
+      };
+    } catch (e) {
+      console.error('[DB] getMetaCapiEvents error:', e.message);
+      return { events: [], total: 0 };
+    }
+  },
+
+  async getMetaCapiSummaryStats() {
+    try {
+      const statsRes = await pool.query(`
+        SELECT 
+          COUNT(*) as total_events,
+          COUNT(*) FILTER (WHERE status = 'success') as successful_events,
+          COUNT(*) FILTER (WHERE status = 'failed') as failed_events,
+          COALESCE(SUM(event_value) FILTER (WHERE status = 'success'), 0) as total_value_inr,
+          COUNT(*) FILTER (WHERE event_name = 'Final Approved') as final_approved_count,
+          COUNT(*) FILTER (WHERE event_name = 'Soft Approved') as soft_approved_count,
+          COUNT(*) FILTER (WHERE event_name = 'Soft Decline') as soft_decline_count,
+          COUNT(*) FILTER (WHERE event_name = 'Final Decline') as final_decline_count
+        FROM meta_capi_events
+      `);
+      const bankStatsRes = await pool.query(`
+        SELECT bank_name, event_name, COUNT(*) as count, COALESCE(SUM(event_value), 0) as total_value
+        FROM meta_capi_events
+        WHERE status = 'success'
+        GROUP BY bank_name, event_name
+        ORDER BY bank_name, count DESC
+      `);
+      return {
+        summary: statsRes.rows[0],
+        bankBreakdown: bankStatsRes.rows
+      };
+    } catch (e) {
+      console.error('[DB] getMetaCapiSummaryStats error:', e.message);
+      return { summary: {}, bankBreakdown: [] };
+    }
+  },
+
+  initPgSchema
 }
 
 module.exports = db;
