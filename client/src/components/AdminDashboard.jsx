@@ -848,6 +848,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       // 1. Fetch primary leads table data immediately
       const leadsRes = await fetch(`${API_URL}/leads?${queryParams.toString()}`, { headers });
       if (leadsRes.status === 401 || leadsRes.status === 403) {
+        setLoading(false);
         handleLogout();
         return;
       }
@@ -888,6 +889,8 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       } else {
         showToast('Error syncing with database.', 'error');
       }
+      setLoading(false);
+    } finally {
       setLoading(false);
     }
   };
@@ -970,6 +973,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
     setCanDelete(false);
     setIsAuthenticated(false);
     setAdminPasswordInput('');
+    setLoading(false);
   };
 
   // --- LEADS MANAGEMENT ---
