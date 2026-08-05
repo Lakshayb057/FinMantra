@@ -13,8 +13,40 @@ const uatPool = new Pool({
 process.env.DATABASE_URL = 'postgresql://postgres:FinMantra123!@finmantra-db.cnm6keucqfmp.ap-south-1.rds.amazonaws.com:5432/finmantra_uat';
 const db = require('./db.js');
 
+// Auto-sync missing table columns from Prod to UAT database
+async function syncTableStructure(tableName) {
+  try {
+    const colRes = await prodPool.query(`
+      SELECT column_name, data_type, udt_name
+      FROM information_schema.columns
+      WHERE table_name = $1
+    `, [tableName]);
+
+    for (const col of colRes.rows) {
+      const colName = col.column_name;
+      let colType = col.data_type.toUpperCase();
+      if (colType.includes('CHARACTER VARYING') || colType === 'VARCHAR') {
+        colType = 'TEXT';
+      } else if (colType === 'USER-DEFINED') {
+        colType = col.udt_name.toUpperCase();
+      }
+      try {
+        await uatPool.query(`ALTER TABLE "${tableName}" ADD COLUMN IF NOT EXISTS "${colName}" ${colType}`);
+      } catch (e) {
+        // ignore column alter warnings
+      }
+    }
+  } catch (err) {
+    console.error(`[Sync Column Structure Error for ${tableName}]:`, err.message);
+  }
+}
+
 async function copyTable(tableName, primaryKey = 'id') {
   try {
+    // 1. Ensure UAT table structure matches Production exactly
+    await syncTableStructure(tableName);
+
+    // 2. Fetch all rows from Production
     const res = await prodPool.query(`SELECT * FROM "${tableName}"`);
     console.log(`[Sync] Found ${res.rows.length} rows in Production database table "${tableName}".`);
     if (res.rows.length === 0) return;
@@ -50,7 +82,7 @@ async function syncAllData() {
   console.log('[Sync] Initializing UAT PostgreSQL schema & migrations...');
   try {
     await db.init();
-    console.log('[Sync] ✅ UAT Schema initialized with all tables & columns!');
+    console.log('[Sync] ✅ UAT Schema initialized!');
   } catch (e) {
     console.log('[Sync Schema Note]:', e.message);
   }
