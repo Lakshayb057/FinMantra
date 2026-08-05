@@ -88,3 +88,160 @@ For SBI: https://www.sbicard.com/sprint/c/SimplyClick?ch=edm&GEMID1=edm_others_S
 07/07/2026 -> on public landing page form add capture pan no. vith proper validation!
 in agent capture pan in place of income
 map the bank with the agents creation
+
+
+01-08-2026
+in hdfc leads dashboard: change **Approved rate to Final approval rateand
+Add soft approval rate map with the ipa status
+Add initial Rejected application wnhich will map with ipa status which are declined
+change the Rejected applications final rejected
+in sbi leads dashboard:
+remove Source Type, change Channel Filter to the leads creation type for the digital public lieads or the agents created leads as per LEAD_GEMID_1**
+**SSAA1 for digital
+SSAR1 for agents
+give edit right to add application no, name in the Lead Details in the leads repo
+02-08-2026
+add pan in scapia form, add application id for the export leads files
++leads dashboard updates!**
+
+
+
+
+
+--------------------------------------Meta - Pixels - Events and audience-------------------------------------
+
+i am want to ad a major functionality in my software which i am describing you all bellow i have a meta developer account where i can handel all the meta ads manager
+currently in stage of developer wanted to make it live:
+[FinMantra](https://developers.facebook.com/apps/1510978103853380)
+App ID: 1510978103853380
+Mode: In development
+Business: [Chaos Design Pvt. Ltd.](https://business.facebook.com/settings/people?business_id=152071752110966)
+
+and now i want to send the events to my meta ads to target audience as per my working all properlyout of all the above table i provide 4 events for all the banks i am thinking to send for audiences with the value in rupee when ever my mis get maped for the leads successfuly then send the events automaticaly from the software server to the meta to catch all the equilent auduence make a complete structred plan along with the meta setup!
+Implementation Plan
+Meta Conversions API (CAPI) Automated Event Dispatch & Meta Setup Plan
+This plan details the full technical design and setup guide to integrate Meta Conversions API (CAPI) into FinMantra. When MIS excel reports or email feeds map leads to bank application statuses, FinMantra will automatically transmit server-side conversion events to Meta Ads Manager with bank-specific monetary values (in INR) for custom audience building, ROAS optimization, and ad targeting.
+
+Process Tree Graph
+Mermaid diagram
+1. Bank-Wise Event & Monetary Value Schema (in INR)
+Based on the provided status matrices, lead status upon successful MIS mapping will be classified into 4 Core Meta Events, each carrying its designated monetary value in Indian Rupees (INR):
+
+Bank Name	Event Name	Raw Status Examples	Value (INR)	Currency
+SBI	Soft Decline	DCLP, IPA Declined, Soft Reject, Pre-Screen Decline	₹0	INR
+SBI	Soft Approved	IPA Approved, Soft Pass, Pre-Approved	₹1	INR
+SBI	Final Approved	APPROVE, Account Created, Card Issued, Disbursed	₹2,600	INR
+SBI	Final Decline	DECLINE, Final Decline, Post-KYC Decline	₹2	INR
+KIWI	Soft Decline	DCLP, Soft Decline, Pre-Screen Fail	₹0	INR
+KIWI	Soft Approved	IPA Approved, Soft Approved, Form Fetch Pass	₹1	INR
+KIWI	Final Approved	APPROVE, Card Created, Active, First Txn	₹2,000	INR
+KIWI	Final Decline	DECLINE, Final Decline, Reject	₹2	INR
+Scapia	Soft Decline	Soft Decline, Pre-Screen Decline	₹0	INR
+Scapia	Soft Approved	Soft Approved, VKYC Pending	₹1	INR
+Scapia	Final Approved	APPROVE, Final Approved, Card Activated	₹1,900	INR
+Scapia	Final Decline	DECLINE, Final Decline	₹2	INR
+HDFC	Soft Decline	DCLP, Soft Decline	₹0	INR
+HDFC	Soft Approved	IPA Approved, Soft Approved	₹1	INR
+HDFC	Final Approved	APPROVE, Account Created	₹2,600	INR
+HDFC	Final Decline	DECLINE, Final Decline	₹2	INR
+Note: For any other bank not explicitly listed above, standard default values will apply: Soft Decline = ₹0, Soft Approved = ₹1, Final Approved = ₹2,000, Final Decline = ₹2.
+
+2. Meta Setup & Live Approval Instructions
+To take App FinMantra (App ID: 1510978103853380) from In Development to Live Mode under Business Chaos Design Pvt. Ltd. (Business ID: 152071752110966), follow these exact steps:
+
+Step A: Meta Business Manager & Dataset/Pixel Setup
+Go to Meta Business Settings.
+Under Data Sources > Datasets (or Pixels), create or select the FinMantra Dataset/Pixel.
+Note down the Pixel ID / Dataset ID (e.g., 123456789098765).
+Step B: Create Permanent System User & Access Token
+In Meta Business Manager, go to Users > System Users.
+Click Add -> Name: FinMantra CAPI Bot, Role: Admin or Employee.
+Click Add Assets -> Select your Pixel/Dataset and assign Full Control (Manage Dataset).
+Click Generate New Token:
+Select App: FinMantra (App ID 1510978103853380).
+Token Expiration: Never (System User Token).
+Select Permissions: ads_management, ads_read.
+Copy the generated Permanent Access Token.
+Step C: Switching App Mode from "In Development" to "Live"
+Open Meta Developer Console - FinMantra App.
+In the top navbar toggle, switch from In Development -> Live.
+Complete the required App Settings checklist:
+Privacy Policy URL: Add https://finmantra.org/privacy-policy.
+Terms of Service URL: Add https://finmantra.org/terms-of-service.
+App Icon: Upload a 1024x1024 px PNG logo for FinMantra.
+Category: Select Business and Pages or Financial Services.
+Business Verification: Ensure Business Chaos Design Pvt. Ltd. (ID: 152071752110966) verification status is green.
+Save changes. CAPI requests can be sent in both Development and Live modes, but Live mode guarantees production event tracking for active Meta Ad campaigns.
+3. Technical Implementation Architecture in Codebase
+Component 1: CAPI Utility & Status Categorization Engine
+File: 
+server/server.js
+
+Enhance sendMetaCapiEvent(lead, eventName, eventValue, bankName) to format user parameters:
+
+ph: SHA-256 hash of E.164 phone number (91XXXXXXXXXX).
+em: SHA-256 hash of lowercased email.
+fn/ln: SHA-256 hash of first/last name.
+fbc: fb.1.${timestamp}.${fbclid} (extracted from lead's fbclid or utm_params.fbclid).
+fbp: Browser identifier from lead's utm_params._fbp or client cookie.
+client_ip_address & client_user_agent.
+custom_data: currency: 'INR', value: amount, content_name: card_name, bank: bank_name, event_category: 'Lead MIS State'.
+event_id: {lead.id}_{eventName} for deduplication.
+Add helper function categorizeMISStatus(rawStatus, bankName):
+
+Maps Excel/MIS status strings (APPL File Generated, APPROVE, DACP, DCLP, DECLINE, Final Decline, etc.) to the 4 canonical events (Soft Decline, Soft Approved, Final Approved, Final Decline) and returns { eventName, value }.
+Component 2: Automatic Trigger on MIS Lead Mapping
+File: 
+server/server.js
+ & 
+server/db.js
+In /api/leads/upload-mis and bulkUpdateLeadMISStatus:
+When leads are successfully matched/updated during MIS processing:
+Asynchronously trigger sendMetaCapiEvent for each matched lead.
+Save capi_status, capi_event_name, and capi_response to the database record.
+Component 3: Database & Settings Integration
+File: 
+server/db.js
+Add columns to leads table if missing: capi_last_event VARCHAR(100), capi_last_value NUMERIC.
+Allow configured meta_pixel_id and meta_access_token in settings table to be managed via Admin Settings UI.
+Proposed Changes
+Backend Server & DB Integration
+[MODIFY] 
+server.js
+Add categorizeMISStatus(rawStatus, bankName) helper function with exact INR monetary rules.
+Update sendMetaCapiEvent() to accept custom event names, values, currency, and extended SHA-256 user attributes (fn, ln, fbc, fbp).
+Update /api/leads/upload-mis and bulk update handling to automatically trigger Meta CAPI dispatches for all successfully mapped leads.
+[MODIFY] 
+db.js
+Ensure schema updates for tracking CAPI execution status per mapped lead.
+Update bulk lead status functions to return modified lead objects for CAPI processing.
+[MODIFY] 
+kiwiEmailFetcher.js
+Add automatic CAPI event trigger after automated KIWI email MIS ingestion.
+[MODIFY] 
+sbiEmailFetcher.js
+Add automatic CAPI event trigger after automated SBI email MIS ingestion.
+User Review Required
+IMPORTANT
+
+Meta API Credentials Needed: To test and run Meta CAPI live, ensure your Meta Pixel ID / Dataset ID and Meta Permanent Access Token are saved in FinMantra Admin Settings or .env file (META_PIXEL_ID and META_ACCESS_TOKEN).
+
+NOTE
+
+Deduplication & Event IDs: To ensure Meta does not double-count events if an MIS file is uploaded multiple times, each event uses an event_id equal to ${lead.id}_${eventName}. Meta automatically deduplicates matching event_ids within a 48-hour window.
+
+Verification Plan
+Automated Verification
+Run syntax and server startup validation checks:
+powershell
+
+node -e "require('./server/server.js')"
+Send mock MIS mapping payloads to verify categorizeMISStatus and payload formatting:
+powershell
+
+node -e "const { categorizeMISStatus } = require('./server/server.js'); console.log(categorizeMISStatus('APPROVE', 'SBI'));"
+Manual Verification & Meta Diagnostics
+Open Meta Events Manager -> Test Events tab.
+Enter your TEST_EVENT_CODE (e.g. TEST12345).
+Upload a sample MIS Excel sheet via FinMantra Admin Dashboard.
+Verify in Meta Test Events console that Soft Decline, Soft Approved, Final Approved, and Final Decline events arrive in real-time with correct INR values and hashed user data (ph, em).
