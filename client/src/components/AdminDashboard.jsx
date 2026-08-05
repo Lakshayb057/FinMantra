@@ -387,6 +387,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   useEffect(() => {
     if (!isAuthenticated) return;
 
+    let isCleaningUp = false;
     const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     const wsProto = (window.location.protocol === 'https:' || !isLocal) ? 'wss:' : 'ws:';
     const wsUrl = isLocal
