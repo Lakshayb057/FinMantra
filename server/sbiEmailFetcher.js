@@ -460,12 +460,14 @@ async function checkAndFetchEmails(broadcastFn = null) {
 
         console.log(`[SBI Email Fetcher] Processing matching email: "${subject}" (UID: ${uidStr})`);
 
+        let foundExcel = false;
         // Parse full message source for attachments
         const parsed = await simpleParser(message.source);
         if (parsed.attachments && parsed.attachments.length > 0) {
           for (const attachment of parsed.attachments) {
             const fname = attachment.filename || 'sbi_mis.xlsx';
             if (fname.endsWith('.xlsx') || fname.endsWith('.xls') || fname.endsWith('.csv')) {
+              foundExcel = true;
               console.log(`[SBI Email Fetcher] Extracting attachment: ${fname} (${attachment.size} bytes)`);
 
               const rows = await parseAttachmentBuffer(attachment.content, fname);
@@ -512,6 +514,18 @@ async function checkAndFetchEmails(broadcastFn = null) {
               });
             }
           }
+        }
+
+        if (!foundExcel) {
+          await db.saveProcessedEmailMis({
+            message_uid: uidStr,
+            subject,
+            sender: senderAddr || config.sender_email,
+            attachment_name: 'No Excel Attachment',
+            total_processed: 0,
+            mapped_count: 0,
+            warning_count: 0
+          });
         }
 
         // Add to processed set in memory
