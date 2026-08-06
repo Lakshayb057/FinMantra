@@ -2551,6 +2551,25 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       { header: 'KYC Completion Date', getValue: l => l.mis_data?.kyc_completion_date || 'N/A' }
     ];
 
+    // Include any custom extra MIS parameters present in mis_data (e.g. kiwi_user_id, GEMID, etc.)
+    const knownHeaders = new Set(columns.map(c => c.header.toLowerCase()));
+    const extraKeys = new Set();
+    dataToExport.forEach(lead => {
+      if (lead.mis_data && typeof lead.mis_data === 'object') {
+        Object.keys(lead.mis_data).forEach(k => {
+          if (k && !knownHeaders.has(k.toLowerCase()) && !['history', 'mis_bank_name'].includes(k.toLowerCase())) {
+            extraKeys.add(k);
+          }
+        });
+      }
+    });
+    extraKeys.forEach(k => {
+      columns.push({
+        header: k,
+        getValue: l => (l.mis_data && l.mis_data[k] !== undefined && l.mis_data[k] !== null) ? String(l.mis_data[k]) : 'N/A'
+      });
+    });
+
     // Generate CSV contents
     const headersLine = columns.map(c => `"${c.header.replace(/"/g, '""')}"`).join(',');
     const rowsLines = dataToExport.map(lead => {
