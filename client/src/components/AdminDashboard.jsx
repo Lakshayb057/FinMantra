@@ -2128,6 +2128,20 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
     return 'Credit Card';
   }, []);
 
+  const getLeadSourceBankDisplay = useCallback((l) => {
+    if (!l) return 'PUBLIC';
+    const bank = getLeadBank(l);
+    if (l.source === 'agent') {
+      const agentName = l.agent_name || 'Staff';
+      return `${bank} (${agentName})`;
+    }
+    const utmSrc = l.utm_source ? l.utm_source.toUpperCase() : '';
+    if (utmSrc && utmSrc !== 'PUBLIC' && utmSrc !== bank) {
+      return `${bank} (${utmSrc})`;
+    }
+    return `${bank} (PUBLIC)`;
+  }, [getLeadBank]);
+
   // ===== MEMOIZED LEADS DASHBOARD COMPUTATIONS =====
 
   // 1. Memoize the full leads list reference
@@ -3726,11 +3740,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                                  style={{ cursor: 'pointer' }}
                                  onClick={() => handleViewLead(l)}
                                >
-                                  {l.source === 'agent' 
-                                    ? (l.agent_name || 'Staff') 
-                                    : (l.utm_source 
-                                        ? `PUBLIC (${l.utm_source.toUpperCase()}${l.utm_info ? ' - ' + l.utm_info.toUpperCase() : ''})` 
-                                        : 'PUBLIC')}
+                                  {getLeadSourceBankDisplay(l)}
                                </span>
                              </td>
                             <td>
@@ -7809,7 +7819,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.9rem' }}>
                         <div><strong>Selected Card:</strong> {getLeadCardName(selectedLeadDetails)}</div>
                         {hasData(selectedLeadDetails.card_bank) && <div><strong>Bank:</strong> {selectedLeadDetails.card_bank}</div>}
-                        {hasData(selectedLeadDetails.source) && <div><strong>Source:</strong> <span className="badge badge-info">{selectedLeadDetails.source}</span></div>}
+                        <div><strong>Source Bank:</strong> <span className="badge badge-info">{getLeadSourceBankDisplay(selectedLeadDetails)}</span></div>
                         {selectedLeadDetails.source === 'agent' && (
                           <>
                             {hasData(selectedLeadDetails.agent_name) && <div><strong>Agent:</strong> {selectedLeadDetails.agent_name} ({selectedLeadDetails.agent_id || 'N/A'})</div>}
