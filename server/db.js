@@ -1730,7 +1730,7 @@ const db = {
   // ── PROCESSED EMAIL TRACKER HELPERS ──
   async getProcessedEmailUids() {
     try {
-      const res = await pool.query(`SELECT message_uid FROM processed_email_mis`);
+      const res = await pool.query(`SELECT message_uid FROM processed_email_mis WHERE attachment_name != 'No Excel Attachment'`);
       return new Set(res.rows.map(r => String(r.message_uid)));
     } catch (e) {
       console.error('[DB] getProcessedEmailUids error:', e.message);
