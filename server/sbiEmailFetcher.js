@@ -434,8 +434,12 @@ async function checkAndFetchEmails(broadcastFn = null) {
         .map(s => s.trim().toLowerCase())
         .filter(Boolean);
 
-      // Search INBOX for emails matching SBI MIS target subjects
-      const messages = client.fetch({ all: true }, { uid: true, envelope: true, source: true });
+      const subjectKeywords = (config.subject_keywords && config.subject_keywords.length > 0)
+        ? config.subject_keywords
+        : ['LG MIS EOD', 'LG MIS 48Hourly', 'LG MIS Hourly'];
+
+      // Search INBOX for emails from sequence 1 to latest using valid ImapFlow sequence range '1:*'
+      const messages = client.fetch('1:*', { uid: true, envelope: true, source: true });
       
       for await (const message of messages) {
         const uidStr = String(message.uid);
@@ -448,8 +452,8 @@ async function checkAndFetchEmails(broadcastFn = null) {
         }
 
         const subject = message.envelope?.subject || '';
-        const isSubjectMatch = (config.subject_keywords || ['LG MIS EOD', 'LG MIS 48Hourly', 'LG MIS Hourly']).some(kw => 
-          subject.toLowerCase().includes(kw.toLowerCase())
+        const isSubjectMatch = subjectKeywords.some(kw => 
+          subject.toLowerCase().includes(String(kw).toLowerCase())
         );
 
         if (!isSubjectMatch) continue;

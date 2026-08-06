@@ -340,16 +340,28 @@ async function checkAndFetchEmails(broadcastFn = null) {
     try {
       const processedUids = await db.getProcessedEmailUids();
       
-      // Look for emails from harbans.anand@mymoneymantra.com
-      const messages = client.fetch({ from: config.sender_email }, { uid: true, envelope: true, source: true });
+      const senderList = (config.sender_email || '')
+        .split(',')
+        .map(s => s.trim().toLowerCase())
+        .filter(Boolean);
+
+      const subjectKeywords = (config.subject_keywords || ['kiwi mis']);
+
+      // Search INBOX for emails from sequence 1 to latest using valid ImapFlow sequence range '1:*'
+      const messages = client.fetch('1:*', { uid: true, envelope: true, source: true });
       
       for await (const message of messages) {
         const uidStr = String(message.uid);
         if (processedUids.has(uidStr)) continue;
 
+        const fromAddr = (message.envelope?.from?.[0]?.address || '').toLowerCase();
+        if (senderList.length > 0) {
+          const isSenderAllowed = senderList.some(s => fromAddr.includes(s));
+          if (!isSenderAllowed) continue;
+        }
+
         const subject = message.envelope?.subject || '';
-        
-        const hasKeyword = config.subject_keywords.length === 0 || config.subject_keywords.some(k => subject.toLowerCase().includes(String(k).toLowerCase()));
+        const hasKeyword = subjectKeywords.length === 0 || subjectKeywords.some(k => subject.toLowerCase().includes(String(k).toLowerCase()));
         if (!hasKeyword) {
           continue;
         }
