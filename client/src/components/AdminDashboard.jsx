@@ -2087,6 +2087,34 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
     return 'OTHER';
   }, [cards]);
 
+  const getLeadCardName = useCallback((lead) => {
+    if (!lead) return 'Credit Card';
+    if (lead.card_name && lead.card_name !== 'Public Redirection' && lead.card_name !== 'Generic' && lead.card_name.trim() !== '') {
+      return lead.card_name;
+    }
+    const textToInspect = [
+      lead.redirect_url,
+      lead.card_id,
+      lead.landing_page,
+      lead.source,
+      lead.utm_source,
+      lead.utm_campaign,
+      lead.utm_content
+    ].filter(Boolean).join(' ').toLowerCase();
+
+    if (textToInspect.includes('scapia')) return 'Scapia Digital';
+    if (textToInspect.includes('gokiwi') || textToInspect.includes('kiwi')) return 'Yes_Kiwi';
+    if (textToInspect.includes('simplyclick')) return 'SBI SimplyClick';
+    if (textToInspect.includes('sbicard') || textToInspect.includes('sbi')) return 'SBI Online';
+    if (textToInspect.includes('pixel')) return 'Pixel';
+    if (textToInspect.includes('tdcc') || textToInspect.includes('tata')) return 'TATA';
+    if (textToInspect.includes('hdfc')) return 'HDFC Card';
+    if (textToInspect.includes('axis')) return 'Axis Card';
+    if (textToInspect.includes('icici')) return 'ICICI Card';
+
+    return 'Credit Card';
+  }, []);
+
   // ===== MEMOIZED LEADS DASHBOARD COMPUTATIONS =====
 
   // 1. Memoize the full leads list reference
@@ -3647,7 +3675,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                             <td>{formatDateTime(l.created_at)}</td>
                             <td style={{ fontWeight: 600, cursor: 'pointer' }} onClick={() => handleViewLead(l)}>{l.full_name}</td>
                             <td>{l.phone}</td>
-                             <td>{l.card_name} <span style={{ color: 'hsl(var(--text-muted))', fontSize: '0.8rem' }}>({l.card_bank})</span></td>
+                             <td>{getLeadCardName(l)} <span style={{ color: 'hsl(var(--text-muted))', fontSize: '0.8rem' }}>({getLeadBank(l)})</span></td>
                              <td style={{ maxWidth: '130px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={l.email}>{l.email || '-'}</td>
                              <td><code style={{ fontSize: '0.8rem', color: 'var(--gold-deep)' }}>{l.pan_no || '-'}</code></td>
                              <td>{l.employment || '-'}</td>
@@ -7746,7 +7774,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                     <div>
                       <h4 style={{ fontSize: '1rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.5rem', marginBottom: '0.8rem', color: 'hsl(var(--primary))' }}>Registration Info</h4>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.9rem' }}>
-                        {hasData(selectedLeadDetails.card_name) && <div><strong>Selected Card:</strong> {selectedLeadDetails.card_name}</div>}
+                        <div><strong>Selected Card:</strong> {getLeadCardName(selectedLeadDetails)}</div>
                         {hasData(selectedLeadDetails.card_bank) && <div><strong>Bank:</strong> {selectedLeadDetails.card_bank}</div>}
                         {hasData(selectedLeadDetails.source) && <div><strong>Source:</strong> <span className="badge badge-info">{selectedLeadDetails.source}</span></div>}
                         {selectedLeadDetails.source === 'agent' && (

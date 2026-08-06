@@ -1216,8 +1216,32 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
       return null;
     })(),
     card_id: card ? card.id : null,
-    card_name: card ? card.name : 'Public Redirection',
-    card_bank: card ? card.bank : 'N/A',
+    card_name: card ? card.name : (() => {
+      const inspect = [utm_source, utm_campaign, utm_content, landing_page, source].filter(Boolean).join(' ').toLowerCase();
+      if (inspect.includes('scapia')) return 'Scapia Digital';
+      if (inspect.includes('kiwi') || inspect.includes('gokiwi')) return 'Yes_Kiwi';
+      if (inspect.includes('simplyclick')) return 'SBI SimplyClick';
+      if (inspect.includes('sbicard') || inspect.includes('sbi')) return 'SBI Online';
+      if (inspect.includes('pixel')) return 'Pixel';
+      if (inspect.includes('tata')) return 'TATA';
+      if (inspect.includes('hdfc')) return 'HDFC Card';
+      if (inspect.includes('axis')) return 'Axis Card';
+      if (inspect.includes('icici')) return 'ICICI Card';
+      return 'Credit Card';
+    })(),
+    card_bank: card ? card.bank : (() => {
+      const inspect = [utm_source, utm_campaign, utm_content, landing_page, source].filter(Boolean).join(' ').toLowerCase();
+      if (inspect.includes('hdfc') || inspect.includes('pixel')) return 'HDFC';
+      if (inspect.includes('sbi') || inspect.includes('simplyclick')) return 'SBI';
+      if (inspect.includes('kiwi') || inspect.includes('gokiwi')) return 'KIWI';
+      if (inspect.includes('scapia')) return 'SCAPIA';
+      if (inspect.includes('icici')) return 'ICICI';
+      if (inspect.includes('axis')) return 'AXIS';
+      if (inspect.includes('pnb')) return 'PNB';
+      if (inspect.includes('yes')) return 'YES';
+      if (inspect.includes('au')) return 'AU';
+      return 'OTHER';
+    })(),
     source: source || 'public',
     agent_id: source === 'agent' ? agent_id : null,
     agent_name: source === 'agent' ? agent_name : null,

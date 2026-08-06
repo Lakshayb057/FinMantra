@@ -1562,7 +1562,7 @@ const db = {
   },
 
   async alignLeadsByRedirectBank() {
-    console.log('[Align] Starting lead bank alignment based on redirect card URLs...');
+    console.log('[Align] Starting lead bank and card name alignment based on redirect card URLs...');
     const cardsRes = await pool.query('SELECT id, bank, name, redirect_url_template FROM cards');
     const cardsMap = new Map();
     cardsRes.rows.forEach(c => cardsMap.set(c.id, c));
@@ -1578,27 +1578,30 @@ const db = {
       await client.query("BEGIN");
       for (const lead of leadsRes.rows) {
         let targetBank = null;
+        let targetCardName = null;
 
         if (lead.card_id && cardsMap.has(lead.card_id)) {
-          targetBank = cardsMap.get(lead.card_id).bank;
+          const cardObj = cardsMap.get(lead.card_id);
+          targetBank = cardObj.bank;
+          targetCardName = cardObj.name;
         }
 
-        if (!targetBank) {
-          const inspectStr = [
-            lead.redirect_url,
-            lead.card_id,
-            lead.card_name,
-            lead.landing_page,
-            lead.utm_source,
-            lead.utm_campaign
-          ].filter(Boolean).join(' ').toLowerCase();
+        const inspectStr = [
+          lead.redirect_url,
+          lead.card_id,
+          lead.card_name,
+          lead.landing_page,
+          lead.utm_source,
+          lead.utm_campaign
+        ].filter(Boolean).join(' ').toLowerCase();
 
-          if (inspectStr.includes('hdfc')) targetBank = 'HDFC';
-          else if (inspectStr.includes('sbi') || inspectStr.includes('simplyclick')) targetBank = 'SBI';
+        if (!targetBank) {
+          if (inspectStr.includes('hdfc') || inspectStr.includes('pixel') || inspectStr.includes('applyonline.hdfcbank')) targetBank = 'HDFC';
+          else if (inspectStr.includes('sbi') || inspectStr.includes('simplyclick') || inspectStr.includes('sbicard')) targetBank = 'SBI';
+          else if (inspectStr.includes('kiwi') || inspectStr.includes('gokiwi')) targetBank = 'KIWI';
+          else if (inspectStr.includes('scapia')) targetBank = 'SCAPIA';
           else if (inspectStr.includes('icici')) targetBank = 'ICICI';
           else if (inspectStr.includes('axis')) targetBank = 'AXIS';
-          else if (inspectStr.includes('kiwi')) targetBank = 'KIWI';
-          else if (inspectStr.includes('scapia')) targetBank = 'SCAPIA';
           else if (inspectStr.includes('pnb')) targetBank = 'PNB';
           else if (inspectStr.includes('yes')) targetBank = 'YES';
           else if (inspectStr.includes('au')) targetBank = 'AU';
@@ -1609,16 +1612,34 @@ const db = {
           else if (inspectStr.includes('bob') || inspectStr.includes('baroda')) targetBank = 'BOB';
         }
 
-        if (targetBank && targetBank.toUpperCase() !== (lead.card_bank || '').toUpperCase()) {
+        if (!targetCardName || targetCardName === 'Public Redirection') {
+          if (inspectStr.includes('scapia')) targetCardName = 'Scapia Digital';
+          else if (inspectStr.includes('gokiwi') || inspectStr.includes('kiwi')) targetCardName = 'Yes_Kiwi';
+          else if (inspectStr.includes('simplyclick')) targetCardName = 'SBI SimplyClick';
+          else if (inspectStr.includes('sbicard') || inspectStr.includes('sbi')) targetCardName = 'SBI Online';
+          else if (inspectStr.includes('pixel')) targetCardName = 'Pixel';
+          else if (inspectStr.includes('tdcc') || inspectStr.includes('tata')) targetCardName = 'TATA';
+          else if (inspectStr.includes('hdfc')) targetCardName = 'HDFC Card';
+          else if (inspectStr.includes('axis')) targetCardName = 'Axis Card';
+          else if (inspectStr.includes('icici')) targetCardName = 'ICICI Card';
+        }
+
+        const newBank = (targetBank || lead.card_bank || 'OTHER').toUpperCase();
+        const newCardName = targetCardName || (lead.card_name && lead.card_name !== 'Public Redirection' ? lead.card_name : 'Credit Card');
+
+        const needsBankUpdate = newBank !== (lead.card_bank || '').toUpperCase();
+        const needsNameUpdate = (lead.card_name || '') === 'Public Redirection' || (!lead.card_name && newCardName);
+
+        if (needsBankUpdate || needsNameUpdate) {
           await client.query(
-            'UPDATE leads SET card_bank = $1 WHERE id = $2',
-            [targetBank.toUpperCase(), lead.id]
+            'UPDATE leads SET card_bank = $1, card_name = $2 WHERE id = $3',
+            [newBank, newCardName, lead.id]
           );
           alignedCount++;
         }
       }
       await client.query("COMMIT");
-      console.log(`[Align] ✅ Successfully aligned ${alignedCount} leads to their redirect card banks!`);
+      console.log(`[Align] ✅ Successfully aligned ${alignedCount} lead bank and card names!`);
     } catch (e) {
       await client.query("ROLLBACK");
       console.error('[Align Error]:', e.message);
