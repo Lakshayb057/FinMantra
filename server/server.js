@@ -1083,16 +1083,27 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
     let matchedCard = null;
     
     if (source === 'kiwi' || source === 'simplyclick_sbi') {
-      // For kiwi and simplyclick_sbi sources, match ONLY via utm_internal
+      const activeCards = await db.getCards(false);
+      // For kiwi and simplyclick_sbi sources, check utm_internal first
       if (utm_internal) {
-        const activeCards = await db.getCards(false);
         const altStr = String(utm_internal).trim().toLowerCase();
         matchedCard = activeCards.find(c => {
           if (!c.utm_internal) return false;
           return String(c.utm_internal).trim().toLowerCase() === altStr;
         });
         if (matchedCard) {
-          console.log(`[Card Matching] Matched card ${matchedCard.name} (${matchedCard.id}) for kiwi source via utm_internal: ${altStr}`);
+          console.log(`[Card Matching] Matched card ${matchedCard.name} (${matchedCard.id}) for ${source} source via utm_internal: ${altStr}`);
+        }
+      }
+      // For simplyclick_sbi, fallback to active SimplyClick / SBI card if utm_internal is missing or unmatched
+      if (!matchedCard && source === 'simplyclick_sbi') {
+        matchedCard = activeCards.find(c => {
+          const n = String(c.name || '').toLowerCase();
+          const i = String(c.id || '').toLowerCase();
+          return n.includes('simplyclick') || i.includes('simplyclick') || n.includes('sbi') || i.includes('sbi');
+        });
+        if (matchedCard) {
+          console.log(`[Card Matching] Fallback matched card ${matchedCard.name} (${matchedCard.id}) for simplyclick_sbi source`);
         }
       }
     } else {

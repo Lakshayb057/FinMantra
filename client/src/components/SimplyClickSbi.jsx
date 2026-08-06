@@ -13,18 +13,12 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
 
   // Form State
   const [formData, setFormData] = useState({
-    pan: '',
     name: '',
-    dob: '',
-    mother_name: '',
+    pan: '',
     mobile: '',
-    address: '',
     email: '',
-    occupation: '',
-    designation: '',
-    company: '',
-    consent: false,
-    pincode: ''
+    pincode: '',
+    consent: false
   });
 
   const [errors, setErrors] = useState({});
@@ -181,19 +175,7 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
     validateField(name, cleanVal);
   };
 
-  // Validate age helper
-  const age = (dobString) => {
-    const today = new Date();
-    const birthDate = new Date(dobString);
-    let currentAge = today.getFullYear() - birthDate.getFullYear();
-    const monthDiff = today.getMonth() - birthDate.getMonth();
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-      currentAge--;
-    }
-    return currentAge;
-  };
-
-  // Field validation matching PublicLanding.jsx
+  // Field validation
   const validateField = (name, value) => {
     let errorText = '';
 
@@ -206,7 +188,7 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
     }
 
     if (name === 'name') {
-      const trimmed = value.trim();
+      const trimmed = value ? String(value).trim() : '';
       if (!trimmed) {
         errorText = 'This field is required';
       } else if (!/^[a-zA-Z\s]+$/.test(trimmed)) {
@@ -219,21 +201,6 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
       }
     }
 
-    if (name === 'dob') {
-      const currentAge = value ? age(value) : 0;
-      if (!value) {
-        errorText = 'This field is required';
-      } else if (currentAge < 21 || currentAge > 70) {
-        errorText = 'You must be 21–70 to apply for this card.';
-      }
-    }
-
-    if (name === 'mother_name') {
-      if (!value || value.trim().length < 2) {
-        errorText = "Enter your mother's name.";
-      }
-    }
-
     if (name === 'mobile') {
       if (!value) {
         errorText = 'This field is required';
@@ -241,12 +208,6 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
         errorText = 'WhatsApp number should start with 6,7,8,9 only';
       } else if (value.length !== 10) {
         errorText = 'WhatsApp number must be exactly 10 digits.';
-      }
-    }
-
-    if (name === 'address') {
-      if (!value || value.trim().length < 10) {
-        errorText = 'Enter your current address (min 10 characters).';
       }
     }
 
@@ -265,24 +226,6 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
         errorText = 'This field is required';
       } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
         errorText = 'Please enter valid Email';
-      }
-    }
-
-    if (name === 'occupation') {
-      if (!value) {
-        errorText = 'Select your occupation.';
-      }
-    }
-
-    if (name === 'designation') {
-      if (!value || value.trim().length < 1) {
-        errorText = 'Enter your designation.';
-      }
-    }
-
-    if (name === 'company') {
-      if (!value || value.trim().length < 1) {
-        errorText = 'Enter your company name.';
       }
     }
 
@@ -308,11 +251,7 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
   // Validate entire form before submission
   const validateForm = () => {
     let isValid = true;
-    const fieldsToValidate = [
-      'pan', 'name', 'dob', 'mother_name', 'mobile',
-      'address', 'pincode', 'email', 'occupation',
-      'designation', 'company', 'consent'
-    ];
+    const fieldsToValidate = ['name', 'pan', 'mobile', 'email', 'pincode', 'consent'];
 
     fieldsToValidate.forEach(fieldName => {
       const val = formData[fieldName];
@@ -452,14 +391,7 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
           phone: formData.mobile,
           email: formData.email.trim(),
           pan_no: formData.pan.toUpperCase(),
-          dob: formData.dob,
-          mother_name: formData.mother_name.trim(),
-          current_address: `${formData.address.trim()} (Pincode: ${formData.pincode})`,
           pincode: formData.pincode,
-          employment: formData.occupation,
-          designation: formData.designation ? formData.designation.trim() : null,
-          company: formData.company ? formData.company.trim() : null,
-          company_name: formData.company ? formData.company.trim() : null,
           consent: true,
           source: 'simplyclick_sbi',
           ...mergedUtm,
@@ -1197,24 +1129,7 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
                 ) : (
                   <form id="leadform" onSubmit={handleFormSubmit} noValidate autoComplete="on">
                     <div className="fgrid">
-                      <div className={`field pan full ${errors.pan ? 'invalid' : ''}`}>
-                        <label htmlFor="pan">PAN number <span className="req">*</span></label>
-                        <input
-                          id="pan"
-                          name="pan"
-                          maxLength="10"
-                          placeholder="ABCDE1234F"
-                          autoComplete="off"
-                          inputMode="text"
-                          aria-describedby="pan_err"
-                          value={formData.pan}
-                          onChange={handleInputChange}
-                        />
-                        <span className="hint">10 characters as printed on your PAN card.</span>
-                        <span className="err" id="pan_err">{errors.pan || 'Enter a valid PAN (e.g. ABCDE1234F).'}</span>
-                      </div>
-
-                      <div className={`field ${errors.name ? 'invalid' : ''}`}>
+                      <div className={`field full ${errors.name ? 'invalid' : ''}`}>
                         <label htmlFor="name">Full name (as on PAN) <span className="req">*</span></label>
                         <input
                           id="name"
@@ -1227,30 +1142,21 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
                         <span className="err">{errors.name || 'Enter your full name.'}</span>
                       </div>
 
-                      <div className={`field ${errors.dob ? 'invalid' : ''}`}>
-                        <label htmlFor="dob">Date of birth <span className="req">*</span></label>
+                      <div className={`field ${errors.pan ? 'invalid' : ''}`}>
+                        <label htmlFor="pan">PAN number <span className="req">*</span></label>
                         <input
-                          id="dob"
-                          name="dob"
-                          type="date"
-                          autoComplete="bday"
-                          value={formData.dob}
-                          onChange={handleInputChange}
-                        />
-                        <span className="err" id="dob_err">{errors.dob || 'You must be 21–70 to apply for this card.'}</span>
-                      </div>
-
-                      <div className={`field ${errors.mother_name ? 'invalid' : ''}`}>
-                        <label htmlFor="mother">Mother&#8217;s name <span className="req">*</span></label>
-                        <input
-                          id="mother"
-                          name="mother_name"
-                          placeholder="Mother&#8217;s full name"
+                          id="pan"
+                          name="pan"
+                          maxLength="10"
+                          placeholder="ABCDE1234F"
                           autoComplete="off"
-                          value={formData.mother_name}
+                          inputMode="text"
+                          aria-describedby="pan_err"
+                          value={formData.pan}
                           onChange={handleInputChange}
                         />
-                        <span className="err">{errors.mother_name || 'Enter your mother&#8217;s name.'}</span>
+                        <span className="hint">10 characters printed on your PAN card.</span>
+                        <span className="err" id="pan_err">{errors.pan || 'Enter a valid PAN (e.g. ABCDE1234F).'}</span>
                       </div>
 
                       <div className={`field ${errors.mobile ? 'invalid' : ''}`}>
@@ -1269,20 +1175,6 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
                           />
                         </div>
                         <span className="err" id="mob_err">{errors.mobile || 'Enter a valid 10-digit WhatsApp number.'}</span>
-                      </div>
-
-                      <div className="field full">
-                        <label htmlFor="address">Current address <span className="req">*</span></label>
-                        <textarea
-                          id="address"
-                          name="address"
-                          placeholder="House / flat, street, area, city, state & PIN code"
-                          autoComplete="street-address"
-                          className={errors.address ? 'invalid' : ''}
-                          value={formData.address}
-                          onChange={handleInputChange}
-                        ></textarea>
-                        {errors.address && <span className="err" style={{ display: 'block' }}>{errors.address}</span>}
                       </div>
 
                       <div className={`field ${errors.email ? 'invalid' : ''}`}>
@@ -1318,49 +1210,6 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
                             Location: {pincodeLocationText}
                           </span>
                         )}
-                      </div>
-
-                      <div className={`field ${errors.occupation ? 'invalid' : ''}`}>
-                        <label htmlFor="occupation">Occupation <span className="req">*</span></label>
-                        <select
-                          id="occupation"
-                          name="occupation"
-                          value={formData.occupation}
-                          onChange={handleInputChange}
-                        >
-                          <option value="" disabled>Select&#8230;</option>
-                          <option value="Salaried">Salaried</option>
-                          <option value="Self-employed professional">Self-employed professional</option>
-                          <option value="Self-employed / Business">Self-employed / Business</option>
-                          <option value="Other">Other</option>
-                        </select>
-                        <span className="err">{errors.occupation || 'Select your occupation.'}</span>
-                      </div>
-
-                      <div className={`field ${errors.designation ? 'invalid' : ''}`}>
-                        <label htmlFor="designation">Designation <span className="req">*</span></label>
-                        <input
-                          id="designation"
-                          name="designation"
-                          placeholder="e.g. Manager"
-                          autoComplete="organization-title"
-                          value={formData.designation}
-                          onChange={handleInputChange}
-                        />
-                        <span className="err">{errors.designation || 'Enter your designation.'}</span>
-                      </div>
-
-                      <div className={`field ${errors.company ? 'invalid' : ''}`}>
-                        <label htmlFor="company">Company name <span className="req">*</span></label>
-                        <input
-                          id="company"
-                          name="company"
-                          placeholder="Your employer / business name"
-                          autoComplete="organization"
-                          value={formData.company}
-                          onChange={handleInputChange}
-                        />
-                        <span className="err">{errors.company || 'Enter your company name.'}</span>
                       </div>
 
                       <input className="hp" tabIndex="-1" autoComplete="off" name="website" aria-hidden="true" readOnly />
