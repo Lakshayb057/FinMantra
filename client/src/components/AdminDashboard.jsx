@@ -2037,7 +2037,30 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
     const md = lead.mis_data || {};
     const bankName = String(md.mis_bank_name || '').toUpperCase().trim();
 
-    // 1. If lead is linked to card_id in cards catalog, check cards catalog bank
+    // 1. Inspect redirect_url, card_id, card_name, card_bank, landing_page, source, utm_source, utm_campaign
+    const textToInspect = [
+      lead.redirect_url,
+      lead.card_id,
+      lead.card_name,
+      lead.card_bank,
+      lead.landing_page,
+      lead.source,
+      lead.utm_source,
+      lead.utm_campaign
+    ].filter(Boolean).join(' ').toLowerCase();
+
+    // Redirect card URL & Card Name take TOP PRIORITY over generic mis_bank_name
+    if (textToInspect.includes('hdfc') || textToInspect.includes('pixel') || textToInspect.includes('applyonline.hdfcbank')) return 'HDFC';
+    if (textToInspect.includes('sbi') || textToInspect.includes('simplyclick') || textToInspect.includes('sbicard')) return 'SBI';
+    if (textToInspect.includes('kiwi') || textToInspect.includes('gokiwi')) return 'KIWI';
+    if (textToInspect.includes('scapia')) return 'SCAPIA';
+    if (textToInspect.includes('icici')) return 'ICICI';
+    if (textToInspect.includes('axis')) return 'AXIS';
+    if (textToInspect.includes('pnb')) return 'PNB';
+    if (textToInspect.includes('yes')) return 'YES';
+    if (textToInspect.includes('au')) return 'AU';
+
+    // 2. Check cards catalog matching by card_id
     if (lead.card_id && cards && cards.length > 0) {
       const matchedCard = cards.find(c => c.id === lead.card_id);
       if (matchedCard && matchedCard.bank) {
@@ -2052,31 +2075,8 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       }
     }
 
-    // 2. Inspect redirect_url, card_id, card_name, card_bank, landing_page, source, utm_source, utm_campaign
-    const textToInspect = [
-      lead.redirect_url,
-      lead.card_id,
-      lead.card_name,
-      lead.card_bank,
-      lead.landing_page,
-      lead.source,
-      lead.utm_source,
-      lead.utm_campaign,
-      bankName
-    ].filter(Boolean).join(' ').toLowerCase();
-
-    if (textToInspect.includes('hdfc') || textToInspect.includes('pixel')) return 'HDFC';
-    if (textToInspect.includes('sbi') || textToInspect.includes('simplyclick')) return 'SBI';
-    if (textToInspect.includes('kiwi')) return 'KIWI';
-    if (textToInspect.includes('scapia')) return 'SCAPIA';
-    if (textToInspect.includes('icici')) return 'ICICI';
-    if (textToInspect.includes('axis')) return 'AXIS';
-    if (textToInspect.includes('pnb')) return 'PNB';
-    if (textToInspect.includes('yes')) return 'YES';
-    if (textToInspect.includes('au')) return 'AU';
-
-    // 3. Fallback to explicit mis_bank_name if present
-    if (bankName) {
+    // 3. Fallback to explicit mis_bank_name if not OTHER
+    if (bankName && bankName !== 'OTHER') {
       if (bankName.includes('KIWI')) return 'KIWI';
       if (bankName.includes('SBI')) return 'SBI';
       if (bankName.includes('HDFC')) return 'HDFC';
