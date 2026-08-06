@@ -197,23 +197,106 @@ function mapMisStatus(fields) {
   return fields.WORK_FLOW_STATUS || 'Pending';
 }
 
-// Smart Lead Auto-Mapping Core Engine
+// Smart Lead Auto-Mapping Core Engine (Sequential 2-Pass Mapping)
 async function processSbiMisRows(rows, attachmentName, broadcastFn = null) {
   if (!rows || rows.length === 0) {
-    return { total: 0, mapped: 0, warnings: 0, matchedDetails: [] };
+    return { total: 0, nonEmptyAppCount: 0, mapped: 0, warnings: 0, matchedDetails: [] };
   }
 
-  // Fetch all leads from PostgreSQL
+  // Fetch all leads from PostgreSQL repository
   const dbLeads = await db.getAllLeadsUnfiltered();
   let mappedCount = 0;
   let warningCount = 0;
   const updates = [];
   const matchedDetails = [];
 
-  // Group DB leads by normalized Name + Date key for fallback fast lookup
-  // Key format: "name_dd/mm/yyyy"
-  const nameDateLeadMap = new Map();
+  // Track matched DB lead IDs to prevent double matching
+  const matchedLeadIds = new Set();
+
+  // Step 1: Filter MIS rows that have a non-empty APPLICATION_NUMBER or LRN_NUMBER
+  const validMisRows = [];
+  rows.forEach((row, index) => {
+    const fields = extract44Fields(row);
+    const appNo = (fields.APPLICATION_NUMBER || fields.LRN_NUMBER || '').trim().toUpperCase();
+    if (appNo) {
+      validMisRows.push({ rowIndex: index, row, fields, appNo });
+    }
+  });
+
+  const totalValidRows = validMisRows.length; // Count of non-empty APPLICATION_NUMBER rows (e.g. 591)
+
+  // ==========================================
+  // PASS 1: Direct APPLICATION_NUMBER / URN Matching (e.g. 144 mapped)
+  // ==========================================
+  const unmappedMisRows = [];
+
+  // Index DB leads by application_id, urn, or existing mis_data reference numbers
+  const appIdLeadMap = new Map();
   dbLeads.forEach(lead => {
+    const ids = [
+      lead.application_id,
+      lead.urn,
+      lead.mis_data?.APPLICATION_NUMBER,
+      lead.mis_data?.APPLICATION_REFERENCE_NUMBER,
+      lead.mis_data?.bank_reference_number,
+      lead.mis_data?.app_id
+    ].filter(Boolean);
+
+    ids.forEach(id => {
+      const cleanId = String(id).trim().toUpperCase();
+      if (cleanId) appIdLeadMap.set(cleanId, lead);
+    });
+  });
+
+  validMisRows.forEach(item => {
+    const { fields, appNo } = item;
+    if (appIdLeadMap.has(appNo)) {
+      const matchedLead = appIdLeadMap.get(appNo);
+      if (!matchedLeadIds.has(matchedLead.id)) {
+        matchedLeadIds.add(matchedLead.id);
+        mappedCount++;
+        const derivedStatus = mapMisStatus(fields);
+
+        const updatedMisData = {
+          ...(matchedLead.mis_data || {}),
+          ...fields,
+          mis_bank_name: 'SBI',
+          mis_file_name: attachmentName,
+          mapped_via: 'APPLICATION_NUMBER'
+        };
+
+        updates.push({
+          id: matchedLead.id,
+          status: derivedStatus,
+          data: updatedMisData,
+          agent_id: matchedLead.agent_id,
+          agent_name: matchedLead.agent_name,
+          application_id: appNo
+        });
+
+        matchedDetails.push({
+          urn: matchedLead.urn,
+          name: matchedLead.full_name,
+          appId: appNo,
+          status: derivedStatus,
+          mappedVia: 'APPLICATION_NUMBER'
+        });
+      } else {
+        unmappedMisRows.push(item);
+      }
+    } else {
+      unmappedMisRows.push(item);
+    }
+  });
+
+  // ==========================================
+  // PASS 2: Fallback Name + Creation Date Matching on Remaining Unmapped Rows (e.g. 591 - 144 = 447 rows)
+  // ==========================================
+  const unmappedDbLeads = dbLeads.filter(l => !matchedLeadIds.has(l.id));
+
+  // Build Name + Date lookup map for unmapped DB leads
+  const nameDateLeadMap = new Map();
+  unmappedDbLeads.forEach(lead => {
     const normN = normalizeName(lead.full_name);
     const normD = normalizeDateStr(lead.created_at);
     if (normN && normD) {
@@ -225,82 +308,43 @@ async function processSbiMisRows(rows, attachmentName, broadcastFn = null) {
     }
   });
 
-  // Group DB leads by Application ID / Reference / URN for primary fast lookup
-  const appIdLeadMap = new Map();
-  dbLeads.forEach(lead => {
-    const appIds = [
-      lead.application_id,
-      lead.urn,
-      lead.mis_data?.APPLICATION_REFERENCE_NUMBER,
-      lead.mis_data?.bank_reference_number,
-      lead.mis_data?.app_id
-    ].filter(Boolean);
-
-    appIds.forEach(id => {
-      const cleanId = String(id).trim().toUpperCase();
-      if (cleanId) appIdLeadMap.set(cleanId, lead);
-    });
-  });
-
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i];
-    const fields = extract44Fields(row);
-    
-    const appNo = (fields.APPLICATION_NUMBER || fields.LRN_NUMBER || '').trim().toUpperCase();
-    
-    // Ignore all rows that do NOT have an APPLICATION_NUMBER in the attachment
-    if (!appNo) {
-      continue;
-    }
+  for (const item of unmappedMisRows) {
+    const { fields, appNo } = item;
+    const rowName = normalizeName(fields.FULL_NAME);
+    const rowDate = normalizeDateStr(fields.LEAD_CREATION_DATE || fields.SD_DECISION_DATE || fields.APPLICATION_SUBMISSION_DATE);
 
     let matchedLead = null;
     let mappedVia = '';
 
-    // First attempt: Map via APPLICATION_NUMBER
-    if (appIdLeadMap.has(appNo)) {
-      matchedLead = appIdLeadMap.get(appNo);
-      mappedVia = 'APPLICATION_NUMBER';
-    } else {
-      // Fallback attempt: Map via Name + Creation Date
-      const rowName = normalizeName(fields.FULL_NAME);
-      const rowDate = normalizeDateStr(fields.LEAD_CREATION_DATE);
-
-      if (rowName && rowDate) {
+    if (rowName) {
+      // First attempt: Exact Name + Creation Date match
+      if (rowDate) {
         const key = `${rowName}_${rowDate}`;
-        const matchingLeads = nameDateLeadMap.get(key) || [];
-
-        if (matchingLeads.length === 1) {
-          matchedLead = matchingLeads[0];
+        const candidates = (nameDateLeadMap.get(key) || []).filter(l => !matchedLeadIds.has(l.id));
+        if (candidates.length >= 1) {
+          matchedLead = candidates[0];
           mappedVia = 'NAME_DATE_FALLBACK';
-        } else if (matchingLeads.length > 1) {
-          // Multiple leads found with exact same name on same date
-          matchedLead = matchingLeads[0]; // Map to first/newest lead
-          mappedVia = 'NAME_DATE_FALLBACK';
-          warningCount++;
+          if (candidates.length > 1) {
+            warningCount++;
+          }
+        }
+      }
 
-          const warningMessage = `⚠️ Duplicate Name Conflict on SBI MIS Sync: Found ${matchingLeads.length} leads matching name "${fields.FULL_NAME}" created on ${rowDate}. Auto-mapped to lead ID ${matchedLead.urn || matchedLead.id}.`;
-          console.warn(`[SBI MIS Auto-Sync] ${warningMessage}`);
-
-          // Create warning alert notification in Admin Notification Center
-          await db.createNotification({
-            type: 'warning',
-            title: '⚠️ Duplicate Lead Name Warning (SBI MIS)',
-            message: warningMessage,
-            details: {
-              attachment: attachmentName,
-              fullName: fields.FULL_NAME,
-              creationDate: rowDate,
-              mappedLeadId: matchedLead.id,
-              urn: matchedLead.urn,
-              matchingLeadIds: matchingLeads.map(l => l.id)
-            }
-          });
+      // Second attempt: Exact Name match among remaining unmapped DB leads if date didn't match
+      if (!matchedLead) {
+        const candidates = unmappedDbLeads.filter(l => !matchedLeadIds.has(l.id) && normalizeName(l.full_name) === rowName);
+        if (candidates.length >= 1) {
+          matchedLead = candidates[0];
+          mappedVia = 'NAME_FALLBACK';
+          if (candidates.length > 1) {
+            warningCount++;
+          }
         }
       }
     }
 
-    // If matched, prepare DB update object with all 44 fields
     if (matchedLead) {
+      matchedLeadIds.add(matchedLead.id);
       mappedCount++;
       const derivedStatus = mapMisStatus(fields);
 
@@ -312,20 +356,22 @@ async function processSbiMisRows(rows, attachmentName, broadcastFn = null) {
         mapped_via: mappedVia
       };
 
+      // Store Application Number in PostgreSQL repository so it is aligned in DB & Admin Dashboard
       updates.push({
         id: matchedLead.id,
         status: derivedStatus,
         data: updatedMisData,
         agent_id: matchedLead.agent_id,
         agent_name: matchedLead.agent_name,
-        application_id: appNo // Provide application_id to be updated in db
+        application_id: appNo
       });
 
       matchedDetails.push({
         urn: matchedLead.urn,
         name: matchedLead.full_name,
         appId: appNo,
-        status: derivedStatus
+        status: derivedStatus,
+        mappedVia
       });
     }
   }
@@ -336,7 +382,8 @@ async function processSbiMisRows(rows, attachmentName, broadcastFn = null) {
   }
 
   return {
-    total: rows.length, // total processed rows
+    total: rows.length,
+    nonEmptyAppCount: totalValidRows,
     mapped: mappedCount,
     warnings: warningCount,
     matchedDetails
@@ -378,15 +425,26 @@ async function checkAndFetchEmails(broadcastFn = null) {
     try {
       const processedUids = await db.getProcessedEmailUids();
 
-      // Search INBOX for emails from sstechnologies2017@gmail.com
-      const messages = client.fetch({ from: config.sender_email }, { uid: true, envelope: true, source: true });
+      const senderList = (config.sender_email || '')
+        .split(',')
+        .map(s => s.trim().toLowerCase())
+        .filter(Boolean);
+
+      // Search INBOX for emails matching SBI MIS target subjects
+      const messages = client.fetch({ all: true }, { uid: true, envelope: true, source: true });
       
       for await (const message of messages) {
         const uidStr = String(message.uid);
         if (processedUids.has(uidStr)) continue; // Skip already processed email
 
+        const senderAddr = (message.envelope?.from?.[0]?.address || '').toLowerCase();
+        if (senderList.length > 0) {
+          const isSenderAllowed = senderList.some(s => senderAddr.includes(s));
+          if (!isSenderAllowed) continue;
+        }
+
         const subject = message.envelope?.subject || '';
-        const isSubjectMatch = config.subject_keywords.some(kw => 
+        const isSubjectMatch = (config.subject_keywords || ['LG MIS EOD', 'LG MIS 48Hourly', 'LG MIS Hourly']).some(kw => 
           subject.toLowerCase().includes(kw.toLowerCase())
         );
 
@@ -413,7 +471,7 @@ async function checkAndFetchEmails(broadcastFn = null) {
               await db.saveProcessedEmailMis({
                 message_uid: uidStr,
                 subject,
-                sender: config.sender_email,
+                sender: senderAddr || config.sender_email,
                 attachment_name: fname,
                 total_processed: result.total,
                 mapped_count: result.mapped,
@@ -434,8 +492,15 @@ async function checkAndFetchEmails(broadcastFn = null) {
               await db.createNotification({
                 type: result.warnings > 0 ? 'warning' : 'success',
                 title: `🎉 ${reportName} Sync Completed`,
-                message: `Successfully fetched and mapped ${result.mapped} leads from "${subject}" (${fname}). Duplicate Warnings: ${result.warnings}.`,
-                details: { subject, filename: fname, totalRows: result.total, mappedCount: result.mapped, warningCount: result.warnings }
+                message: `Successfully fetched and mapped ${result.mapped} leads from "${subject}" (${fname}). Total rows: ${result.total}, Valid App Rows: ${result.nonEmptyAppCount}. Duplicate Warnings: ${result.warnings}.`,
+                details: {
+                  subject,
+                  filename: fname,
+                  totalRows: result.total,
+                  nonEmptyAppCount: result.nonEmptyAppCount,
+                  mappedCount: result.mapped,
+                  warningCount: result.warnings
+                }
               });
             }
           }

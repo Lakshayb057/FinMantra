@@ -1546,7 +1546,7 @@ const db = {
               mis_data = tmp.mis_data,
               agent_id = COALESCE(l.agent_id, tmp.agent_id),
               agent_name = COALESCE(l.agent_name, tmp.agent_name),
-              application_id = COALESCE(l.application_id, COALESCE(tmp.app_id, l.application_id))
+              application_id = COALESCE(NULLIF(tmp.app_id, ''), l.application_id)
           FROM (VALUES ${valueLines.join(', ')}) AS tmp(id, mis_status, mis_data, agent_id, agent_name, app_id)
           WHERE l.id = tmp.id
         `;
