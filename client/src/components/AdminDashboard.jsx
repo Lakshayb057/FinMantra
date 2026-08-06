@@ -2321,26 +2321,11 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
         if (dashChannel !== 'SSAA1' && dashChannel !== 'SSAR1' && !gemId.toLowerCase().includes(dashChannel.toLowerCase())) return false;
       }
       if (normSelectedBank && normSelectedBank !== 'ALL') {
-        const misBank = String(lead.mis_data?.mis_bank_name || '').toUpperCase().trim();
-        if (misBank) {
-          if (normSelectedBank === 'KIWI') {
-            const isKiwiMis = misBank === 'KIWI' || Boolean(lead.mis_data?.kiwi_bank) || Boolean(lead.mis_data?.user_id) || Boolean(lead.mis_data?.application_id_bank_2?.startsWith('KW'));
-            if (!isKiwiMis) return false;
-          } else if (normSelectedBank === 'HDFC') {
-            if (misBank !== 'HDFC') return false;
-          } else if (normSelectedBank === 'SBI') {
-            if (misBank !== 'SBI') return false;
-          } else if (normSelectedBank === 'SCAPIA') {
-            if (misBank !== 'SCAPIA') return false;
-          } else {
-            const leadBank = getLeadBank(lead);
-            if (leadBank !== normSelectedBank) return false;
-          }
-        } else {
-          const leadBank = getLeadBank(lead);
-          if (leadBank !== normSelectedBank) return false;
-        }
+        const leadBank = getLeadBank(lead);
+        if (leadBank !== normSelectedBank) return false;
       } else if (!normSelectedBank || normSelectedBank === 'ALL') {
+        // Since we removed 'All', if it somehow gets here without a bank selected, we don't return all leads anymore to avoid user confusion
+        // But if we want to ensure it works, we should just return false until a bank is selected
         return false;
       }
       return true;
