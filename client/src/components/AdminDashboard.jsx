@@ -3492,24 +3492,44 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
             )}
 
             {activeTab === 'leads_dashboard' && (
-              <button 
-                onClick={fetchMISStats} 
-                className="btn-secondary"
-                disabled={loadingMISStats}
-                style={{ 
-                  display: 'inline-flex', 
-                  alignItems: 'center', 
-                  gap: '0.4rem', 
-                  padding: '0.4rem 0.9rem', 
-                  fontSize: '0.82rem',
-                  height: '34px',
-                  borderRadius: '2px',
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap'
-                }}
-              >
-                <RefreshCw size={14} className={loadingMISStats ? 'spin' : ''} /> Sync Dashboard
-              </button>
+              <>
+                <button 
+                  onClick={() => handleExportMISLeads(filteredMappedLeads)} 
+                  className="btn-secondary"
+                  style={{ 
+                    display: 'inline-flex', 
+                    alignItems: 'center', 
+                    gap: '0.4rem', 
+                    padding: '0.4rem 0.9rem', 
+                    fontSize: '0.82rem',
+                    height: '34px',
+                    borderRadius: '2px',
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap'
+                  }}
+                  title="Export all currently filtered mapped leads with Redirect URLs to Excel"
+                >
+                  <Download size={14} /> Export to Excel
+                </button>
+                <button 
+                  onClick={fetchMISStats} 
+                  className="btn-secondary"
+                  disabled={loadingMISStats}
+                  style={{ 
+                    display: 'inline-flex', 
+                    alignItems: 'center', 
+                    gap: '0.4rem', 
+                    padding: '0.4rem 0.9rem', 
+                    fontSize: '0.82rem',
+                    height: '34px',
+                    borderRadius: '2px',
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  <RefreshCw size={14} className={loadingMISStats ? 'spin' : ''} /> Sync Dashboard
+                </button>
+              </>
             )}
           </div>
         </div>
