@@ -3834,6 +3834,7 @@ app.get('/api/leads/export', authenticateToken, requireAdmin, async (req, res) =
   if (!Array.isArray(columns) || columns.length === 0) {
     columns = [
       { id: "urn", header: "URN", source: "urn" },
+      { id: "redirect_url", header: "Redirect URL", source: "redirect_url" },
       { id: "created_at", header: "Creation Date/Time", source: "created_at" },
       { id: "full_name", header: "Full Name", source: "full_name" },
       { id: "phone", header: "Phone", source: "phone" },
@@ -3925,6 +3926,16 @@ app.get('/api/leads/export', authenticateToken, requireAdmin, async (req, res) =
         }
       } else if (source === 'utm_params') {
         val = l.utm_params ? JSON.stringify(l.utm_params) : '{}';
+      } else if (source === 'redirect_url') {
+        if (l.redirect_url) {
+          val = l.redirect_url;
+        } else {
+          const agentCode = l.agent_id || 'public';
+          const dateCode = l.created_at ? new Date(l.created_at).toISOString().slice(0, 10).replace(/-/g, '') : '';
+          const domain = getPublicSiteUrl(req, settings);
+          val = `${domain}/refer/${agentCode}/${dateCode}/${l.urn || ''}`;
+        }
+      }
       } else if (l[source] !== undefined && l[source] !== null && String(l[source]).trim() !== '') {
         val = String(l[source]);
       } else if (l.mis_data && l.mis_data[source] !== undefined && l.mis_data[source] !== null && String(l.mis_data[source]).trim() !== '') {

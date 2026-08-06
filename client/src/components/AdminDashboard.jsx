@@ -1877,6 +1877,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
     if (!window.confirm('Are you sure you want to reset the CSV template to the default layout with all 46 tracking parameters?')) return;
     const defaultCols = [
       { id: "urn", header: "URN", source: "urn" },
+      { id: "redirect_url", header: "Redirect URL", source: "redirect_url" },
       { id: "created_at", header: "Creation Date/Time", source: "created_at" },
       { id: "full_name", header: "Full Name", source: "full_name" },
       { id: "phone", header: "Phone", source: "phone" },
@@ -2420,6 +2421,13 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
     // Define columns to export
     const columns = [
       { header: 'URN', getValue: l => l.urn },
+      { header: 'Redirect URL', getValue: l => {
+        if (l.redirect_url) return l.redirect_url;
+        const agentCode = l.agent_id || 'public';
+        const dateCode = l.created_at ? new Date(l.created_at).toISOString().slice(0, 10).replace(/-/g, '') : '';
+        const domain = window.location.hostname.includes('uat') ? 'https://uat.finmantra.org' : 'https://finmantra.org';
+        return `${domain}/refer/${agentCode}/${dateCode}/${l.urn || ''}`;
+      }},
       { header: 'Application ID', getValue: l => l.application_id || l.mis_data?.application_id || l.mis_data?.APPLICATION_NUMBER || l.mis_data?.application_id_bank_2 || l.mis_data?.user_id || 'N/A' },
       { header: 'Client Name', getValue: l => l.full_name },
       { header: 'Phone', getValue: l => l.phone || 'N/A' },
@@ -3535,6 +3543,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                           </th>
                         )}
                         <th>URN No.</th>
+                        <th>Redirect URL</th>
                         <th>Date & Time</th>
                         <th>Name</th>
                         <th>WhatsApp No.</th>
@@ -3564,6 +3573,25 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                               </td>
                             )}
                             <td><span className="badge badge-info" style={{ cursor: 'pointer' }} onClick={() => handleViewLead(l)}>{l.urn}</span></td>
+                            <td>
+                              {(() => {
+                                const agentCode = l.agent_id || 'public';
+                                const dateCode = l.created_at ? new Date(l.created_at).toISOString().slice(0, 10).replace(/-/g, '') : '';
+                                const domain = window.location.hostname.includes('uat') ? 'https://uat.finmantra.org' : 'https://finmantra.org';
+                                const rUrl = l.redirect_url || `${domain}/refer/${agentCode}/${dateCode}/${l.urn || ''}`;
+                                return (
+                                  <a 
+                                    href={rUrl} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer" 
+                                    style={{ fontSize: '0.75rem', color: 'var(--accent)', textDecoration: 'underline', maxWidth: '170px', display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} 
+                                    title={rUrl}
+                                  >
+                                    {rUrl}
+                                  </a>
+                                );
+                              })()}
+                            </td>
                             <td>{formatDateTime(l.created_at)}</td>
                             <td style={{ fontWeight: 600, cursor: 'pointer' }} onClick={() => handleViewLead(l)}>{l.full_name}</td>
                             <td>{l.phone}</td>
@@ -3606,7 +3634,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={canDelete ? 13 : 12} style={{ textAlign: 'center', padding: '3rem', color: 'hsl(var(--text-muted))' }}>
+                          <td colSpan={canDelete ? 14 : 13} style={{ textAlign: 'center', padding: '3rem', color: 'hsl(var(--text-muted))' }}>
                             No leads captured matching current filter query parameters.
                           </td>
                         </tr>
@@ -7675,7 +7703,20 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                             {hasData(selectedLeadDetails.agent_location) && <div><strong>Kiosk Location:</strong> {selectedLeadDetails.agent_location}</div>}
                           </>
                         )}
-                        {hasData(selectedLeadDetails.redirect_url) && <div><strong>Redirect URL:</strong> <a href={selectedLeadDetails.redirect_url} target="_blank" rel="noopener noreferrer" style={{ color: 'hsl(var(--primary))', textDecoration: 'underline', wordBreak: 'break-all' }}>Open Link</a></div>}
+                        {(() => {
+                          const agentCode = selectedLeadDetails.agent_id || 'public';
+                          const dateCode = selectedLeadDetails.created_at ? new Date(selectedLeadDetails.created_at).toISOString().slice(0, 10).replace(/-/g, '') : '';
+                          const domain = window.location.hostname.includes('uat') ? 'https://uat.finmantra.org' : 'https://finmantra.org';
+                          const rUrl = selectedLeadDetails.redirect_url || `${domain}/refer/${agentCode}/${dateCode}/${selectedLeadDetails.urn || ''}`;
+                          return (
+                            <div style={{ marginTop: '0.4rem', gridColumn: '1 / -1' }}>
+                              <strong>Redirect URL:</strong>{' '}
+                              <a href={rUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)', textDecoration: 'underline', wordBreak: 'break-all', fontSize: '0.85rem' }}>
+                                {rUrl}
+                              </a>
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
                   </div>
