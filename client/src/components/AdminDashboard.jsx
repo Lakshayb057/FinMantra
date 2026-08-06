@@ -1888,7 +1888,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       { id: "card_bank", header: "Card Bank", source: "card_bank" },
       { id: "source", header: "Source", source: "source" },
       { id: "utm_source", header: "UTM Source", source: "utm_source" },
-      { id: "utm_info", header: "UTM Info", source: "utm_info" },
+      { id: "utm_info", header: "UTM Source", source: "utm_info" },
       { id: "utm_creative_format", header: "UTM Creative Format", source: "utm_creative_format" },
       { id: "utm_medium", header: "UTM Medium", source: "utm_medium" },
       { id: "utm_campaign", header: "UTM Campaign", source: "utm_campaign" },
@@ -3508,7 +3508,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                     {utmOptions.terms.map((t, i) => <option key={i} value={t}>{t}</option>)}
                   </select>
                   <select className="form-select" value={filterInfo} onChange={(e) => setFilterInfo(e.target.value)} style={{ flex: '1 1 140px', minWidth: '125px', height: '36px', fontSize: '0.8rem', textOverflow: 'ellipsis' }}>
-                    <option value="">UTM Info</option>
+                    <option value="">UTM Source</option>
                     {utmOptions.infos.map((inf, i) => <option key={i} value={inf}>{inf}</option>)}
                   </select>
                   <button 
@@ -7693,7 +7693,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                         {hasData(selectedLeadDetails.utm_term) && <div><strong>UTM Term:</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_term}</span></div>}
                         {hasData(selectedLeadDetails.utm_content) && <div><strong>UTM Content:</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_content}</span></div>}
                         {hasData(selectedLeadDetails.utm_creative_format) && <div><strong>UTM Creative Format:</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_creative_format}</span></div>}
-                        {hasData(selectedLeadDetails.utm_info) && <div><strong>UTM Info:</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_info}</span></div>}
+                        {hasData(selectedLeadDetails.utm_info) && <div><strong>UTM Source:</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_info}</span></div>}
                         {hasData(selectedLeadDetails.utm_id) && <div><strong>UTM Campaign ID (utm_id):</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_id}</span></div>}
                         {hasData(selectedLeadDetails.utm_creative) && <div><strong>UTM Ad ID (utm_creative):</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_creative}</span></div>}
                         {hasData(selectedLeadDetails.utm_internal) && <div><strong>UTM Internal:</strong> <span style={{ color: 'var(--gold-deep)' }}>{selectedLeadDetails.utm_internal}</span></div>}
@@ -8135,7 +8135,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                       />
                     </div>
                     <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>UTM Info</label>
+                      <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>UTM Source</label>
                       <input 
                         type="text" 
                         className="form-input" 
@@ -8707,7 +8707,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                     <input type="text" className="form-input" placeholder="e.g. Pixel_Free_plus_fast..." value={createLeadForm.utm_content} onChange={e => setCreateLeadForm({ ...createLeadForm, utm_content: e.target.value })} />
                   </div>
                   <div>
-                    <label style={{ fontSize: '0.75rem', color: 'var(--muted)', fontWeight: 600 }}>UTM Info</label>
+                    <label style={{ fontSize: '0.75rem', color: 'var(--muted)', fontWeight: 600 }}>UTM Source</label>
                     <input type="text" className="form-input" placeholder="e.g. paid_social" value={createLeadForm.utm_info} onChange={e => setCreateLeadForm({ ...createLeadForm, utm_info: e.target.value })} />
                   </div>
                 </div>
