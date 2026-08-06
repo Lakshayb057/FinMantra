@@ -1391,7 +1391,9 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
     const settings = await db.getSettings();
     
     const waBaseUrl = getPublicSiteUrl(req, settings);
-    const referralLink = `${waBaseUrl}/refer/${agentCode}/${dateCode}/${newLead.urn}`;
+    const referralLink = (newLead.redirect_url && newLead.redirect_url.startsWith('http')) 
+      ? newLead.redirect_url 
+      : `${waBaseUrl}/refer/${agentCode}/${dateCode}/${newLead.urn}`;
     const cardNameStr = card ? `${card.bank} ${card.name}` : 'FinMantra Partner Bank';
     const referralMsg = `Hello ${trimmedName}, thank you for choosing FinMantra. You can access your secure bank portal for the ${cardNameStr} application here: ${referralLink}`;
     const referralTemplateName = settings.wa_referral_template_name || process.env.WA_REFERRAL_TEMPLATE_NAME || 'finmantra_portal';
@@ -1588,7 +1590,9 @@ app.put('/api/leads/public/urn/:urn', async (req, res) => {
   const dateCode = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD
   
   const waBaseUrl = getPublicSiteUrl(req, dbSettings);
-  const referralLink = `${waBaseUrl}/refer/${agentCode}/${dateCode}/${lead.urn}`;
+  const referralLink = (lead.redirect_url && lead.redirect_url.startsWith('http')) 
+    ? lead.redirect_url 
+    : `${waBaseUrl}/refer/${agentCode}/${dateCode}/${lead.urn}`;
   const cardNameStr = card ? `${card.bank} ${card.name}` : 'FinMantra Partner Bank';
   const referralMsg = `Hello ${lead.full_name}, thank you for choosing FinMantra. You can access your secure bank portal for the ${cardNameStr} application here: ${referralLink}`;
   const referralTemplateName = dbSettings.wa_referral_template_name || process.env.WA_REFERRAL_TEMPLATE_NAME || 'finmantra_portal';
