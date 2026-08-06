@@ -2617,6 +2617,7 @@ app.post('/api/leads/upload-mis', authenticateToken, upload.single('file'), asyn
     const uploadingAgentName = req.user.role === 'agent' ? req.user.name : null;
     await db.bulkUpdateLeadMISStatus(updates, uploadingAgentId, uploadingAgentName);
     invalidateMISCache();
+    await db.alignLeadsByRedirectBank().catch(err => console.error('[Align Warning]:', err.message));
     broadcast({ type: 'MIS_UPDATED' });
     broadcast({ type: 'LEADS_UPDATED' });
   }
@@ -2636,6 +2637,19 @@ app.post('/api/leads/upload-mis', authenticateToken, upload.single('file'), asyn
     unmatchedDetails,
     unmatchedList: unmatchedDetails
   });
+});
+
+// Align All Mapped Leads by Redirect Card Bank (Admin Only)
+app.post('/api/leads/align-banks', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const alignedCount = await db.alignLeadsByRedirectBank();
+    invalidateMISCache();
+    broadcast({ type: 'LEADS_UPDATED' });
+    broadcast({ type: 'MIS_UPDATED' });
+    res.json({ success: true, message: `Successfully aligned ${alignedCount} leads to their redirect card banks!`, alignedCount });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Failed to align leads by redirect bank.' });
+  }
 });
 
 // ── MIS Stats Cache (30s TTL) ──

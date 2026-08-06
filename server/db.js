@@ -1561,6 +1561,74 @@ const db = {
     }
   },
 
+  async alignLeadsByRedirectBank() {
+    console.log('[Align] Starting lead bank alignment based on redirect card URLs...');
+    const cardsRes = await pool.query('SELECT id, bank, name, redirect_url_template FROM cards');
+    const cardsMap = new Map();
+    cardsRes.rows.forEach(c => cardsMap.set(c.id, c));
+
+    const leadsRes = await pool.query(`
+      SELECT id, urn, card_id, card_name, card_bank, redirect_url, landing_page, utm_source, utm_campaign
+      FROM leads
+    `);
+
+    let alignedCount = 0;
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      for (const lead of leadsRes.rows) {
+        let targetBank = null;
+
+        if (lead.card_id && cardsMap.has(lead.card_id)) {
+          targetBank = cardsMap.get(lead.card_id).bank;
+        }
+
+        if (!targetBank) {
+          const inspectStr = [
+            lead.redirect_url,
+            lead.card_id,
+            lead.card_name,
+            lead.landing_page,
+            lead.utm_source,
+            lead.utm_campaign
+          ].filter(Boolean).join(' ').toLowerCase();
+
+          if (inspectStr.includes('hdfc')) targetBank = 'HDFC';
+          else if (inspectStr.includes('sbi') || inspectStr.includes('simplyclick')) targetBank = 'SBI';
+          else if (inspectStr.includes('icici')) targetBank = 'ICICI';
+          else if (inspectStr.includes('axis')) targetBank = 'AXIS';
+          else if (inspectStr.includes('kiwi')) targetBank = 'KIWI';
+          else if (inspectStr.includes('scapia')) targetBank = 'SCAPIA';
+          else if (inspectStr.includes('pnb')) targetBank = 'PNB';
+          else if (inspectStr.includes('yes')) targetBank = 'YES';
+          else if (inspectStr.includes('au')) targetBank = 'AU';
+          else if (inspectStr.includes('kotak')) targetBank = 'KOTAK';
+          else if (inspectStr.includes('idfc')) targetBank = 'IDFC';
+          else if (inspectStr.includes('indusind')) targetBank = 'INDUSIND';
+          else if (inspectStr.includes('rbl')) targetBank = 'RBL';
+          else if (inspectStr.includes('bob') || inspectStr.includes('baroda')) targetBank = 'BOB';
+        }
+
+        if (targetBank && targetBank.toUpperCase() !== (lead.card_bank || '').toUpperCase()) {
+          await client.query(
+            'UPDATE leads SET card_bank = $1 WHERE id = $2',
+            [targetBank.toUpperCase(), lead.id]
+          );
+          alignedCount++;
+        }
+      }
+      await client.query("COMMIT");
+      console.log(`[Align] ✅ Successfully aligned ${alignedCount} leads to their redirect card banks!`);
+    } catch (e) {
+      await client.query("ROLLBACK");
+      console.error('[Align Error]:', e.message);
+      throw e;
+    } finally {
+      client.release();
+    }
+    return alignedCount;
+  },
+
   // ── NOTIFICATION CENTER HELPERS ──
   async createNotification({ type = 'info', title, message, details = {} }) {
     try {
