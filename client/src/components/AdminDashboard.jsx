@@ -2179,32 +2179,39 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       }
     }
 
-    const bank = (l.card_bank || '').toUpperCase();
-    const cardName = (l.card_name || '').toLowerCase();
-    const inspect = [l.landing_page, l.utm_source, l.utm_campaign, l.utm_content].filter(Boolean).join(' ').toLowerCase();
+    const bank = (l.card_bank || md.mis_bank_name || md.winning_bank || '').toUpperCase();
+    const cardName = (l.card_name || md.card_name || md['Card Name'] || '').toLowerCase();
+    const inspect = [
+      l.landing_page, 
+      l.utm_source, 
+      l.utm_campaign, 
+      l.utm_content,
+      md.kiwi_bank,
+      md.user_id,
+      md.application_id_bank_2,
+      md.reject_reason
+    ].filter(Boolean).join(' ').toLowerCase();
 
-    if (bank === 'SCAPIA' || inspect.includes('scapia') || cardName.includes('scapia')) {
+    if (bank.includes('SCAPIA') || inspect.includes('scapia') || cardName.includes('scapia')) {
       return `https://apply.scapia.cards/landing_page?utm_source=RKPL_offline&utm_medium=BOBCARD&utm_campaign=web&utm_content=HA_SPK1_${urn}_travel&utm_term=card`;
     }
 
-    if (bank === 'KIWI' || inspect.includes('kiwi') || cardName.includes('kiwi') || inspect.includes('gokiwi')) {
+    if (bank.includes('KIWI') || inspect.includes('kiwi') || inspect.includes('gokiwi') || cardName.includes('kiwi') || md.user_id || md.kiwi_bank || md.application_id_bank_2?.startsWith('KW')) {
       return `https://gokiwi.sng.link/D5owq/zu1ht?utm_source=mmm&utm_campaign=&utm_medium=apply&utm_term=EARNTRA&utm_content=ENT_${urn}_971692`;
     }
 
-    if (bank === 'HDFC' || inspect.includes('hdfc') || cardName.includes('pixel')) {
-      return `https://applyonline.hdfcbank.com/cards/credit-cards.html?CHANNELSOURCE=ZETA&DSACode=XRKD&LGcode=HSPK01&LCcode=${urn_first}&LC2=${urn_last}&SMcode=A28596#nbb`;
-    }
-
-    if (bank === 'SBI' || inspect.includes('sbi') || cardName.includes('sbi') || cardName.includes('simplyclick')) {
+    if (bank.includes('SBI') || cardName.includes('sbi') || cardName.includes('simplyclick') || inspect.includes('sbi') || inspect.includes('simplyclick')) {
       if (cardName.includes('simplyclick')) {
         return `https://www.sbicard.com/sprint/c/SimplyClick?CHN=OMLG&GEMID1=SSAA1&GEMID2=LGSS01`;
       }
       return `https://www.sbicard.com/corecards/?CHN=OMLG&GEMID1=SSAA1&GEMID2=LGSS01`;
     }
 
-    const domain = window.location.hostname.includes('uat') ? 'https://uat.finmantra.org' : 'https://finmantra.org';
-    const dateCode = l.created_at ? new Date(l.created_at).toISOString().slice(0, 10).replace(/-/g, '') : '20260806';
-    return `${domain}/refer/${agentId}/${dateCode}/${urn}`;
+    if (bank.includes('HDFC') || cardName.includes('hdfc') || cardName.includes('pixel') || inspect.includes('hdfc') || inspect.includes('pixel')) {
+      return `https://applyonline.hdfcbank.com/cards/credit-cards.html?CHANNELSOURCE=ZETA&DSACode=XRKD&LGcode=HSPK01&LCcode=${urn_first}&LC2=${urn_last}&SMcode=A28596#nbb`;
+    }
+
+    return `https://applyonline.hdfcbank.com/cards/credit-cards.html?CHANNELSOURCE=ZETA&DSACode=XRKD&LGcode=HSPK01&LCcode=${urn_first}&LC2=${urn_last}&SMcode=A28596#nbb`;
   }, [cards]);
 
   // ===== MEMOIZED LEADS DASHBOARD COMPUTATIONS =====
