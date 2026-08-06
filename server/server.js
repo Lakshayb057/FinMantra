@@ -306,6 +306,32 @@ function resolveIntentUrl(url) {
   return url;
 }
 
+// Helper to dynamically resolve domain for WhatsApp referral URLs (uat.finmantra.org vs finmantra.org)
+function getPublicSiteUrl(req, settings = {}) {
+  const host = req ? (req.get('host') || '') : '';
+  const port = String(process.env.PORT || '5000');
+  
+  if (host.includes('uat.finmantra.org') || port === '5001') {
+    return 'https://uat.finmantra.org';
+  }
+  
+  if (host.includes('finmantra.org')) {
+    return 'https://finmantra.org';
+  }
+
+  const dbUrl = settings && settings.public_site_url ? String(settings.public_site_url).trim() : '';
+  if (dbUrl && dbUrl !== 'undefined' && dbUrl !== 'null') {
+    return dbUrl.endsWith('/') ? dbUrl.slice(0, -1) : dbUrl;
+  }
+
+  if (host.includes('localhost') || host.includes('127.0.0.1')) {
+    return 'http://localhost:5173';
+  }
+
+  const protocol = req ? (req.protocol || 'http') : 'http';
+  return host ? `${protocol}://${host}` : 'https://finmantra.org';
+}
+
 // Helper to format fallback plain text message for Baileys
 function getFallbackText(isOtpAuth, parameters, settings) {
   if (isOtpAuth) {
@@ -1317,26 +1343,7 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
     const dateCode = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD
     const settings = await db.getSettings();
     
-    // Resolve base URL based on settings or fallback dynamically
-    let baseUrl = settings.public_site_url ? settings.public_site_url.trim() : '';
-    if (baseUrl) {
-      if (baseUrl.endsWith('/')) {
-        baseUrl = baseUrl.substring(0, baseUrl.length - 1);
-      }
-    } else {
-      const host = req.get('host') || 'localhost:5000';
-      const protocol = req.protocol || 'http';
-      baseUrl = `${protocol}://${host}`;
-      if (host.includes('localhost') || host.includes('127.0.0.1')) {
-        baseUrl = 'http://localhost:5173';
-      }
-    }
-    
-    let waBaseUrl = baseUrl;
-    if (waBaseUrl.includes('localhost') || waBaseUrl.includes('127.0.0.1')) {
-      waBaseUrl = 'https://finmantra.org';
-    }
-    
+    const waBaseUrl = getPublicSiteUrl(req, settings);
     const referralLink = `${waBaseUrl}/refer/${agentCode}/${dateCode}/${newLead.urn}`;
     const cardNameStr = card ? `${card.bank} ${card.name}` : 'FinMantra Partner Bank';
     const referralMsg = `Hello ${trimmedName}, thank you for choosing FinMantra. You can access your secure bank portal for the ${cardNameStr} application here: ${referralLink}`;
@@ -1533,26 +1540,7 @@ app.put('/api/leads/public/urn/:urn', async (req, res) => {
   const agentCode = lead.agent_id || 'public';
   const dateCode = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD
   
-  // Resolve base URL based on settings or fallback dynamically
-  let baseUrl = dbSettings.public_site_url ? dbSettings.public_site_url.trim() : '';
-  if (baseUrl) {
-    if (baseUrl.endsWith('/')) {
-      baseUrl = baseUrl.substring(0, baseUrl.length - 1);
-    }
-  } else {
-    const host = req.get('host') || 'localhost:5000';
-    const protocol = req.protocol || 'http';
-    baseUrl = `${protocol}://${host}`;
-    if (host.includes('localhost') || host.includes('127.0.0.1')) {
-      baseUrl = 'http://localhost:5173';
-    }
-  }
-  
-  let waBaseUrl = baseUrl;
-  if (waBaseUrl.includes('localhost') || waBaseUrl.includes('127.0.0.1')) {
-    waBaseUrl = 'https://finmantra.org';
-  }
-  
+  const waBaseUrl = getPublicSiteUrl(req, dbSettings);
   const referralLink = `${waBaseUrl}/refer/${agentCode}/${dateCode}/${lead.urn}`;
   const cardNameStr = card ? `${card.bank} ${card.name}` : 'FinMantra Partner Bank';
   const referralMsg = `Hello ${lead.full_name}, thank you for choosing FinMantra. You can access your secure bank portal for the ${cardNameStr} application here: ${referralLink}`;
@@ -4254,7 +4242,8 @@ app.post('/api/whatsapp/test', async (req, res) => {
       const result = await sendWhatsAppTemplate(phone, configuredTemplate, [sampleOtp], true);
       return res.json({ success: true, message: `Sample OTP (${sampleOtp}) dispatched to ${phone} via Meta API template "${configuredTemplate}".`, result });
     } else {
-      const sampleUrl = 'https://finmantra.org/refer/public/20260628/FMTEST999';
+      const sampleBaseUrl = getPublicSiteUrl(req, settings);
+      const sampleUrl = `${sampleBaseUrl}/refer/public/20260628/FMTEST999`;
       const referralTemplateName = settings.wa_referral_template_name || process.env.WA_REFERRAL_TEMPLATE_NAME || 'transactional_link';
       const result = await sendWhatsAppTemplate(phone, referralTemplateName, ['Customer', sampleUrl]);
       return res.json({ success: true, message: `Sample Bank Portal URL dispatched to ${phone} via Meta API template "${referralTemplateName}".`, result });
