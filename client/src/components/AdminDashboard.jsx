@@ -2142,6 +2142,69 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
     return `${bank} (PUBLIC)`;
   }, [getLeadBank]);
 
+  const getOriginalBankRedirectUrl = useCallback((l) => {
+    if (!l) return '';
+    const urn = l.urn || '';
+    let urn_first = '';
+    let urn_last = '';
+    if (urn.length > 7) {
+      urn_first = urn.slice(0, 7);
+      urn_last = urn.slice(7);
+    } else {
+      urn_first = urn;
+      urn_last = urn;
+    }
+    const agentId = l.agent_id || 'public';
+    const utmFormat = l.utm_creative_format || 'default';
+
+    if (l.redirect_url && 
+        !l.redirect_url.includes('finmantra.org/refer') && 
+        !l.redirect_url.includes('uat.finmantra.org/refer') && 
+        !l.redirect_url.includes('localhost')) {
+      return l.redirect_url;
+    }
+
+    if (l.card_id && cards && cards.length > 0) {
+      const c = cards.find(x => x.id === l.card_id);
+      if (c && c.redirect_url_template) {
+        let tpl = c.redirect_url_template;
+        tpl = tpl.replace(/\{urn\}/g, urn);
+        tpl = tpl.replace(/\{urn_first\}/g, urn_first);
+        tpl = tpl.replace(/\{urn_last\}/g, urn_last);
+        tpl = tpl.replace(/\{agent_id\}/g, agentId);
+        tpl = tpl.replace(/\{utm_creative_format\}/g, utmFormat);
+        return tpl;
+      }
+    }
+
+    const bank = (l.card_bank || '').toUpperCase();
+    const cardName = (l.card_name || '').toLowerCase();
+    const inspect = [l.landing_page, l.utm_source, l.utm_campaign, l.utm_content].filter(Boolean).join(' ').toLowerCase();
+
+    if (bank === 'SCAPIA' || inspect.includes('scapia') || cardName.includes('scapia')) {
+      return `https://apply.scapia.cards/landing_page?utm_source=RKPL_offline&utm_medium=BOBCARD&utm_campaign=web&utm_content=HA_SPK1_${urn}_travel&utm_term=card`;
+    }
+
+    if (bank === 'KIWI' || inspect.includes('kiwi') || cardName.includes('kiwi') || inspect.includes('gokiwi')) {
+      return `https://gokiwi.sng.link/D5owq/zu1ht?utm_source=mmm&utm_campaign=&utm_medium=apply&utm_term=EARNTRA&utm_content=ENT_${urn}_971692`;
+    }
+
+    if (bank === 'HDFC' || inspect.includes('hdfc') || cardName.includes('pixel')) {
+      return `https://applyonline.hdfcbank.com/cards/credit-cards.html?CHANNELSOURCE=ZETA&DSACode=XRKD&LGcode=HSPK01&LCcode=${urn_first}&LC2=${urn_last}&SMcode=A28596#nbb`;
+    }
+
+    if (bank === 'SBI' || inspect.includes('sbi') || cardName.includes('sbi') || cardName.includes('simplyclick')) {
+      if (cardName.includes('simplyclick')) {
+        return `https://www.sbicard.com/sprint/c/SimplyClick?CHN=OMLG&GEMID1=SSAA1&GEMID2=LGSS01`;
+      }
+      return `https://www.sbicard.com/corecards/?CHN=OMLG&GEMID1=SSAA1&GEMID2=LGSS01`;
+    }
+
+    const domain = window.location.hostname.includes('uat') ? 'https://uat.finmantra.org' : 'https://finmantra.org';
+    const dateCode = l.created_at ? new Date(l.created_at).toISOString().slice(0, 10).replace(/-/g, '') : '20260806';
+    return `${domain}/refer/${agentId}/${dateCode}/${urn}`;
+  }, [cards]);
+
   // ===== MEMOIZED LEADS DASHBOARD COMPUTATIONS =====
 
   // 1. Memoize the full leads list reference
@@ -2506,13 +2569,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
     // Define columns to export
     const columns = [
       { header: 'URN', getValue: l => l.urn },
-      { header: 'Redirect URL', getValue: l => {
-        if (l.redirect_url) return l.redirect_url;
-        const agentCode = l.agent_id || 'public';
-        const dateCode = l.created_at ? new Date(l.created_at).toISOString().slice(0, 10).replace(/-/g, '') : '';
-        const domain = window.location.hostname.includes('uat') ? 'https://uat.finmantra.org' : 'https://finmantra.org';
-        return `${domain}/refer/${agentCode}/${dateCode}/${l.urn || ''}`;
-      }},
+      { header: 'Redirect URL', getValue: l => getOriginalBankRedirectUrl(l) },
       { header: 'Application ID', getValue: l => l.application_id || l.mis_data?.application_id || l.mis_data?.APPLICATION_NUMBER || l.mis_data?.application_id_bank_2 || l.mis_data?.user_id || 'N/A' },
       { header: 'Client Name', getValue: l => l.full_name },
       { header: 'Phone', getValue: l => l.phone || 'N/A' },
@@ -3721,10 +3778,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                             <td><span className="badge badge-info" style={{ cursor: 'pointer' }} onClick={() => handleViewLead(l)}>{l.urn}</span></td>
                             <td>
                               {(() => {
-                                const agentCode = l.agent_id || 'public';
-                                const dateCode = l.created_at ? new Date(l.created_at).toISOString().slice(0, 10).replace(/-/g, '') : '';
-                                const domain = window.location.hostname.includes('uat') ? 'https://uat.finmantra.org' : 'https://finmantra.org';
-                                const rUrl = l.redirect_url || `${domain}/refer/${agentCode}/${dateCode}/${l.urn || ''}`;
+                                const rUrl = getOriginalBankRedirectUrl(l);
                                 return (
                                   <a 
                                     href={rUrl} 
@@ -7703,10 +7757,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
               </div>
               <div style={{ maxHeight: '50vh', overflowY: 'auto' }}>
                 {(() => {
-                  const agentCode = selectedMappedLead.agent_id || 'public';
-                  const dateCode = selectedMappedLead.created_at ? new Date(selectedMappedLead.created_at).toISOString().slice(0, 10).replace(/-/g, '') : '';
-                  const domain = window.location.hostname.includes('uat') ? 'https://uat.finmantra.org' : 'https://finmantra.org';
-                  const redirectUrlVal = selectedMappedLead.redirect_url || `${domain}/refer/${agentCode}/${dateCode}/${selectedMappedLead.urn || ''}`;
+                  const redirectUrlVal = getOriginalBankRedirectUrl(selectedMappedLead);
 
                   const standardFields = [
                     { label: 'Redirect URL', key: 'redirect_url', isUrl: true, customVal: redirectUrlVal },
