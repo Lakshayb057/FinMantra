@@ -2157,12 +2157,14 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
     const agentId = l.agent_id || 'public';
     const utmFormat = l.utm_creative_format || 'default';
 
-    if (l.redirect_url && 
-        !l.redirect_url.includes('finmantra.org/refer') && 
-        !l.redirect_url.includes('uat.finmantra.org/refer') && 
-        !l.redirect_url.includes('localhost')) {
-      return l.redirect_url;
-    }
+    const md = l.mis_data || {};
+    const misUrl = md['Redirect URL'] || md['Redirect URL (redirect_url)'] || md['redirect_url'] || '';
+
+    const directUrl = (l.redirect_url && !l.redirect_url.includes('finmantra.org/refer') && !l.redirect_url.includes('uat.finmantra.org/refer') && !l.redirect_url.includes('localhost'))
+                      ? l.redirect_url
+                      : ((misUrl && !misUrl.includes('finmantra.org/refer') && !misUrl.includes('uat.finmantra.org/refer') && !misUrl.includes('localhost')) ? misUrl : '');
+
+    if (directUrl) return directUrl;
 
     if (l.card_id && cards && cards.length > 0) {
       const c = cards.find(x => x.id === l.card_id);
