@@ -149,31 +149,14 @@ export default function PublicLanding({ navigateTo, utmParams }) {
     fullName: '',
     phone: '',
     email: '',
-    city: '',
-    employment: '',
-    income: 'Below ₹25,000',
-    selectedCard: '',
-    has_credit_card: '',
-    pincode: '',
-    monthly_income: '',
     pan_no: '',
-    dob: '',
-    mother_name: '',
-    current_address: '',
-    designation: '',
-    address_house: '',
-    address_street: '',
-    address_locality: '',
-    address_city: '',
-    address_state: ''
+    pincode: '',
+    consent: true
   });
 
   const [errors, setErrors] = useState({});
-  const [employmentDropdownOpen, setEmploymentDropdownOpen] = useState(false);
-  const [designationDropdownOpen, setDesignationDropdownOpen] = useState(false);
-  const empDropdownRef = useRef(null);
-  const designationDropdownRef = useRef(null);
   const [isPhoneVerified, setIsPhoneVerified] = useState(false);
+  const isPhoneVerifiedRef = useRef(false);
   const [currentUrn, setCurrentUrn] = useState('');
 
   // Pincode Lookup & Serviceability States
@@ -893,100 +876,97 @@ export default function PublicLanding({ navigateTo, utmParams }) {
     }
   };
 
-  // Continue to Step 2 & Save Step 1 Lead details immediately
-  const handleContinueToStep2 = async () => {
-    if (!isPhoneVerified) {
-      setFormError('Please verify your contact number with OTP first.');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      return;
-    }
-    if (!validateStep(1)) return;
-
-    setIsSubmitting(true);
-    setFormError('');
-    try {
-      const savedUtmStr = sessionStorage.getItem('finmantra_utm');
-      const savedUtm = savedUtmStr ? JSON.parse(savedUtmStr) : {};
-      const mergedUtm = { ...savedUtm, ...(utmParams || {}) };
-
-      const leadRes = await fetch(`${API_URL}/leads`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          full_name: formData.fullName,
-          phone: formData.phone,
-          email: formData.email,
-          dob: formData.dob || null,
-          mother_name: formData.mother_name || null,
-          source: 'public',
-          consent: true,
-          ...mergedUtm,
-          utm_params: mergedUtm
-        })
-      });
-
-      const leadData = await leadRes.json();
-      if (leadRes.ok) {
-        setCurrentUrn(leadData.urn);
-        setFormStep(2);
+  // Validate Form
+  const validateForm = () => {
+    const newErrors = {};
+    if (!formData.fullName || formData.fullName.trim().length < 3) {
+      newErrors.fullName = 'Full Name is required';
+    } else {
+      const trimmed = formData.fullName.trim();
+      if (!/^[A-Za-z\s]+$/.test(trimmed)) {
+        newErrors.fullName = 'Full Name must contain letters and spaces only';
       } else {
-        setFormError(leadData.error || 'Failed to register details. Please try again.');
+        const words = trimmed.split(/\s+/).filter(Boolean);
+        if (words.length < 2) {
+          newErrors.fullName = 'Please enter your Last Name / Father Name';
+        }
       }
-    } catch (err) {
-      setFormError('Network error. Unable to contact registration servers.');
-    } finally {
-      setIsSubmitting(false);
     }
+
+    if (!formData.phone || formData.phone.length !== 10 || !/^[6-9]/.test(formData.phone)) {
+      newErrors.phone = 'Enter a valid 10-digit mobile number';
+    }
+
+    if (!formData.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      newErrors.email = 'Enter a valid email address';
+    }
+
+    if (!formData.pan_no || !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(formData.pan_no.toUpperCase())) {
+      newErrors.pan_no = 'Invalid PAN card format (e.g. ABCDE1234F)';
+    }
+
+    if (!formData.pincode || formData.pincode.length !== 6 || !/^\d+$/.test(formData.pincode)) {
+      newErrors.pincode = 'Pincode must be exactly 6 digits';
+    } else if (pincodeError) {
+      newErrors.pincode = pincodeError;
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
-  // Form Submission for Step 2 ("More Info")
+  // Form Submission (Single Step)
   const handleFormSubmit = async (e) => {
     if (e) e.preventDefault();
     setFormError('');
     setPincodeError('');
 
-    if (formStep === 1) {
-      handleContinueToStep2();
+    if (!validateForm()) {
+      setFormError('Please correct the highlighted errors before submitting.');
       return;
     }
 
-    if (!validateStep(2)) {
-      setFormError('Please correct the highlighted errors before submitting.');
+    if (!isPhoneVerifiedRef.current) {
+      sendStep1Otp();
       return;
     }
 
     setIsSubmitting(true);
     try {
-      trackLeadSubmission({
-        fullName: formData.fullName,
-        email: formData.email,
-        phone: formData.phone,
-        eventId: currentUrn,
-        contentName: 'Lead Fully Registered',
-        status: 'registered'
-      });
+      const savedUtmStr = sessionStorage.getItem('finmantra_utm');
+      const savedUtm = savedUtmStr ? JSON.parse(savedUtmStr) : {};
+      const mergedUtm = { ...savedUtm, ...(utmParams || {}) };
 
-      const compiledAddress = `${formData.address_house.trim()}, ${formData.address_street.trim()}${formData.address_locality ? ', ' + formData.address_locality.trim() : ''}, ${formData.address_city.trim()}, ${formData.address_state.trim()} - ${formData.pincode.trim()}`;
-
-      const res = await fetch(`${API_URL}/leads/public/urn/${currentUrn}`, {
-        method: 'PUT',
+      const res = await fetch(`${API_URL}/leads`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          employment: formData.employment,
-          monthly_income: formData.monthly_income,
-          designation: formData.designation || null,
-          pan_no: formData.pan_no ? String(formData.pan_no).trim().toUpperCase() : null,
-          has_credit_card: formData.has_credit_card,
+          full_name: formData.fullName.trim(),
+          phone: formData.phone,
+          email: formData.email.trim(),
+          pan_no: formData.pan_no.toUpperCase(),
           pincode: formData.pincode,
-          current_address: compiledAddress
+          consent: true,
+          source: 'public',
+          ...mergedUtm,
+          utm_params: mergedUtm
         })
       });
 
       const data = await res.json();
       if (res.ok) {
+        trackLeadSubmission({
+          fullName: formData.fullName,
+          email: formData.email,
+          phone: formData.phone,
+          eventId: data.urn,
+          contentName: 'Public Lead Submitted',
+          status: 'submitted'
+        });
+
         const cacheData = {
           name: formData.fullName,
-          urn: currentUrn,
+          urn: data.urn,
           redirectUrl: data.redirectUrl,
           cardName: 'FinMantra Card Redirect',
           bank: 'Partner Bank',
@@ -995,7 +975,7 @@ export default function PublicLanding({ navigateTo, utmParams }) {
         sessionStorage.setItem('finmantra_applied_lead', JSON.stringify(cacheData));
         window.location.replace(resolveRedirectUrl(data.redirectUrl));
       } else {
-        setFormError(data.error || 'Failed to complete application. Please try again.');
+        setFormError(data.error || 'Failed to submit application. Please try again.');
       }
     } catch (err) {
       setFormError('Network error. Unable to contact servers.');
@@ -1004,7 +984,7 @@ export default function PublicLanding({ navigateTo, utmParams }) {
     }
   };
 
-  // Verify OTP (Invoked from Step 1 Modal)
+  // Verify OTP
   const handleVerifyOtp = async () => {
     setOtpStatus('Verifying...');
     setIsSubmitting(true);
@@ -1018,11 +998,15 @@ export default function PublicLanding({ navigateTo, utmParams }) {
 
       if (res.ok) {
         setOtpStatus('Verified successfully!');
+        isPhoneVerifiedRef.current = true;
         setIsPhoneVerified(true);
         setIsSubmitting(false);
         setTimeout(() => {
           setShowOtpModal(false);
           setOtpVal('');
+          setTimeout(() => {
+            handleFormSubmit();
+          }, 100);
         }, 1500);
       } else {
         setOtpStatus(`Verification failed: ${data.error}`);
@@ -1191,621 +1175,150 @@ export default function PublicLanding({ navigateTo, utmParams }) {
             </div>
           )}
           <form onSubmit={handleFormSubmit}>
-            {/* Step indicator */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', position: 'relative', padding: '0 8px' }}>
-              <div style={{ position: 'absolute', top: '15px', left: '16px', right: '16px', height: '2px', background: 'var(--line)', zIndex: 1 }}>
-                <div style={{ width: formStep === 2 ? '100%' : '0%', height: '100%', background: 'var(--gold)', transition: 'width 0.3s ease' }}></div>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 2, position: 'relative' }}>
-                <div style={{ 
-                  width: '32px', height: '32px', borderRadius: '50%', 
-                  background: formStep >= 1 ? 'var(--gold)' : 'var(--white)', 
-                  border: formStep >= 1 ? '2px solid var(--gold)' : '2px solid var(--line)',
-                  color: formStep >= 1 ? 'var(--white)' : 'var(--muted)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.85rem',
-                  transition: 'all 0.3s ease',
-                  boxShadow: formStep === 1 ? '0 0 12px rgba(224, 168, 46, 0.3)' : 'none'
-                }}>1</div>
-                <span style={{ fontSize: '0.75rem', fontWeight: 600, marginTop: '6px', color: formStep === 1 ? 'var(--gold-deep)' : 'var(--muted)' }}>Contact</span>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 2, position: 'relative' }}>
-                <div style={{ 
-                  width: '32px', height: '32px', borderRadius: '50%', 
-                  background: formStep >= 2 ? 'var(--gold)' : 'var(--white)', 
-                  border: formStep >= 2 ? '2px solid var(--gold)' : '2px solid var(--line)',
-                  color: formStep >= 2 ? 'var(--white)' : 'var(--muted)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.85rem',
-                  transition: 'all 0.3s ease',
-                  boxShadow: formStep === 2 ? '0 0 12px rgba(224, 168, 46, 0.3)' : 'none'
-                }}>2</div>
-                <span style={{ fontSize: '0.75rem', fontWeight: 600, marginTop: '6px', color: formStep === 2 ? 'var(--gold-deep)' : 'var(--muted)' }}>More Info</span>
-              </div>
-            </div>
-
-            {/* ===== 2-Step Wizard (All Screen Sizes) ===== */}
             {formError && (
               <div style={{ background: 'rgba(209, 67, 67, 0.1)', border: '1px solid rgba(209, 67, 67, 0.2)', padding: '0.75rem 1rem', borderRadius: 'var(--radius-sm)', color: 'var(--err)', fontSize: '0.85rem', marginBottom: '1rem' }}>
                 {formError}
               </div>
             )}
 
-            {/* STEP 1: CONTACT DETAILS */}
-            {formStep === 1 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem', animation: 'fadeIn 0.3s ease' }}>
-                {formSchema.fields.fullName.visible && (
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
-                      {formSchema.fields.fullName.label}
-                    </label>
-                    <div style={{ position: 'relative' }}>
-                      <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', opacity: 0.7, display: 'flex', alignItems: 'center' }}>
-                        <User size={18} />
-                      </span>
-                      <input 
-                        type="text" name="fullName" className="form-input"
-                        style={{ paddingLeft: '2.5rem', height: '42px', borderRadius: 'var(--radius-sm)' }}
-                        placeholder={formSchema.fields.fullName.placeholder}
-                        value={formData.fullName} onChange={handleInputChange}
-                        required={formSchema.fields.fullName.required} disabled={isSubmitting}
-                      />
-                    </div>
-                    {errors.fullName && <div style={{ color: 'var(--err)', fontSize: '0.8rem', marginTop: '0.25rem' }}>{errors.fullName}</div>}
-                  </div>
-                )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
+                  Full Name (as per PAN) <span style={{ color: 'var(--err)' }}>*</span>
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', opacity: 0.7, display: 'flex', alignItems: 'center' }}>
+                    <User size={18} />
+                  </span>
+                  <input 
+                    type="text" name="fullName" className="form-input"
+                    style={{ paddingLeft: '2.5rem', height: '42px', borderRadius: 'var(--radius-sm)' }}
+                    placeholder="Enter your full name as per PAN Card"
+                    value={formData.fullName} onChange={handleInputChange}
+                    required disabled={isSubmitting}
+                  />
+                </div>
+                {errors.fullName && <div style={{ color: 'var(--err)', fontSize: '0.8rem', marginTop: '0.25rem' }}>{errors.fullName}</div>}
+              </div>
 
-                {formSchema.fields.phone.visible && (
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
-                      {formSchema.fields.phone.label}
-                    </label>
-                    <div className="phone-verify-container">
-                      <div className="phone-input-wrapper">
-                        <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', opacity: 0.7, display: 'flex', alignItems: 'center' }}>
-                          <Phone size={18} />
-                        </span>
-                        <input
-                          type="tel" name="phone" className="form-input"
-                          style={{ paddingLeft: '2.5rem', height: '42px', borderRadius: 'var(--radius-sm)' }}
-                          placeholder={formSchema.fields.phone.placeholder}
-                          maxLength="10" value={formData.phone} onChange={handleInputChange}
-                          required={formSchema.fields.phone.required} disabled={isSubmitting || isPhoneVerified}
-                        />
-                      </div>
-                      {formData.phone.length === 10 && !errors.phone && (
-                        <button
-                          type="button"
-                          onClick={sendStep1Otp}
-                          className="phone-verify-button btn-primary"
-                          style={{ 
-                            background: isPhoneVerified ? 'var(--mint)' : '#ef4444',
-                            borderColor: isPhoneVerified ? 'var(--mint)' : '#ef4444',
-                            color: 'var(--white)',
-                            fontWeight: 700,
-                            borderRadius: 'var(--radius-sm)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.25rem',
-                            cursor: isPhoneVerified ? 'default' : 'pointer'
-                          }}
-                          disabled={isSubmitting || isPhoneVerified}
-                        >
-                          {isPhoneVerified ? '✓ Verified' : 'Verify'}
-                        </button>
-                      )}
-                    </div>
-                    {errors.phone && <div style={{ color: 'var(--err)', fontSize: '0.75rem', marginTop: '0.25rem' }}>{errors.phone}</div>}
-                  </div>
-                )}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
+                    PAN Number <span style={{ color: 'var(--err)' }}>*</span>
+                  </label>
+                  <input
+                    type="text" name="pan_no" className="form-input"
+                    style={{ height: '42px', borderRadius: 'var(--radius-sm)', textTransform: 'uppercase' }}
+                    placeholder="ABCDE1234F"
+                    maxLength="10"
+                    value={formData.pan_no} onChange={handleInputChange}
+                    required disabled={isSubmitting}
+                  />
+                  {errors.pan_no && <div style={{ color: 'var(--err)', fontSize: '0.75rem', marginTop: '0.25rem' }}>{errors.pan_no}</div>}
+                </div>
 
-                {formSchema.fields.email.visible && (
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
-                      {formSchema.fields.email.label}
-                    </label>
-                    <div style={{ position: 'relative' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
+                    WhatsApp Number <span style={{ color: 'var(--err)' }}>*</span>
+                  </label>
+                  <div className="phone-verify-container">
+                    <div className="phone-input-wrapper">
                       <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', opacity: 0.7, display: 'flex', alignItems: 'center' }}>
-                        <Mail size={18} />
+                        <Phone size={18} />
                       </span>
                       <input
-                        type="email" name="email" className="form-input"
+                        type="tel" name="phone" className="form-input"
                         style={{ paddingLeft: '2.5rem', height: '42px', borderRadius: 'var(--radius-sm)' }}
-                        placeholder={formSchema.fields.email.placeholder}
-                        value={formData.email} onChange={handleInputChange}
-                        required={formSchema.fields.email.required} disabled={isSubmitting}
+                        placeholder="10-digit mobile"
+                        maxLength="10" value={formData.phone} onChange={handleInputChange}
+                        required disabled={isSubmitting || isPhoneVerified}
                       />
                     </div>
-                    {errors.email && <div style={{ color: 'var(--err)', fontSize: '0.75rem', marginTop: '0.25rem' }}>{errors.email}</div>}
-                  </div>
-                )}
-
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
-                    Date of Birth
-                  </label>
-                  <div style={{ position: 'relative' }}>
-                    <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', opacity: 0.7, display: 'flex', alignItems: 'center' }}>
-                      <Calendar size={18} />
-                    </span>
-                    <input 
-                      type="date" name="dob" className="form-input"
-                      style={{ paddingLeft: '2.5rem', height: '42px', borderRadius: 'var(--radius-sm)' }}
-                      value={formData.dob} onChange={handleInputChange}
-                      required disabled={isSubmitting}
-                    />
-                  </div>
-                  {errors.dob && <div style={{ color: 'var(--err)', fontSize: '0.8rem', marginTop: '0.25rem' }}>{errors.dob}</div>}
-                </div>
-
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
-                    Mother's Name
-                  </label>
-                  <div style={{ position: 'relative' }}>
-                    <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', opacity: 0.7, display: 'flex', alignItems: 'center' }}>
-                      <User size={18} />
-                    </span>
-                    <input 
-                      type="text" name="mother_name" className="form-input"
-                      style={{ paddingLeft: '2.5rem', height: '42px', borderRadius: 'var(--radius-sm)' }}
-                      placeholder="Enter mother's full name"
-                      value={formData.mother_name} onChange={handleInputChange}
-                      required disabled={isSubmitting}
-                    />
-                  </div>
-                  {errors.mother_name && <div style={{ color: 'var(--err)', fontSize: '0.8rem', marginTop: '0.25rem' }}>{errors.mother_name}</div>}
-                </div>
-
-
-                <button 
-                  type="button" 
-                  onClick={handleContinueToStep2} 
-                  className="btn-primary" 
-                  style={{ 
-                    width: '100%', 
-                    marginTop: '1rem', 
-                    height: '42px'
-                  }}
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? 'Registering...' : 'Continue to Next Step'} <ArrowRight size={18} />
-                </button>
-              </div>
-            )}
-
-            {/* STEP 2: PROFESSIONAL & FINANCIAL DETAILS */}
-            {formStep === 2 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem', animation: 'fadeIn 0.3s ease' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                  {formSchema.fields.employment.visible && (
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
-                        {formSchema.fields.employment.label}
-                      </label>
-                      <div ref={empDropdownRef} style={{ position: 'relative' }}>
-                        <div
-                          onClick={() => !isSubmitting && setEmploymentDropdownOpen(prev => !prev)}
-                          className="form-input"
-                          style={{
-                            paddingLeft: '2.5rem', paddingRight: '2.5rem',
-                            height: '42px', borderRadius: 'var(--radius-sm)',
-                            display: 'flex', alignItems: 'center',
-                            cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                            color: formData.employment ? 'var(--ink)' : 'var(--muted)',
-                            userSelect: 'none',
-                            border: '1.5px solid',
-                            borderColor: employmentDropdownOpen ? 'var(--gold)' : 'var(--line)',
-                            boxShadow: employmentDropdownOpen ? '0 0 0 3px rgba(224, 168, 46, 0.2)' : undefined
-                          }}
-                        >
-                          <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', opacity: 0.7, display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
-                            <Briefcase size={18} />
-                          </span>
-                          {formData.employment || 'Select Employment'}
-                          <ChevronDown size={16} style={{
-                            position: 'absolute', right: '0.85rem', top: '50%',
-                            transform: employmentDropdownOpen ? 'translateY(-50%) rotate(180deg)' : 'translateY(-50%)',
-                            transition: 'transform 0.2s ease',
-                            color: 'var(--muted)'
-                          }} />
-                        </div>
-
-                        {employmentDropdownOpen && (
-                          <div style={{
-                            position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
-                            background: 'var(--white)',
-                            border: '1.5px solid var(--line)',
-                            borderRadius: 'var(--radius-sm)',
-                            boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-                            zIndex: 50,
-                            overflow: 'hidden',
-                            animation: 'fadeIn 0.15s ease'
-                          }}>
-                            {(formSchema.fields.employment.options || []).map(opt => (
-                              <div
-                                key={opt.value}
-                                onClick={() => {
-                                  if (!opt.enabled) return;
-                                  setFormData(prev => ({ ...prev, employment: opt.value }));
-                                  setEmploymentDropdownOpen(false);
-                                }}
-                                style={{
-                                  padding: '0.65rem 1rem',
-                                  fontSize: '0.9rem',
-                                  cursor: opt.enabled ? 'pointer' : 'not-allowed',
-                                  opacity: opt.enabled ? 1 : 0.4,
-                                  background: formData.employment === opt.value ? 'rgba(224, 168, 46, 0.15)' : 'transparent',
-                                  color: formData.employment === opt.value ? 'var(--gold-deep)' : 'var(--ink)',
-                                  fontWeight: formData.employment === opt.value ? 700 : 400,
-                                  transition: 'background 0.15s ease, color 0.15s ease',
-                                  borderBottom: '1px solid var(--line)'
-                                }}
-                                onMouseEnter={e => { 
-                                  if (opt.enabled && formData.employment !== opt.value) { 
-                                    e.currentTarget.style.background = 'var(--paper-2)'; 
-                                  } 
-                                }}
-                                onMouseLeave={e => { 
-                                  if (formData.employment !== opt.value) { 
-                                    e.currentTarget.style.background = 'transparent'; 
-                                  } 
-                                }}
-                              >
-                                {opt.label || opt.value}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        <input type="hidden" name="employment" value={formData.employment} required={formSchema.fields.employment.required} />
-                      </div>
-                      {errors.employment && <div style={{ color: 'var(--err)', fontSize: '0.75rem', marginTop: '0.25rem' }}>{errors.employment}</div>}
-                    </div>
-                  )}
-
-                  {formSchema.fields.monthly_income && formSchema.fields.monthly_income.visible && (
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
-                        {formSchema.fields.monthly_income.label}
-                      </label>
-                      <div style={{ position: 'relative' }}>
-                        <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', fontWeight: 700, fontSize: '1rem', opacity: 0.8, display: 'flex', alignItems: 'center' }}>₹</span>
-                        <input
-                          type="text" name="monthly_income" className="form-input"
-                          style={{
-                            paddingLeft: '2.25rem',
-                            height: '42px',
-                            borderRadius: 'var(--radius-sm)',
-                            opacity: 1
-                          }}
-                          placeholder={formSchema.fields.monthly_income.placeholder || 'Net Monthly Income'}
-                          value={formData.monthly_income} onChange={handleInputChange}
-                          required={formSchema.fields.monthly_income.required}
-                          disabled={isSubmitting}
-                        />
-                      </div>
-                      {errors.monthly_income && <div style={{ color: 'var(--err)', fontSize: '0.75rem', marginTop: '0.25rem' }}>{errors.monthly_income}</div>}
-                    </div>
-                  )}
-                </div>
-
-                <div ref={designationDropdownRef} className="form-group" style={{ marginBottom: '0.75rem', position: 'relative' }}>
-                  <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
-                    Designation
-                  </label>
-                  <div style={{ position: 'relative' }}>
-                    <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', opacity: 0.7, display: 'flex', alignItems: 'center' }}>
-                      <Briefcase size={18} />
-                    </span>
-                    <input 
-                      type="text" name="designation" className="form-input"
-                      style={{ paddingLeft: '2.5rem', height: '42px', borderRadius: 'var(--radius-sm)' }}
-                      placeholder="Type or select designation"
-                      value={formData.designation} 
-                      onChange={handleInputChange}
-                      onFocus={() => !isSubmitting && setDesignationDropdownOpen(true)}
-                      required disabled={isSubmitting}
-                      autoComplete="off"
-                    />
-                    <ChevronDown size={16} style={{
-                      position: 'absolute', right: '0.85rem', top: '50%',
-                      transform: designationDropdownOpen ? 'translateY(-50%) rotate(180deg)' : 'translateY(-50%)',
-                      transition: 'transform 0.2s ease',
-                      color: 'var(--muted)',
-                      pointerEvents: 'none'
-                    }} />
-                  </div>
-                  
-                  {designationDropdownOpen && (
-                    <div style={{
-                      position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
-                      background: 'var(--white)',
-                      border: '1.5px solid var(--line)',
-                      borderRadius: 'var(--radius-sm)',
-                      boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-                      zIndex: 50,
-                      maxHeight: '200px',
-                      overflowY: 'auto',
-                      animation: 'fadeIn 0.15s ease'
-                    }}>
-                      {COMMON_DESIGNATIONS.filter(des => 
-                        des.toLowerCase().includes((formData.designation || '').toLowerCase())
-                      ).length > 0 ? (
-                        COMMON_DESIGNATIONS.filter(des => 
-                          des.toLowerCase().includes((formData.designation || '').toLowerCase())
-                        ).map((opt, idx) => (
-                          <div
-                            key={idx}
-                            onClick={() => {
-                              setFormData(prev => ({ ...prev, designation: opt }));
-                              setDesignationDropdownOpen(false);
-                            }}
-                            style={{
-                              padding: '0.65rem 1rem',
-                              fontSize: '0.9rem',
-                              cursor: 'pointer',
-                              background: formData.designation === opt ? 'rgba(224, 168, 46, 0.15)' : 'transparent',
-                              color: formData.designation === opt ? 'var(--gold-deep)' : 'var(--ink)',
-                              fontWeight: formData.designation === opt ? 700 : 400,
-                              transition: 'background 0.15s ease, color 0.15s ease',
-                              borderBottom: '1px solid var(--line)'
-                            }}
-                            onMouseEnter={e => { 
-                              if (formData.designation !== opt) { 
-                                e.currentTarget.style.background = 'var(--paper-2)'; 
-                              } 
-                            }}
-                            onMouseLeave={e => { 
-                              if (formData.designation !== opt) { 
-                                e.currentTarget.style.background = 'transparent'; 
-                              } 
-                            }}
-                          >
-                            {opt}
-                          </div>
-                        ))
-                      ) : (
-                        <div style={{ padding: '0.65rem 1rem', fontSize: '0.9rem', color: 'var(--muted)' }}>
-                          Press enter or continue typing for custom option
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  {errors.designation && <div style={{ color: 'var(--err)', fontSize: '0.8rem', marginTop: '0.25rem' }}>{errors.designation}</div>}
-                </div>
-
-                {formSchema.fields.pan_no && formSchema.fields.pan_no.visible && (
-                  <div className="form-group" style={{ marginBottom: '0.75rem' }}>
-                    <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
-                      {formSchema.fields.pan_no.label}
-                    </label>
-                    <input
-                      type="text" name="pan_no" className="form-input"
-                      style={{ height: '42px', borderRadius: 'var(--radius-sm)', textTransform: 'uppercase' }}
-                      placeholder={formSchema.fields.pan_no.placeholder || 'e.g. ABCDE1234F'}
-                      value={formData.pan_no} onChange={handleInputChange}
-                      required={formSchema.fields.pan_no.required}
-                      disabled={isSubmitting}
-                    />
-                    {errors.pan_no && <div style={{ color: 'var(--err)', fontSize: '0.75rem', marginTop: '0.25rem' }}>{errors.pan_no}</div>}
-                  </div>
-                )}
-                {formSchema.fields.has_credit_card.visible && (
-                  <div className="form-group" style={{ marginBottom: '0.75rem' }}>
-                    <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
-                      {formSchema.fields.has_credit_card.label}
-                    </label>
-                    <div 
-                      onClick={() => {
-                        if (isSubmitting) return;
-                        setFormData(prev => ({ 
-                          ...prev, 
-                          has_credit_card: prev.has_credit_card === 'Yes' ? 'No' : 'Yes' 
-                        }));
-                      }}
-                      style={{
-                        position: 'relative',
-                        display: 'flex',
-                        alignItems: 'center',
-                        width: '130px',
-                        height: '42px',
-                        background: 'var(--paper-2)',
-                        border: errors.has_credit_card ? '1.5px solid var(--err)' : '1px solid var(--line)',
-                        borderRadius: 'var(--radius-sm)',
-                        padding: '4px',
-                        cursor: 'pointer',
-                        opacity: 1,
-                        userSelect: 'none',
-                        marginTop: '0.3rem',
-                        transition: 'all 0.3s ease'
-                      }}
-                    >
-                      {formData.has_credit_card && (
-                        <div style={{
-                          position: 'absolute',
-                          left: formData.has_credit_card === 'Yes' ? 'calc(100% - 63px)' : '4px',
-                          width: '59px',
-                          height: '32px',
-                          background: 'var(--gold)',
-                          borderRadius: '8px',
-                          boxShadow: '0 2px 8px rgba(224, 168, 46, 0.35)',
-                          transition: 'left 0.25s cubic-bezier(0.16, 1, 0.3, 1)'
-                        }}></div>
-                      )}
-                      <div style={{
-                        position: 'relative',
-                        zIndex: 2,
-                        display: 'flex',
-                        width: '100%',
-                        height: '100%',
-                        alignItems: 'center',
-                        justifyContent: 'space-around',
-                        fontSize: '0.85rem',
-                        fontWeight: 700
-                      }}>
-                        <span style={{ 
-                          color: formData.has_credit_card === 'No' ? 'var(--white)' : 'var(--muted)',
-                          transition: 'color 0.25s ease',
-                          width: '59px',
-                          textAlign: 'center'
-                        }}>No</span>
-                        <span style={{ 
-                          color: formData.has_credit_card === 'Yes' ? 'var(--white)' : 'var(--muted)',
-                          transition: 'color 0.25s ease',
-                          width: '59px',
-                          textAlign: 'center'
-                        }}>Yes</span>
-                      </div>
-                    </div>
-                    {errors.has_credit_card && <div style={{ color: 'var(--err)', fontSize: '0.7rem', marginTop: '0.25rem' }}>{errors.has_credit_card}</div>}
-                    <input type="hidden" name="has_credit_card" value={formData.has_credit_card}
-                      required={formSchema.fields.has_credit_card.required} />
-                  </div>
-                )}
-
-                {/* Structured Address Fields */}
-                <div style={{ borderTop: '1px dashed var(--line)', paddingTop: '1rem', marginTop: '0.5rem' }}>
-                  <h4 style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--gold-deep)', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Current Residence Address</h4>
-                  
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.5rem' }}>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>Flat / House No. / Building</label>
-                      <input 
-                        type="text" name="address_house" className="form-input"
-                        style={{ height: '42px', borderRadius: 'var(--radius-sm)' }}
-                        placeholder="Flat/House No., Bldg"
-                        value={formData.address_house} onChange={handleInputChange}
-                        required disabled={isSubmitting}
-                      />
-                      {errors.address_house && <div style={{ color: 'var(--err)', fontSize: '0.75rem', marginTop: '0.25rem' }}>{errors.address_house}</div>}
-                    </div>
-                    
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>Road / Street / Landmark</label>
-                      <input 
-                        type="text" name="address_street" className="form-input"
-                        style={{ height: '42px', borderRadius: 'var(--radius-sm)' }}
-                        placeholder="Road, Street, Area"
-                        value={formData.address_street} onChange={handleInputChange}
-                        required disabled={isSubmitting}
-                      />
-                      {errors.address_street && <div style={{ color: 'var(--err)', fontSize: '0.75rem', marginTop: '0.25rem' }}>{errors.address_street}</div>}
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.5rem' }}>
-                    {formSchema.fields.pincode.visible && (
-                      <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>Pincode</label>
-                        <div style={{ position: 'relative' }}>
-                          <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', opacity: 0.7, display: 'flex', alignItems: 'center' }}>
-                            <MapPin size={18} />
-                          </span>
-                          <input
-                            type="text" name="pincode" className="form-input"
-                            style={{ paddingLeft: '2.5rem', height: '42px', borderRadius: 'var(--radius-sm)' }}
-                            placeholder="6-digit Pincode"
-                            maxLength="6" value={formData.pincode} onChange={handleInputChange}
-                            required={formSchema.fields.pincode.required}
-                            disabled={isSubmitting}
-                          />
-                        </div>
-                        {pincodeLoading && <div style={{ fontSize: '0.7rem', color: 'red', marginTop: '0.25rem' }}>Verifying...</div>}
-                        {pincodeLocationText && (
-                          <div style={{ fontSize: '0.7rem', color: 'var(--mint)', marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                            <span style={{ display: 'inline-block', width: '5px', height: '5px', borderRadius: '50%', background: 'var(--mint)' }}></span>
-                            {pincodeLocationText}
-                          </div>
-                        )}
-                        {(errors.pincode || pincodeError) && <div style={{ fontSize: '0.7rem', color: 'var(--err)', marginTop: '0.25rem' }}>{errors.pincode || pincodeError}</div>}
-                      </div>
-                    )}
-
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>Locality / Area</label>
-                      {pincodeLocalities.length > 0 ? (
-                        <select 
-                          name="address_locality" className="form-input"
-                          style={{ height: '42px', borderRadius: 'var(--radius-sm)', padding: '0 0.75rem', background: 'var(--paper)', color: 'var(--ink)', border: '1.5px solid var(--line)' }}
-                          value={formData.address_locality} onChange={handleInputChange}
-                          required disabled={isSubmitting}
-                        >
-                          {pincodeLocalities.map((loc, idx) => (
-                            <option key={idx} value={loc}>{loc}</option>
-                          ))}
-                        </select>
-                      ) : (
-                        <input 
-                          type="text" name="address_locality" className="form-input"
-                          style={{ height: '42px', borderRadius: 'var(--radius-sm)' }}
-                          placeholder="Locality name"
-                          value={formData.address_locality} onChange={handleInputChange}
-                          required disabled={isSubmitting}
-                        />
-                      )}
-                      {errors.address_locality && <div style={{ color: 'var(--err)', fontSize: '0.75rem', marginTop: '0.25rem' }}>{errors.address_locality}</div>}
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.25rem' }}>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>City</label>
-                      <input 
-                        type="text" name="address_city" className="form-input"
-                        style={{ height: '42px', borderRadius: 'var(--radius-sm)' }}
-                        placeholder="City"
-                        value={formData.address_city} onChange={handleInputChange}
-                        required disabled={isSubmitting}
-                      />
-                      {errors.address_city && <div style={{ color: 'var(--err)', fontSize: '0.75rem', marginTop: '0.25rem' }}>{errors.address_city}</div>}
-                    </div>
-
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>State</label>
-                      <select 
-                        name="address_state" className="form-input"
-                        style={{ height: '42px', borderRadius: 'var(--radius-sm)', padding: '0 0.75rem', background: 'var(--paper)', color: 'var(--ink)', border: '1.5px solid var(--line)' }}
-                        value={formData.address_state} onChange={handleInputChange}
-                        required disabled={isSubmitting}
+                    {formData.phone.length === 10 && !errors.phone && (
+                      <button
+                        type="button"
+                        onClick={sendStep1Otp}
+                        className="phone-verify-button btn-primary"
+                        style={{ 
+                          background: isPhoneVerified ? 'var(--mint)' : '#ef4444',
+                          borderColor: isPhoneVerified ? 'var(--mint)' : '#ef4444',
+                          color: 'var(--white)',
+                          fontWeight: 700,
+                          borderRadius: 'var(--radius-sm)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.25rem',
+                          cursor: isPhoneVerified ? 'default' : 'pointer'
+                        }}
+                        disabled={isSubmitting || isPhoneVerified}
                       >
-                        <option value="">Select State</option>
-                        {[
-                          "Andaman and Nicobar Islands", "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar",
-                          "Chandigarh", "Chhattisgarh", "Dadra and Nagar Haveli and Daman and Diu", "Delhi", "Goa",
-                          "Gujarat", "Haryana", "Himachal Pradesh", "Jammu and Kashmir", "Jharkhand", "Karnataka",
-                          "Kerala", "Ladakh", "Lakshadweep", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya",
-                          "Mizoram", "Nagaland", "Odisha", "Puducherry", "Punjab", "Rajasthan", "Sikkim",
-                          "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal"
-                        ].map((st, idx) => (
-                          <option key={idx} value={st}>{st}</option>
-                        ))}
-                      </select>
-                      {errors.address_state && <div style={{ color: 'var(--err)', fontSize: '0.75rem', marginTop: '0.25rem' }}>{errors.address_state}</div>}
-                    </div>
+                        {isPhoneVerified ? '✓ Verified' : 'Verify'}
+                      </button>
+                    )}
                   </div>
+                  {errors.phone && <div style={{ color: 'var(--err)', fontSize: '0.75rem', marginTop: '0.25rem' }}>{errors.phone}</div>}
                 </div>
-
-                <div className="consent" style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', margin: '4px 0 10px' }}>
-                  <input type="checkbox" id="consent" required disabled={isSubmitting} style={{ marginTop: '3px', flex: '0 0 auto', width: '18px', height: '18px', accentColor: 'var(--gold)' }} />
-                  <label htmlFor="consent" style={{ fontSize: '0.78rem', color: 'var(--muted)', lineHeight: 1.5, cursor: 'pointer' }}>
-                    {settings.consent_text || 'I authorise FinMantra and its partner banks to contact me via call, SMS, WhatsApp and email about credit card offers, even if I\'m registered under DND/NDNC.'}{' '}
-                    I've read the <a href={settings.terms_link || '#'} target="_blank" rel="noreferrer" style={{ color: 'var(--gold-deep)', textDecoration: 'underline' }}>Terms</a> & <a href={settings.privacy_link || '#'} target="_blank" rel="noreferrer" style={{ color: 'var(--gold-deep)', textDecoration: 'underline' }}>Privacy Policy</a>.
-                  </label>
-                </div>
-
-                {/* formError is now rendered at the top of the wizard */}
-
-                <button type="submit" className="btn-primary" style={{ width: '100%', height: '42px' }} disabled={isSubmitting}>
-                  {isSubmitting ? (
-                    <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
-                      Processing... <RefreshCw size={18} className="animate-spin" />
-                    </span>
-                  ) : (
-                    <>
-                      Apply Now <ArrowRight size={18} />
-                    </>
-                  )}
-                </button>
               </div>
-            )}
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
+                    Email Address <span style={{ color: 'var(--err)' }}>*</span>
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', opacity: 0.7, display: 'flex', alignItems: 'center' }}>
+                      <Mail size={18} />
+                    </span>
+                    <input
+                      type="email" name="email" className="form-input"
+                      style={{ paddingLeft: '2.5rem', height: '42px', borderRadius: 'var(--radius-sm)' }}
+                      placeholder="you@example.com"
+                      value={formData.email} onChange={handleInputChange}
+                      required disabled={isSubmitting}
+                    />
+                  </div>
+                  {errors.email && <div style={{ color: 'var(--err)', fontSize: '0.75rem', marginTop: '0.25rem' }}>{errors.email}</div>}
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--ink)' }}>
+                    Pincode <span style={{ color: 'var(--err)' }}>*</span>
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', opacity: 0.7, display: 'flex', alignItems: 'center' }}>
+                      <MapPin size={18} />
+                    </span>
+                    <input
+                      type="text" name="pincode" className="form-input"
+                      style={{ paddingLeft: '2.5rem', height: '42px', borderRadius: 'var(--radius-sm)' }}
+                      placeholder="6-digit Pincode"
+                      maxLength="6" value={formData.pincode} onChange={handleInputChange}
+                      required disabled={isSubmitting}
+                    />
+                  </div>
+                  {pincodeLoading && <div style={{ fontSize: '0.7rem', color: 'red', marginTop: '0.25rem' }}>Verifying...</div>}
+                  {pincodeLocationText && (
+                    <div style={{ fontSize: '0.7rem', color: 'var(--mint)', marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                      <span style={{ display: 'inline-block', width: '5px', height: '5px', borderRadius: '50%', background: 'var(--mint)' }}></span>
+                      {pincodeLocationText}
+                    </div>
+                  )}
+                  {(errors.pincode || pincodeError) && <div style={{ fontSize: '0.7rem', color: 'var(--err)', marginTop: '0.25rem' }}>{errors.pincode || pincodeError}</div>}
+                </div>
+              </div>
+
+              <div className="consent" style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', margin: '4px 0 10px' }}>
+                <input type="checkbox" id="consent" defaultChecked={true} required disabled={isSubmitting} style={{ marginTop: '3px', flex: '0 0 auto', width: '18px', height: '18px', accentColor: 'var(--gold)' }} />
+                <label htmlFor="consent" style={{ fontSize: '0.78rem', color: 'var(--muted)', lineHeight: 1.5, cursor: 'pointer' }}>
+                  {settings.consent_text || 'I authorise FinMantra and its partner banks to contact me via call, SMS, WhatsApp and email about credit card offers, even if I\'m registered under DND/NDNC.'}{' '}
+                  I've read the <a href={settings.terms_link || '#'} target="_blank" rel="noreferrer" style={{ color: 'var(--gold-deep)', textDecoration: 'underline' }}>Terms</a> & <a href={settings.privacy_link || '#'} target="_blank" rel="noreferrer" style={{ color: 'var(--gold-deep)', textDecoration: 'underline' }}>Privacy Policy</a>.
+                </label>
+              </div>
+
+              <button type="submit" className="btn-primary" style={{ width: '100%', height: '42px' }} disabled={isSubmitting}>
+                {isSubmitting ? 'Submitting Application...' : 'Apply Now'} <ArrowRight size={18} />
+              </button>
+            </div>
             
             <div className="securenote" style={{ textAlign: 'center', fontSize: '0.78rem', color: 'var(--muted)', marginTop: '16px', display: 'flex', gap: '6px', justifyContent: 'center', alignItems: 'center' }}>
               <span>✓ No hidden charges</span>

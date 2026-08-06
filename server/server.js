@@ -1095,6 +1095,18 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
           console.log(`[Card Matching] Matched card ${matchedCard.name} (${matchedCard.id}) for ${source} source via utm_internal: ${altStr}`);
         }
       }
+      // For kiwi, fallback to active Kiwi / Yes Bank card if utm_internal is missing or unmatched
+      if (!matchedCard && source === 'kiwi') {
+        matchedCard = activeCards.find(c => {
+          const n = String(c.name || '').toLowerCase();
+          const i = String(c.id || '').toLowerCase();
+          const b = String(c.bank || '').toLowerCase();
+          return n.includes('kiwi') || i.includes('kiwi') || b.includes('kiwi') || n.includes('yes');
+        });
+        if (matchedCard) {
+          console.log(`[Card Matching] Fallback matched card ${matchedCard.name} (${matchedCard.id}) for kiwi source`);
+        }
+      }
       // For simplyclick_sbi, fallback to active SimplyClick / SBI card if utm_internal is missing or unmatched
       if (!matchedCard && source === 'simplyclick_sbi') {
         matchedCard = activeCards.find(c => {

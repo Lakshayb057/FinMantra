@@ -40,8 +40,6 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
     email: '',
     pincode: '',
     pan_no: '',
-    employment: '',
-    monthly_income: '',
     address_locality: '',
     address_city: '',
     address_state: ''
@@ -273,18 +271,6 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
       }
     }
 
-    if (name === 'employment') {
-      if (!value) {
-        errorText = 'Please select one.';
-      }
-    }
-
-    if (name === 'monthly_income') {
-      if (!value) {
-        errorText = 'Please select your income range.';
-      }
-    }
-
     setErrors(prev => {
       const updated = { ...prev };
       if (errorText) {
@@ -425,7 +411,7 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
     setFormError('');
     setPincodeError('');
 
-    // Strict validation on all 7 fields
+    // Strict validation on 5 fields
     const newErrors = {};
     if (!formData.fullName || formData.fullName.trim().length < 3) {
       newErrors.fullName = 'Please enter your name.';
@@ -459,14 +445,6 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
       newErrors.pan_no = 'Enter a valid PAN (e.g. ABCDE1234F).';
     }
 
-    if (!formData.employment) {
-      newErrors.employment = 'Please select one.';
-    }
-
-    if (!formData.monthly_income) {
-      newErrors.monthly_income = 'Please select your income range.';
-    }
-
     setErrors(newErrors);
     if (Object.keys(newErrors).length > 0) {
       setFormError('Please correct the highlighted errors before submitting.');
@@ -481,8 +459,6 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
 
     setIsSubmitting(true);
     try {
-      const compiledAddress = `${formData.address_locality || 'N/A'}, ${formData.address_city || 'N/A'}, ${formData.address_state || 'N/A'} - ${formData.pincode}`;
-
       const savedUtmStr = sessionStorage.getItem('finmantra_utm');
       const savedUtm = savedUtmStr ? JSON.parse(savedUtmStr) : {};
       const mergedUtm = { ...savedUtm, ...(utmParams || {}) };
@@ -491,14 +467,11 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          full_name: formData.fullName,
+          full_name: formData.fullName.trim(),
           phone: formData.phone,
-          email: formData.email,
-          employment: formData.employment,
-          monthly_income: formData.monthly_income,
+          email: formData.email.trim(),
           pan_no: formData.pan_no ? String(formData.pan_no).trim().toUpperCase() : null,
           pincode: formData.pincode,
-          current_address: compiledAddress,
           consent: true,
           source: 'kiwi',
           ...mergedUtm,
@@ -1246,41 +1219,6 @@ export default function KiwiLanding({ navigateTo, utmParams }) {
                         disabled={isSubmitting} 
                       />
                       {errors.pan_no && <div className="kiwi-err">{errors.pan_no}</div>}
-                    </div>
-                  </div>
-
-                  <div className="kiwi-two">
-                    <div className={`kiwi-field ${errors.employment ? 'invalid' : ''}`}>
-                      <label htmlFor="employment">Employment *</label>
-                      <select 
-                        id="employment" 
-                        name="employment" 
-                        value={formData.employment} 
-                        onChange={handleInputChange} 
-                        disabled={isSubmitting}
-                      >
-                        <option value="">Select</option>
-                        <option value="Salaried">Salaried</option>
-                        <option value="Self Employed (Business)">Self-employed</option>
-                      </select>
-                      {errors.employment && <div className="kiwi-err">{errors.employment}</div>}
-                    </div>
-                    <div className={`kiwi-field ${errors.monthly_income ? 'invalid' : ''}`}>
-                      <label htmlFor="income">Monthly income *</label>
-                      <select 
-                        id="income" 
-                        name="monthly_income" 
-                        value={formData.monthly_income} 
-                        onChange={handleInputChange} 
-                        disabled={isSubmitting}
-                      >
-                        <option value="">Select</option>
-                        <option value="Below ₹25,000">Below ₹25,000</option>
-                        <option value="₹25,000 – ₹50,000">₹25,000 – ₹50,000</option>
-                        <option value="₹50,000 – ₹1,00,000">₹50,000 – ₹1,00,000</option>
-                        <option value="Above ₹1,0,000">Above ₹1,00,000</option>
-                      </select>
-                      {errors.monthly_income && <div className="kiwi-err">{errors.monthly_income}</div>}
                     </div>
                   </div>
 
