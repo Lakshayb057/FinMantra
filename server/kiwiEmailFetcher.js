@@ -322,7 +322,11 @@ async function checkAndFetchEmails(broadcastFn = null) {
   });
 
   client.on('error', err => {
-    console.error('[KIWI Email Fetcher] ImapFlow Client Error:', err.message);
+    const msg = err.message || '';
+    if (msg.includes('Unexpected close') || msg.includes('Connection not available') || msg.includes('Socket timeout')) {
+      return; // Ignore routine idle connection closures from Gmail IMAP
+    }
+    console.error('[KIWI Email Fetcher] ImapFlow Client Error:', msg);
   });
 
   let totalMappedInSync = 0;
@@ -404,8 +408,11 @@ async function checkAndFetchEmails(broadcastFn = null) {
       mappedLeads: totalMappedInSync
     };
   } catch (err) {
-    console.error('[KIWI Email Fetcher] IMAP Error:', err.message);
-    return { success: false, error: err.message };
+    const msg = err.message || '';
+    if (!msg.includes('Unexpected close') && !msg.includes('Connection not available') && !msg.includes('Socket timeout')) {
+      console.error('[KIWI Email Fetcher] IMAP Error:', msg);
+    }
+    return { success: false, error: msg };
   }
 }
 

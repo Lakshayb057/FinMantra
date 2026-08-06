@@ -410,7 +410,11 @@ async function checkAndFetchEmails(broadcastFn = null) {
   });
 
   client.on('error', err => {
-    console.error('[SBI Email Fetcher] ImapFlow Client Error:', err.message);
+    const msg = err.message || '';
+    if (msg.includes('Unexpected close') || msg.includes('Connection not available') || msg.includes('Socket timeout')) {
+      return; // Ignore routine idle connection closures from Gmail IMAP
+    }
+    console.error('[SBI Email Fetcher] ImapFlow Client Error:', msg);
   });
 
   let totalMappedInSync = 0;
@@ -533,9 +537,11 @@ async function checkAndFetchEmails(broadcastFn = null) {
     };
 
   } catch (err) {
-    console.error('[SBI Email Fetcher] IMAP Error:', err.message);
-    // Silent error logging to console — do not flood Notification Center on routine IMAP timeouts/failures
-    return { success: false, error: err.message };
+    const msg = err.message || '';
+    if (!msg.includes('Unexpected close') && !msg.includes('Connection not available') && !msg.includes('Socket timeout')) {
+      console.error('[SBI Email Fetcher] IMAP Error:', msg);
+    }
+    return { success: false, error: msg };
   }
 }
 
