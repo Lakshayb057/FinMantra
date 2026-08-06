@@ -3565,28 +3565,6 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                 <button onClick={() => setShowUploadMISModal(true)} className="btn-secondary" style={{ padding: '0.4rem 0.85rem', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', height: '34px', borderRadius: '2px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
                   <Upload size={14} /> Upload MIS
                 </button>
-                <button 
-                  onClick={async () => {
-                    try {
-                      showToast('Aligning leads by redirect card banks...', 'info');
-                      const res = await fetch(`${API_URL}/leads/align-banks`, { method: 'POST', headers: getHeaders() });
-                      const data = await res.json();
-                      if (data.success) {
-                        showToast(`🎉 ${data.message}`, 'success');
-                        fetchLeads();
-                      } else {
-                        showToast(data.error || 'Alignment failed.', 'error');
-                      }
-                    } catch(e) {
-                      showToast('Failed to connect to alignment server.', 'error');
-                    }
-                  }} 
-                  className="btn-secondary" 
-                  style={{ padding: '0.4rem 0.85rem', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', height: '34px', borderRadius: '4px', cursor: 'pointer', whiteSpace: 'nowrap', color: 'var(--gold-deep)', borderColor: 'var(--gold-deep)' }}
-                  title="Automatically align all lead banks to match their redirect card URLs"
-                >
-                  ⚡ Align Banks
-                </button>
               </>
             )}
 
