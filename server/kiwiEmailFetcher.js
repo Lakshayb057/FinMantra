@@ -347,8 +347,8 @@ async function checkAndFetchEmails(broadcastFn = null) {
 
       const subjectKeywords = (config.subject_keywords || ['kiwi mis']);
 
-      // Search INBOX for emails from sequence 1 to latest using valid ImapFlow sequence range '1:*'
-      const messages = client.fetch('1:*', { uid: true, envelope: true, source: true });
+      // Phase 1: Fetch lightweight headers only (fast and reliable)
+      const messages = client.fetch('1:*', { uid: true, envelope: true });
       
       for await (const message of messages) {
         const uidStr = String(message.uid);
@@ -366,9 +366,13 @@ async function checkAndFetchEmails(broadcastFn = null) {
           continue;
         }
 
-        console.log(`[KIWI Email Fetcher] Processing email: "${subject}" (UID: ${uidStr})`);
+        console.log(`[KIWI Email Fetcher] Matched target email: "${subject}" (UID: ${uidStr}). Fetching attachment...`);
 
-        const parsed = await simpleParser(message.source);
+        // Phase 2: Fetch full message source specifically for this single matched UID
+        const fullMsg = await client.fetchOne(uidStr, { source: true }, { uid: true });
+        if (!fullMsg || !fullMsg.source) continue;
+
+        const parsed = await simpleParser(fullMsg.source);
         if (parsed.attachments && parsed.attachments.length > 0) {
           console.log(`[KIWI Email Fetcher] Email UID ${uidStr} has ${parsed.attachments.length} attachment(s).`);
           for (const attachment of parsed.attachments) {

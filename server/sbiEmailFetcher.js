@@ -438,8 +438,8 @@ async function checkAndFetchEmails(broadcastFn = null) {
         ? config.subject_keywords
         : ['LG MIS EOD', 'LG MIS 48Hourly', 'LG MIS Hourly'];
 
-      // Search INBOX for emails from sequence 1 to latest using valid ImapFlow sequence range '1:*'
-      const messages = client.fetch('1:*', { uid: true, envelope: true, source: true });
+      // Phase 1: Fetch lightweight headers only (fast and reliable)
+      const messages = client.fetch('1:*', { uid: true, envelope: true });
       
       for await (const message of messages) {
         const uidStr = String(message.uid);
@@ -458,9 +458,13 @@ async function checkAndFetchEmails(broadcastFn = null) {
 
         if (!isSubjectMatch) continue;
 
-        console.log(`[SBI Email Fetcher] Processing matching email: "${subject}" (UID: ${uidStr})`);
+        console.log(`[SBI Email Fetcher] Matched target email: "${subject}" (UID: ${uidStr}). Fetching attachment...`);
 
-        const parsed = await simpleParser(message.source);
+        // Phase 2: Fetch full message source specifically for this single matched UID
+        const fullMsg = await client.fetchOne(uidStr, { source: true }, { uid: true });
+        if (!fullMsg || !fullMsg.source) continue;
+
+        const parsed = await simpleParser(fullMsg.source);
         if (parsed.attachments && parsed.attachments.length > 0) {
           console.log(`[SBI Email Fetcher] Email UID ${uidStr} has ${parsed.attachments.length} attachment(s).`);
           for (const attachment of parsed.attachments) {
