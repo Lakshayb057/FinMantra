@@ -1577,42 +1577,56 @@ const db = {
     try {
       await client.query("BEGIN");
       for (const lead of leadsRes.rows) {
-        let targetBank = null;
-        let targetCardName = null;
+        const redirectUrl = String(lead.redirect_url || '').toLowerCase();
 
-        if (lead.card_id && cardsMap.has(lead.card_id)) {
+        // 1. Direct REDIRECT URL matching takes top priority over everything else!
+        if (redirectUrl.includes('gokiwi') || redirectUrl.includes('kiwi')) {
+          targetBank = 'KIWI';
+          targetCardName = 'Yes_Kiwi';
+        } else if (redirectUrl.includes('scapia')) {
+          targetBank = 'SCAPIA';
+          targetCardName = 'Scapia Digital';
+        } else if (redirectUrl.includes('applyonline.hdfcbank') || redirectUrl.includes('hdfcbank') || redirectUrl.includes('hdfc')) {
+          targetBank = 'HDFC';
+          targetCardName = redirectUrl.includes('pixel') ? 'Pixel' : (redirectUrl.includes('tdcc') ? 'TATA' : 'HDFC Card');
+        } else if (redirectUrl.includes('sbicard') || redirectUrl.includes('simplyclick') || redirectUrl.includes('sbi')) {
+          targetBank = 'SBI';
+          targetCardName = redirectUrl.includes('simplyclick') ? 'SBI SimplyClick' : 'SBI Online';
+        } else if (redirectUrl.includes('icici')) {
+          targetBank = 'ICICI';
+          targetCardName = 'ICICI Card';
+        } else if (redirectUrl.includes('axis')) {
+          targetBank = 'AXIS';
+          targetCardName = 'Axis Card';
+        }
+
+        // 2. Card Selection / Card ID from cards catalog
+        if (!targetBank && lead.card_id && cardsMap.has(lead.card_id)) {
           const cardObj = cardsMap.get(lead.card_id);
           targetBank = cardObj.bank;
           targetCardName = cardObj.name;
         }
 
-        const inspectStr = [
-          lead.redirect_url,
-          lead.card_id,
-          lead.card_name,
-          lead.landing_page,
-          lead.utm_source,
-          lead.utm_campaign
-        ].filter(Boolean).join(' ').toLowerCase();
-
+        // 3. Fallback to inspect parameters
         if (!targetBank) {
-          if (inspectStr.includes('hdfc') || inspectStr.includes('pixel') || inspectStr.includes('applyonline.hdfcbank')) targetBank = 'HDFC';
-          else if (inspectStr.includes('sbi') || inspectStr.includes('simplyclick') || inspectStr.includes('sbicard')) targetBank = 'SBI';
-          else if (inspectStr.includes('kiwi') || inspectStr.includes('gokiwi')) targetBank = 'KIWI';
+          const inspectStr = [
+            lead.card_id,
+            lead.card_name,
+            lead.landing_page,
+            lead.utm_source,
+            lead.utm_campaign
+          ].filter(Boolean).join(' ').toLowerCase();
+
+          if (inspectStr.includes('gokiwi') || inspectStr.includes('kiwi')) targetBank = 'KIWI';
           else if (inspectStr.includes('scapia')) targetBank = 'SCAPIA';
+          else if (inspectStr.includes('hdfc') || inspectStr.includes('pixel') || inspectStr.includes('applyonline.hdfcbank')) targetBank = 'HDFC';
+          else if (inspectStr.includes('sbi') || inspectStr.includes('simplyclick') || inspectStr.includes('sbicard')) targetBank = 'SBI';
           else if (inspectStr.includes('icici')) targetBank = 'ICICI';
           else if (inspectStr.includes('axis')) targetBank = 'AXIS';
-          else if (inspectStr.includes('pnb')) targetBank = 'PNB';
-          else if (inspectStr.includes('yes')) targetBank = 'YES';
-          else if (inspectStr.includes('au')) targetBank = 'AU';
-          else if (inspectStr.includes('kotak')) targetBank = 'KOTAK';
-          else if (inspectStr.includes('idfc')) targetBank = 'IDFC';
-          else if (inspectStr.includes('indusind')) targetBank = 'INDUSIND';
-          else if (inspectStr.includes('rbl')) targetBank = 'RBL';
-          else if (inspectStr.includes('bob') || inspectStr.includes('baroda')) targetBank = 'BOB';
         }
 
         if (!targetCardName || targetCardName === 'Public Redirection') {
+          const inspectStr = [lead.redirect_url, lead.card_name, lead.landing_page, lead.utm_source, lead.utm_campaign].filter(Boolean).join(' ').toLowerCase();
           if (inspectStr.includes('scapia')) targetCardName = 'Scapia Digital';
           else if (inspectStr.includes('gokiwi') || inspectStr.includes('kiwi')) targetCardName = 'Yes_Kiwi';
           else if (inspectStr.includes('simplyclick')) targetCardName = 'SBI SimplyClick';

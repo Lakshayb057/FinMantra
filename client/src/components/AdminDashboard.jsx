@@ -2036,31 +2036,20 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
     if (!lead) return 'OTHER';
     const md = lead.mis_data || {};
     const bankName = String(md.mis_bank_name || '').toUpperCase().trim();
+    const redirectUrl = String(lead.redirect_url || '').toLowerCase();
+    const cardId = String(lead.card_id || '').toLowerCase();
+    const cardName = String(lead.card_name || '').toLowerCase();
+    const cardBank = String(lead.card_bank || '').toLowerCase();
 
-    // 1. Inspect redirect_url, card_id, card_name, card_bank, landing_page, source, utm_source, utm_campaign
-    const textToInspect = [
-      lead.redirect_url,
-      lead.card_id,
-      lead.card_name,
-      lead.card_bank,
-      lead.landing_page,
-      lead.source,
-      lead.utm_source,
-      lead.utm_campaign
-    ].filter(Boolean).join(' ').toLowerCase();
+    // 1. Direct REDIRECT URL matching takes top priority over everything else!
+    if (redirectUrl.includes('gokiwi') || redirectUrl.includes('kiwi')) return 'KIWI';
+    if (redirectUrl.includes('scapia')) return 'SCAPIA';
+    if (redirectUrl.includes('applyonline.hdfcbank') || redirectUrl.includes('hdfcbank') || redirectUrl.includes('hdfc')) return 'HDFC';
+    if (redirectUrl.includes('sbicard') || redirectUrl.includes('simplyclick') || redirectUrl.includes('sbi')) return 'SBI';
+    if (redirectUrl.includes('icici')) return 'ICICI';
+    if (redirectUrl.includes('axis')) return 'AXIS';
 
-    // Redirect card URL & Card Name take TOP PRIORITY over generic mis_bank_name
-    if (textToInspect.includes('hdfc') || textToInspect.includes('pixel') || textToInspect.includes('applyonline.hdfcbank')) return 'HDFC';
-    if (textToInspect.includes('sbi') || textToInspect.includes('simplyclick') || textToInspect.includes('sbicard')) return 'SBI';
-    if (textToInspect.includes('kiwi') || textToInspect.includes('gokiwi')) return 'KIWI';
-    if (textToInspect.includes('scapia')) return 'SCAPIA';
-    if (textToInspect.includes('icici')) return 'ICICI';
-    if (textToInspect.includes('axis')) return 'AXIS';
-    if (textToInspect.includes('pnb')) return 'PNB';
-    if (textToInspect.includes('yes')) return 'YES';
-    if (textToInspect.includes('au')) return 'AU';
-
-    // 2. Check cards catalog matching by card_id
+    // 2. Card Selection / Card ID from cards catalog
     if (lead.card_id && cards && cards.length > 0) {
       const matchedCard = cards.find(c => c.id === lead.card_id);
       if (matchedCard && matchedCard.bank) {
@@ -2075,7 +2064,31 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       }
     }
 
-    // 3. Fallback to explicit mis_bank_name if not OTHER
+    // 3. Card Name / Card Bank
+    if (cardName.includes('kiwi') || cardBank.includes('kiwi')) return 'KIWI';
+    if (cardName.includes('scapia') || cardBank.includes('scapia')) return 'SCAPIA';
+    if (cardName.includes('sbi') || cardBank.includes('sbi') || cardName.includes('simplyclick')) return 'SBI';
+    if (cardName.includes('hdfc') || cardBank.includes('hdfc') || cardName.includes('pixel')) return 'HDFC';
+    if (cardName.includes('icici') || cardBank.includes('icici')) return 'ICICI';
+    if (cardName.includes('axis') || cardBank.includes('axis')) return 'AXIS';
+
+    // 4. UTM Source / Campaign text inspection fallback
+    const utmInspect = [
+      lead.landing_page,
+      lead.source,
+      lead.utm_source,
+      lead.utm_campaign,
+      lead.utm_content
+    ].filter(Boolean).join(' ').toLowerCase();
+
+    if (utmInspect.includes('gokiwi') || utmInspect.includes('kiwi')) return 'KIWI';
+    if (utmInspect.includes('scapia')) return 'SCAPIA';
+    if (utmInspect.includes('applyonline.hdfcbank') || utmInspect.includes('pixel') || utmInspect.includes('hdfc')) return 'HDFC';
+    if (utmInspect.includes('sbicard') || utmInspect.includes('simplyclick') || utmInspect.includes('sbi')) return 'SBI';
+    if (utmInspect.includes('icici')) return 'ICICI';
+    if (utmInspect.includes('axis')) return 'AXIS';
+
+    // 5. Fallback to mis_bank_name if not OTHER
     if (bankName && bankName !== 'OTHER') {
       if (bankName.includes('KIWI')) return 'KIWI';
       if (bankName.includes('SBI')) return 'SBI';
