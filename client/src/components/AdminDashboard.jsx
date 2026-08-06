@@ -7684,7 +7684,13 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
               </div>
               <div style={{ maxHeight: '50vh', overflowY: 'auto' }}>
                 {(() => {
+                  const agentCode = selectedMappedLead.agent_id || 'public';
+                  const dateCode = selectedMappedLead.created_at ? new Date(selectedMappedLead.created_at).toISOString().slice(0, 10).replace(/-/g, '') : '';
+                  const domain = window.location.hostname.includes('uat') ? 'https://uat.finmantra.org' : 'https://finmantra.org';
+                  const redirectUrlVal = selectedMappedLead.redirect_url || `${domain}/refer/${agentCode}/${dateCode}/${selectedMappedLead.urn || ''}`;
+
                   const standardFields = [
+                    { label: 'Redirect URL', key: 'redirect_url', isUrl: true, customVal: redirectUrlVal },
                     { label: 'Bank Reference Number', key: 'bank_reference_number' },
                     { label: 'Application Submit Date/Time', key: 'application_submit_date_time' },
                     { label: 'Customer Type', key: 'customer_type' },
@@ -7718,9 +7724,9 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
                   // Add standard rows
                   standardFields.forEach(item => {
-                    const rawVal = selectedMappedLead.mis_data?.[item.key];
-                    const val = formatMISValue(rawVal, item.key);
-                    allRows.push({ label: item.label, value: val, key: item.key });
+                    const rawVal = item.customVal !== undefined ? item.customVal : selectedMappedLead.mis_data?.[item.key];
+                    const val = item.isUrl ? rawVal : formatMISValue(rawVal, item.key);
+                    allRows.push({ label: item.label, value: val, key: item.key, isUrl: item.isUrl });
                   });
 
                   // Add extra custom rows from the uploaded file
@@ -7746,7 +7752,15 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                     return (
                       <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', padding: '0.65rem 1rem', fontSize: '0.8rem', borderBottom: '1px solid rgba(0,0,0,0.04)', textAlign: 'left' }}>
                         <div style={{ color: 'hsl(var(--text-secondary))', fontWeight: 500 }}>{item.label}</div>
-                        <div style={{ color: valColor, fontWeight: valFontWeight, fontFamily: item.key.includes('date') || item.key.includes('number') ? 'var(--font-mono)' : 'inherit', wordBreak: 'break-all' }}>{item.value}</div>
+                        <div style={{ color: valColor, fontWeight: valFontWeight, fontFamily: item.key.includes('date') || item.key.includes('number') ? 'var(--font-mono)' : 'inherit', wordBreak: 'break-all' }}>
+                          {item.isUrl ? (
+                            <a href={item.value} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)', textDecoration: 'underline' }}>
+                              {item.value}
+                            </a>
+                          ) : (
+                            item.value
+                          )}
+                        </div>
                       </div>
                     );
                   });
