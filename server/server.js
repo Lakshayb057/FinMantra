@@ -3973,7 +3973,6 @@ app.get('/api/leads/export', authenticateToken, requireAdmin, async (req, res) =
           const domain = getPublicSiteUrl(req, settings);
           val = `${domain}/refer/${agentCode}/${dateCode}/${l.urn || ''}`;
         }
-      }
       } else if (l[source] !== undefined && l[source] !== null && String(l[source]).trim() !== '') {
         val = String(l[source]);
       } else if (l.mis_data && l.mis_data[source] !== undefined && l.mis_data[source] !== null && String(l.mis_data[source]).trim() !== '') {
