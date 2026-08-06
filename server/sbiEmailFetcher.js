@@ -460,15 +460,23 @@ async function checkAndFetchEmails(broadcastFn = null) {
 
         console.log(`[SBI Email Fetcher] Processing matching email: "${subject}" (UID: ${uidStr})`);
 
-        let foundExcel = false;
-        // Parse full message source for attachments
         const parsed = await simpleParser(message.source);
         if (parsed.attachments && parsed.attachments.length > 0) {
+          console.log(`[SBI Email Fetcher] Email UID ${uidStr} has ${parsed.attachments.length} attachment(s).`);
           for (const attachment of parsed.attachments) {
-            const fname = attachment.filename || 'sbi_mis.xlsx';
-            if (fname.endsWith('.xlsx') || fname.endsWith('.xls') || fname.endsWith('.csv')) {
-              foundExcel = true;
-              console.log(`[SBI Email Fetcher] Extracting attachment: ${fname} (${attachment.size} bytes)`);
+            const fname = attachment.filename || attachment.name || 'sbi_mis.xlsx';
+            const fnLower = fname.toLowerCase();
+            const cType = (attachment.contentType || '').toLowerCase();
+            
+            const isExcelOrCsv = fnLower.endsWith('.xlsx') || 
+                                 fnLower.endsWith('.xls') || 
+                                 fnLower.endsWith('.csv') ||
+                                 cType.includes('spreadsheet') || 
+                                 cType.includes('excel') || 
+                                 cType.includes('csv');
+
+            if (isExcelOrCsv) {
+              console.log(`[SBI Email Fetcher] Extracting Excel/CSV attachment: ${fname} (${attachment.size} bytes)`);
 
               const rows = await parseAttachmentBuffer(attachment.content, fname);
               const result = await processSbiMisRows(rows, fname, broadcastFn);
@@ -477,7 +485,7 @@ async function checkAndFetchEmails(broadcastFn = null) {
               totalWarningsInSync += result.warnings;
               processedFilesCount++;
 
-              // Record in processed email log
+              // Record in processed email log only when file is processed
               await db.saveProcessedEmailMis({
                 message_uid: uidStr,
                 subject,
@@ -512,24 +520,10 @@ async function checkAndFetchEmails(broadcastFn = null) {
                   warningCount: result.warnings
                 }
               });
+              processedUids.add(uidStr);
             }
           }
         }
-
-        if (!foundExcel) {
-          await db.saveProcessedEmailMis({
-            message_uid: uidStr,
-            subject,
-            sender: senderAddr || config.sender_email,
-            attachment_name: 'No Excel Attachment',
-            total_processed: 0,
-            mapped_count: 0,
-            warning_count: 0
-          });
-        }
-
-        // Add to processed set in memory
-        processedUids.add(uidStr);
       }
 
     } finally {

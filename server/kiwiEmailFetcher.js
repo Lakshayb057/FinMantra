@@ -368,14 +368,23 @@ async function checkAndFetchEmails(broadcastFn = null) {
 
         console.log(`[KIWI Email Fetcher] Processing email: "${subject}" (UID: ${uidStr})`);
 
-        let foundExcel = false;
         const parsed = await simpleParser(message.source);
         if (parsed.attachments && parsed.attachments.length > 0) {
+          console.log(`[KIWI Email Fetcher] Email UID ${uidStr} has ${parsed.attachments.length} attachment(s).`);
           for (const attachment of parsed.attachments) {
-            const fname = attachment.filename || 'kiwi_mis.xlsx';
-            if (fname.endsWith('.xlsx') || fname.endsWith('.xls') || fname.endsWith('.csv')) {
-              foundExcel = true;
-              console.log(`[KIWI Email Fetcher] Extracting attachment: ${fname} (${attachment.size} bytes)`);
+            const fname = attachment.filename || attachment.name || 'kiwi_mis.xlsx';
+            const fnLower = fname.toLowerCase();
+            const cType = (attachment.contentType || '').toLowerCase();
+
+            const isExcelOrCsv = fnLower.endsWith('.xlsx') || 
+                                 fnLower.endsWith('.xls') || 
+                                 fnLower.endsWith('.csv') ||
+                                 cType.includes('spreadsheet') || 
+                                 cType.includes('excel') || 
+                                 cType.includes('csv');
+
+            if (isExcelOrCsv) {
+              console.log(`[KIWI Email Fetcher] Extracting Excel/CSV attachment: ${fname} (${attachment.size} bytes)`);
 
               const result = await processKiwiMisBuffer(attachment.content, fname, broadcastFn);
 
@@ -398,23 +407,10 @@ async function checkAndFetchEmails(broadcastFn = null) {
                 message: `Successfully fetched and mapped ${result.mapped} leads from "${subject}" (${fname}).`,
                 details: { subject, filename: fname, totalRows: result.total, mappedCount: result.mapped }
               });
+              processedUids.add(uidStr);
             }
           }
         }
-
-        if (!foundExcel) {
-          await db.saveProcessedEmailMis({
-            message_uid: uidStr,
-            subject,
-            sender: fromAddr || config.sender_email,
-            attachment_name: 'No Excel Attachment',
-            total_processed: 0,
-            mapped_count: 0,
-            warning_count: 0
-          });
-        }
-
-        processedUids.add(uidStr);
       }
     } finally {
       lock.release();
