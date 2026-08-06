@@ -2033,26 +2033,56 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   }, [dbBankList, settings]);
 
   const getLeadBank = useCallback((lead) => {
+    if (!lead) return 'OTHER';
     const md = lead.mis_data || {};
     const bankName = String(md.mis_bank_name || '').toUpperCase().trim();
 
-    // 1. Explicit mis_bank_name saved in DB takes top priority
+    // 1. If lead is linked to card_id in cards catalog, check cards catalog bank
+    if (lead.card_id && cards && cards.length > 0) {
+      const matchedCard = cards.find(c => c.id === lead.card_id);
+      if (matchedCard && matchedCard.bank) {
+        const bUpper = matchedCard.bank.trim().toUpperCase();
+        if (bUpper.includes('HDFC') || bUpper.includes('PIXEL')) return 'HDFC';
+        if (bUpper.includes('SBI') || bUpper.includes('SIMPLYCLICK')) return 'SBI';
+        if (bUpper.includes('KIWI')) return 'KIWI';
+        if (bUpper.includes('SCAPIA')) return 'SCAPIA';
+        if (bUpper.includes('ICICI')) return 'ICICI';
+        if (bUpper.includes('AXIS')) return 'AXIS';
+        return bUpper;
+      }
+    }
+
+    // 2. Inspect redirect_url, card_id, card_name, card_bank, landing_page, source, utm_source, utm_campaign
+    const textToInspect = [
+      lead.redirect_url,
+      lead.card_id,
+      lead.card_name,
+      lead.card_bank,
+      lead.landing_page,
+      lead.source,
+      lead.utm_source,
+      lead.utm_campaign,
+      bankName
+    ].filter(Boolean).join(' ').toLowerCase();
+
+    if (textToInspect.includes('hdfc') || textToInspect.includes('pixel')) return 'HDFC';
+    if (textToInspect.includes('sbi') || textToInspect.includes('simplyclick')) return 'SBI';
+    if (textToInspect.includes('kiwi')) return 'KIWI';
+    if (textToInspect.includes('scapia')) return 'SCAPIA';
+    if (textToInspect.includes('icici')) return 'ICICI';
+    if (textToInspect.includes('axis')) return 'AXIS';
+    if (textToInspect.includes('pnb')) return 'PNB';
+    if (textToInspect.includes('yes')) return 'YES';
+    if (textToInspect.includes('au')) return 'AU';
+
+    // 3. Fallback to explicit mis_bank_name if present
     if (bankName) {
       if (bankName.includes('KIWI')) return 'KIWI';
       if (bankName.includes('SBI')) return 'SBI';
-      if (bankName.includes('HDFC') || bankName.includes('PIXEL')) return 'HDFC';
+      if (bankName.includes('HDFC')) return 'HDFC';
       if (bankName.includes('SCAPIA')) return 'SCAPIA';
-      if (bankName.includes('OTHER')) return 'OTHER';
+      return bankName;
     }
-
-    const cName = String(lead.card_name || '').toLowerCase();
-    const cBank = String(lead.card_bank || '').toLowerCase();
-    const src = String(lead.source || '').toLowerCase();
-
-    if (cName.includes('kiwi') || cBank.includes('kiwi') || src.includes('kiwi')) return 'KIWI';
-    if (cName.includes('sbi') || cBank.includes('sbi') || src.includes('sbi')) return 'SBI';
-    if (cName.includes('hdfc') || cBank.includes('hdfc') || src.includes('hdfc')) return 'HDFC';
-    if (cName.includes('scapia') || cBank.includes('scapia') || src.includes('scapia')) return 'SCAPIA';
 
     return 'OTHER';
   }, [cards]);
