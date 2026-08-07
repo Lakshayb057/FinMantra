@@ -688,24 +688,24 @@ const db = {
       else if (bank.includes('SCAPIA') || bank.includes('BOB')) bank = 'SCAPIA';
       else if (!bank) bank = 'PUBLIC';
 
+      const isAgent = r.source === 'agent';
+      const agentName = r.agent_name || 'Staff';
       const utmSrc = r.utm_source ? r.utm_source.toUpperCase().trim() : 'PUBLIC';
 
-      let displayBank = '';
-      if (r.source === 'agent') {
-        const agentName = r.agent_name || 'Staff';
-        displayBank = `${bank} (${agentName})`;
-      } else {
-        displayBank = `${bank} (${utmSrc})`;
-      }
+      let displayBank = isAgent ? `${bank} (${agentName})` : `${bank} (${utmSrc})`;
       if (displayBank) {
         sourceSet.add(displayBank);
-        utmSourceSet.add(displayBank);
+        if (!isAgent) {
+          utmSourceSet.add(displayBank);
+        }
       }
 
       if (cardName) {
-        const displayCard = `${cardName} (${r.source === 'agent' ? (r.agent_name || 'Staff') : utmSrc})`;
+        const displayCard = isAgent ? `${cardName} (${agentName})` : `${cardName} (${utmSrc})`;
         sourceSet.add(displayCard);
-        utmSourceSet.add(displayCard);
+        if (!isAgent) {
+          utmSourceSet.add(displayCard);
+        }
       }
     });
 
