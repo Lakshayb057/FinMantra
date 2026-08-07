@@ -3768,6 +3768,7 @@ app.get('/api/leads', authenticateToken, async (req, res) => {
       const search = req.query.search || '';
       const card = req.query.card || '';
       const source = req.query.source || '';
+      const utmSource = req.query.utmSource || req.query.utm_source || '';
       const startDate = req.query.startDate || '';
       const endDate = req.query.endDate || '';
       const campaign = req.query.campaign || '';
@@ -3775,7 +3776,7 @@ app.get('/api/leads', authenticateToken, async (req, res) => {
       const info = req.query.info || '';
       
       const result = await db.getLeadsFiltered({
-        agentId, bankMisFilter, page, limit, search, card, source, startDate, endDate, campaign, term, info
+        agentId, bankMisFilter, page, limit, search, card, source, utmSource, startDate, endDate, campaign, term, info
       });
       return res.json(result);
     } else {

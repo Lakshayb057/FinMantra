@@ -658,12 +658,47 @@ const db = {
     if (_utmOptionsCache && (now - _utmOptionsCacheTime) < 10 * 60 * 1000) {
       return _utmOptionsCache;
     }
-    const [campRes, termRes, infoRes] = await Promise.all([
+    const [campRes, termRes, infoRes, utmSourceRes, comboRes] = await Promise.all([
       pool.query(`SELECT DISTINCT utm_campaign FROM leads WHERE utm_campaign IS NOT NULL AND utm_campaign != '' ORDER BY utm_campaign`),
       pool.query(`SELECT DISTINCT utm_term FROM leads WHERE utm_term IS NOT NULL AND utm_term != '' ORDER BY utm_term`),
-      pool.query(`SELECT DISTINCT utm_info FROM leads WHERE utm_info IS NOT NULL AND utm_info != '' ORDER BY utm_info`)
+      pool.query(`SELECT DISTINCT utm_info FROM leads WHERE utm_info IS NOT NULL AND utm_info != '' ORDER BY utm_info`),
+      pool.query(`SELECT DISTINCT utm_source FROM leads WHERE utm_source IS NOT NULL AND utm_source != '' ORDER BY utm_source`),
+      pool.query(`SELECT DISTINCT card_bank, card_name, source, agent_name, utm_source FROM leads`)
     ]);
+
+    const sourceSet = new Set();
+    const utmSourceSet = new Set(['META', 'GOOGLE', 'LINKEDIN', 'INSTAGRAM', 'PUBLIC', 'AGENT']);
+
+    utmSourceRes.rows.forEach(r => {
+      if (r.utm_source) utmSourceSet.add(r.utm_source.toUpperCase().trim());
+    });
+
+    comboRes.rows.forEach(r => {
+      let bank = (r.card_bank || r.card_name || '').toUpperCase().trim();
+      if (bank.includes('SBI')) bank = 'SBI';
+      else if (bank.includes('KIWI') || bank.includes('YES')) bank = 'KIWI';
+      else if (bank.includes('HDFC')) bank = 'HDFC';
+      else if (bank.includes('SCAPIA') || bank.includes('BOB')) bank = 'SCAPIA';
+      else if (!bank) bank = 'PUBLIC';
+
+      let display = '';
+      if (r.source === 'agent') {
+        const agentName = r.agent_name || 'Staff';
+        display = `${bank} (${agentName})`;
+      } else {
+        const utmSrc = r.utm_source ? r.utm_source.toUpperCase().trim() : '';
+        if (utmSrc && utmSrc !== 'PUBLIC' && utmSrc !== bank) {
+          display = `${bank} (${utmSrc})`;
+        } else {
+          display = `${bank} (PUBLIC)`;
+        }
+      }
+      if (display) sourceSet.add(display);
+    });
+
     _utmOptionsCache = {
+      sources: Array.from(sourceSet).sort(),
+      utm_sources: Array.from(utmSourceSet).sort(),
       campaigns: campRes.rows.map(r => r.utm_campaign),
       terms: termRes.rows.map(r => r.utm_term),
       infos: infoRes.rows.map(r => r.utm_info)
@@ -677,7 +712,7 @@ const db = {
     _utmOptionsCacheTime = 0;
   },
 
-  async getLeadsFiltered({ agentId = null, bankMisFilter = null, page = 1, limit = 50, search = '', card = '', source = '', startDate = '', endDate = '', campaign = '', term = '', info = '' }) {
+  async getLeadsFiltered({ agentId = null, bankMisFilter = null, page = 1, limit = 50, search = '', card = '', source = '', utmSource = '', startDate = '', endDate = '', campaign = '', term = '', info = '' }) {
     const LEAD_COLUMNS = `id, urn, full_name, phone, email, city, employment, income_range,
       card_id, card_name, card_bank, source, agent_id, agent_name, agent_location, consent, application_id,
       created_at, mis_status, mis_mapped_at, pan_no, pincode, has_credit_card, monthly_income,
@@ -738,8 +773,51 @@ const db = {
       clauses.push(`card_id = $${params.length}`);
     }
     if (source) {
-      params.push(source);
-      clauses.push(`source = $${params.length}`);
+      const trimmedSource = source.trim();
+      const matchParen = trimmedSource.match(/^([^(]+)\s*\(([^)]+)\)$/);
+      if (matchParen) {
+        const bankPart = matchParen[1].trim().toLowerCase();
+        const srcPart = matchParen[2].trim().toLowerCase();
+        params.push(`%${bankPart}%`);
+        const pBank = params.length;
+        params.push(srcPart);
+        const pSrc = params.length;
+        params.push(`%${srcPart}%`);
+        const pSrcLike = params.length;
+
+        clauses.push(`(
+          (LOWER(card_bank) LIKE $${pBank} OR LOWER(card_name) LIKE $${pBank})
+          AND (
+            LOWER(utm_source) = $${pSrc}
+            OR LOWER(source) = $${pSrc}
+            OR LOWER(agent_name) LIKE $${pSrcLike}
+            OR ($${pSrc} = 'public' AND (utm_source IS NULL OR utm_source = '' OR utm_source = 'public'))
+          )
+        )`);
+      } else {
+        params.push(`%${trimmedSource.toLowerCase()}%`);
+        const pIdx = params.length;
+        clauses.push(`(
+          LOWER(source) LIKE $${pIdx}
+          OR LOWER(utm_source) LIKE $${pIdx}
+          OR LOWER(agent_name) LIKE $${pIdx}
+          OR LOWER(card_bank) LIKE $${pIdx}
+          OR LOWER(card_name) LIKE $${pIdx}
+        )`);
+      }
+    }
+    if (utmSource) {
+      const cleanUtm = utmSource.trim().toLowerCase();
+      params.push(cleanUtm);
+      const pExact = params.length;
+      params.push(`%${cleanUtm}%`);
+      const pLike = params.length;
+      clauses.push(`(
+        LOWER(utm_source) = $${pExact}
+        OR LOWER(utm_source) LIKE $${pLike}
+        OR ($${pExact} = 'public' AND (utm_source IS NULL OR utm_source = '' OR utm_source = 'public'))
+        OR ($${pExact} = 'agent' AND source = 'agent')
+      )`);
     }
     if (startDate) {
       params.push(startDate + ' 00:00:00+05:30');
@@ -1761,9 +1839,20 @@ const db = {
       
       allLeads.forEach(lead => {
         if (!lead.phone) return;
-        const bankName = String(lead.bank_name || (lead.mis_data && lead.mis_data.mis_bank_name) || '').toUpperCase().trim();
+        const cleanPhone = String(lead.phone).replace(/\D/g, '').slice(-10);
+        if (!cleanPhone || cleanPhone.length < 10) return;
+
+        let bankName = String(lead.card_bank || lead.card_name || (lead.mis_data && lead.mis_data.mis_bank_name) || '').toUpperCase().trim();
+        if (bankName.includes('SBI')) bankName = 'SBI';
+        else if (bankName.includes('KIWI') || bankName.includes('YES')) bankName = 'KIWI';
+        else if (bankName.includes('HDFC')) bankName = 'HDFC';
+        else if (bankName.includes('SCAPIA') || bankName.includes('BOB')) bankName = 'SCAPIA';
         if (!bankName) return;
-        const key = `${lead.phone}_${bankName}`;
+
+        // Group by Phone + IST Date (YYYY-MM-DD) + Bank
+        const dateStr = lead.created_at ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date(lead.created_at)) : 'nodate';
+        const key = `${cleanPhone}_${dateStr}_${bankName}`;
+
         if (!grouped.has(key)) {
           grouped.set(key, []);
         }
@@ -1771,32 +1860,51 @@ const db = {
       });
 
       const idsToDelete = [];
+      const isSyncedOrHasUrn = (l) => {
+        const hasUrn = l.urn && String(l.urn).trim() !== '' && String(l.urn).trim() !== '-';
+        const isMapped = l.mis_status || l.mis_mapped_at || (l.mis_data && Object.keys(l.mis_data).length > 0);
+        return hasUrn || isMapped;
+      };
+
       for (const [key, leads] of grouped.entries()) {
         if (leads.length > 1) {
-          // Sort leads to find the "best mapped" one.
-          // Criteria: mapped (has mis_status or mis_data) is better than unmapped.
-          // Newer is better than older.
           leads.sort((a, b) => {
-            const aMapped = a.mis_status || (a.mis_data && Object.keys(a.mis_data).length > 0) ? 1 : 0;
-            const bMapped = b.mis_status || (b.mis_data && Object.keys(b.mis_data).length > 0) ? 1 : 0;
-            if (aMapped !== bMapped) {
-              return bMapped - aMapped; // Mapped comes first
+            const aUrn = (a.urn && String(a.urn).trim() !== '' && String(a.urn).trim() !== '-') ? 100 : 0;
+            const bUrn = (b.urn && String(b.urn).trim() !== '' && String(b.urn).trim() !== '-') ? 100 : 0;
+            const aMapped = (a.mis_status || (a.mis_data && Object.keys(a.mis_data).length > 0)) ? 50 : 0;
+            const bMapped = (b.mis_status || (b.mis_data && Object.keys(b.mis_data).length > 0)) ? 50 : 0;
+
+            const scoreA = aUrn + aMapped;
+            const scoreB = bUrn + bMapped;
+
+            if (scoreA !== scoreB) {
+              return scoreB - scoreA;
             }
-            // If same mapped status, newer comes first
+
             const dateA = new Date(a.created_at || 0).getTime();
             const dateB = new Date(b.created_at || 0).getTime();
             return dateB - dateA;
           });
 
-          // leads[0] is the best one. The rest will be deleted.
           for (let i = 1; i < leads.length; i++) {
-            idsToDelete.push(leads[i].id);
+            const dup = leads[i];
+            const dupHasUrnOrSync = isSyncedOrHasUrn(dup);
+            const keeperHasUrnOrSync = isSyncedOrHasUrn(leads[0]);
+
+            if (dupHasUrnOrSync && !keeperHasUrnOrSync) {
+              continue;
+            }
+            if (dupHasUrnOrSync && keeperHasUrnOrSync) {
+              if (dup.urn && leads[0].urn && String(dup.urn).trim() !== String(leads[0].urn).trim()) {
+                continue;
+              }
+            }
+            idsToDelete.push(dup.id);
           }
         }
       }
 
       if (idsToDelete.length > 0) {
-        // Delete in chunks to avoid query size limits
         const chunkSize = 100;
         for (let i = 0; i < idsToDelete.length; i += chunkSize) {
           const chunk = idsToDelete.slice(i, i + chunkSize);
@@ -1805,7 +1913,7 @@ const db = {
         await this.createNotification({
           type: 'warning',
           title: '🧹 Duplicate Leads Cleaned',
-          message: `Deduplication engine removed ${idsToDelete.length} duplicate lead(s) with matching phone & bank.`,
+          message: `Deduplication engine removed ${idsToDelete.length} duplicate lead(s) with matching phone, date & bank. Synced URNs were preserved.`,
           details: { removedCount: idsToDelete.length }
         });
       }

@@ -141,10 +141,11 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCard, setFilterCard] = useState('');
   const [filterSource, setFilterSource] = useState('');
+  const [filterUtmSource, setFilterUtmSource] = useState('');
   const [filterCampaign, setFilterCampaign] = useState('');
   const [filterTerm, setFilterTerm] = useState('');
   const [filterInfo, setFilterInfo] = useState('');
-  const [utmOptions, setUtmOptions] = useState({ campaigns: [], terms: [], infos: [] });
+  const [utmOptions, setUtmOptions] = useState({ sources: [], utm_sources: [], campaigns: [], terms: [], infos: [] });
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -523,6 +524,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
         search: searchTerm,
         card: filterCard,
         source: filterSource,
+        utmSource: filterUtmSource,
         startDate: filterStartDate,
         endDate: filterEndDate,
         campaign: filterCampaign,
@@ -839,6 +841,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
         search: searchTerm,
         card: filterCard,
         source: filterSource,
+        utmSource: filterUtmSource,
         startDate: filterStartDate,
         endDate: filterEndDate,
         campaign: filterCampaign,
@@ -899,7 +902,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   // Reset page to 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, filterCard, filterSource, filterStartDate, filterEndDate, filterCampaign, filterTerm, filterInfo]);
+  }, [searchTerm, filterCard, filterSource, filterUtmSource, filterStartDate, filterEndDate, filterCampaign, filterTerm, filterInfo]);
 
   // Refetch leads when pagination/filters change (debounced for search)
   useEffect(() => {
@@ -908,7 +911,35 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       fetchLeads(currentPage, leadsPerPage);
     }, searchTerm ? 400 : 0); // Debounce search, instant for other filters
     return () => clearTimeout(timer);
-  }, [currentPage, leadsPerPage, searchTerm, filterCard, filterSource, filterStartDate, filterEndDate, filterCampaign, filterTerm, filterInfo, isAuthenticated, token]);
+  }, [currentPage, leadsPerPage, searchTerm, filterCard, filterSource, filterUtmSource, filterStartDate, filterEndDate, filterCampaign, filterTerm, filterInfo, isAuthenticated, token]);
+
+  const handleSyncAllData = async () => {
+    if (!token) return;
+    showToast('Syncing all data & removing duplicate leads...', 'info');
+    try {
+      const res = await fetch(`${API_URL}/admin/remove-duplicates`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const data = await res.json();
+      await loadAllAdminData();
+      if (data.success) {
+        if (data.removedCount > 0) {
+          showToast(`Sync complete! Removed ${data.removedCount} duplicate lead(s).`, 'success');
+        } else {
+          showToast('Sync complete! No duplicate leads found.', 'success');
+        }
+      } else {
+        showToast('Data synced with database.', 'success');
+      }
+    } catch (err) {
+      console.error('Error running duplicate cleanup on sync:', err);
+      await loadAllAdminData();
+      showToast('Data synced with database.', 'success');
+    }
+  };
 
   const showToast = (text, type = 'success') => {
     setMessage({ text, type });
@@ -1101,6 +1132,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
     if (searchTerm) queryParams.push(`search=${encodeURIComponent(searchTerm)}`);
     if (filterCard) queryParams.push(`card=${encodeURIComponent(filterCard)}`);
     if (filterSource) queryParams.push(`source=${encodeURIComponent(filterSource)}`);
+    if (filterUtmSource) queryParams.push(`utmSource=${encodeURIComponent(filterUtmSource)}`);
     const queryString = queryParams.length > 0 ? `?${queryParams.join('&')}` : '';
 
     // Fetch filtered leads, create Blob, and trigger browser download:
@@ -3006,7 +3038,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
             </button>
             <div style={{ height: '1px', background: 'var(--line)', margin: '0.4rem 0' }} />
             <button 
-              onClick={() => { loadAllAdminData(); setShowMobileMenu(false); }} 
+              onClick={() => { handleSyncAllData(); setShowMobileMenu(false); }} 
               className="btn-secondary" 
               style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%', padding: '0.55rem 0.85rem', fontSize: '0.9rem' }}
             >
@@ -3441,7 +3473,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
           </button>
 
           <button 
-            onClick={loadAllAdminData} 
+            onClick={handleSyncAllData} 
             className="sidebar-icon-btn" 
             title="Sync All Data"
             style={{
@@ -3671,11 +3703,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                   </select>
                   <select className="form-select" value={filterSource} onChange={(e) => setFilterSource(e.target.value)} style={{ flex: '1 1 140px', minWidth: '125px', height: '36px', fontSize: '0.8rem', textOverflow: 'ellipsis' }}>
                     <option value="">Filter by Source</option>
-                    <option value="public">Public Website</option>
-                    <option value="agent">Agent Walk-in</option>
-                    <option value="kiwi">Kiwi Page</option>
-                    <option value="simplyclick_sbi">SBI SimplyClick</option>
-                    <option value="scapia">Scapia Landing Page</option>
+                    {(utmOptions.sources || []).map((src, i) => <option key={i} value={src}>{src}</option>)}
                   </select>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', flex: '1 1 140px', minWidth: '130px' }}>
                     <span style={{ fontSize: '0.72rem', color: 'hsl(var(--text-muted))', whiteSpace: 'nowrap' }}>From:</span>
@@ -3705,15 +3733,15 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                     <option value="">UTM Term</option>
                     {utmOptions.terms.map((t, i) => <option key={i} value={t}>{t}</option>)}
                   </select>
-                  <select className="form-select" value={filterInfo} onChange={(e) => setFilterInfo(e.target.value)} style={{ flex: '1 1 140px', minWidth: '125px', height: '36px', fontSize: '0.8rem', textOverflow: 'ellipsis' }}>
+                  <select className="form-select" value={filterUtmSource} onChange={(e) => setFilterUtmSource(e.target.value)} style={{ flex: '1 1 140px', minWidth: '125px', height: '36px', fontSize: '0.8rem', textOverflow: 'ellipsis' }}>
                     <option value="">UTM Source</option>
-                    {utmOptions.infos.map((inf, i) => <option key={i} value={inf}>{inf}</option>)}
+                    {(utmOptions.utm_sources || []).map((u, i) => <option key={i} value={u}>{u}</option>)}
                   </select>
                   <button 
-                    onClick={() => { setSearchTerm(''); setFilterCard(''); setFilterSource(''); setFilterStartDate(''); setFilterEndDate(''); setFilterCampaign(''); setFilterTerm(''); setFilterInfo(''); }}
+                    onClick={() => { setSearchTerm(''); setFilterCard(''); setFilterSource(''); setFilterUtmSource(''); setFilterStartDate(''); setFilterEndDate(''); setFilterCampaign(''); setFilterTerm(''); setFilterInfo(''); }}
                     className="btn-secondary"
-                    style={{ height: '36px', fontSize: '0.75rem', whiteSpace: 'nowrap', padding: '0 0.85rem', opacity: (searchTerm || filterCard || filterSource || filterStartDate || filterEndDate || filterCampaign || filterTerm || filterInfo) ? 1 : 0.5 }}
-                    disabled={!(searchTerm || filterCard || filterSource || filterStartDate || filterEndDate || filterCampaign || filterTerm || filterInfo)}
+                    style={{ height: '36px', fontSize: '0.75rem', whiteSpace: 'nowrap', padding: '0 0.85rem', opacity: (searchTerm || filterCard || filterSource || filterUtmSource || filterStartDate || filterEndDate || filterCampaign || filterTerm || filterInfo) ? 1 : 0.5 }}
+                    disabled={!(searchTerm || filterCard || filterSource || filterUtmSource || filterStartDate || filterEndDate || filterCampaign || filterTerm || filterInfo)}
                   >✕ Clear Filters</button>
                 </div>
 
