@@ -434,29 +434,45 @@ async function checkAndFetchEmails(broadcastFn = null) {
         .map(s => s.trim().toLowerCase())
         .filter(Boolean);
 
+      const defaultKeywords = ['LG MIS', 'SBI MIS', 'EOD MIS', '48Hourly', 'Hourly', '48 Hourly'];
       const subjectKeywords = (config.subject_keywords && config.subject_keywords.length > 0)
         ? config.subject_keywords
-        : ['LG MIS EOD', 'LG MIS 48Hourly', 'LG MIS Hourly'];
+        : defaultKeywords;
 
       // Phase 1: Fetch lightweight headers only (fast and reliable)
       const messages = client.fetch('1:*', { uid: true, envelope: true });
       
       for await (const message of messages) {
         const uidStr = String(message.uid);
-        if (processedUids.has(uidStr)) continue; // Skip already processed email
+        const sbiUidKey = `sbi_${uidStr}`;
+        if (processedUids.has(sbiUidKey) || processedUids.has(uidStr)) continue; // Skip already processed email
 
-        const senderAddr = (message.envelope?.from?.[0]?.address || '').toLowerCase();
-        if (senderList.length > 0) {
-          const isSenderAllowed = senderList.some(s => senderAddr.includes(s));
-          if (!isSenderAllowed) continue;
-        }
-
+        const fromAddr = (message.envelope?.from?.[0]?.address || '').toLowerCase();
+        const fromName = (message.envelope?.from?.[0]?.name || '').toLowerCase();
+        const fullSender = `${fromAddr} ${fromName}`;
         const subject = message.envelope?.subject || '';
-        const isSubjectMatch = subjectKeywords.some(kw => 
-          subject.toLowerCase().includes(String(kw).toLowerCase())
-        );
+        const normSubject = subject.toLowerCase();
+
+        // Check Subject Match
+        const isSubjectMatch = subjectKeywords.some(kw => {
+          const cleanKw = String(kw).toLowerCase().replace(/[^a-z0-9]/g, '');
+          const cleanSubj = normSubject.replace(/[^a-z0-9]/g, '');
+          return cleanSubj.includes(cleanKw) || normSubject.includes(String(kw).toLowerCase());
+        });
 
         if (!isSubjectMatch) continue;
+
+        // Check Sender Match (lenient for forwarded emails matching target MIS)
+        let isSenderAllowed = true;
+        if (senderList.length > 0) {
+          isSenderAllowed = senderList.some(s => fullSender.includes(s) || normSubject.includes(s) || s === 'all');
+        }
+        // Allow forwarded emails if subject clearly indicates SBI LG MIS
+        if (!isSenderAllowed && (normSubject.includes('lg mis') || normSubject.includes('sbi mis') || normSubject.includes('sbi'))) {
+          isSenderAllowed = true;
+        }
+
+        if (!isSenderAllowed) continue;
 
         console.log(`[SBI Email Fetcher] Matched target email: "${subject}" (UID: ${uidStr}). Fetching attachment...`);
 
@@ -475,9 +491,13 @@ async function checkAndFetchEmails(broadcastFn = null) {
             const isExcelOrCsv = fnLower.endsWith('.xlsx') || 
                                  fnLower.endsWith('.xls') || 
                                  fnLower.endsWith('.csv') ||
+                                 fnLower.endsWith('.txt') ||
                                  cType.includes('spreadsheet') || 
                                  cType.includes('excel') || 
-                                 cType.includes('csv');
+                                 cType.includes('csv') ||
+                                 cType.includes('octet-stream') ||
+                                 fnLower.includes('mis') ||
+                                 fnLower.includes('lg_');
 
             if (isExcelOrCsv) {
               console.log(`[SBI Email Fetcher] Extracting Excel/CSV attachment: ${fname} (${attachment.size} bytes)`);
@@ -491,9 +511,9 @@ async function checkAndFetchEmails(broadcastFn = null) {
 
               // Record in processed email log only when file is processed
               await db.saveProcessedEmailMis({
-                message_uid: uidStr,
+                message_uid: sbiUidKey,
                 subject,
-                sender: senderAddr || config.sender_email,
+                sender: fromAddr || config.sender_email,
                 attachment_name: fname,
                 total_processed: result.total,
                 mapped_count: result.mapped,

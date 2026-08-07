@@ -650,7 +650,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   const triggerManualEmailSync = async () => {
     setIsSyncingEmailMis(true);
     try {
-      const res = await fetch('/api/admin/sync-email-mis', {
+      const res = await fetch(`${API_URL}/admin/sync-email-mis`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -673,7 +673,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   const triggerManualKiwiEmailSync = async () => {
     setIsSyncingKiwiEmailMis(true);
     try {
-      const res = await fetch('/api/admin/sync-kiwi-email-mis', {
+      const res = await fetch(`${API_URL}/admin/sync-kiwi-email-mis`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });

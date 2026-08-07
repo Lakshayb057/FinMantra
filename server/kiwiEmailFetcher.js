@@ -345,26 +345,45 @@ async function checkAndFetchEmails(broadcastFn = null) {
         .map(s => s.trim().toLowerCase())
         .filter(Boolean);
 
-      const subjectKeywords = (config.subject_keywords || ['kiwi mis']);
+      const defaultKiwiKeywords = ['kiwi mis', 'kiwi', 'gokiwi', 'yes bank'];
+      const subjectKeywords = (config.subject_keywords && config.subject_keywords.length > 0)
+        ? config.subject_keywords
+        : defaultKiwiKeywords;
 
       // Phase 1: Fetch lightweight headers only (fast and reliable)
       const messages = client.fetch('1:*', { uid: true, envelope: true });
       
       for await (const message of messages) {
         const uidStr = String(message.uid);
-        if (processedUids.has(uidStr)) continue;
+        const kiwiUidKey = `kiwi_${uidStr}`;
+        if (processedUids.has(kiwiUidKey) || processedUids.has(uidStr)) continue;
 
         const fromAddr = (message.envelope?.from?.[0]?.address || '').toLowerCase();
+        const fromName = (message.envelope?.from?.[0]?.name || '').toLowerCase();
+        const fullSender = `${fromAddr} ${fromName}`;
+        const subject = message.envelope?.subject || '';
+        const normSubject = subject.toLowerCase();
+
+        // Check Subject Match
+        const isSubjectMatch = subjectKeywords.some(kw => {
+          const cleanKw = String(kw).toLowerCase().replace(/[^a-z0-9]/g, '');
+          const cleanSubj = normSubject.replace(/[^a-z0-9]/g, '');
+          return cleanSubj.includes(cleanKw) || normSubject.includes(String(kw).toLowerCase());
+        });
+
+        if (!isSubjectMatch) continue;
+
+        // Check Sender Match (lenient for forwarded emails matching target MIS)
+        let isSenderAllowed = true;
         if (senderList.length > 0) {
-          const isSenderAllowed = senderList.some(s => fromAddr.includes(s));
-          if (!isSenderAllowed) continue;
+          isSenderAllowed = senderList.some(s => fullSender.includes(s) || normSubject.includes(s) || s === 'all');
+        }
+        // Allow forwarded emails if subject clearly indicates KIWI MIS
+        if (!isSenderAllowed && (normSubject.includes('kiwi') || normSubject.includes('gokiwi'))) {
+          isSenderAllowed = true;
         }
 
-        const subject = message.envelope?.subject || '';
-        const hasKeyword = subjectKeywords.length === 0 || subjectKeywords.some(k => subject.toLowerCase().includes(String(k).toLowerCase()));
-        if (!hasKeyword) {
-          continue;
-        }
+        if (!isSenderAllowed) continue;
 
         console.log(`[KIWI Email Fetcher] Matched target email: "${subject}" (UID: ${uidStr}). Fetching attachment...`);
 
@@ -383,9 +402,13 @@ async function checkAndFetchEmails(broadcastFn = null) {
             const isExcelOrCsv = fnLower.endsWith('.xlsx') || 
                                  fnLower.endsWith('.xls') || 
                                  fnLower.endsWith('.csv') ||
+                                 fnLower.endsWith('.txt') ||
                                  cType.includes('spreadsheet') || 
                                  cType.includes('excel') || 
-                                 cType.includes('csv');
+                                 cType.includes('csv') ||
+                                 cType.includes('octet-stream') ||
+                                 fnLower.includes('kiwi') ||
+                                 fnLower.includes('mis');
 
             if (isExcelOrCsv) {
               console.log(`[KIWI Email Fetcher] Extracting Excel/CSV attachment: ${fname} (${attachment.size} bytes)`);
@@ -396,7 +419,7 @@ async function checkAndFetchEmails(broadcastFn = null) {
               processedFilesCount++;
 
               await db.saveProcessedEmailMis({
-                message_uid: uidStr,
+                message_uid: kiwiUidKey,
                 subject,
                 sender: fromAddr || config.sender_email,
                 attachment_name: fname,
