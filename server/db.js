@@ -1832,67 +1832,129 @@ const db = {
     }
   },
 
+  getCanonicalLeadBank(lead) {
+    if (!lead) return 'OTHER';
+    const md = lead.mis_data || {};
+    const bankName = String(md.mis_bank_name || md.bank_name || '').toUpperCase().trim();
+    const redirectUrl = String(lead.redirect_url || '').toLowerCase();
+    const cardName = String(lead.card_name || '').toLowerCase();
+    const cardBank = String(lead.card_bank || '').toLowerCase();
+
+    // 1. Direct REDIRECT URL matching
+    if (redirectUrl.includes('gokiwi') || redirectUrl.includes('kiwi')) return 'KIWI';
+    if (redirectUrl.includes('scapia')) return 'SCAPIA';
+    if (redirectUrl.includes('applyonline.hdfcbank') || redirectUrl.includes('hdfcbank') || redirectUrl.includes('hdfc')) return 'HDFC';
+    if (redirectUrl.includes('sbicard') || redirectUrl.includes('simplyclick') || redirectUrl.includes('sbi')) return 'SBI';
+    if (redirectUrl.includes('icici')) return 'ICICI';
+    if (redirectUrl.includes('axis')) return 'AXIS';
+
+    // 2. Card Name / Card Bank
+    if (cardName.includes('kiwi') || cardBank.includes('kiwi')) return 'KIWI';
+    if (cardName.includes('scapia') || cardBank.includes('scapia')) return 'SCAPIA';
+    if (cardName.includes('sbi') || cardBank.includes('sbi') || cardName.includes('simplyclick')) return 'SBI';
+    if (cardName.includes('hdfc') || cardBank.includes('hdfc') || cardName.includes('pixel')) return 'HDFC';
+    if (cardName.includes('icici') || cardBank.includes('icici')) return 'ICICI';
+    if (cardName.includes('axis') || cardBank.includes('axis')) return 'AXIS';
+    if (cardName.includes('tata') || cardBank.includes('idfc')) return 'IDFC';
+
+    // 3. Inspection of tracking & landing page fields
+    const utmInspect = [
+      lead.landing_page,
+      lead.source,
+      lead.utm_source,
+      lead.utm_campaign,
+      lead.utm_content
+    ].filter(Boolean).join(' ').toLowerCase();
+
+    if (utmInspect.includes('gokiwi') || utmInspect.includes('kiwi')) return 'KIWI';
+    if (utmInspect.includes('scapia')) return 'SCAPIA';
+    if (utmInspect.includes('applyonline.hdfcbank') || utmInspect.includes('pixel') || utmInspect.includes('hdfc')) return 'HDFC';
+    if (utmInspect.includes('sbicard') || utmInspect.includes('simplyclick') || utmInspect.includes('sbi')) return 'SBI';
+    if (utmInspect.includes('icici')) return 'ICICI';
+    if (utmInspect.includes('axis')) return 'AXIS';
+
+    if (bankName) {
+      if (bankName.includes('SBI')) return 'SBI';
+      if (bankName.includes('KIWI') || bankName.includes('YES')) return 'KIWI';
+      if (bankName.includes('HDFC')) return 'HDFC';
+      if (bankName.includes('SCAPIA') || bankName.includes('BOB')) return 'SCAPIA';
+      return bankName;
+    }
+
+    return 'OTHER';
+  },
+
   async removeDuplicateLeads() {
     try {
       const allLeads = await this.getAllLeadsUnfiltered();
-      const grouped = new Map();
-      
+      const groupedSameDay = new Map();
+      const groupedSameBank = new Map();
+
+      const isSyncedWithMis = (l) => {
+        return !!(l.mis_status || l.mis_mapped_at || (l.mis_data && Object.keys(l.mis_data).length > 0));
+      };
+
       allLeads.forEach(lead => {
         if (!lead.phone) return;
         const cleanPhone = String(lead.phone).replace(/\D/g, '').slice(-10);
         if (!cleanPhone || cleanPhone.length < 10) return;
 
-        let bankName = String(lead.card_bank || lead.card_name || (lead.mis_data && lead.mis_data.mis_bank_name) || '').toUpperCase().trim();
-        if (bankName.includes('SBI')) bankName = 'SBI';
-        else if (bankName.includes('KIWI') || bankName.includes('YES')) bankName = 'KIWI';
-        else if (bankName.includes('HDFC')) bankName = 'HDFC';
-        else if (bankName.includes('SCAPIA') || bankName.includes('BOB')) bankName = 'SCAPIA';
-        if (!bankName) return;
+        const bank = this.getCanonicalLeadBank(lead);
+        if (!bank || bank === 'OTHER') return;
 
-        // Group by Phone + IST Date (YYYY-MM-DD) + Bank
         const dateStr = lead.created_at ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date(lead.created_at)) : 'nodate';
-        const key = `${cleanPhone}_${dateStr}_${bankName}`;
-
-        if (!grouped.has(key)) {
-          grouped.set(key, []);
+        
+        // Pass 1: Same Phone + Same Day + Same Bank
+        const keyDay = `${cleanPhone}_${dateStr}_${bank}`;
+        if (!groupedSameDay.has(keyDay)) {
+          groupedSameDay.set(keyDay, []);
         }
-        grouped.get(key).push(lead);
+        groupedSameDay.get(keyDay).push(lead);
+
+        // Pass 2: Same Phone + Same Bank (for unsynced duplicate attempts)
+        const keyBank = `${cleanPhone}_${bank}`;
+        if (!groupedSameBank.has(keyBank)) {
+          groupedSameBank.set(keyBank, []);
+        }
+        groupedSameBank.get(keyBank).push(lead);
       });
 
-      const idsToDelete = [];
-      const isSyncedWithMis = (l) => {
-        return !!(l.mis_status || l.mis_mapped_at || (l.mis_data && Object.keys(l.mis_data).length > 0));
-      };
+      const idsToDeleteSet = new Set();
 
-      for (const [key, leads] of grouped.entries()) {
-        if (leads.length > 1) {
-          leads.sort((a, b) => {
-            const aMapped = isSyncedWithMis(a) ? 100 : 0;
-            const bMapped = isSyncedWithMis(b) ? 100 : 0;
+      const processGroup = (groupMap) => {
+        for (const [key, leads] of groupMap.entries()) {
+          if (leads.length > 1) {
+            leads.sort((a, b) => {
+              const aMapped = isSyncedWithMis(a) ? 100 : 0;
+              const bMapped = isSyncedWithMis(b) ? 100 : 0;
 
-            if (aMapped !== bMapped) {
-              return bMapped - aMapped;
+              if (aMapped !== bMapped) {
+                return bMapped - aMapped;
+              }
+
+              const dateA = new Date(a.created_at || 0).getTime();
+              const dateB = new Date(b.created_at || 0).getTime();
+              return dateB - dateA;
+            });
+
+            for (let i = 1; i < leads.length; i++) {
+              const dup = leads[i];
+              const dupIsSynced = isSyncedWithMis(dup);
+              const keeperIsSynced = isSyncedWithMis(leads[0]);
+
+              if (dupIsSynced && keeperIsSynced) {
+                continue;
+              }
+              idsToDeleteSet.add(dup.id);
             }
-
-            const dateA = new Date(a.created_at || 0).getTime();
-            const dateB = new Date(b.created_at || 0).getTime();
-            return dateB - dateA;
-          });
-
-          for (let i = 1; i < leads.length; i++) {
-            const dup = leads[i];
-            const dupIsSynced = isSyncedWithMis(dup);
-            const keeperIsSynced = isSyncedWithMis(leads[0]);
-
-            // Protect lead if it has active MIS sync data and keeper is also MIS synced
-            if (dupIsSynced && keeperIsSynced) {
-              continue;
-            }
-
-            idsToDelete.push(dup.id);
           }
         }
-      }
+      };
+
+      processGroup(groupedSameDay);
+      processGroup(groupedSameBank);
+
+      const idsToDelete = Array.from(idsToDeleteSet);
 
       if (idsToDelete.length > 0) {
         const chunkSize = 100;
