@@ -667,13 +667,20 @@ const db = {
     ]);
 
     const sourceSet = new Set();
-    const utmSourceSet = new Set(['META', 'GOOGLE', 'LINKEDIN', 'INSTAGRAM', 'PUBLIC', 'AGENT']);
+    const utmSourceSet = new Set(['META', 'GOOGLE', 'LINKEDIN', 'INSTAGRAM', 'PUBLIC', 'AGENT', 'FACEBOOK', 'CHATGPT.COM', 'EXCEL_UPLOAD']);
 
     utmSourceRes.rows.forEach(r => {
-      if (r.utm_source) utmSourceSet.add(r.utm_source.toUpperCase().trim());
+      if (r.utm_source) {
+        const u = r.utm_source.toUpperCase().trim();
+        if (u) {
+          utmSourceSet.add(u);
+          sourceSet.add(u);
+        }
+      }
     });
 
     comboRes.rows.forEach(r => {
+      const cardName = (r.card_name || '').trim();
       let bank = (r.card_bank || r.card_name || '').toUpperCase().trim();
       if (bank.includes('SBI')) bank = 'SBI';
       else if (bank.includes('KIWI') || bank.includes('YES')) bank = 'KIWI';
@@ -681,19 +688,25 @@ const db = {
       else if (bank.includes('SCAPIA') || bank.includes('BOB')) bank = 'SCAPIA';
       else if (!bank) bank = 'PUBLIC';
 
-      let display = '';
+      const utmSrc = r.utm_source ? r.utm_source.toUpperCase().trim() : 'PUBLIC';
+
+      let displayBank = '';
       if (r.source === 'agent') {
         const agentName = r.agent_name || 'Staff';
-        display = `${bank} (${agentName})`;
+        displayBank = `${bank} (${agentName})`;
       } else {
-        const utmSrc = r.utm_source ? r.utm_source.toUpperCase().trim() : '';
-        if (utmSrc && utmSrc !== 'PUBLIC' && utmSrc !== bank) {
-          display = `${bank} (${utmSrc})`;
-        } else {
-          display = `${bank} (PUBLIC)`;
-        }
+        displayBank = `${bank} (${utmSrc})`;
       }
-      if (display) sourceSet.add(display);
+      if (displayBank) {
+        sourceSet.add(displayBank);
+        utmSourceSet.add(displayBank);
+      }
+
+      if (cardName) {
+        const displayCard = `${cardName} (${r.source === 'agent' ? (r.agent_name || 'Staff') : utmSrc})`;
+        sourceSet.add(displayCard);
+        utmSourceSet.add(displayCard);
+      }
     });
 
     _utmOptionsCache = {
@@ -786,7 +799,7 @@ const db = {
         const pSrcLike = params.length;
 
         clauses.push(`(
-          (LOWER(card_bank) LIKE $${pBank} OR LOWER(card_name) LIKE $${pBank})
+          (LOWER(card_bank) LIKE $${pBank} OR LOWER(card_name) LIKE $${pBank} OR LOWER(redirect_url) LIKE $${pBank})
           AND (
             LOWER(utm_source) = $${pSrc}
             OR LOWER(source) = $${pSrc}
@@ -807,17 +820,43 @@ const db = {
       }
     }
     if (utmSource) {
-      const cleanUtm = utmSource.trim().toLowerCase();
-      params.push(cleanUtm);
-      const pExact = params.length;
-      params.push(`%${cleanUtm}%`);
-      const pLike = params.length;
-      clauses.push(`(
-        LOWER(utm_source) = $${pExact}
-        OR LOWER(utm_source) LIKE $${pLike}
-        OR ($${pExact} = 'public' AND (utm_source IS NULL OR utm_source = '' OR utm_source = 'public'))
-        OR ($${pExact} = 'agent' AND source = 'agent')
-      )`);
+      const trimmedUtm = utmSource.trim();
+      const matchParen = trimmedUtm.match(/^([^(]+)\s*\(([^)]+)\)$/);
+      if (matchParen) {
+        const cardOrBankPart = matchParen[1].trim().toLowerCase();
+        const srcPart = matchParen[2].trim().toLowerCase();
+        params.push(`%${cardOrBankPart}%`);
+        const pCardBank = params.length;
+        params.push(srcPart);
+        const pSrc = params.length;
+        params.push(`%${srcPart}%`);
+        const pSrcLike = params.length;
+
+        clauses.push(`(
+          (LOWER(card_bank) LIKE $${pCardBank} OR LOWER(card_name) LIKE $${pCardBank} OR LOWER(redirect_url) LIKE $${pCardBank})
+          AND (
+            LOWER(utm_source) = $${pSrc}
+            OR LOWER(source) = $${pSrc}
+            OR LOWER(agent_name) LIKE $${pSrcLike}
+            OR ($${pSrc} = 'public' AND (utm_source IS NULL OR utm_source = '' OR utm_source = 'public'))
+          )
+        )`);
+      } else {
+        const cleanUtm = trimmedUtm.toLowerCase();
+        params.push(cleanUtm);
+        const pExact = params.length;
+        params.push(`%${cleanUtm}%`);
+        const pLike = params.length;
+        clauses.push(`(
+          LOWER(utm_source) = $${pExact}
+          OR LOWER(utm_source) LIKE $${pLike}
+          OR LOWER(source) LIKE $${pLike}
+          OR LOWER(card_name) LIKE $${pLike}
+          OR LOWER(card_bank) LIKE $${pLike}
+          OR ($${pExact} = 'public' AND (utm_source IS NULL OR utm_source = '' OR utm_source = 'public'))
+          OR ($${pExact} = 'agent' AND source = 'agent')
+        )`);
+      }
     }
     if (startDate) {
       params.push(startDate + ' 00:00:00+05:30');
