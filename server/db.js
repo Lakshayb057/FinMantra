@@ -1860,25 +1860,18 @@ const db = {
       });
 
       const idsToDelete = [];
-      const isSyncedOrHasUrn = (l) => {
-        const hasUrn = l.urn && String(l.urn).trim() !== '' && String(l.urn).trim() !== '-';
-        const isMapped = l.mis_status || l.mis_mapped_at || (l.mis_data && Object.keys(l.mis_data).length > 0);
-        return hasUrn || isMapped;
+      const isSyncedWithMis = (l) => {
+        return !!(l.mis_status || l.mis_mapped_at || (l.mis_data && Object.keys(l.mis_data).length > 0));
       };
 
       for (const [key, leads] of grouped.entries()) {
         if (leads.length > 1) {
           leads.sort((a, b) => {
-            const aUrn = (a.urn && String(a.urn).trim() !== '' && String(a.urn).trim() !== '-') ? 100 : 0;
-            const bUrn = (b.urn && String(b.urn).trim() !== '' && String(b.urn).trim() !== '-') ? 100 : 0;
-            const aMapped = (a.mis_status || (a.mis_data && Object.keys(a.mis_data).length > 0)) ? 50 : 0;
-            const bMapped = (b.mis_status || (b.mis_data && Object.keys(b.mis_data).length > 0)) ? 50 : 0;
+            const aMapped = isSyncedWithMis(a) ? 100 : 0;
+            const bMapped = isSyncedWithMis(b) ? 100 : 0;
 
-            const scoreA = aUrn + aMapped;
-            const scoreB = bUrn + bMapped;
-
-            if (scoreA !== scoreB) {
-              return scoreB - scoreA;
+            if (aMapped !== bMapped) {
+              return bMapped - aMapped;
             }
 
             const dateA = new Date(a.created_at || 0).getTime();
@@ -1888,17 +1881,14 @@ const db = {
 
           for (let i = 1; i < leads.length; i++) {
             const dup = leads[i];
-            const dupHasUrnOrSync = isSyncedOrHasUrn(dup);
-            const keeperHasUrnOrSync = isSyncedOrHasUrn(leads[0]);
+            const dupIsSynced = isSyncedWithMis(dup);
+            const keeperIsSynced = isSyncedWithMis(leads[0]);
 
-            if (dupHasUrnOrSync && !keeperHasUrnOrSync) {
+            // Protect lead if it has active MIS sync data and keeper is also MIS synced
+            if (dupIsSynced && keeperIsSynced) {
               continue;
             }
-            if (dupHasUrnOrSync && keeperHasUrnOrSync) {
-              if (dup.urn && leads[0].urn && String(dup.urn).trim() !== String(leads[0].urn).trim()) {
-                continue;
-              }
-            }
+
             idsToDelete.push(dup.id);
           }
         }
