@@ -439,10 +439,12 @@ async function checkAndFetchEmails(broadcastFn = null) {
         ? config.subject_keywords
         : defaultKeywords;
 
-      // Phase 1: Fetch lightweight headers only (fast and reliable)
+      // Phase 1: Collect candidate matching email headers first (avoids IMAP command collision)
+      const candidates = [];
       const messages = client.fetch('1:*', { uid: true, envelope: true });
       
       for await (const message of messages) {
+        if (!message || !message.uid) continue;
         const uidStr = String(message.uid);
         const sbiUidKey = `sbi_${uidStr}`;
         if (processedUids.has(sbiUidKey) || processedUids.has(uidStr)) continue; // Skip already processed email
@@ -474,10 +476,22 @@ async function checkAndFetchEmails(broadcastFn = null) {
 
         if (!isSenderAllowed) continue;
 
+        candidates.push({ uidStr, sbiUidKey, subject, fromAddr });
+      }
+
+      // Phase 2: Fetch full message source specifically for each collected candidate UID
+      for (const cand of candidates) {
+        const { uidStr, sbiUidKey, subject, fromAddr } = cand;
         console.log(`[SBI Email Fetcher] Matched target email: "${subject}" (UID: ${uidStr}). Fetching attachment...`);
 
-        // Phase 2: Fetch full message source specifically for this single matched UID
-        const fullMsg = await client.fetchOne(uidStr, { source: true }, { uid: true });
+        let fullMsg = null;
+        try {
+          fullMsg = await client.fetchOne(uidStr, { source: true }, { uid: true });
+        } catch (fetchErr) {
+          console.error(`[SBI Email Fetcher] Error fetching message UID ${uidStr}:`, fetchErr.message);
+          continue;
+        }
+
         if (!fullMsg || !fullMsg.source) continue;
 
         const parsed = await simpleParser(fullMsg.source);
