@@ -300,13 +300,22 @@ async function processKiwiMisBuffer(buffer, attachmentName, broadcastFn = null) 
   };
 }
 
+let isFetching = false;
+
 async function checkAndFetchEmails(broadcastFn = null) {
+  if (isFetching) {
+    return { success: false, reason: 'Sync already in progress' };
+  }
+  isFetching = true;
+
   const config = await getEmailConfig();
   if (!config.enabled) {
+    isFetching = false;
     return { success: false, reason: 'Disabled in settings' };
   }
 
   if (!config.app_password) {
+    isFetching = false;
     return { success: false, reason: 'No password configured' };
   }
 
@@ -476,6 +485,8 @@ async function checkAndFetchEmails(broadcastFn = null) {
       console.error('[KIWI Email Fetcher] IMAP Error:', msg);
     }
     return { success: false, error: msg };
+  } finally {
+    isFetching = false;
   }
 }
 

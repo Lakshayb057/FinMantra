@@ -390,11 +390,19 @@ async function processSbiMisRows(rows, attachmentName, broadcastFn = null) {
   };
 }
 
+let isFetching = false;
+
 // Check Gmail IMAP and fetch SBI MIS attachments
 async function checkAndFetchEmails(broadcastFn = null) {
+  if (isFetching) {
+    return { success: false, reason: 'Sync already in progress' };
+  }
+  isFetching = true;
+
   const config = await getEmailConfig();
   if (!config.enabled) {
     console.log('[SBI Email Fetcher] Disabled in settings. Skipping IMAP sync.');
+    isFetching = false;
     return { success: false, reason: 'Disabled in settings' };
   }
 
@@ -592,6 +600,8 @@ async function checkAndFetchEmails(broadcastFn = null) {
       console.error('[SBI Email Fetcher] IMAP Error:', msg);
     }
     return { success: false, error: msg };
+  } finally {
+    isFetching = false;
   }
 }
 

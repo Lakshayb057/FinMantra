@@ -4712,24 +4712,28 @@ server.listen(PORT, async () => {
       await baileys.initBaileys(broadcast);
     }
 
-    // Initialize SBI Email MIS Auto-Sync Poller (Runs 15s after boot, then every 1 min)
-    setTimeout(() => {
-      sbiEmailFetcher.checkAndFetchEmails(broadcast).catch(err => {
+    // Initialize Email MIS Auto-Sync Poller (Runs sequentially to prevent IMAP connection contention)
+    const runEmailPollers = async () => {
+      try {
+        await sbiEmailFetcher.checkAndFetchEmails(broadcast);
+      } catch (err) {
         console.error('[SBI Email MIS Poller] Error:', err.message);
-      });
-      kiwiEmailFetcher.checkAndFetchEmails(broadcast).catch(err => {
+      }
+      await new Promise(r => setTimeout(r, 4000));
+      try {
+        await kiwiEmailFetcher.checkAndFetchEmails(broadcast);
+      } catch (err) {
         console.error('[KIWI Email MIS Poller] Error:', err.message);
-      });
+      }
+    };
+
+    setTimeout(() => {
+      runEmailPollers();
     }, 15000);
 
     setInterval(() => {
-      sbiEmailFetcher.checkAndFetchEmails(broadcast).catch(err => {
-        console.error('[SBI Email MIS Poller] Error:', err.message);
-      });
-      kiwiEmailFetcher.checkAndFetchEmails(broadcast).catch(err => {
-        console.error('[KIWI Email MIS Poller] Error:', err.message);
-      });
-    }, 1 * 60 * 1000);
+      runEmailPollers();
+    }, 2 * 60 * 1000);
   } catch (err) {
     console.error('====================================================================');
     console.error('[Database] WARNING: Server startup failed to initialize database connectivity.');
