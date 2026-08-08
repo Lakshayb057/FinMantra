@@ -3705,7 +3705,6 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                     <option value="">Filter by Source</option>
                     <option value="public">Public Website</option>
                     <option value="agent">Agent Walk-in</option>
-                    <option value>Filter by Source</option>
                     <option value="kiwi">Kiwi Page</option>
                     <option value="simplyclick_sbi">SBI SimplyClick</option>
                     <option value="scapia">Scapia Landing Page</option>
