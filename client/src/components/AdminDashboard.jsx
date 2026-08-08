@@ -904,6 +904,37 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
     setCurrentPage(1);
   }, [searchTerm, filterCard, filterSource, filterUtmSource, filterStartDate, filterEndDate, filterCampaign, filterTerm, filterInfo]);
 
+  // Dynamically filter UTM source options based on selected Bank / Source
+  const availableUtmSources = useMemo(() => {
+    const allUtm = utmOptions.utm_sources || [];
+    if (!filterSource) return allUtm;
+
+    const srcLower = filterSource.toLowerCase().trim();
+
+    let searchKw = srcLower;
+    const match = srcLower.match(/^([^(]+)/);
+    if (match) {
+      searchKw = match[1].trim();
+    }
+
+    if (searchKw.includes('sbi') || searchKw.includes('simplyclick')) searchKw = 'sbi';
+    else if (searchKw.includes('kiwi') || searchKw.includes('yes')) searchKw = 'kiwi';
+    else if (searchKw.includes('hdfc') || searchKw.includes('pixel')) searchKw = 'hdfc';
+    else if (searchKw.includes('scapia')) searchKw = 'scapia';
+
+    return allUtm.filter(opt => {
+      const optLower = opt.toLowerCase().trim();
+      return optLower.includes(searchKw) || optLower.includes(srcLower);
+    });
+  }, [utmOptions.utm_sources, filterSource]);
+
+  // Reset UTM source filter if selected option is no longer valid for the new Filter by Source
+  useEffect(() => {
+    if (filterUtmSource && availableUtmSources.length > 0 && !availableUtmSources.includes(filterUtmSource)) {
+      setFilterUtmSource('');
+    }
+  }, [filterSource, availableUtmSources, filterUtmSource]);
+
   // Refetch leads when pagination/filters change (debounced for search)
   useEffect(() => {
     if (!isAuthenticated || !token) return;
@@ -3703,11 +3734,13 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                   </select>
                   <select className="form-select" value={filterSource} onChange={(e) => setFilterSource(e.target.value)} style={{ flex: '1 1 140px', minWidth: '125px', height: '36px', fontSize: '0.8rem', textOverflow: 'ellipsis' }}>
                     <option value="">Filter by Source</option>
+                    <option value="SBI">SBI</option>
+                    <option value="KIWI">KIWI</option>
+                    <option value="HDFC">HDFC</option>
+                    <option value="SCAPIA">SCAPIA</option>
                     <option value="public">Public Website</option>
                     <option value="agent">Agent Walk-in</option>
-                    <option value="kiwi">Kiwi Page</option>
-                    <option value="simplyclick_sbi">SBI SimplyClick</option>
-                    <option value="scapia">Scapia Landing Page</option>
+                    {(utmOptions.sources || []).map((src, i) => <option key={i} value={src}>{src}</option>)}
                   </select>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', flex: '1 1 140px', minWidth: '130px' }}>
                     <span style={{ fontSize: '0.72rem', color: 'hsl(var(--text-muted))', whiteSpace: 'nowrap' }}>From:</span>
@@ -3738,7 +3771,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                   </select>
                   <select className="form-select" value={filterUtmSource} onChange={(e) => setFilterUtmSource(e.target.value)} style={{ flex: '1 1 140px', minWidth: '125px', height: '36px', fontSize: '0.8rem', textOverflow: 'ellipsis' }}>
                     <option value="">UTM Source</option>
-                    {(utmOptions.utm_sources || []).map((u, i) => <option key={i} value={u}>{u}</option>)}
+                    {(availableUtmSources || []).map((u, i) => <option key={i} value={u}>{u}</option>)}
                   </select>
                   <button 
                     onClick={() => { setSearchTerm(''); setFilterCard(''); setFilterSource(''); setFilterUtmSource(''); setFilterStartDate(''); setFilterEndDate(''); setFilterCampaign(''); setFilterTerm(''); setFilterInfo(''); }}
