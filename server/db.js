@@ -655,7 +655,7 @@ const db = {
 
   async getUTMFilterOptions() {
     const now = Date.now();
-    if (_utmOptionsCache && (now - _utmOptionsCacheTime) < 10 * 60 * 1000) {
+    if (_utmOptionsCache && (now - _utmOptionsCacheTime) < 15 * 1000) {
       return _utmOptionsCache;
     }
     const [campRes, termRes, infoRes, utmSourceRes, comboRes] = await Promise.all([
@@ -667,7 +667,7 @@ const db = {
     ]);
 
     const sourceSet = new Set();
-    const utmSourceSet = new Set(['META', 'GOOGLE', 'LINKEDIN', 'INSTAGRAM', 'PUBLIC', 'AGENT', 'FACEBOOK', 'CHATGPT.COM', 'EXCEL_UPLOAD']);
+    const utmSourceSet = new Set();
 
     utmSourceRes.rows.forEach(r => {
       if (r.utm_source) {
@@ -1041,6 +1041,7 @@ const db = {
         lead.company_name || null
       ]
     );
+    this.clearUTMCache();
     return { id, urn, ...lead, created_at: new Date().toISOString() };
   },
 
@@ -1080,16 +1081,19 @@ const db = {
         id
       ]
     );
+    this.clearUTMCache();
     return { id, ...lead };
   },
 
   async deleteLead(id) {
     await pool.query('DELETE FROM leads WHERE id = $1', [id]);
+    this.clearUTMCache();
     return true;
   },
 
   async deleteLeads(ids) {
     await pool.query('DELETE FROM leads WHERE id = ANY($1::varchar[])', [ids]);
+    this.clearUTMCache();
     return true;
   },
 
