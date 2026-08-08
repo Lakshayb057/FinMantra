@@ -3793,36 +3793,13 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                               </td>
                             )}
                             <td><span className="badge badge-info" style={{ cursor: 'pointer' }} onClick={() => handleViewLead(l)}>{l.urn}</span></td>
-                            <td>
-                              {(() => {
-                                const rUrl = getOriginalBankRedirectUrl(l);
-                                return (
-                                  <a 
-                                    href={rUrl} 
-                                    target="_blank" 
-                                    rel="noopener noreferrer" 
-                                    style={{ fontSize: '0.75rem', color: 'var(--accent)', textDecoration: 'underline', maxWidth: '170px', display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} 
-                                    title={rUrl}
-                                  >
-                                    {rUrl}
-                                  </a>
-                                );
-                              })()}
-                            </td>
                             <td>{formatDateTime(l.created_at)}</td>
                             <td style={{ fontWeight: 600, cursor: 'pointer' }} onClick={() => handleViewLead(l)}>{l.full_name}</td>
                             <td>{l.phone}</td>
                              <td>{getLeadCardName(l)} <span style={{ color: 'hsl(var(--text-muted))', fontSize: '0.8rem' }}>({getLeadBank(l)})</span></td>
                              <td style={{ maxWidth: '130px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={l.email}>{l.email || '-'}</td>
                              <td><code style={{ fontSize: '0.8rem', color: 'var(--gold-deep)' }}>{l.pan_no || '-'}</code></td>
-                             <td>{l.employment || '-'}</td>
-                             <td>
-                               <span className={`badge ${l.has_credit_card === 'Yes' ? 'badge-success' : 'badge-secondary'}`}>
-                                 {l.has_credit_card || '-'}
-                               </span>
-                             </td>
                              <td><code>{l.pincode || '-'}</code></td>
-                             <td>{l.monthly_income ? `₹${l.monthly_income}` : '-'}</td>
                              <td>
                                <span 
                                  className={`badge ${l.source === 'agent' ? 'badge-warning' : 'badge-success'}`}
