@@ -3703,12 +3703,16 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                   </select>
                   <select className="form-select" value={filterSource} onChange={(e) => setFilterSource(e.target.value)} style={{ flex: '1 1 140px', minWidth: '125px', height: '36px', fontSize: '0.8rem', textOverflow: 'ellipsis' }}>
                     <option value="">Filter by Source</option>
-                    {(utmOptions.sources || []).map((src, i) => <option key={i} value={src}>{src}</option>)}
+                    <option value="public">Public Website</option>
+                    <option value="agent">Agent Walk-in</option>
+                    <option value>Filter by Source</option>
+                    <option value="kiwi">Kiwi Page</option>
+                    <option value="simplyclick_sbi">SBI SimplyClick</option>
+                    <option value="scapia">Scapia Landing Page</option>
                   </select>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', flex: '1 1 140px', minWidth: '130px' }}>
                     <span style={{ fontSize: '0.72rem', color: 'hsl(var(--text-muted))', whiteSpace: 'nowrap' }}>From:</span>
                     <input 
-                      type="date" 
                       className="form-input" 
                       value={filterStartDate}
                       onChange={(e) => setFilterStartDate(e.target.value)}
@@ -3761,17 +3765,16 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                           </th>
                         )}
                         <th>URN No.</th>
-                        <th>Redirect URL</th>
+                        
                         <th>Date & Time</th>
                         <th>Name</th>
                         <th>WhatsApp No.</th>
                         <th>Card Selection</th>
                         <th style={{ width: '130px', maxWidth: '130px' }}>Email</th>
                         <th>PAN No.</th>
-                        <th>Employment</th>
-                        <th>Already Has Card?</th>
+                       
                         <th>Pincode</th>
-                        <th>Monthly Income</th>
+                       
                         <th>Source</th>
                         <th>Actions</th>
                       </tr>
