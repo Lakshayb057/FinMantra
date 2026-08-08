@@ -911,12 +911,18 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
     const srcLower = filterSource.toLowerCase().trim();
 
-    let searchKw = srcLower;
-    const match = srcLower.match(/^([^(]+)/);
-    if (match) {
-      searchKw = match[1].trim();
+    if (srcLower === 'agent') {
+      return allUtm.filter(opt => opt.toLowerCase().includes('agent'));
     }
 
+    if (srcLower === 'public') {
+      return allUtm.filter(opt => {
+        const l = opt.toLowerCase();
+        return l.includes('public') || l === 'meta' || l === 'google' || l === 'linkedin' || l === 'facebook' || l === 'instagram';
+      });
+    }
+
+    let searchKw = srcLower;
     if (searchKw.includes('sbi') || searchKw.includes('simplyclick')) searchKw = 'sbi';
     else if (searchKw.includes('kiwi') || searchKw.includes('yes')) searchKw = 'kiwi';
     else if (searchKw.includes('hdfc') || searchKw.includes('pixel')) searchKw = 'hdfc';
@@ -924,7 +930,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
     return allUtm.filter(opt => {
       const optLower = opt.toLowerCase().trim();
-      return optLower.includes(searchKw) || optLower.includes(srcLower);
+      return optLower.includes(searchKw);
     });
   }, [utmOptions.utm_sources, filterSource]);
 
@@ -3740,7 +3746,6 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                     <option value="SCAPIA">SCAPIA</option>
                     <option value="public">Public Website</option>
                     <option value="agent">Agent Walk-in</option>
-                    {(utmOptions.sources || []).map((src, i) => <option key={i} value={src}>{src}</option>)}
                   </select>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', flex: '1 1 140px', minWidth: '130px' }}>
                     <span style={{ fontSize: '0.72rem', color: 'hsl(var(--text-muted))', whiteSpace: 'nowrap' }}>From:</span>
