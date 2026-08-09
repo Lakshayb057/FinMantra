@@ -2203,7 +2203,17 @@ const db = {
           UPPER(mis_status) LIKE '%SUCCESS%' OR
           UPPER(mis_status) LIKE '%PASS%' OR
           UPPER(COALESCE(mis_data->>'final_decision', '')) LIKE '%APPROV%' OR
-          UPPER(COALESCE(mis_data->>'STATUS', '')) LIKE '%APPROV%'
+          UPPER(COALESCE(mis_data->>'STATUS', '')) LIKE '%APPROV%' OR
+          UPPER(COALESCE(mis_data->>'Card_Created', '')) LIKE '%YES%' OR
+          UPPER(COALESCE(mis_data->>'Card_Created', '')) LIKE '%APPROV%' OR
+          UPPER(COALESCE(mis_data->>'Card_Created', '')) LIKE '%CREATE%' OR
+          mis_data->>'Card_Created' = '1' OR
+          UPPER(COALESCE(mis_data->>'card_created', '')) LIKE '%YES%' OR
+          UPPER(COALESCE(mis_data->>'card_created', '')) LIKE '%APPROV%' OR
+          UPPER(COALESCE(mis_data->>'card_created', '')) LIKE '%CREATE%' OR
+          mis_data->>'card_created' = '1' OR
+          UPPER(COALESCE(mis_data->>'current_state', '')) LIKE '%CARD%CREATE%' OR
+          UPPER(COALESCE(mis_data->>'current_state', '')) LIKE '%CREATE%'
         )`;
       }
 
