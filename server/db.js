@@ -2173,7 +2173,36 @@ const db = {
     try {
       if (sqlFilter && sqlFilter.trim()) {
         const res = await pool.query(sqlFilter);
-        return res.rows;
+        let rows = res.rows;
+        if (bankName && bankName !== 'ALL') {
+          const cbUpper = bankName.trim().toUpperCase();
+          rows = rows.filter(r => {
+            const md = r.mis_data || {};
+            const bStr = (String(r.card_bank || '') + ' ' + String(md.mis_bank_name || '') + ' ' + String(r.source || '')).toUpperCase();
+            if (cbUpper.includes('KIWI')) {
+              const isKiwi = bStr.includes('KIWI') || (md.kiwi_winning_bank && md.kiwi_winning_bank !== 'null') || String(r.source || '').toLowerCase() === 'kiwi';
+              const isOther = bStr.includes('HDFC') || bStr.includes('SBI') || bStr.includes('SCAPIA');
+              return isKiwi && !isOther;
+            }
+            if (cbUpper.includes('SBI')) {
+              const isSbi = bStr.includes('SBI');
+              const isOther = bStr.includes('KIWI') || bStr.includes('HDFC') || bStr.includes('SCAPIA') || String(r.source || '').toLowerCase() === 'kiwi';
+              return isSbi && !isOther;
+            }
+            if (cbUpper.includes('HDFC')) {
+              const isHdfc = bStr.includes('HDFC');
+              const isOther = bStr.includes('KIWI') || bStr.includes('SBI') || bStr.includes('SCAPIA') || String(r.source || '').toLowerCase() === 'kiwi';
+              return isHdfc && !isOther;
+            }
+            if (cbUpper.includes('SCAPIA')) {
+              const isScapia = bStr.includes('SCAPIA');
+              const isOther = bStr.includes('KIWI') || bStr.includes('SBI') || bStr.includes('HDFC') || String(r.source || '').toLowerCase() === 'kiwi';
+              return isScapia && !isOther;
+            }
+            return true;
+          });
+        }
+        return rows;
       }
 
       const cat = String(misCategory || 'FINAL APPROVED').toUpperCase().trim();
