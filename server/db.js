@@ -337,9 +337,11 @@ async function initPgSchema() {
     } catch (migErr) {}
     try {
       await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS capi_status VARCHAR(50)");
-    } catch (migErr) {}
-    try {
       await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS capi_response JSONB");
+      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS capi_last_event VARCHAR(100)");
+      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS capi_last_value NUMERIC");
+      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS capi_last_status VARCHAR(50)");
+      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS capi_last_at TIMESTAMP WITH TIME ZONE");
     } catch (migErr) {}
     try {
       await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS pan_no VARCHAR(50)");
@@ -372,6 +374,37 @@ async function initPgSchema() {
         failed_count INT DEFAULT 0,
         errors JSONB DEFAULT '[]'::jsonb,
         file_path VARCHAR(500) NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS meta_audiences (
+        id VARCHAR(100) PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        meta_audience_id VARCHAR(100),
+        description TEXT,
+        bank_name VARCHAR(100) DEFAULT 'ALL',
+        mis_category VARCHAR(100) DEFAULT 'FINAL APPROVED',
+        sql_filter TEXT,
+        total_records INTEGER DEFAULT 0,
+        auto_push BOOLEAN DEFAULT TRUE,
+        status VARCHAR(50) DEFAULT 'active',
+        last_synced_at TIMESTAMP WITH TIME ZONE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS audience_history_logs (
+        id VARCHAR(100) PRIMARY KEY,
+        audience_id VARCHAR(100) REFERENCES meta_audiences(id) ON DELETE CASCADE,
+        audience_name VARCHAR(255),
+        records_processed INTEGER DEFAULT 0,
+        records_failed INTEGER DEFAULT 0,
+        query TEXT,
+        error_message TEXT,
+        status VARCHAR(50) DEFAULT 'SUCCESS',
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -1638,8 +1671,9 @@ const db = {
   },
 
   async bulkUpdateLeadMISStatus(updates, agentId = null, agentName = null) {
-    if (!updates || updates.length === 0) return;
+    if (!updates || updates.length === 0) return [];
     const client = await pool.connect();
+    const updatedLeads = [];
     try {
       await client.query("SET statement_timeout = 300000");
       const batchSize = 50;
@@ -1670,10 +1704,15 @@ const db = {
               application_id = COALESCE(NULLIF(tmp.app_id, ''), l.application_id)
           FROM (VALUES ${valueLines.join(', ')}) AS tmp(id, mis_status, mis_data, agent_id, agent_name, app_id)
           WHERE l.id = tmp.id
+          RETURNING l.id, l.urn, l.full_name, l.phone, l.email, l.card_bank, l.card_name, l.mis_status, l.mis_data, l.fbclid, l.utm_params, l.ip_address, l.user_agent, l.landing_page
         `;
         
-        await client.query(queryText, queryParams);
+        const res = await client.query(queryText, queryParams);
+        if (res.rows && res.rows.length > 0) {
+          updatedLeads.push(...res.rows);
+        }
       }
+      return updatedLeads;
     } catch (e) {
       console.error('[DB] bulkUpdateLeadMISStatus error:', e.message);
       throw e;
@@ -1993,6 +2032,172 @@ const db = {
     } catch (e) {
       console.error('[DB] setLeadVisibilityConfig error:', e.message);
       return false;
+    }
+  },
+
+  // --- Meta Audiences & CAPI ---
+  async getMetaAudiences() {
+    try {
+      const res = await pool.query('SELECT * FROM meta_audiences ORDER BY created_at DESC');
+      return res.rows;
+    } catch (e) {
+      console.error('[DB] getMetaAudiences error:', e.message);
+      return [];
+    }
+  },
+
+  async getMetaAudienceById(id) {
+    try {
+      const res = await pool.query('SELECT * FROM meta_audiences WHERE id = $1', [id]);
+      return res.rows[0] || null;
+    } catch (e) {
+      console.error('[DB] getMetaAudienceById error:', e.message);
+      return null;
+    }
+  },
+
+  async createMetaAudience(audience) {
+    try {
+      const id = audience.id || `aud_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+      const res = await pool.query(
+        `INSERT INTO meta_audiences (id, name, meta_audience_id, description, bank_name, mis_category, sql_filter, total_records, auto_push, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         RETURNING *`,
+        [
+          id,
+          audience.name,
+          audience.meta_audience_id || null,
+          audience.description || '',
+          audience.bank_name || 'ALL',
+          audience.mis_category || 'FINAL APPROVED',
+          audience.sql_filter || '',
+          audience.total_records || 0,
+          audience.auto_push !== undefined ? audience.auto_push : true,
+          audience.status || 'active'
+        ]
+      );
+      return res.rows[0];
+    } catch (e) {
+      console.error('[DB] createMetaAudience error:', e.message);
+      throw e;
+    }
+  },
+
+  async updateMetaAudience(id, updates) {
+    try {
+      const fields = [];
+      const values = [];
+      let idx = 1;
+      for (const [k, v] of Object.entries(updates)) {
+        if (['name', 'meta_audience_id', 'description', 'bank_name', 'mis_category', 'sql_filter', 'total_records', 'auto_push', 'status', 'last_synced_at'].includes(k)) {
+          fields.push(`${k} = $${idx}`);
+          values.push(v);
+          idx++;
+        }
+      }
+      if (fields.length === 0) return null;
+      values.push(id);
+      const query = `UPDATE meta_audiences SET ${fields.join(', ')} WHERE id = $${idx} RETURNING *`;
+      const res = await pool.query(query, values);
+      return res.rows[0] || null;
+    } catch (e) {
+      console.error('[DB] updateMetaAudience error:', e.message);
+      throw e;
+    }
+  },
+
+  async deleteMetaAudience(id) {
+    try {
+      await pool.query('DELETE FROM meta_audiences WHERE id = $1', [id]);
+      return true;
+    } catch (e) {
+      console.error('[DB] deleteMetaAudience error:', e.message);
+      return false;
+    }
+  },
+
+  async getAudienceHistoryLogs(limit = 100) {
+    try {
+      const res = await pool.query('SELECT * FROM audience_history_logs ORDER BY created_at DESC LIMIT $1', [limit]);
+      return res.rows;
+    } catch (e) {
+      console.error('[DB] getAudienceHistoryLogs error:', e.message);
+      return [];
+    }
+  },
+
+  async insertAudienceHistoryLog(logData) {
+    try {
+      const id = logData.id || `log_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+      const res = await pool.query(
+        `INSERT INTO audience_history_logs (id, audience_id, audience_name, records_processed, records_failed, query, error_message, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         RETURNING *`,
+        [
+          id,
+          logData.audience_id,
+          logData.audience_name || 'Custom Audience',
+          logData.records_processed || 0,
+          logData.records_failed || 0,
+          logData.query || '',
+          logData.error_message || null,
+          logData.status || 'SUCCESS'
+        ]
+      );
+      return res.rows[0];
+    } catch (e) {
+      console.error('[DB] insertAudienceHistoryLog error:', e.message);
+      return null;
+    }
+  },
+
+  async updateLeadCapiStatus(leadId, capiEvent, capiValue, capiStatus, capiResponse) {
+    try {
+      await pool.query(
+        `UPDATE leads SET 
+           capi_last_event = $1,
+           capi_last_value = $2,
+           capi_last_status = $3,
+           capi_response = $4,
+           capi_last_at = NOW()
+         WHERE id = $5`,
+        [capiEvent, capiValue, capiStatus, JSON.stringify(capiResponse || {}), leadId]
+      );
+    } catch (e) {
+      console.error('[DB] updateLeadCapiStatus error:', e.message);
+    }
+  },
+
+  async getFinalApprovedLeadsForAudience(bankName = 'ALL', sqlFilter = null) {
+    try {
+      if (sqlFilter && sqlFilter.trim()) {
+        const res = await pool.query(sqlFilter);
+        return res.rows;
+      }
+
+      let whereClause = ` WHERE mis_status IS NOT NULL AND (
+        UPPER(mis_status) LIKE '%APPROVE%' OR 
+        UPPER(mis_status) LIKE '%ISSUED%' OR 
+        UPPER(mis_status) LIKE '%DISBURSED%' OR 
+        UPPER(mis_status) LIKE '%ACTIVAT%' OR 
+        UPPER(mis_status) LIKE '%FIRST_TXN%' OR
+        UPPER(mis_status) LIKE '%CARD_CREATED%'
+      )`;
+
+      const params = [];
+      if (bankName && bankName !== 'ALL') {
+        params.push(`%${bankName.trim()}%`);
+        whereClause += ` AND (UPPER(card_bank) LIKE UPPER($${params.length}) OR UPPER(mis_data->>'mis_bank_name') LIKE UPPER($${params.length}))`;
+      }
+
+      const res = await pool.query(
+        `SELECT id, urn, full_name, phone, email, card_bank, card_name, mis_status, mis_data FROM leads ${whereClause}`,
+        params
+      );
+      return res.rows;
+    } catch (e) {
+      console.error('[DB] getFinalApprovedLeadsForAudience error:', e.message);
+      return [];
     }
   }
 }

@@ -6,6 +6,7 @@ const path = require('path');
 const os = require('os');
 const { execFile } = require('child_process');
 const db = require('./db');
+const metaCapi = require('./metaCapi');
 const sbiFetcher = require('./sbiEmailFetcher'); // To reuse config
 
 async function getEmailConfig() {
@@ -289,7 +290,17 @@ async function processKiwiMisBuffer(buffer, attachmentName, broadcastFn = null) 
   }
 
   if (updates.length > 0) {
-    await db.bulkUpdateLeadMISStatus(updates);
+    const updatedLeads = await db.bulkUpdateLeadMISStatus(updates);
+    if (updatedLeads && updatedLeads.length > 0) {
+      setTimeout(async () => {
+        for (const lead of updatedLeads) {
+          if (metaCapi.isFinalApprovedStatus(lead.mis_status)) {
+            await metaCapi.sendMetaCapiEvent(lead, 'Purchase', 2000, 'KIWI');
+          }
+        }
+        await metaCapi.syncLeadsToMetaCustomAudiences(updatedLeads);
+      }, 100);
+    }
   }
 
   return {

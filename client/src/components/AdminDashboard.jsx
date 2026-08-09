@@ -6,7 +6,7 @@ import {
   QrCode, Smartphone, CheckCircle, Wifi, WifiOff, Eye, EyeOff, MessageSquare, Layers,
   ArrowUp, ArrowDown, MoreVertical, LogOut, Activity, Sun, Moon, LogIn,
   TrendingUp, Upload, CheckCircle2, Filter, Database, UserPlus, FileSpreadsheet, FolderArchive, FolderDown, FileText,
-  Bell, Mail, Key, AlertTriangle, Info
+  Bell, Mail, Key, AlertTriangle, Info, Target, Zap, Share2
 } from 'lucide-react';
 
 const formatDateTime = (dateStr) => {
@@ -235,6 +235,149 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   const [kiwiEmailConfigError, setKiwiEmailConfigError] = useState('');
   const [kiwiEmailConfigSuccess, setKiwiEmailConfigSuccess] = useState('');
 
+  // ── Meta Audiences & CAPI States ──
+  const [metaAudiences, setMetaAudiences] = useState([]);
+  const [audienceLogs, setAudienceLogs] = useState([]);
+  const [loadingAudiences, setLoadingAudiences] = useState(false);
+  const [showAudienceModal, setShowAudienceModal] = useState(false);
+  const [editingAudience, setEditingAudience] = useState(null);
+  const [audienceFormData, setAudienceFormData] = useState({
+    name: '',
+    description: '',
+    bank_name: 'ALL',
+    mis_category: 'FINAL APPROVED',
+    sql_filter: '',
+    auto_push: true
+  });
+  const [syncingAudienceId, setSyncingAudienceId] = useState(null);
+  const [activeAudienceTab, setActiveAudienceTab] = useState('audiences');
+  const [testCapiBank, setTestCapiBank] = useState('HDFC Bank');
+  const [testCapiResult, setTestCapiResult] = useState(null);
+  const [testingCapi, setTestingCapi] = useState(false);
+
+  const fetchMetaAudiences = async () => {
+    if (!token) return;
+    setLoadingAudiences(true);
+    try {
+      const res = await fetch('/api/meta/audiences', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        setMetaAudiences(data.audiences || []);
+      }
+    } catch (err) {
+      console.error('Error fetching Meta audiences:', err);
+    } finally {
+      setLoadingAudiences(false);
+    }
+  };
+
+  const fetchAudienceLogs = async () => {
+    if (!token) return;
+    try {
+      const res = await fetch('/api/meta/audiences/logs', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        setAudienceLogs(data.logs || []);
+      }
+    } catch (err) {
+      console.error('Error fetching audience logs:', err);
+    }
+  };
+
+  const handleSaveAudience = async () => {
+    if (!token || !audienceFormData.name.trim()) return;
+    try {
+      const url = editingAudience ? `/api/meta/audiences/${editingAudience.id}` : '/api/meta/audiences';
+      const method = editingAudience ? 'PUT' : 'POST';
+      const res = await fetch(url, {
+        method,
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(audienceFormData)
+      });
+      const data = await res.json();
+      if (data.success) {
+        setShowAudienceModal(false);
+        setEditingAudience(null);
+        setAudienceFormData({ name: '', description: '', bank_name: 'ALL', mis_category: 'FINAL APPROVED', sql_filter: '', auto_push: true });
+        fetchMetaAudiences();
+      } else {
+        alert(data.error || 'Failed to save Meta audience');
+      }
+    } catch (err) {
+      alert('Error saving audience: ' + err.message);
+    }
+  };
+
+  const handleDeleteAudience = async (id) => {
+    if (!token || !window.confirm('Are you sure you want to delete this Meta Custom Audience?')) return;
+    try {
+      const res = await fetch(`/api/meta/audiences/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchMetaAudiences();
+      } else {
+        alert(data.error || 'Failed to delete audience');
+      }
+    } catch (err) {
+      alert('Error deleting audience: ' + err.message);
+    }
+  };
+
+  const handleSyncAudience = async (id) => {
+    if (!token) return;
+    setSyncingAudienceId(id);
+    try {
+      const res = await fetch(`/api/meta/audiences/${id}/sync`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchMetaAudiences();
+        fetchAudienceLogs();
+        alert(data.message || 'Audience sync completed successfully!');
+      } else {
+        alert(data.error || 'Failed to sync audience');
+      }
+    } catch (err) {
+      alert('Error syncing audience: ' + err.message);
+    } finally {
+      setSyncingAudienceId(null);
+    }
+  };
+
+  const handleTestCapiTrigger = async () => {
+    if (!token) return;
+    setTestingCapi(true);
+    setTestCapiResult(null);
+    try {
+      const res = await fetch('/api/meta/test-capi', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ bank_name: testCapiBank })
+      });
+      const data = await res.json();
+      setTestCapiResult(data);
+    } catch (err) {
+      setTestCapiResult({ error: err.message });
+    } finally {
+      setTestingCapi(false);
+    }
+  };
+
   const defaultCreateLeadForm = {
     application_id: '',
     full_name: '',
@@ -376,6 +519,13 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       events.forEach(event => window.removeEventListener(event, resetIdleTimer));
     };
   }, [token]);
+
+  useEffect(() => {
+    if (activeTab === 'audiences' && isAuthenticated && token) {
+      fetchMetaAudiences();
+      fetchAudienceLogs();
+    }
+  }, [activeTab, isAuthenticated, token]);
 
   // Load Admin Data
   useEffect(() => {
@@ -3067,6 +3217,13 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
               <MapPin size={16} /> Kiosks & Cities
             </button>
             <button 
+              className={`nav-link ${activeTab === 'audiences' ? 'active' : ''}`} 
+              onClick={() => { setActiveTab('audiences'); setShowMobileMenu(false); }}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.6rem 0.85rem', width: '100%', fontSize: '0.9rem', border: 'none', background: activeTab === 'audiences' ? 'var(--paper-2)' : 'transparent', color: activeTab === 'audiences' ? 'var(--gold-deep)' : 'var(--ink)', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}
+            >
+              <Target size={16} /> Meta Audiences & CAPI
+            </button>
+            <button 
               className={`nav-link ${activeTab === 'settings' ? 'active' : ''}`} 
               onClick={() => { setActiveTab('settings'); setShowMobileMenu(false); }}
               style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.6rem 0.85rem', width: '100%', fontSize: '0.9rem', border: 'none', background: activeTab === 'settings' ? 'var(--paper-2)' : 'transparent', color: activeTab === 'settings' ? 'var(--gold-deep)' : 'var(--ink)', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}
@@ -3231,6 +3388,28 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
               }}
             >
               <MapPin size={20} />
+            </button>
+
+            <button
+              onClick={() => setActiveTab('audiences')}
+              title="Meta Audiences & CAPI"
+              className={`sidebar-icon-btn ${activeTab === 'audiences' ? 'active' : ''}`}
+              style={{
+                width: '44px',
+                height: '44px',
+                borderRadius: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: activeTab === 'audiences' ? '1px solid var(--gold)' : '1px solid transparent',
+                background: activeTab === 'audiences' ? 'var(--paper)' : 'transparent',
+                color: activeTab === 'audiences' ? 'var(--gold-deep)' : 'var(--muted)',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                boxShadow: activeTab === 'audiences' ? '0 4px 12px rgba(224, 168, 46, 0.15)' : 'none'
+              }}
+            >
+              <Target size={20} />
             </button>
 
             {/* Notification Center Bell Icon */}
@@ -3573,6 +3752,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                 {activeTab === 'cards' && 'Cards Catalog Manager'}
                 {activeTab === 'agents' && 'Agents Controller'}
                 {activeTab === 'locations' && 'Kiosks & City Locations'}
+                {activeTab === 'audiences' && 'Meta Custom Audiences & CAPI'}
                 {activeTab === 'settings' && 'System Settings & API'}
               </span>
               <span style={{ 
@@ -3595,6 +3775,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
               {activeTab === 'cards' && 'Configure credit card offers, ad tracking parameters, and dynamic partner redirect templates.'}
               {activeTab === 'agents' && 'Manage field sales agents, login credentials, assigned banks, and kiosk permissions.'}
               {activeTab === 'locations' && 'Manage operational cities, kiosk centers, and serviceability locations.'}
+              {activeTab === 'audiences' && 'Manage Meta Custom Audiences, automated CAPI Purchase dispatches, and real-time sync logs.'}
               {activeTab === 'settings' && 'Configure WhatsApp API gateways, export templates, security access rules, and system settings.'}
             </p>
           </div>
@@ -7382,6 +7563,566 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                     </div>
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* META AUDIENCES & CAPI TAB */}
+          {activeTab === 'audiences' && (
+            <div className="desktop-panel-fill" style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {/* Sub-navigation bar */}
+              <div className="glass-panel" style={{ display: 'flex', gap: '0.5rem', padding: '0.65rem 1rem', borderRadius: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <button
+                  onClick={() => setActiveAudienceTab('audiences')}
+                  style={{
+                    padding: '0.45rem 1rem',
+                    fontSize: '0.82rem',
+                    fontWeight: 700,
+                    borderRadius: '8px',
+                    border: activeAudienceTab === 'audiences' ? '1px solid var(--gold)' : '1px solid var(--line)',
+                    background: activeAudienceTab === 'audiences' ? 'var(--gold-deep)' : 'var(--paper-2)',
+                    color: activeAudienceTab === 'audiences' ? '#fff' : 'var(--ink)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <Target size={15} /> Custom Audiences ({metaAudiences.length})
+                </button>
+
+                <button
+                  onClick={() => setActiveAudienceTab('logs')}
+                  style={{
+                    padding: '0.45rem 1rem',
+                    fontSize: '0.82rem',
+                    fontWeight: 700,
+                    borderRadius: '8px',
+                    border: activeAudienceTab === 'logs' ? '1px solid var(--gold)' : '1px solid var(--line)',
+                    background: activeAudienceTab === 'logs' ? 'var(--gold-deep)' : 'var(--paper-2)',
+                    color: activeAudienceTab === 'logs' ? '#fff' : 'var(--ink)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <Activity size={15} /> Audience History Logs ({audienceLogs.length})
+                </button>
+
+                <button
+                  onClick={() => setActiveAudienceTab('capi_settings')}
+                  style={{
+                    padding: '0.45rem 1rem',
+                    fontSize: '0.82rem',
+                    fontWeight: 700,
+                    borderRadius: '8px',
+                    border: activeAudienceTab === 'capi_settings' ? '1px solid var(--gold)' : '1px solid var(--line)',
+                    background: activeAudienceTab === 'capi_settings' ? 'var(--gold-deep)' : 'var(--paper-2)',
+                    color: activeAudienceTab === 'capi_settings' ? '#fff' : 'var(--ink)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <Zap size={15} /> CAPI & Meta Credentials
+                </button>
+
+                <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  {activeAudienceTab === 'audiences' && (
+                    <button
+                      onClick={() => {
+                        setEditingAudience(null);
+                        setAudienceFormData({ name: '', description: '', bank_name: 'ALL', mis_category: 'FINAL APPROVED', sql_filter: '', auto_push: true });
+                        setShowAudienceModal(true);
+                      }}
+                      className="btn-primary"
+                      style={{ padding: '0.45rem 0.9rem', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', borderRadius: '6px', background: 'var(--gold-deep)', color: '#fff' }}
+                    >
+                      <Plus size={15} /> New Custom Audience
+                    </button>
+                  )}
+                  <button
+                    onClick={() => { fetchMetaAudiences(); fetchAudienceLogs(); }}
+                    className="btn-secondary"
+                    style={{ padding: '0.45rem 0.75rem', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', borderRadius: '6px' }}
+                    title="Refresh Audiences & Logs"
+                  >
+                    <RefreshCw size={14} className={loadingAudiences ? 'spin' : ''} /> Refresh
+                  </button>
+                </div>
+              </div>
+
+              {/* Sub-tab 1: CUSTOM AUDIENCES TABLE */}
+              {activeAudienceTab === 'audiences' && (
+                <div className="glass-panel desktop-panel-fill" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <Target size={20} style={{ color: 'var(--gold-deep)' }} />
+                        <span>Configured Meta Custom Audiences</span>
+                      </h3>
+                      <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.8rem', color: 'var(--muted)' }}>
+                        Audiences created in FinMantra and synced directly to Meta Ads Manager using hashed customer profiles (SHA-256 Email, Phone, Name).
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="desktop-scroll-panel" style={{ width: '100%', overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'left' }}>
+                      <thead>
+                        <tr style={{ background: 'var(--paper-2)', borderBottom: '2px solid var(--line)' }}>
+                          <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--ink)' }}>Audience Name</th>
+                          <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--ink)' }}>Meta Audience ID</th>
+                          <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--ink)' }}>Bank Target</th>
+                          <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--ink)' }}>Status Rule</th>
+                          <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--ink)', textAlign: 'right' }}>Total Records</th>
+                          <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--ink)' }}>Last Synced</th>
+                          <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--ink)', textAlign: 'center' }}>Auto-Push</th>
+                          <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--ink)', textAlign: 'center' }}>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {metaAudiences.length === 0 ? (
+                          <tr>
+                            <td colSpan={8} style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--muted)', fontSize: '0.9rem' }}>
+                              No Custom Audiences configured yet. Click <strong>"+ New Custom Audience"</strong> to define your first target audience!
+                            </td>
+                          </tr>
+                        ) : (
+                          metaAudiences.map(aud => (
+                            <tr key={aud.id} style={{ borderBottom: '1px solid var(--line)', transition: 'background 0.15s' }}>
+                              <td style={{ padding: '0.85rem 1rem', fontWeight: 700, color: 'var(--ink)' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                  <span>{aud.name}</span>
+                                  <button
+                                    onClick={() => {
+                                      setEditingAudience(aud);
+                                      setAudienceFormData({
+                                        name: aud.name || '',
+                                        description: aud.description || '',
+                                        bank_name: aud.bank_name || 'ALL',
+                                        mis_category: aud.mis_category || 'FINAL APPROVED',
+                                        sql_filter: aud.sql_filter || '',
+                                        auto_push: aud.auto_push !== undefined ? aud.auto_push : true
+                                      });
+                                      setShowAudienceModal(true);
+                                    }}
+                                    style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: '2px' }}
+                                    title="Edit Audience"
+                                  >
+                                    <Edit size={13} />
+                                  </button>
+                                </div>
+                                {aud.description && (
+                                  <div style={{ fontSize: '0.75rem', color: 'var(--muted)', fontWeight: 400, marginTop: '2px' }}>{aud.description}</div>
+                                )}
+                              </td>
+                              <td style={{ padding: '0.85rem 1rem', fontFamily: 'monospace', fontSize: '0.82rem' }}>
+                                {aud.meta_audience_id ? (
+                                  <span style={{ background: 'rgba(224, 168, 46, 0.1)', color: 'var(--gold-deep)', padding: '0.2rem 0.5rem', borderRadius: '4px', border: '1px solid rgba(224, 168, 46, 0.25)' }}>
+                                    {aud.meta_audience_id}
+                                  </span>
+                                ) : (
+                                  <span style={{ color: 'var(--muted)', fontStyle: 'italic' }}>Not Synced to Meta</span>
+                                )}
+                              </td>
+                              <td style={{ padding: '0.85rem 1rem' }}>
+                                <span style={{ padding: '0.2rem 0.6rem', borderRadius: '12px', background: 'var(--paper-2)', border: '1px solid var(--line)', fontWeight: 600, fontSize: '0.78rem' }}>
+                                  {aud.bank_name || 'ALL'}
+                                </span>
+                              </td>
+                              <td style={{ padding: '0.85rem 1rem' }}>
+                                <span style={{ padding: '0.2rem 0.6rem', borderRadius: '12px', background: 'rgba(16, 185, 129, 0.12)', color: 'var(--mint)', border: '1px solid rgba(16, 185, 129, 0.3)', fontWeight: 700, fontSize: '0.75rem' }}>
+                                  FINAL APPROVED
+                                </span>
+                              </td>
+                              <td style={{ padding: '0.85rem 1rem', textAlign: 'right', fontWeight: 800, color: 'var(--ink)' }}>
+                                {(Number(aud.total_records) || 0).toLocaleString()}
+                              </td>
+                              <td style={{ padding: '0.85rem 1rem', fontSize: '0.8rem', color: 'var(--muted)' }}>
+                                {aud.last_synced_at ? formatDateTime(aud.last_synced_at) : 'Never'}
+                              </td>
+                              <td style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>
+                                <span style={{
+                                  padding: '0.15rem 0.55rem',
+                                  borderRadius: '12px',
+                                  fontSize: '0.72rem',
+                                  fontWeight: 700,
+                                  background: aud.auto_push ? 'rgba(16, 185, 129, 0.12)' : 'rgba(209, 67, 67, 0.12)',
+                                  color: aud.auto_push ? 'var(--mint)' : 'var(--err)',
+                                  border: `1px solid ${aud.auto_push ? 'rgba(16, 185, 129, 0.3)' : 'rgba(209, 67, 67, 0.3)'}`
+                                }}>
+                                  {aud.auto_push ? 'ENABLED' : 'DISABLED'}
+                                </span>
+                              </td>
+                              <td style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>
+                                <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center' }}>
+                                  <button
+                                    onClick={() => handleSyncAudience(aud.id)}
+                                    disabled={syncingAudienceId === aud.id}
+                                    className="btn-primary"
+                                    style={{ padding: '0.35rem 0.65rem', fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: '0.3rem', background: 'var(--gold-deep)', color: '#fff', borderRadius: '4px' }}
+                                    title="Sync matching Final Approved leads to Meta Audience"
+                                  >
+                                    <Zap size={13} className={syncingAudienceId === aud.id ? 'spin' : ''} />
+                                    {syncingAudienceId === aud.id ? 'Pushing...' : 'Sync Now'}
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteAudience(aud.id)}
+                                    style={{ background: 'none', border: '1px solid rgba(209, 67, 67, 0.3)', color: 'var(--err)', borderRadius: '4px', padding: '0.35rem 0.5rem', cursor: 'pointer' }}
+                                    title="Delete Audience"
+                                  >
+                                    <Trash2 size={13} />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Sub-tab 2: AUDIENCE HISTORY LOGS */}
+              {activeAudienceTab === 'logs' && (
+                <div className="glass-panel desktop-panel-fill" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <Activity size={20} style={{ color: 'var(--gold-deep)' }} />
+                      <span>Audience History Logs</span>
+                    </h3>
+                    <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.8rem', color: 'var(--muted)' }}>
+                      Complete execution log tracking lead query processing, records pushed to Meta Ads Manager, and failed attempts.
+                    </p>
+                  </div>
+
+                  <div className="desktop-scroll-panel" style={{ width: '100%', overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem', textAlign: 'left' }}>
+                      <thead>
+                        <tr style={{ background: 'var(--paper-2)', borderBottom: '2px solid var(--line)' }}>
+                          <th style={{ padding: '0.7rem 0.85rem', fontWeight: 700, color: 'var(--ink)' }}>Audience</th>
+                          <th style={{ padding: '0.7rem 0.85rem', fontWeight: 700, color: 'var(--ink)' }}>Created Date</th>
+                          <th style={{ padding: '0.7rem 0.85rem', fontWeight: 700, color: 'var(--ink)', textAlign: 'right' }}>Record Processed</th>
+                          <th style={{ padding: '0.7rem 0.85rem', fontWeight: 700, color: 'var(--ink)', textAlign: 'right' }}>Record Failed</th>
+                          <th style={{ padding: '0.7rem 0.85rem', fontWeight: 700, color: 'var(--ink)' }}>Query</th>
+                          <th style={{ padding: '0.7rem 0.85rem', fontWeight: 700, color: 'var(--ink)', textAlign: 'center' }}>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {audienceLogs.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--muted)' }}>
+                              No audience history logs recorded yet.
+                            </td>
+                          </tr>
+                        ) : (
+                          audienceLogs.map((log, idx) => (
+                            <tr key={log.id || idx} style={{ borderBottom: '1px solid var(--line)' }}>
+                              <td style={{ padding: '0.7rem 0.85rem', fontWeight: 700, color: 'var(--ink)' }}>
+                                {log.audience_name || 'Custom Audience'}
+                              </td>
+                              <td style={{ padding: '0.7rem 0.85rem', color: 'var(--muted)', fontSize: '0.78rem' }}>
+                                {formatDateTime(log.created_at)}
+                              </td>
+                              <td style={{ padding: '0.7rem 0.85rem', textAlign: 'right', fontWeight: 700, color: 'var(--mint)' }}>
+                                {(Number(log.records_processed) || 0).toLocaleString()}
+                              </td>
+                              <td style={{ padding: '0.7rem 0.85rem', textAlign: 'right', fontWeight: 700, color: Number(log.records_failed) > 0 ? 'var(--err)' : 'var(--muted)' }}>
+                                {(Number(log.records_failed) || 0).toLocaleString()}
+                              </td>
+                              <td style={{ padding: '0.7rem 0.85rem', fontFamily: 'monospace', fontSize: '0.76rem', color: 'var(--muted)', maxWidth: '380px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={log.query}>
+                                {log.query || 'select id, phone, email from leads where mis_status is Final Approved'}
+                              </td>
+                              <td style={{ padding: '0.7rem 0.85rem', textAlign: 'center' }}>
+                                <span style={{
+                                  padding: '0.15rem 0.5rem',
+                                  borderRadius: '12px',
+                                  fontSize: '0.72rem',
+                                  fontWeight: 800,
+                                  background: log.status === 'SUCCESS' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(209, 67, 67, 0.12)',
+                                  color: log.status === 'SUCCESS' ? 'var(--mint)' : 'var(--err)',
+                                  border: `1px solid ${log.status === 'SUCCESS' ? 'rgba(16, 185, 129, 0.3)' : 'rgba(209, 67, 67, 0.3)'}`
+                                }}>
+                                  {log.status || 'SUCCESS'}
+                                </span>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Sub-tab 3: CAPI & META SETTINGS & TEST CONSOLE */}
+              {activeAudienceTab === 'capi_settings' && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: '1.25rem' }}>
+                  {/* Settings Form */}
+                  <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                    <div>
+                      <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: 'var(--gold-deep)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <Key size={20} />
+                        <span>Meta API Credentials Setup</span>
+                      </h3>
+                      <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.8rem', color: 'var(--muted)' }}>
+                        Configure your Meta Developer App (App ID 1510978103853380) and Business System User Token for CAPI & Custom Audiences.
+                      </p>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                      <div className="form-group">
+                        <label className="form-label" style={{ fontWeight: 700 }}>Meta Pixel ID / Dataset ID</label>
+                        <input
+                          type="text"
+                          className="form-input"
+                          placeholder="e.g. 123456789098765"
+                          value={settings.meta_pixel_id || ''}
+                          onChange={(e) => setSettings({ ...settings, meta_pixel_id: e.target.value })}
+                        />
+                      </div>
+
+                      <div className="form-group">
+                        <label className="form-label" style={{ fontWeight: 700 }}>Meta Ad Account ID</label>
+                        <input
+                          type="text"
+                          className="form-input"
+                          placeholder="e.g. act_123456789098765"
+                          value={settings.meta_ad_account_id || ''}
+                          onChange={(e) => setSettings({ ...settings, meta_ad_account_id: e.target.value })}
+                        />
+                      </div>
+
+                      <div className="form-group">
+                        <label className="form-label" style={{ fontWeight: 700 }}>Permanent System User Access Token</label>
+                        <textarea
+                          className="form-textarea"
+                          rows={3}
+                          placeholder="EAAxxxxx (Never expiring System User Token with ads_management & ads_read permissions)"
+                          value={settings.meta_access_token || ''}
+                          onChange={(e) => setSettings({ ...settings, meta_access_token: e.target.value })}
+                          style={{ fontFamily: 'monospace', fontSize: '0.8rem' }}
+                        />
+                      </div>
+
+                      <div className="form-group">
+                        <label className="form-label" style={{ fontWeight: 700 }}>Test Event Code (UAT Testing)</label>
+                        <input
+                          type="text"
+                          className="form-input"
+                          placeholder="e.g. TEST12345 (Optional code for Meta Events Manager Test Console)"
+                          value={settings.meta_test_event_code || ''}
+                          onChange={(e) => setSettings({ ...settings, meta_test_event_code: e.target.value })}
+                        />
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            const res = await fetch('/api/settings', {
+                              method: 'PUT',
+                              headers: {
+                                'Authorization': `Bearer ${token}`,
+                                'Content-Type': 'application/json'
+                              },
+                              body: JSON.stringify(settings)
+                            });
+                            if (res.ok) alert('Meta API credentials saved successfully!');
+                            else alert('Failed to save settings');
+                          } catch (e) {
+                            alert('Error: ' + e.message);
+                          }
+                        }}
+                        className="btn-primary"
+                        style={{ background: 'var(--gold-deep)', color: '#fff', padding: '0.6rem 1.2rem', fontWeight: 700, borderRadius: '6px', cursor: 'pointer' }}
+                      >
+                        Save Meta Credentials
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Real-time Test Console */}
+                  <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                    <div>
+                      <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <Zap size={20} style={{ color: 'var(--gold-deep)' }} />
+                        <span>CAPI Live Test Event Console</span>
+                      </h3>
+                      <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.8rem', color: 'var(--muted)' }}>
+                        Trigger a real-time static <strong>Purchase</strong> event (value ₹2,000 INR) to verify Meta Conversions API connectivity.
+                      </p>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                      <div className="form-group">
+                        <label className="form-label" style={{ fontWeight: 700 }}>Select Target Partner Bank</label>
+                        <select
+                          className="form-select"
+                          value={testCapiBank}
+                          onChange={(e) => setTestCapiBank(e.target.value)}
+                        >
+                          <option value="HDFC Bank">HDFC Bank</option>
+                          <option value="SBI">SBI Bank</option>
+                          <option value="KIWI">KIWI Bank</option>
+                          <option value="Scapia">Scapia</option>
+                        </select>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleTestCapiTrigger}
+                        disabled={testingCapi}
+                        className="btn-primary"
+                        style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', background: 'var(--gold-deep)', color: '#fff', padding: '0.65rem 1.2rem', fontWeight: 700, borderRadius: '6px', cursor: 'pointer' }}
+                      >
+                        <Zap size={16} className={testingCapi ? 'spin' : ''} />
+                        {testingCapi ? 'Dispatching Event...' : 'Dispatch Test Purchase Event (₹2,000)'}
+                      </button>
+
+                      {testCapiResult && (
+                        <div style={{ marginTop: '0.5rem', background: 'var(--paper-2)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--line)' }}>
+                          <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '0.85rem', fontWeight: 700, color: 'var(--ink)' }}>Meta Graph API Response:</h4>
+                          <pre style={{ margin: 0, fontSize: '0.78rem', fontFamily: 'monospace', overflowX: 'auto', color: testCapiResult.success ? 'var(--mint)' : 'var(--err)' }}>
+                            {JSON.stringify(testCapiResult, null, 2)}
+                          </pre>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* CREATE / EDIT CUSTOM AUDIENCE MODAL */}
+          {showAudienceModal && (
+            <div
+              className="modal-overlay"
+              style={{
+                backdropFilter: 'blur(6px)',
+                background: 'rgba(0, 0, 0, 0.75)',
+                zIndex: 99999
+              }}
+              onClick={(e) => {
+                if (e.target === e.currentTarget) {
+                  setShowAudienceModal(false);
+                  setEditingAudience(null);
+                }
+              }}
+            >
+              <div className="glass-panel modal-card animate-fade-in" style={{ width: '100%', maxWidth: '540px', padding: '1.75rem', borderRadius: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+                  <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <Target size={20} style={{ color: 'var(--gold-deep)' }} />
+                    <span>{editingAudience ? 'Edit Custom Audience' : 'Create New Custom Audience'}</span>
+                  </h3>
+                  <button onClick={() => { setShowAudienceModal(false); setEditingAudience(null); }} style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer' }}>
+                    <X size={20} />
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div className="form-group">
+                    <label className="form-label" style={{ fontWeight: 700 }}>Audience Name *</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="e.g. SBI Final Approved Customers"
+                      value={audienceFormData.name}
+                      onChange={(e) => setAudienceFormData({ ...audienceFormData, name: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label" style={{ fontWeight: 700 }}>Description</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="e.g. Target audience built from SBI card approved leads"
+                      value={audienceFormData.description}
+                      onChange={(e) => setAudienceFormData({ ...audienceFormData, description: e.target.value })}
+                    />
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    <div className="form-group">
+                      <label className="form-label" style={{ fontWeight: 700 }}>Target Bank</label>
+                      <select
+                        className="form-select"
+                        value={audienceFormData.bank_name}
+                        onChange={(e) => setAudienceFormData({ ...audienceFormData, bank_name: e.target.value })}
+                      >
+                        <option value="ALL">All Banks</option>
+                        <option value="SBI">SBI Bank</option>
+                        <option value="KIWI">KIWI Bank</option>
+                        <option value="HDFC">HDFC Bank</option>
+                        <option value="Scapia">Scapia</option>
+                      </select>
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label" style={{ fontWeight: 700 }}>MIS Lead Rule</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        value="FINAL APPROVED"
+                        disabled
+                        style={{ opacity: 0.8, fontWeight: 700, color: 'var(--mint)' }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label" style={{ fontWeight: 700 }}>Custom SQL Query Rule (Optional)</label>
+                    <textarea
+                      className="form-textarea"
+                      rows={2}
+                      placeholder="Select finmatraid, where mis_status is Final Approved for bank..."
+                      value={audienceFormData.sql_filter}
+                      onChange={(e) => setAudienceFormData({ ...audienceFormData, sql_filter: e.target.value })}
+                      style={{ fontFamily: 'monospace', fontSize: '0.8rem' }}
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: 'var(--paper-2)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--line)' }}>
+                    <input
+                      type="checkbox"
+                      id="auto_push_chk"
+                      checked={audienceFormData.auto_push}
+                      onChange={(e) => setAudienceFormData({ ...audienceFormData, auto_push: e.target.checked })}
+                      style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+                    />
+                    <label htmlFor="auto_push_chk" style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--ink)', cursor: 'pointer' }}>
+                      Automatically push matching leads to Meta Graph API upon MIS mapping
+                    </label>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
+                    <button
+                      type="button"
+                      onClick={() => { setShowAudienceModal(false); setEditingAudience(null); }}
+                      className="btn-secondary"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveAudience}
+                      className="btn-primary"
+                      style={{ background: 'var(--gold-deep)', color: '#fff' }}
+                    >
+                      {editingAudience ? 'Save Changes' : 'Create Audience on Meta'}
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           )}

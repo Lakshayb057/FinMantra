@@ -3,6 +3,7 @@ const { simpleParser } = require('mailparser');
 const xlsx = require('xlsx');
 const ExcelJS = require('exceljs');
 const db = require('./db');
+const metaCapi = require('./metaCapi');
 
 // Default SBI IMAP Email Sync Config
 const DEFAULT_CONFIG = {
@@ -378,7 +379,17 @@ async function processSbiMisRows(rows, attachmentName, broadcastFn = null) {
 
   // Execute bulk updates in PostgreSQL
   if (updates.length > 0) {
-    await db.bulkUpdateLeadMISStatus(updates);
+    const updatedLeads = await db.bulkUpdateLeadMISStatus(updates);
+    if (updatedLeads && updatedLeads.length > 0) {
+      setTimeout(async () => {
+        for (const lead of updatedLeads) {
+          if (metaCapi.isFinalApprovedStatus(lead.mis_status)) {
+            await metaCapi.sendMetaCapiEvent(lead, 'Purchase', 2000, 'SBI');
+          }
+        }
+        await metaCapi.syncLeadsToMetaCustomAudiences(updatedLeads);
+      }, 100);
+    }
   }
 
   return {
