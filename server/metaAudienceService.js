@@ -101,7 +101,7 @@ function getNormalizedStatusCategory(rawStatus, misData = null) {
     return 'FINAL_APPROVE';
   }
 
-  // 2. SOFT DECLINE (9 leads - Pre-decline / DCLP / DACP / Soft Decline)
+  // 2. SOFT DECLINE (9 leads - Pre-decline / DCLP / DACP / Soft Decline / BRE / Policy)
   if (
     fullStateStr.includes('SOFT_DECLINE') ||
     fullStateStr.includes('SOFT DECLINE') ||
@@ -111,23 +111,37 @@ function getNormalizedStatusCategory(rawStatus, misData = null) {
     fullStateStr.includes('DCLP') ||
     fullStateStr.includes('DACP') ||
     fullStateStr.includes('SOFT_REJECT') ||
-    fullStateStr.includes('REJECT_SOFT')
+    fullStateStr.includes('REJECT_SOFT') ||
+    fullStateStr.includes('POLICY') ||
+    fullStateStr.includes('BRE_DECLINE') ||
+    fullStateStr.includes('BRE')
   ) {
     return 'SOFT_DECLINE';
   }
 
-  // 3. FINAL DECLINE (532 leads - Hard Rejected / Declined / Cancelled)
-  if (
-    fullStateStr.includes('DECLINE') ||
-    fullStateStr.includes('REJECT') ||
-    fullStateStr.includes('CANCEL') ||
-    fullStateStr.includes('FAIL')
-  ) {
-    return 'FINAL_DECLINE';
+  // 3. SOFT APPROVE (60 leads - Soft Approved / IPA Approved / In Progress / VKYC / Submitted / Active Funnel)
+  const isSoftApprove = (
+    fullStateStr.includes('APPROV') ||
+    fullStateStr.includes('PASS') ||
+    fullStateStr.includes('SUCCESS') ||
+    fullStateStr.includes('ELIGIBLE') ||
+    fullStateStr.includes('DOC') ||
+    fullStateStr.includes('IN_PROGRESS') ||
+    fullStateStr.includes('IN PROGRESS') ||
+    fullStateStr.includes('VKYC') ||
+    fullStateStr.includes('KYC') ||
+    fullStateStr.includes('SUBMITTED') ||
+    fullStateStr.includes('OTP') ||
+    rawUpper === 'PENDING' ||
+    (md.ipa_date && String(md.ipa_date).trim() !== '')
+  );
+
+  if (isSoftApprove) {
+    return 'SOFT_APPROVE';
   }
 
-  // 4. SOFT APPROVE (60 leads - All active in-progress / pending mapped leads)
-  return 'SOFT_APPROVE';
+  // 4. FINAL DECLINE (532 leads - All remaining hard rejected / declined leads)
+  return 'FINAL_DECLINE';
 }
 
 // Normalize bank name to uppercase clean canonical string
