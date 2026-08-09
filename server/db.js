@@ -2256,7 +2256,46 @@ const db = {
         `SELECT id, urn, full_name, phone, email, card_bank, card_name, mis_status, mis_data FROM leads ${whereClause}`,
         params
       );
-      if (res.rows.length > 0 || !cat.includes('ALL')) {
+      if (res.rows.length > 0) {
+        return res.rows;
+      }
+
+      // Exact UI Analytics Dashboard KPI Filter Fallback
+      if (cleanB.includes('KIWI')) {
+        console.log(`[DB Engine] Applying UI Analytics Dashboard KPI filter for KIWI category '${cat}'...`);
+        const allRes = await pool.query(
+          `SELECT id, urn, full_name, phone, email, card_bank, card_name, source, mis_status, mis_data FROM leads WHERE mis_status IS NOT NULL OR mis_mapped_at IS NOT NULL`
+        );
+        const kiwiRows = allRes.rows;
+
+        if (cat.includes('FINAL') && (cat.includes('APPROVED') || cat.includes('CARD'))) {
+          return kiwiRows.filter(r => {
+            const md = r.mis_data || {};
+            const kiwiCard = (String(md.Card_Created || md.card_activation_status || md.card_created || md.card_state || md.current_state || md.winning_state || md.mis_status || r.mis_status || '') + ' ' + String(md.pnb_state || '') + ' ' + String(md.yes_state || '') + ' ' + String(md.au_state || '')).toLowerCase();
+            const isCardCreated = kiwiCard.includes('yes') || kiwiCard.includes('active') || kiwiCard.includes('created') || kiwiCard.includes('issued') || kiwiCard.includes('disbursed') || kiwiCard.includes('card_created') || kiwiCard === '1';
+            const isDeclined = String(r.mis_status || md.final_decision || '').toUpperCase().includes('DECLINE') || String(r.mis_status || md.final_decision || '').toUpperCase().includes('REJECT');
+            return isCardCreated && !isDeclined;
+          });
+        }
+        if (cat.includes('SOFT') && cat.includes('APPROVED')) {
+          return kiwiRows.filter(r => {
+            const md = r.mis_data || {};
+            const kiwiIpa = (String(md.IPA || md.ipa_status || md.decision || md.status || md.current_state || md.winning_state || md.mis_status || r.mis_status || '') + ' ' + String(md.pnb_state || '') + ' ' + String(md.yes_state || '') + ' ' + String(md.au_state || '')).toLowerCase();
+            const isSoftApprove = kiwiIpa.includes('approve') || kiwiIpa.includes('pass') || kiwiIpa.includes('success') || kiwiIpa.includes('eligible') || kiwiIpa.includes('doc_upload') || kiwiIpa.includes('in_progress') || (md.ipa_date && String(md.ipa_date).trim() !== '');
+            const isDeclined = String(r.mis_status || md.final_decision || '').toUpperCase().includes('DECLINE') || String(r.mis_status || md.final_decision || '').toUpperCase().includes('REJECT');
+            return isSoftApprove && !isDeclined;
+          });
+        }
+        if (cat.includes('DECLINED') || cat.includes('REJECTED')) {
+          return kiwiRows.filter(r => {
+            const md = r.mis_data || {};
+            return String(r.mis_status || md.final_decision || '').toUpperCase().includes('DECLINE') || String(r.mis_status || md.final_decision || '').toUpperCase().includes('REJECT') || String(r.mis_status || md.final_decision || '').toUpperCase().includes('CANCEL');
+          });
+        }
+        return kiwiRows;
+      }
+
+      if (!cat.includes('ALL')) {
         return res.rows;
       }
 
