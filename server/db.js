@@ -2189,31 +2189,48 @@ const db = {
       } else if (cat.includes('ALL')) {
         statusCondition = `(phone IS NOT NULL AND phone != '') OR (email IS NOT NULL AND email != '')`;
       } else {
-        // Default: FINAL APPROVED (Card Created / Approved / Issued / File Generated)
-        statusCondition = `(
-          LOWER(mis_status) IN ('card created', 'card_created', 'card generated', 'card_generated', 'approved', 'issued', 'disbursed', 'file generated') OR
-          UPPER(mis_status) LIKE '%APPROV%' OR 
-          UPPER(mis_status) LIKE '%CARD%CREATE%' OR 
-          UPPER(mis_status) LIKE '%CARD%GENERATE%' OR 
-          UPPER(mis_status) LIKE '%ISSUED%' OR 
-          UPPER(mis_status) LIKE '%DISBURS%' OR 
-          UPPER(mis_status) LIKE '%FILE GENERAT%' OR 
-          UPPER(mis_status) LIKE '%APPL FILE%' OR 
-          LOWER(COALESCE(mis_data->>'Card_Created', '')) IN ('1', 'yes', 'true') OR
-          LOWER(COALESCE(mis_data->>'card_created', '')) IN ('1', 'yes', 'true') OR
-          LOWER(COALESCE(mis_data->>'current_state', '')) IN ('card created', 'card_created', 'approved', 'issued') OR
-          LOWER(COALESCE(mis_data->>'card_activation_status', '')) IN ('active', 'yes', '1') OR
-          LOWER(COALESCE(mis_data->>'yes_state', '')) LIKE '%card%create%' OR
-          LOWER(COALESCE(mis_data->>'au_state', '')) LIKE '%card%create%' OR
-          LOWER(COALESCE(mis_data->>'pnb_state', '')) LIKE '%card%create%' OR
-          UPPER(COALESCE(mis_data->>'final_decision', '')) LIKE '%APPROV%' OR
-          UPPER(COALESCE(mis_data->>'final_decision', '')) LIKE '%FILE GENERAT%' OR
-          UPPER(mis_data::text) LIKE '%CARD_CREATED%' OR
-          UPPER(mis_data::text) LIKE '%CARD CREATED%'
-        ) AND NOT (
-          UPPER(mis_status) LIKE '%REJECT%' OR 
-          UPPER(mis_status) LIKE '%DECLINE%'
-        )`;
+        const cleanB = String(bankName || '').toUpperCase();
+        if (cleanB.includes('KIWI')) {
+          statusCondition = `(
+            LOWER(mis_status) IN ('card created', 'card_created', 'card generated', 'card_generated') OR
+            LOWER(COALESCE(mis_data->>'Card_Created', '')) IN ('1', 'yes', 'true') OR
+            LOWER(COALESCE(mis_data->>'card_created', '')) IN ('1', 'yes', 'true') OR
+            LOWER(COALESCE(mis_data->>'current_state', '')) IN ('card created', 'card_created') OR
+            LOWER(COALESCE(mis_data->>'card_activation_status', '')) IN ('active', 'yes', '1') OR
+            LOWER(COALESCE(mis_data->>'yes_state', '')) LIKE '%card%create%' OR
+            LOWER(COALESCE(mis_data->>'au_state', '')) LIKE '%card%create%' OR
+            LOWER(COALESCE(mis_data->>'pnb_state', '')) LIKE '%card%create%' OR
+            UPPER(mis_data::text) LIKE '%"CARD_CREATED":"1"%' OR
+            UPPER(mis_data::text) LIKE '%"CARD_CREATED": "1"%' OR
+            UPPER(mis_data::text) LIKE '%"CARD_CREATED":"YES"%' OR
+            UPPER(mis_data::text) LIKE '%"CARD_CREATED": "YES"%'
+          ) AND NOT (
+            UPPER(mis_status) LIKE '%REJECT%' OR 
+            UPPER(mis_status) LIKE '%DECLINE%' OR 
+            UPPER(mis_status) LIKE '%SOFT%' OR 
+            UPPER(mis_status) LIKE '%VKYC%' OR 
+            UPPER(mis_status) LIKE '%IPA%' OR 
+            UPPER(mis_status) LIKE '%PENDING%'
+          )`;
+        } else {
+          statusCondition = `(
+            LOWER(mis_status) IN ('card created', 'card_created', 'approved', 'issued', 'disbursed', 'file generated', 'appl file generated') OR
+            UPPER(mis_status) LIKE '%CARD%CREATE%' OR 
+            UPPER(mis_status) LIKE '%CARD%GENERATE%' OR 
+            UPPER(mis_status) LIKE '%ISSUED%' OR 
+            UPPER(mis_status) LIKE '%DISBURS%' OR 
+            UPPER(mis_status) LIKE '%FILE GENERAT%' OR 
+            UPPER(mis_status) LIKE '%APPL FILE%' OR 
+            UPPER(COALESCE(mis_data->>'final_decision', '')) LIKE '%APPROV%' OR
+            UPPER(COALESCE(mis_data->>'final_decision', '')) LIKE '%FILE GENERAT%'
+          ) AND NOT (
+            UPPER(mis_status) LIKE '%REJECT%' OR 
+            UPPER(mis_status) LIKE '%DECLINE%' OR 
+            UPPER(mis_status) LIKE '%SOFT%' OR 
+            UPPER(mis_status) LIKE '%VKYC%' OR 
+            UPPER(mis_status) LIKE '%IPA%'
+          )`;
+        }
       }
 
       let whereClause = ` WHERE mis_status IS NOT NULL AND (${statusCondition})`;
