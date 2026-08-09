@@ -2240,9 +2240,9 @@ const db = {
         const cleanB = bankName.trim().toUpperCase();
         params.push(`%${cleanB}%`);
         if (cleanB.includes('KIWI')) {
-          whereClause += ` AND (UPPER(card_bank) LIKE UPPER($${params.length}) OR UPPER(mis_data->>'mis_bank_name') LIKE UPPER($${params.length}) OR UPPER(card_name) LIKE UPPER($${params.length}) OR LOWER(source) = 'kiwi' OR mis_data->>'kiwi_winning_bank' IS NOT NULL OR UPPER(mis_data::text) LIKE '%KIWI%')`;
+          whereClause += ` AND (UPPER(card_bank) LIKE UPPER($${params.length}) OR UPPER(mis_data->>'mis_bank_name') LIKE UPPER($${params.length}) OR UPPER(card_name) LIKE UPPER($${params.length}) OR LOWER(source) = 'kiwi' OR mis_data->>'kiwi_winning_bank' IS NOT NULL)`;
         } else {
-          whereClause += ` AND (UPPER(card_bank) LIKE UPPER($${params.length}) OR UPPER(mis_data->>'mis_bank_name') LIKE UPPER($${params.length}) OR UPPER(card_name) LIKE UPPER($${params.length}) OR UPPER(mis_data::text) LIKE UPPER($${params.length}))`;
+          whereClause += ` AND (UPPER(card_bank) LIKE UPPER($${params.length}) OR UPPER(mis_data->>'mis_bank_name') LIKE UPPER($${params.length}) OR UPPER(card_name) LIKE UPPER($${params.length}))`;
         }
       }
 
@@ -2262,9 +2262,9 @@ const db = {
         const cleanB = bankName.trim().toUpperCase();
         fallbackParams.push(`%${cleanB}%`);
         if (cleanB.includes('KIWI')) {
-          fallbackWhere += ` AND (UPPER(card_bank) LIKE UPPER($${fallbackParams.length}) OR UPPER(mis_data->>'mis_bank_name') LIKE UPPER($${fallbackParams.length}) OR UPPER(card_name) LIKE UPPER($${fallbackParams.length}) OR LOWER(source) = 'kiwi' OR mis_data->>'kiwi_winning_bank' IS NOT NULL OR UPPER(mis_data::text) LIKE '%KIWI%')`;
+          fallbackWhere += ` AND (UPPER(card_bank) LIKE UPPER($${fallbackParams.length}) OR UPPER(mis_data->>'mis_bank_name') LIKE UPPER($${fallbackParams.length}) OR UPPER(card_name) LIKE UPPER($${fallbackParams.length}) OR LOWER(source) = 'kiwi' OR mis_data->>'kiwi_winning_bank' IS NOT NULL)`;
         } else {
-          fallbackWhere += ` AND (UPPER(card_bank) LIKE UPPER($${fallbackParams.length}) OR UPPER(mis_data->>'mis_bank_name') LIKE UPPER($${fallbackParams.length}) OR UPPER(card_name) LIKE UPPER($${fallbackParams.length}) OR UPPER(mis_data::text) LIKE UPPER($${fallbackParams.length}))`;
+          fallbackWhere += ` AND (UPPER(card_bank) LIKE UPPER($${fallbackParams.length}) OR UPPER(mis_data->>'mis_bank_name') LIKE UPPER($${fallbackParams.length}) OR UPPER(card_name) LIKE UPPER($${fallbackParams.length}))`;
         }
       }
       const fallbackRes = await pool.query(

@@ -265,13 +265,13 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
     let bankCond = '1=1';
     if (bank.includes('KIWI')) {
-      bankCond = `(UPPER(COALESCE(card_bank,'')) LIKE '%KIWI%' OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE '%KIWI%' OR UPPER(COALESCE(card_name,'')) LIKE '%KIWI%' OR LOWER(source) = 'kiwi' OR mis_data->>'kiwi_winning_bank' IS NOT NULL OR UPPER(mis_data::text) LIKE '%KIWI%')`;
+      bankCond = `(UPPER(COALESCE(card_bank,'')) LIKE '%KIWI%' OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE '%KIWI%' OR UPPER(COALESCE(card_name,'')) LIKE '%KIWI%' OR LOWER(source) = 'kiwi' OR mis_data->>'kiwi_winning_bank' IS NOT NULL)`;
     } else if (bank.includes('SBI')) {
-      bankCond = `(UPPER(COALESCE(card_bank,'')) LIKE '%SBI%' OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE '%SBI%' OR UPPER(COALESCE(card_name,'')) LIKE '%SBI%' OR UPPER(mis_data::text) LIKE '%SBI%')`;
+      bankCond = `(UPPER(COALESCE(card_bank,'')) LIKE '%SBI%' OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE '%SBI%' OR UPPER(COALESCE(card_name,'')) LIKE '%SBI%')`;
     } else if (bank.includes('HDFC')) {
-      bankCond = `(UPPER(COALESCE(card_bank,'')) LIKE '%HDFC%' OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE '%HDFC%' OR UPPER(COALESCE(card_name,'')) LIKE '%HDFC%' OR UPPER(mis_data::text) LIKE '%HDFC%')`;
+      bankCond = `(UPPER(COALESCE(card_bank,'')) LIKE '%HDFC%' OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE '%HDFC%' OR UPPER(COALESCE(card_name,'')) LIKE '%HDFC%')`;
     } else if (bank.includes('SCAPIA')) {
-      bankCond = `(UPPER(COALESCE(card_bank,'')) LIKE '%SCAPIA%' OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE '%SCAPIA%' OR UPPER(COALESCE(card_name,'')) LIKE '%SCAPIA%' OR UPPER(mis_data::text) LIKE '%SCAPIA%')`;
+      bankCond = `(UPPER(COALESCE(card_bank,'')) LIKE '%SCAPIA%' OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE '%SCAPIA%' OR UPPER(COALESCE(card_name,'')) LIKE '%SCAPIA%')`;
     }
 
     let catCond = '1=1';
