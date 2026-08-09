@@ -131,7 +131,7 @@ function getKiwiStatusCategory(lead, rawStatus, misData) {
   };
 
   const rawIpa = getPropVal(md, 'ipa', 'IPA', 'ipa_status', 'SOFT_DECISION', 'ipa_state').toLowerCase();
-  const rawRejectReason = getPropVal(md, 'reject_reason', 'Reject_Reason', 'decline_reason', 'Decline_Reason', 'decline_description', 'remark', 'Remark').toLowerCase();
+  const rawRejectReason = getPropVal(md, 'reject_reason', 'Reject_Reason', 'decline_reason', 'Decline_Reason', 'decline_description', 'remark', 'Remark', 'Comments').toLowerCase();
 
   const mdJsonStr = JSON.stringify(md).toLowerCase();
   const fullStr = (rawUpper + ' ' + cs + ' ' + rawIpa + ' ' + rawRejectReason + ' ' + yesSt + ' ' + auSt + ' ' + pnbSt + ' ' + mdJsonStr).toLowerCase();
@@ -143,6 +143,14 @@ function getKiwiStatusCategory(lead, rawStatus, misData) {
     rawIpa.includes('decline') || rawIpa.includes('reject') || rawIpa.includes('fail') || rawIpa.includes('pre')
   );
 
+  const hasRejectReasonText = (
+    rawRejectReason.length > 0 &&
+    rawRejectReason !== 'none' &&
+    rawRejectReason !== 'null' &&
+    rawRejectReason !== 'na' &&
+    rawRejectReason !== 'undefined'
+  );
+
   // 2. SOFT DECLINE (9 leads - Pre-decline / DCLP)
   const isSoftDecline = (
     fullStr.includes('dclp') || fullStr.includes('dacp') ||
@@ -151,8 +159,9 @@ function getKiwiStatusCategory(lead, rawStatus, misData) {
     fullStr.includes('soft reject') || fullStr.includes('pre_screen') || fullStr.includes('pre-screen') ||
     fullStr.includes('prescreen') || fullStr.includes('"ipa":0') || fullStr.includes('"ipa":"0"') ||
     fullStr.includes('"ipa":"dclp"') || fullStr.includes('"ipa_status":"0"') || fullStr.includes('"ipa_status":"dclp"') ||
+    fullStr.includes('cibil') || fullStr.includes('policy') || fullStr.includes('ineligible') || fullStr.includes('not_eligible') ||
     isIpaZeroOrNegative ||
-    (rawRejectReason.includes('dclp') || rawRejectReason.includes('dacp') || rawRejectReason.includes('pre_decline') || rawRejectReason.includes('pre-decline') || rawRejectReason.includes('pre') || rawRejectReason.includes('soft') || rawRejectReason.includes('bre') || rawRejectReason.includes('policy') || rawRejectReason.includes('cibil') || rawRejectReason.includes('score'))
+    hasRejectReasonText
   );
 
   if (isSoftDecline) {
