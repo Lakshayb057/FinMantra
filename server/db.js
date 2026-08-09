@@ -2203,14 +2203,12 @@ const db = {
             UPPER(mis_data::text) LIKE '%"CARD_CREATED":"1"%' OR
             UPPER(mis_data::text) LIKE '%"CARD_CREATED": "1"%' OR
             UPPER(mis_data::text) LIKE '%"CARD_CREATED":"YES"%' OR
-            UPPER(mis_data::text) LIKE '%"CARD_CREATED": "YES"%'
+            UPPER(mis_data::text) LIKE '%"CARD_CREATED": "YES"%' OR
+            UPPER(mis_data::text) LIKE '%"CARD_CREATED":1%' OR
+            UPPER(mis_data::text) LIKE '%"CARD_CREATED": 1%'
           ) AND NOT (
             UPPER(mis_status) LIKE '%REJECT%' OR 
-            UPPER(mis_status) LIKE '%DECLINE%' OR 
-            UPPER(mis_status) LIKE '%SOFT%' OR 
-            UPPER(mis_status) LIKE '%VKYC%' OR 
-            UPPER(mis_status) LIKE '%IPA%' OR 
-            UPPER(mis_status) LIKE '%PENDING%'
+            UPPER(mis_status) LIKE '%DECLINE%'
           )`;
         } else {
           statusCondition = `(
