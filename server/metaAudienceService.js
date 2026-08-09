@@ -112,8 +112,10 @@ function getNormalizedStatusCategory(rawStatus, misData = null) {
     return 'FINAL_APPROVE';
   }
 
-  // 2. SOFT DECLINE (Checked SECOND - BEFORE Final Decline so pre-decline/DCLP/DACP are caught)
+  // 2. SOFT DECLINE (Checked SECOND - Pre-decline / DCLP / DACP / NOT_STARTED / NOT_APPLICABLE)
   if (
+    cleanAllStates.includes('NOTSTARTED') ||
+    cleanAllStates.includes('NOTAPPLICABLE') ||
     cleanAllStates.includes('SOFTDECLINE') ||
     cleanAllStates.includes('PREDECLINE') ||
     cleanAllStates.includes('PREDCL') ||
@@ -125,6 +127,9 @@ function getNormalizedStatusCategory(rawStatus, misData = null) {
     cleanAllStates.includes('REJECTSOFT') ||
     cleanAllStates.includes('REJECTPRE') ||
     cleanAllStates.includes('PREREJECT') ||
+    rawUpper.includes('NOT_STARTED') ||
+    rawUpper.includes('NOT STARTED') ||
+    rawUpper.includes('NOT_APPLICABLE') ||
     rawUpper.includes('SOFT DECLINE') ||
     rawUpper.includes('SOFT_DECLINE') ||
     rawUpper.includes('PRE-DECLINE') ||
