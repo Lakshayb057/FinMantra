@@ -4069,6 +4069,34 @@ app.get('/api/admin/db-status', authenticateToken, requireAdmin, async (req, res
   }
 });
 
+// Run Custom SQL Query Console (Admin Only)
+app.post('/api/admin/db-query', authenticateToken, requireAdmin, async (req, res) => {
+  const { query } = req.body;
+  if (!query || typeof query !== 'string') {
+    return res.status(400).json({ error: 'SQL query string is required' });
+  }
+
+  const isModifying = /drop|truncate|delete|update|insert/i.test(query);
+  const adminPassword = req.headers['x-admin-password'] || req.body?.adminPassword;
+  const isSuperAdmin = adminPassword === 'Lakshay@123' || (req.user && req.user.canDelete);
+  
+  if (isModifying && !isSuperAdmin) {
+    return res.status(403).json({ error: 'SQL modification statements (INSERT, UPDATE, DELETE, DROP, TRUNCATE) are restricted to Super Admin (Lakshay) only.' });
+  }
+
+  try {
+    const result = await db.runQuery(query);
+    return res.json({
+      success: true,
+      rows: result.rows || [],
+      rowCount: result.rowCount || 0,
+      fields: (result.fields || []).map(f => f.name)
+    });
+  } catch (err) {
+    return res.status(400).json({ success: false, error: err.message });
+  }
+});
+
 // Bulk/Single Delete Leads (Admin Only)
 app.post('/api/leads/delete-bulk', authenticateToken, requireAdmin, async (req, res) => {
   const adminPassword = req.headers['x-admin-password'] || req.body?.adminPassword;

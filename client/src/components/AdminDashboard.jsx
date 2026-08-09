@@ -1282,6 +1282,35 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
     }
   }, [activeSettingsSubTab, activeTab]);
 
+  const [sqlQuery, setSqlQuery] = useState('SELECT id, urn, full_name, company_name FROM leads ORDER BY created_at DESC LIMIT 5;');
+  const [sqlResult, setSqlResult] = useState(null);
+  const [sqlError, setSqlError] = useState(null);
+  const [isExecutingSql, setIsExecutingSql] = useState(false);
+
+  const executeSqlQuery = async (e) => {
+    if (e) e.preventDefault();
+    if (!sqlQuery.trim()) return;
+    setIsExecutingSql(true);
+    setSqlResult(null);
+    setSqlError(null);
+    try {
+      const res = await apiFetch(`${API_URL}/admin/db-query`, {
+        method: 'POST',
+        body: JSON.stringify({ query: sqlQuery })
+      });
+      if (res && res.success) {
+        setSqlResult(res);
+        showToast('SQL query executed successfully!');
+      } else {
+        setSqlError(res?.error || 'Failed to execute query.');
+      }
+    } catch (err) {
+      setSqlError(err.message || 'SQL execution failed.');
+    } finally {
+      setIsExecutingSql(false);
+    }
+  };
+
   // Reset page to 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
@@ -7950,6 +7979,127 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                           >
                             <RefreshCw size={14} /> Refresh Stats
                           </button>
+                        </div>
+
+                        {/* Custom SQL Query Console */}
+                        <div style={{ borderTop: '1px solid var(--line)', paddingTop: '2rem', marginTop: '2.5rem' }}>
+                          <h4 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '0.5rem', color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <Database size={18} style={{ color: 'var(--gold-deep)' }} />
+                            <span>SQL Query Execution Console</span>
+                          </h4>
+                          <p style={{ fontSize: '0.78rem', color: 'var(--muted)', marginBottom: '1.25rem' }}>
+                            Run raw PostgreSQL read queries to inspect schema structures, filter complex parameters, and analyze datasets across all database tables.
+                          </p>
+
+                          <form onSubmit={executeSqlQuery} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            <div className="form-group" style={{ marginBottom: 0 }}>
+                              <label className="form-label" style={{ fontWeight: 700, fontSize: '0.8rem' }}>Enter PostgreSQL Query</label>
+                              <textarea
+                                className="form-input"
+                                rows="4"
+                                value={sqlQuery}
+                                onChange={(e) => setSqlQuery(e.target.value)}
+                                style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem', background: 'rgba(20, 24, 40, 0.25)', border: '1px solid var(--line)' }}
+                                placeholder="SELECT * FROM leads ORDER BY created_at DESC LIMIT 5;"
+                              />
+                            </div>
+
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => setSqlQuery('SELECT id, urn, full_name, company_name FROM leads ORDER BY created_at DESC LIMIT 5;')}
+                                  style={{ background: 'var(--paper-2)', border: '1px solid var(--line)', padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.7rem', color: 'var(--muted)', cursor: 'pointer' }}
+                                >
+                                  Leads Sample
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setSqlQuery("SELECT * FROM sbi_company_codes WHERE LOWER(company_name) LIKE '%reliance%' LIMIT 5;")}
+                                  style={{ background: 'var(--paper-2)', border: '1px solid var(--line)', padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.7rem', color: 'var(--muted)', cursor: 'pointer' }}
+                                >
+                                  Companies Sample
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setSqlQuery('SELECT COUNT(*), card_bank FROM leads GROUP BY card_bank;')}
+                                  style={{ background: 'var(--paper-2)', border: '1px solid var(--line)', padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.7rem', color: 'var(--muted)', cursor: 'pointer' }}
+                                >
+                                  Aggregations Sample
+                                </button>
+                              </div>
+                              <button
+                                type="submit"
+                                className="btn-primary"
+                                disabled={isExecutingSql}
+                                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--gold-deep)', color: '#fff', borderRadius: '8px', padding: '0.5rem 1.25rem' }}
+                              >
+                                <RefreshCw size={14} className={isExecutingSql ? 'spin' : ''} />
+                                {isExecutingSql ? 'Executing...' : 'Run Query'}
+                              </button>
+                            </div>
+                          </form>
+
+                          {/* SQL Error Alert */}
+                          {sqlError && (
+                            <div style={{ margin: '1.25rem 0 0 0', padding: '1rem', background: 'rgba(209, 67, 67, 0.08)', border: '1px solid rgba(209, 67, 67, 0.25)', borderRadius: '8px', color: 'var(--err)', fontSize: '0.82rem', fontFamily: 'var(--font-mono)', whiteSpace: 'pre-wrap' }}>
+                              ⚠️ <strong>Query Error:</strong> {sqlError}
+                            </div>
+                          )}
+
+                          {/* SQL Success Result Table */}
+                          {sqlResult && (
+                            <div style={{ margin: '1.5rem 0 0 0' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                                <h5 style={{ margin: 0, fontSize: '0.88rem', fontWeight: 700, color: 'var(--ink)' }}>
+                                  Query Results ({sqlResult.rowCount} rows affected)
+                                </h5>
+                                <span style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>
+                                  Returned {sqlResult.rows?.length || 0} rows
+                                </span>
+                              </div>
+
+                              {sqlResult.rows && sqlResult.rows.length > 0 ? (
+                                <div style={{ overflowX: 'auto', background: 'var(--paper-2)', borderRadius: '8px', border: '1px solid var(--line)', maxHeight: '350px', overflowY: 'auto' }}>
+                                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', textAlign: 'left' }}>
+                                    <thead>
+                                      <tr style={{ background: 'rgba(224, 168, 46, 0.08)', borderBottom: '1px solid var(--line)', position: 'sticky', top: 0, zIndex: 1 }}>
+                                        {sqlResult.fields.map((field, idx) => (
+                                          <th key={idx} style={{ padding: '0.6rem 0.85rem', fontWeight: 700, background: 'var(--paper-2)' }}>{field}</th>
+                                        ))}
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {sqlResult.rows.map((row, rowIdx) => (
+                                        <tr key={rowIdx} style={{ borderBottom: '1px solid var(--line)' }}>
+                                          {sqlResult.fields.map((field, colIdx) => {
+                                            const cellVal = row[field];
+                                            let displayVal = 'N/A';
+                                            if (cellVal !== null && cellVal !== undefined) {
+                                              if (typeof cellVal === 'object') {
+                                                displayVal = JSON.stringify(cellVal);
+                                              } else {
+                                                displayVal = String(cellVal);
+                                              }
+                                            }
+                                            return (
+                                              <td key={colIdx} style={{ padding: '0.55rem 0.85rem', color: 'var(--ink)', maxWidth: '280px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={displayVal}>
+                                                {displayVal}
+                                              </td>
+                                            );
+                                          })}
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              ) : (
+                                <div style={{ padding: '2rem', border: '1px dashed var(--line)', borderRadius: '8px', textAlign: 'center', color: 'var(--muted)', fontSize: '0.85rem', fontWeight: 600 }}>
+                                  Query executed successfully, but returned 0 rows.
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
                     ) : (

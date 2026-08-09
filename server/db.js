@@ -2642,6 +2642,10 @@ const db = {
       status.error = err.message;
     }
     return status;
+  },
+
+  async runQuery(sql) {
+    return await pool.query(sql);
   }
 }
 
