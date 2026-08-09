@@ -75,8 +75,6 @@ function getKiwiStatusCategory(lead, rawStatus, misData) {
   const cc = String(md.card_created || md.Card_Created || '').trim().toLowerCase();
   const ft = String(md.first_txn || md.first_transaction || '').trim().toLowerCase();
   const cs = String(md.current_state || md.winning_state || md.final_decision || '').trim().toLowerCase();
-  const ipaStr = String(md.ipa || md.ipa_status || md.SOFT_DECISION || md.ipa_state || '').trim().toLowerCase();
-  const rejReason = String(md.reject_reason || '').trim().toLowerCase();
 
   const kiwiCardStr = (
     String(md.Card_Created || md.card_activation_status || md.card_created || md.card_state || md.current_state || md.winning_state || md.mis_status || lead.mis_status || '') + ' ' +
@@ -98,33 +96,33 @@ function getKiwiStatusCategory(lead, rawStatus, misData) {
     return 'FINAL_APPROVE';
   }
 
-  // 2. SOFT DECLINE (9 leads - Pre-decline / DCLP / DACP)
+  // 2. SOFT DECLINE (9 leads - Pre-decline / DCLP / DACP / Soft Decline)
+  const ipaRaw = (String(md.ipa || md.ipa_status || md.SOFT_DECISION || md.ipa_state || '') + ' ' + String(md.reject_reason || '')).toLowerCase();
+  const fullStr = (rawUpper + ' ' + cs + ' ' + ipaRaw + ' ' + String(md.yes_state || '') + ' ' + String(md.au_state || '') + ' ' + String(md.pnb_state || '')).toLowerCase();
+
   const isSoftDecline = (
-    ipaStr.includes('dclp') || ipaStr.includes('dacp') || ipaStr.includes('pre_decline') || ipaStr.includes('pre-decline') || ipaStr.includes('soft_decline') ||
-    cs.includes('dclp') || cs.includes('dacp') || cs.includes('pre_decline') || cs.includes('pre-decline') || cs.includes('soft_decline') ||
-    rejReason.includes('dclp') || rejReason.includes('dacp') || rejReason.includes('pre_decline') || rejReason.includes('soft_decline') ||
-    ipaStr.includes('reject') || cs.includes('pre_reject')
+    fullStr.includes('dclp') || fullStr.includes('dacp') || fullStr.includes('pre_decline') || fullStr.includes('pre-decline') || fullStr.includes('soft_decline') || fullStr.includes('soft decline') || fullStr.includes('soft_reject') ||
+    ipaRaw.includes('dclp') || ipaRaw.includes('dacp') || ipaRaw.includes('pre_decline') || ipaRaw.includes('pre-decline')
   );
 
   if (isSoftDecline) {
     return 'SOFT_DECLINE';
   }
 
-  // 3. FINAL DECLINE (532 leads - Hard Rejected / Declined)
-  const isFinalDecline = (
-    rawUpper.includes('REJECT') ||
-    rawUpper.includes('DECLIN') ||
-    rawUpper.includes('CANCEL') ||
-    cs.includes('reject') ||
-    cs.includes('declin') ||
-    cs.includes('cancel')
-  );
+  // 3. SOFT APPROVE (60 leads - In-progress / Soft Approved / IPA Approved)
+  const kiwiIpa = (String(md.ipa || md.ipa_status || md.SOFT_DECISION || md.ipa_state || '') + ' ' + String(md.pnb_state || '') + ' ' + String(md.yes_state || '') + ' ' + String(md.au_state || '')).toLowerCase();
+  const isKiwiSoftApprove = kiwiIpa.includes('approve') || kiwiIpa.includes('pass') || kiwiIpa.includes('success') || kiwiIpa.includes('eligible') || kiwiIpa.includes('doc_upload') || kiwiIpa.includes('in_progress') || (md.ipa_date && String(md.ipa_date).trim() !== '');
 
-  if (isFinalDecline) {
+  if (isKiwiSoftApprove && !rawUpper.includes('REJECT') && !rawUpper.includes('DECLIN')) {
+    return 'SOFT_APPROVE';
+  }
+
+  // 4. FINAL DECLINE (532 leads - Hard Rejected / Declined)
+  if (rawUpper.includes('REJECT') || rawUpper.includes('DECLIN') || rawUpper.includes('CANCEL') || cs.includes('reject') || cs.includes('declin')) {
     return 'FINAL_DECLINE';
   }
 
-  // 4. SOFT APPROVE (60 leads - All remaining in-progress mapped leads)
+  // Fallback for remaining active leads -> SOFT_APPROVE
   return 'SOFT_APPROVE';
 }
 
