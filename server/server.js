@@ -1036,7 +1036,7 @@ async function syncLeadsToMetaCustomAudiences(leadsList, targetAudienceId = null
 
       const targetBank = audience.bank_name || 'ALL';
       const matchingLeads = leadsList.filter(l => {
-        if (!isFinalApprovedStatus(l.mis_status)) return false;
+        if (!targetAudienceId && l.mis_status && !isFinalApprovedStatus(l.mis_status)) return false;
         if (targetBank === 'ALL') return true;
         const leadBank = String(l.card_bank || (l.mis_data && l.mis_data.mis_bank_name) || '').toUpperCase();
         return leadBank.includes(targetBank.toUpperCase());
