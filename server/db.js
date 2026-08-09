@@ -2213,7 +2213,12 @@ const db = {
           UPPER(COALESCE(mis_data->>'card_created', '')) LIKE '%CREATE%' OR
           mis_data->>'card_created' = '1' OR
           UPPER(COALESCE(mis_data->>'current_state', '')) LIKE '%CARD%CREATE%' OR
-          UPPER(COALESCE(mis_data->>'current_state', '')) LIKE '%CREATE%'
+          UPPER(COALESCE(mis_data->>'current_state', '')) LIKE '%CREATE%' OR
+          UPPER(COALESCE(mis_data::text, '')) LIKE '%CARD%CREATE%' OR
+          UPPER(COALESCE(mis_data::text, '')) LIKE '%CARD_CREATED%' OR
+          UPPER(COALESCE(mis_data::text, '')) LIKE '%"CARD_CREATED":"1"%' OR
+          UPPER(COALESCE(mis_data::text, '')) LIKE '%"CARD_CREATED":1%' OR
+          UPPER(COALESCE(mis_data::text, '')) LIKE '%"CARD_CREATED":"YES"%'
         )`;
       }
 
