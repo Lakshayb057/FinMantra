@@ -48,6 +48,74 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
   const [resendTimer, setResendTimer] = useState(0);
   const [simulatedOtpText, setSimulatedOtpText] = useState('');
 
+  // Autocomplete suggestions states
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
+  const [selectedCompany, setSelectedCompany] = useState(null);
+  const suggestionsRef = useRef(null);
+
+  // Close suggestions on clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (suggestionsRef.current && !suggestionsRef.current.contains(event.target)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  // Fetch company name suggestions
+  useEffect(() => {
+    const fetchSuggestions = async () => {
+      const query = (formData.company_name || '').trim();
+      
+      // If the currently typed company name is the same as the selected company name, don't trigger search
+      if (selectedCompany && selectedCompany.name.trim().toLowerCase() === query.toLowerCase()) {
+        return;
+      }
+
+      if (query.length < 2) {
+        setSuggestions([]);
+        setShowSuggestions(false);
+        return;
+      }
+
+      setIsLoadingSuggestions(true);
+      try {
+        const res = await fetch(`${API_URL}/sbi/companies/search?q=${encodeURIComponent(query)}`);
+        if (res.ok) {
+          const data = await res.json();
+          setSuggestions(data || []);
+          setShowSuggestions(true);
+        } else {
+          setSuggestions([]);
+        }
+      } catch (err) {
+        console.error('Failed to fetch suggestions:', err);
+        setSuggestions([]);
+      } finally {
+        setIsLoadingSuggestions(false);
+      }
+    };
+
+    const timer = setTimeout(fetchSuggestions, 300);
+    return () => clearTimeout(timer);
+  }, [formData.company_name, selectedCompany]);
+
+  const handleSelectSuggestion = (company) => {
+    setFormData(prev => ({
+      ...prev,
+      company_name: company.name
+    }));
+    setSelectedCompany(company);
+    setShowSuggestions(false);
+    validateField('company_name', company.name, { ...formData, company_name: company.name });
+  };
+
   // Fetch settings & cards
   useEffect(() => {
     const loadSettings = async () => {
@@ -623,6 +691,9 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
         company_name: formData.company_name,
         consent: formData.consent,
         source: 'SBI (QDE)',
+        sbi_company_code: selectedCompany ? selectedCompany.code : null,
+        sbi_company_category: selectedCompany ? selectedCompany.category : null,
+        why_ltf_pricing: selectedCompany ? selectedCompany.why_ltf : null,
         ...utmParams
       };
 
@@ -670,6 +741,153 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
          --line:#CFE2F3; /* Light Blue-Grey Borders */
          --ok:#2f7d4f; 
          --err:#b23a48;
+        }
+
+        /* Wikipedia-style Search Suggest Autocomplete Dropdown */
+        .company-field-container {
+          position: relative;
+          width: 100%;
+        }
+
+        .sbi-autocomplete-dropdown {
+          position: absolute;
+          top: 100%;
+          left: 0;
+          right: 0;
+          z-index: 10000;
+          background: #ffffff;
+          border: 1px solid var(--line);
+          border-radius: 12px;
+          margin-top: 6px;
+          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+          max-height: 250px;
+          overflow-y: auto;
+          scrollbar-width: thin;
+          scrollbar-color: var(--wine2) transparent;
+        }
+
+        .sbi-autocomplete-dropdown::-webkit-scrollbar {
+          width: 6px;
+        }
+
+        .sbi-autocomplete-dropdown::-webkit-scrollbar-thumb {
+          background-color: var(--wine2);
+          border-radius: 4px;
+        }
+
+        .sbi-autocomplete-item {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 12px 16px;
+          cursor: pointer;
+          transition: background-color 0.2s ease;
+          border-bottom: 1px solid rgba(207, 226, 243, 0.4);
+          font-size: 14px;
+        }
+
+        .sbi-autocomplete-item:last-child {
+          border-bottom: none;
+        }
+
+        .sbi-autocomplete-item:hover {
+          background-color: var(--blush);
+        }
+
+        .sbi-company-info {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          text-align: left;
+        }
+
+        .sbi-company-name {
+          font-weight: 600;
+          color: var(--ink);
+        }
+
+        .sbi-company-code {
+          font-size: 11px;
+          color: #64748b;
+          font-family: monospace;
+        }
+
+        .sbi-company-badges {
+          display: flex;
+          gap: 6px;
+          align-items: center;
+        }
+
+        .sbi-badge {
+          font-size: 10px;
+          font-weight: 700;
+          padding: 2px 8px;
+          border-radius: 20px;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+
+        .sbi-badge.cat-s {
+          background-color: #dcfce7;
+          color: #15803d;
+          border: 1px solid #bbf7d0;
+        }
+
+        .sbi-badge.cat-c {
+          background-color: #dbeafe;
+          color: #1d4ed8;
+          border: 1px solid #bfdbfe;
+        }
+
+        .sbi-badge.cat-a {
+          background-color: #fef9c3;
+          color: #a16207;
+          border: 1px solid #fef08a;
+        }
+
+        .sbi-badge.cat-b {
+          background-color: #fef3c7;
+          color: #d97706;
+          border: 1px solid #fde68a;
+        }
+
+        .sbi-badge.ltf-badge {
+          background-color: #fce7f3;
+          color: #be185d;
+          border: 1px solid #fbcfe8;
+        }
+
+        .sbi-autocomplete-loading {
+          position: absolute;
+          top: 100%;
+          left: 0;
+          right: 0;
+          z-index: 10000;
+          background: #ffffff;
+          border: 1px solid var(--line);
+          border-radius: 12px;
+          margin-top: 6px;
+          padding: 12px 16px;
+          font-size: 13px;
+          color: #64748b;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+        }
+
+        .loading-spinner {
+          display: inline-block;
+          width: 14px;
+          height: 14px;
+          border: 2px solid rgba(10, 63, 131, 0.2);
+          border-radius: 50%;
+          border-top-color: var(--wine);
+          animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+          to { transform: rotate(360deg); }
         }
         
         .simplyclick-wrapper {
@@ -1556,13 +1774,49 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
                       {/* 14. Company Name */}
                       <div className={`field full ${errors.company_name ? 'invalid' : ''}`}>
                         <label htmlFor="company_name">Company / Employer Name <span className="req">*</span></label>
-                        <input
-                          id="company_name"
-                          name="company_name"
-                          placeholder="Full Company or Business Name"
-                          value={formData.company_name}
-                          onChange={handleInputChange}
-                        />
+                        <div className="company-field-container">
+                          <input
+                            id="company_name"
+                            name="company_name"
+                            placeholder="Full Company or Business Name"
+                            value={formData.company_name}
+                            onChange={handleInputChange}
+                            autoComplete="off"
+                          />
+                          {showSuggestions && suggestions.length > 0 && (
+                            <div ref={suggestionsRef} className="sbi-autocomplete-dropdown">
+                              {suggestions.map((company, index) => (
+                                <div
+                                  key={index}
+                                  className="sbi-autocomplete-item"
+                                  onClick={() => handleSelectSuggestion(company)}
+                                >
+                                  <div className="sbi-company-info">
+                                    <span className="sbi-company-name">{company.name}</span>
+                                    {company.code && <span className="sbi-company-code">({company.code})</span>}
+                                  </div>
+                                  <div className="sbi-company-badges">
+                                    {company.category && (
+                                      <span className={`sbi-badge cat-${company.category.toLowerCase().trim()}`}>
+                                        Category {company.category}
+                                      </span>
+                                    )}
+                                    {company.why_ltf && (
+                                      <span className="sbi-badge ltf-badge" title={company.why_ltf}>
+                                        LTF Offer
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {isLoadingSuggestions && (
+                            <div className="sbi-autocomplete-loading">
+                              <span className="loading-spinner"></span> Searching company list...
+                            </div>
+                          )}
+                        </div>
                         <span className="err">{errors.company_name || 'Company Name is required.'}</span>
                       </div>
 

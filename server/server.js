@@ -1192,7 +1192,10 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
     company_name,
     application_id,
     application_no,
-    app_id
+    app_id,
+    sbi_company_code,
+    sbi_company_category,
+    why_ltf_pricing
   } = req.body;
 
   const trimmedName = full_name ? String(full_name).trim() : '';
@@ -1548,7 +1551,12 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
       }
       return clientIp || null;
     })(),
-    user_agent: req.headers['user-agent'] || null
+    user_agent: req.headers['user-agent'] || null,
+    mis_data: {
+      company_code: sbi_company_code || null,
+      company_category: sbi_company_category || null,
+      why_ltf_pricing: why_ltf_pricing || null
+    }
   };
 
   const newLead = await db.addLead(leadData);
@@ -4599,6 +4607,50 @@ app.post('/api/whatsapp/test', async (req, res) => {
     }
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Autocomplete search for SBI company names
+app.get('/api/sbi/companies/search', async (req, res) => {
+  try {
+    const q = String(req.query.q || '').trim();
+    if (!q || q.length < 2) {
+      return res.json([]);
+    }
+
+    // Search by prefix first, then by substring
+    const query = `
+      SELECT company_name, company_code, company_category, why_ltf_pricing
+      FROM sbi_company_codes
+      WHERE LOWER(company_name) LIKE $1
+      ORDER BY 
+        CASE WHEN LOWER(company_name) LIKE $2 THEN 0 ELSE 1 END,
+        company_name ASC
+      LIMIT 15
+    `;
+    const params = [`%${q.toLowerCase()}%`, `${q.toLowerCase()}%`];
+    const result = await db.pool.query(query, params);
+    
+    // Deduplicate by name
+    const seen = new Set();
+    const suggestions = [];
+    for (const row of result.rows) {
+      const cleanName = row.company_name.toUpperCase();
+      if (!seen.has(cleanName)) {
+        seen.add(cleanName);
+        suggestions.push({
+          name: row.company_name,
+          code: row.company_code,
+          category: row.company_category,
+          why_ltf: row.why_ltf_pricing
+        });
+      }
+    }
+    
+    res.json(suggestions);
+  } catch (err) {
+    console.error('[Search Suggest API Error]:', err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 

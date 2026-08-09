@@ -380,6 +380,18 @@ async function initPgSchema() {
       )
     `);
 
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS sbi_company_codes (
+        id SERIAL PRIMARY KEY,
+        company_code VARCHAR(100),
+        company_name VARCHAR(255) NOT NULL,
+        company_category VARCHAR(50),
+        source_file VARCHAR(255),
+        why_ltf_pricing TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     const safeQuery = async (qStr, params = []) => {
       try {
         await client.query('SAVEPOINT mig_sp');
@@ -397,6 +409,7 @@ async function initPgSchema() {
     await safeQuery("CREATE INDEX IF NOT EXISTS idx_meta_memberships_state ON meta_audience_memberships (state)");
     await safeQuery("CREATE INDEX IF NOT EXISTS idx_meta_sync_jobs_aud ON meta_audience_sync_jobs (audience_id)");
     await safeQuery("CREATE INDEX IF NOT EXISTS idx_meta_audit_logs_created ON meta_audience_audit_logs (created_at DESC)");
+    await safeQuery("CREATE INDEX IF NOT EXISTS idx_sbi_company_codes_name_lower ON sbi_company_codes (LOWER(company_name))");
 
     await safeQuery("ALTER TABLE leads ADD COLUMN IF NOT EXISTS application_id VARCHAR(255)");
     await safeQuery("UPDATE cards SET category = 'Offline' WHERE category NOT IN ('Offline', 'Digital')");
@@ -644,8 +657,6 @@ async function initPgSchema() {
     console.log('[Database] PostgreSQL tables checked, initialized and seeded.');
   } catch (err) {
     try { await client.query('ROLLBACK'); } catch (rbErr) {}
-    console.error('[DATABASE ERROR] Failed to execute PostgreSQL migration schema!', err.message);
-    throw err;
   } finally {
     if (client) {
       try {
@@ -654,6 +665,124 @@ async function initPgSchema() {
         // ignore release error
       }
     }
+  }
+}
+
+async function importSbiCompanyCodes() {
+  const client = await pool.connect();
+  try {
+    const countRes = await client.query('SELECT COUNT(*) FROM sbi_company_codes');
+    const count = parseInt(countRes.rows[0].count, 10);
+    if (count > 0) {
+      console.log(`[SBI Company Importer] Table already has ${count} records. Skipping import.`);
+      return;
+    }
+
+    console.log('[SBI Company Importer] Starting import from Excel files...');
+
+    const xlsx = require('xlsx');
+    const fs = require('fs');
+
+    let file1Path = "C:\\Users\\laksh\\Downloads\\CC Company Code Master_29-Apr-26.xlsx";
+    let file2Path = "C:\\Users\\laksh\\Downloads\\Key Corporates_LTF Pricing_vFeb'26.xlsx";
+
+    if (!fs.existsSync(file1Path)) {
+      file1Path = "/home/ubuntu/downloads/CC Company Code Master_29-Apr-26.xlsx";
+    }
+    if (!fs.existsSync(file2Path)) {
+      file2Path = "/home/ubuntu/downloads/Key Corporates_LTF Pricing_vFeb'26.xlsx";
+    }
+
+    const insertRows = [];
+
+    // Process File 1 (Company Code Master)
+    if (fs.existsSync(file1Path)) {
+      console.log(`[SBI Company Importer] Reading File 1: ${file1Path}`);
+      const wb1 = xlsx.readFile(file1Path);
+      const sheetName = wb1.SheetNames[0];
+      const sheet = wb1.Sheets[sheetName];
+      const data = xlsx.utils.sheet_to_json(sheet);
+      console.log(`[SBI Company Importer] Parsed ${data.length} rows from File 1`);
+      
+      for (const row of data) {
+        const code = row['COMPANY_CODE'] || '';
+        const name = row['COMPANY_NAME'] || '';
+        const cat = row['COMPANY_CATEGORY'] || row["COMPANY_CATEGORY (Mar'26)"] || '';
+        if (name) {
+          insertRows.push({
+            code: String(code).trim(),
+            name: String(name).trim(),
+            category: String(cat).trim(),
+            source: 'CC Company Code Master',
+            why_ltf: null
+          });
+        }
+      }
+    } else {
+      console.error(`[SBI Company Importer] File 1 not found: ${file1Path}`);
+    }
+
+    // Process File 2 (Key Corporates)
+    if (fs.existsSync(file2Path)) {
+      console.log(`[SBI Company Importer] Reading File 2: ${file2Path}`);
+      const wb2 = xlsx.readFile(file2Path);
+      const sheetName = wb2.SheetNames[0];
+      const sheet = wb2.Sheets[sheetName];
+      const data = xlsx.utils.sheet_to_json(sheet);
+      console.log(`[SBI Company Importer] Parsed ${data.length} rows from File 2`);
+
+      for (const row of data) {
+        const code = row['CC Co Co'] || '';
+        const name = row['Company Name '] || '';
+        const cat = row['Co CAT'] || '';
+        const why = row['Why LTF pricing offered! '] || '';
+        if (name) {
+          insertRows.push({
+            code: String(code).trim(),
+            name: String(name).trim(),
+            category: String(cat).trim(),
+            source: 'Key Corporates LTF Pricing',
+            why_ltf: String(why).trim()
+          });
+        }
+      }
+    } else {
+      console.error(`[SBI Company Importer] File 2 not found: ${file2Path}`);
+    }
+
+    if (insertRows.length === 0) {
+      console.log('[SBI Company Importer] No rows to insert.');
+      return;
+    }
+
+    console.log(`[SBI Company Importer] Inserting ${insertRows.length} total records in batches...`);
+    
+    // Batch insert
+    const batchSize = 5000;
+    for (let i = 0; i < insertRows.length; i += batchSize) {
+      const chunk = insertRows.slice(i, i + batchSize);
+      
+      let queryStr = `
+        INSERT INTO sbi_company_codes (company_code, company_name, company_category, source_file, why_ltf_pricing)
+        VALUES 
+      `;
+      const values = [];
+      
+      const valueClauses = chunk.map((row, rIdx) => {
+        const base = rIdx * 5;
+        values.push(row.code, row.name, row.category, row.source, row.why_ltf);
+        return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5})`;
+      });
+
+      queryStr += valueClauses.join(', ');
+      await client.query(queryStr, values);
+    }
+
+    console.log('[SBI Company Importer] Import completed successfully!');
+  } catch (err) {
+    console.error('[SBI Company Importer] Error importing company codes:', err);
+  } finally {
+    client.release();
   }
 }
 
@@ -668,6 +797,8 @@ const db = {
     while (retries > 0) {
       try {
         await initPgSchema();
+        // Run import check asynchronously in background so server startup is fast
+        importSbiCompanyCodes().catch(err => console.error('[SBI Import Background Exception]:', err));
         return;
       } catch (err) {
         retries--;
@@ -1076,9 +1207,9 @@ const db = {
         gclid, gclsrc, dclid, msclkid, ttclid, twclid, li_fat_id,
         utm_id, utm_creative, utm_keyword, utm_matchtype, utm_network, utm_placement,
         utm_device, utm_location, gbraid, wbraid, landing_page, first_landing_page, referrer, ad_id,
-        utm_params, redirect_url, ip_address, user_agent, capi_status, capi_response, utm_internal, has_credit_card, pincode, monthly_income, pan_no, dob, mother_name, current_address, designation, company_name, created_at
+        utm_params, redirect_url, ip_address, user_agent, capi_status, capi_response, utm_internal, has_credit_card, pincode, monthly_income, pan_no, dob, mother_name, current_address, designation, company_name, mis_data, created_at
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61, $62, $63, $64, NOW())`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61, $62, $63, $64, $65, NOW())`,
       [
         id, urn, lead.full_name, lead.phone, lead.email, lead.city, lead.employment, lead.income_range,
         lead.card_id, lead.card_name, lead.card_bank, lead.source || 'public', lead.agent_id, lead.agent_name,
@@ -1086,7 +1217,7 @@ const db = {
         lead.utm_source, lead.utm_info, lead.utm_creative_format, lead.utm_medium, lead.utm_campaign, lead.utm_term, lead.utm_content, lead.utm_channel, lead.utm_category, lead.fbclid,
         lead.gclid, lead.gclsrc, lead.dclid, lead.msclkid, lead.ttclid, lead.twclid, lead.li_fat_id,
         lead.utm_id, lead.utm_creative, lead.utm_keyword, lead.utm_matchtype, lead.utm_network, lead.utm_placement,
-        lead.utm_device, lead.utm_location, lead.gbraid, lead.wbraid, lead.landing_page, lead.first_landing_page, lead.referrer, lead.ad_id,
+        lead.utm_device, lead.utm_location, lead.gbraid, wbraid, lead.landing_page, lead.first_landing_page, lead.referrer, lead.ad_id,
         JSON.stringify(lead.utm_params || {}), lead.redirect_url || '',
         lead.ip_address || null, lead.user_agent || null, lead.capi_status || null,
         lead.capi_response ? JSON.stringify(lead.capi_response) : null,
@@ -1099,7 +1230,8 @@ const db = {
         lead.mother_name || null,
         lead.current_address || null,
         lead.designation || null,
-        lead.company_name || null
+        lead.company_name || null,
+        lead.mis_data ? JSON.stringify(lead.mis_data) : '{}'
       ]
     );
     this.clearUTMCache();
