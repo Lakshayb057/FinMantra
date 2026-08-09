@@ -2552,6 +2552,9 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
   const getLeadSourceBankDisplay = useCallback((l) => {
     if (!l) return 'PUBLIC';
+    if (l.source === 'SBI (QDE)' || l.source === 'sbi_qde' || (l.landing_page && l.landing_page.includes('sbi_qde'))) {
+      return 'SBI (QDE)';
+    }
     const bank = getLeadBank(l);
     if (l.source === 'agent') {
       const agentName = l.agent_name || 'Staff';

@@ -1224,8 +1224,10 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
     return res.status(400).json({ error: "Mother's name cannot be the same as Full Name." });
   }
 
+  const isSbiQde = source === 'sbi_qde' || source === 'SBI (QDE)' || (landing_page && String(landing_page).toLowerCase().includes('sbi_qde'));
+
   // Validate all 14 required fields for SBI QDE application
-  if (source === 'sbi_qde') {
+  if (isSbiQde) {
     const requiredSbiQdeFields = [
       { key: pan_no, name: 'PAN Number' },
       { key: full_name, name: 'Full Name' },
@@ -1290,7 +1292,7 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
   if (!card) {
     let matchedCard = null;
     
-    if (source === 'kiwi' || source === 'simplyclick_sbi' || source === 'sbi_qde') {
+    if (source === 'kiwi' || source === 'simplyclick_sbi' || isSbiQde) {
       const activeCards = await db.getCards(false);
       // For kiwi, simplyclick_sbi, and sbi_qde sources, check utm_internal first
       if (utm_internal) {
@@ -1316,7 +1318,7 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
         }
       }
       // For simplyclick_sbi & sbi_qde, fallback to active SimplyClick / SBI card if utm_internal is missing or unmatched
-      if (!matchedCard && (source === 'simplyclick_sbi' || source === 'sbi_qde')) {
+      if (!matchedCard && (source === 'simplyclick_sbi' || isSbiQde)) {
         matchedCard = activeCards.find(c => {
           const n = String(c.name || '').toLowerCase();
           const i = String(c.id || '').toLowerCase();
@@ -1473,7 +1475,7 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
       if (inspect.includes('au')) return 'AU';
       return 'OTHER';
     })(),
-    source: source || 'public',
+    source: isSbiQde ? 'SBI (QDE)' : (source || 'public'),
     agent_id: source === 'agent' ? agent_id : null,
     agent_name: source === 'agent' ? agent_name : null,
     agent_location: source === 'agent' ? agent_location : null,
@@ -1572,7 +1574,8 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
     .replace(/{first_landing_page}/gi, encodeURIComponent(first_landing_page || ''))
     .replace(/{referrer}/gi, encodeURIComponent(referrer || ''))
     .replace(/{utm_info}/gi, encodeURIComponent(utm_info || ''))
-    .replace(/{utm_creative_format}/gi, encodeURIComponent(utm_creative_format || ''));
+    .replace(/{utm_creative_format}/gi, encodeURIComponent(utm_creative_format || ''))
+    .replace(/{application_id}/gi, encodeURIComponent(leadData.application_id || ''));
 
   newLead.redirect_url = redirectUrl;
   
@@ -1637,7 +1640,7 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
   }
 
   // Send Custom WhatsApp Confirmation for SBI QDE Landing Page
-  if (source === 'sbi_qde') {
+  if (isSbiQde) {
     const qdeMsg = "Thank you for submitting this application. We will submit your application with bank and if you’re eligible for any credit card with bank, our representative will call you shortly";
     console.log(`[WhatsApp SBI QDE Creation] Sending confirmation message to ${trimmedPhone}`);
     try {

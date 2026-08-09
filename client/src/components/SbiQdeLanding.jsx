@@ -459,7 +459,7 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
         designation: formData.designation,
         company_name: formData.company_name,
         consent: formData.consent,
-        source: 'sbi_qde',
+        source: 'SBI (QDE)',
         ...utmParams
       };
 
