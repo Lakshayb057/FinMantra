@@ -276,7 +276,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
     if (cat.includes('FINAL') && (cat.includes('APPROVED') || cat.includes('CARD'))) {
       if (bank.includes('KIWI')) {
-        return `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE LOWER(COALESCE(mis_data->>'yes_state','')) LIKE '%yes%' OR LOWER(COALESCE(mis_data->>'Card_Created','')) IN ('1','yes') OR LOWER(mis_status) IN ('card created','approved');`;
+        return `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE LOWER(mis_status) IN ('card created', 'card_created', 'issued') OR COALESCE(mis_data->>'Card_Created','') IN ('1','yes') OR LOWER(COALESCE(mis_data->>'yes_state','')) LIKE '%yes%';`;
       }
       return `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE UPPER(mis_status) LIKE '%APPROV%' OR UPPER(mis_status) LIKE '%CARD%CREATE%';`;
     } else if (cat.includes('FINAL') && (cat.includes('DECLINED') || cat.includes('REJECTED'))) {
