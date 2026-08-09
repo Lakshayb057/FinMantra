@@ -69,95 +69,75 @@ function getNormalizedStatusCategory(rawStatus, misData = null) {
   if (md && typeof md === 'string') {
     try { md = JSON.parse(md); } catch (e) {}
   }
-  if (md && typeof md === 'object') {
-    const kiwiCard = (
-      String(md.Card_Created || md.card_activation_status || md.card_created || md.card_state || md.current_state || md.winning_state || md.mis_status || rawStatus || '') + ' ' + 
-      String(md.pnb_state || '') + ' ' + 
-      String(md.yes_state || '') + ' ' + 
-      String(md.au_state || '')
-    ).toUpperCase();
+  md = md && typeof md === 'object' ? md : {};
 
-    if (
-      kiwiCard.includes('YES') ||
-      kiwiCard.includes('CARD CREATED') ||
-      kiwiCard.includes('CARD_CREATED') ||
-      kiwiCard.includes('CARD ISSUED') ||
-      kiwiCard.includes('CARD_ISSUED') ||
-      kiwiCard.includes('AC_CREATED') ||
-      kiwiCard.includes('ACCOUNT_CREATED') ||
-      kiwiCard.includes('ACCOUNT CREATED')
-    ) {
-      if (!kiwiCard.includes('REJECT') && !kiwiCard.includes('DECLINE')) {
-        return 'FINAL_APPROVE';
-      }
+  const rawUpper = String(rawStatus || '').toUpperCase().trim();
+  const cardVal = String(md.Card_Created || md.card_created || md.card_activation_status || md.card_state || '').toUpperCase().trim();
+  const firstTxnVal = String(md.first_txn || md.first_transaction || '').toUpperCase().trim();
+  const currentStateVal = String(md.current_state || md.winning_state || '').toUpperCase().trim();
+
+  // 1. FINAL APPROVE (Checked FIRST - Highest Precedence)
+  const isCardCreatedPositive = cardVal && cardVal !== 'NO' && cardVal !== 'FALSE' && cardVal !== '0' && cardVal !== 'NULL' && cardVal !== 'UNDEFINED' && !cardVal.includes('REJECT') && !cardVal.includes('DECLINE');
+  const isFirstTxnPositive = firstTxnVal && firstTxnVal !== 'NO' && firstTxnVal !== 'FALSE' && firstTxnVal !== '0' && firstTxnVal !== 'NULL' && firstTxnVal !== 'UNDEFINED';
+
+  if (
+    isCardCreatedPositive ||
+    isFirstTxnPositive ||
+    rawUpper.includes('CARD CREATED') ||
+    rawUpper.includes('CARD_CREATED') ||
+    rawUpper.includes('CARD ISSUED') ||
+    rawUpper.includes('CARD_ISSUED') ||
+    rawUpper.includes('AC_CREATED') ||
+    rawUpper.includes('ACCOUNT_CREATED') ||
+    rawUpper.includes('ACCOUNT CREATED') ||
+    rawUpper === 'APPROVED' ||
+    rawUpper === 'FINAL_APPROVE' ||
+    currentStateVal.includes('AC_CREATED') ||
+    currentStateVal.includes('ACCOUNT_CREATED') ||
+    currentStateVal.includes('CARD_CREATED') ||
+    currentStateVal.includes('CARD_ISSUED')
+  ) {
+    if (!rawUpper.includes('REJECT') && !rawUpper.includes('DECLINE')) {
+      return 'FINAL_APPROVE';
     }
   }
 
-  if (!rawStatus) return null;
-  const upper = String(rawStatus).toUpperCase().trim();
-
-  // Explicit CARD CREATED / CARD ISSUED check (Takes precedence for KIWI & all banks)
+  // 2. FINAL DECLINE
   if (
-    upper.includes('CARD CREATED') ||
-    upper.includes('CARD_CREATED') ||
-    upper.includes('CARD ISSUED') ||
-    upper.includes('CARD_ISSUED') ||
-    upper.includes('AC_CREATED') ||
-    upper.includes('ACCOUNT_CREATED') ||
-    upper.includes('ACCOUNT CREATED')
-  ) {
-    return 'FINAL_APPROVE';
-  }
-
-  // 1. SOFT DECLINE
-  if (
-    upper.includes('SOFT DECLINE') ||
-    upper.includes('SOFT_DECLINE') ||
-    upper.includes('PRE-DECLINE') ||
-    upper.includes('DCLP') ||
-    upper.includes('DACP')
-  ) {
-    return 'SOFT_DECLINE';
-  }
-
-  // 2. SOFT APPROVE
-  if (
-    upper.includes('SOFT APPROVE') ||
-    upper.includes('SOFT_APPROVE') ||
-    upper.includes('PRE-APPROV') ||
-    upper.includes('PREAPPROVED') ||
-    upper.includes('VKYC') ||
-    upper.includes('IPA') ||
-    upper.includes('IN-PROCESS') ||
-    upper.includes('IN_PROCESS') ||
-    upper.includes('PENDING')
-  ) {
-    if (!upper.includes('REJECT') && !upper.includes('DECLINE')) {
-      return 'SOFT_APPROVE';
-    }
-  }
-
-  // 3. FINAL DECLINE
-  if (
-    upper.includes('DECLINE') ||
-    upper.includes('REJECT') ||
-    upper.includes('CANCEL') ||
-    upper.includes('FAIL')
+    rawUpper.includes('DECLINE') ||
+    rawUpper.includes('REJECT') ||
+    rawUpper.includes('CANCEL') ||
+    rawUpper.includes('FAIL') ||
+    currentStateVal.includes('REJECT') ||
+    currentStateVal.includes('DECLINE')
   ) {
     return 'FINAL_DECLINE';
   }
 
-  // 4. FINAL APPROVE
+  // 3. SOFT DECLINE
   if (
-    upper.includes('APPROVE') ||
-    upper.includes('DISBURSED') ||
-    upper.includes('ACTIVE') ||
-    upper.includes('CARD ACTIVATED') ||
-    upper.includes('FIRST TXN') ||
-    upper.includes('FIRST_TXN') ||
-    upper.includes('SUCCESS')
+    rawUpper.includes('SOFT DECLINE') ||
+    rawUpper.includes('SOFT_DECLINE') ||
+    rawUpper.includes('PRE-DECLINE') ||
+    rawUpper.includes('DCLP') ||
+    rawUpper.includes('DACP')
   ) {
-    return 'FINAL_APPROVE';
+    return 'SOFT_DECLINE';
+  }
+
+  // 4. SOFT APPROVE
+  if (
+    rawUpper.includes('SOFT APPROVE') ||
+    rawUpper.includes('SOFT_APPROVE') ||
+    rawUpper.includes('PRE-APPROV') ||
+    rawUpper.includes('PREAPPROVED') ||
+    rawUpper.includes('VKYC') ||
+    rawUpper.includes('IPA') ||
+    rawUpper.includes('IN-PROCESS') ||
+    rawUpper.includes('IN_PROCESS') ||
+    rawUpper.includes('PENDING')
+  ) {
+    return 'SOFT_APPROVE';
   }
 
   return null;
@@ -510,7 +490,7 @@ async function getEligibleMappedLeadsForAudience(audience) {
 
     if (audience_type === 'BANK_MASTER') {
       if (bank_name === 'KIWI') {
-        query += ` AND (card_bank ILIKE '%KIWI%' OR card_bank ILIKE '%YES%' OR card_bank ILIKE '%AU%' OR card_bank ILIKE '%PNB%' OR mis_data->>'mis_bank_name' ILIKE '%KIWI%' OR mis_data->>'winning_bank' IS NOT NULL OR mis_data->>'kiwi_winning_bank' IS NOT NULL OR card_name ILIKE '%KIWI%' OR landing_page ILIKE '%KIWI%' OR utm_source ILIKE '%KIWI%')`;
+        query += ` AND (card_bank ILIKE '%KIWI%' OR mis_data->>'mis_bank_name' ILIKE '%KIWI%' OR (mis_data->>'kiwi_winning_bank' IS NOT NULL AND mis_data->>'kiwi_winning_bank' != '') OR card_name ILIKE '%KIWI%' OR landing_page ILIKE '%KIWI%' OR landing_page ILIKE '%GOKIWI%' OR utm_source ILIKE '%KIWI%' OR utm_source ILIKE '%GOKIWI%')`;
       } else {
         query += ` AND (card_bank ILIKE $${pIdx} OR mis_data->>'mis_bank_name' ILIKE $${pIdx})`;
         params.push(`%${bank_name}%`);
@@ -518,7 +498,7 @@ async function getEligibleMappedLeadsForAudience(audience) {
       }
     } else if (audience_type === 'BANK_STATUS') {
       if (bank_name === 'KIWI') {
-        query += ` AND (card_bank ILIKE '%KIWI%' OR card_bank ILIKE '%YES%' OR card_bank ILIKE '%AU%' OR card_bank ILIKE '%PNB%' OR mis_data->>'mis_bank_name' ILIKE '%KIWI%' OR mis_data->>'winning_bank' IS NOT NULL OR mis_data->>'kiwi_winning_bank' IS NOT NULL OR card_name ILIKE '%KIWI%' OR landing_page ILIKE '%KIWI%' OR utm_source ILIKE '%KIWI%')`;
+        query += ` AND (card_bank ILIKE '%KIWI%' OR mis_data->>'mis_bank_name' ILIKE '%KIWI%' OR (mis_data->>'kiwi_winning_bank' IS NOT NULL AND mis_data->>'kiwi_winning_bank' != '') OR card_name ILIKE '%KIWI%' OR landing_page ILIKE '%KIWI%' OR landing_page ILIKE '%GOKIWI%' OR utm_source ILIKE '%KIWI%' OR utm_source ILIKE '%GOKIWI%')`;
       } else {
         query += ` AND (card_bank ILIKE $${pIdx} OR mis_data->>'mis_bank_name' ILIKE $${pIdx})`;
         params.push(`%${bank_name}%`);
