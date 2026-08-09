@@ -5,22 +5,22 @@ const db = require('./db');
 function getSettingVal(settings, key, envKey, defaultVal = null) {
   if (key === 'meta_ad_account_id') {
     const dbVal = settings && settings[key] ? String(settings[key]).trim() : '';
-    if (dbVal && dbVal.startsWith('act_')) return dbVal;
+    if (dbVal && dbVal.startsWith('act_') && !dbVal.includes('*')) return dbVal;
     const envVal = process.env.META_AD_ACCOUNT_ID;
-    if (envVal) return envVal.startsWith('act_') ? envVal : `act_${envVal}`;
+    if (envVal && !envVal.includes('*')) return envVal.startsWith('act_') ? envVal : `act_${envVal}`;
     return 'act_1450810068922146';
   }
 
   if (key === 'meta_access_token') {
     const dbVal = settings && settings[key] ? String(settings[key]).trim() : '';
-    if (dbVal && dbVal.startsWith('EAAV')) return dbVal;
+    if (dbVal && dbVal.startsWith('EAAV') && !dbVal.includes('...')) return dbVal;
     const envVal = process.env.META_ACCESS_TOKEN;
-    if (envVal && envVal.startsWith('EAAV')) return envVal;
+    if (envVal && envVal.startsWith('EAAV') && !envVal.includes('...')) return envVal;
     return 'EAAVcOgEkwUQBSMZA5fifzCMuvEzonYAZCybPbWYdAy0YM6ASvcjqcIt9ii4gaXDuLexc7ZBHZA7zGA0hhZA5d1t59SkUtszAb/NFZASRXucGdaX2w1XQD6RY4/QA8jZAUbaiAVSn/ColzfIlOvq9BU0ePyM1uoileKbLtFe0BSjfghbZCUtQSjY0BBjYe3FFXQZDZD';
   }
 
   const dbVal = settings && settings[key] ? String(settings[key]).trim() : '';
-  if (dbVal && dbVal !== 'undefined' && dbVal !== 'null') {
+  if (dbVal && dbVal !== 'undefined' && dbVal !== 'null' && !dbVal.includes('...')) {
     return dbVal;
   }
   const envVal = envKey && process.env[envKey] ? String(process.env[envKey]).trim() : '';
@@ -584,7 +584,7 @@ async function syncSingleAudience(audienceId, isFullSync = false, broadcast = nu
       audience.meta_audience_id = metaRes.metaAudienceId;
       await db.updateMetaAudience(audience.id, { meta_audience_id: metaRes.metaAudienceId });
     } else {
-      return { success: false, error: 'Failed to create Meta Audience ID' };
+      return { success: false, error: metaRes.error ? `Failed to create Meta Audience ID: ${metaRes.error}` : 'Failed to create Meta Audience ID' };
     }
   }
 
