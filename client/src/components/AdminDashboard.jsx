@@ -7997,7 +7997,26 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
                           <form onSubmit={executeSqlQuery} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                             <div className="form-group" style={{ marginBottom: 0 }}>
-                              <label className="form-label" style={{ fontWeight: 700, fontSize: '0.8rem' }}>Enter PostgreSQL Query</label>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                <label className="form-label" style={{ fontWeight: 700, fontSize: '0.8rem', margin: 0 }}>Enter PostgreSQL Query</label>
+                                <select 
+                                  className="form-select"
+                                  onChange={(e) => {
+                                    if (e.target.value) {
+                                      setSqlQuery(e.target.value);
+                                    }
+                                  }}
+                                  style={{ width: 'auto', minWidth: '220px', padding: '0.2rem 0.5rem', height: '28px', fontSize: '0.75rem', borderRadius: '4px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)' }}
+                                >
+                                  <option value="">-- Load Sample Query --</option>
+                                  <option value="SELECT company_code, company_name, company_category, why_ltf_pricing FROM sbi_company_codes WHERE LOWER(company_name) LIKE '%reliance%' LIMIT 10;">Find SBI Companies (Reliance)</option>
+                                  <option value="SELECT urn, full_name, phone, company_name, mis_data->>'company_code' as code, mis_data->>'company_category' as cat, mis_data->>'why_ltf_pricing' as ltf FROM leads WHERE company_name IS NOT NULL AND company_name != '' ORDER BY created_at DESC LIMIT 10;">Recent Leads with Company Tiers</option>
+                                  <option value="SELECT card_bank, COUNT(*) as lead_count FROM leads GROUP BY card_bank ORDER BY lead_count DESC;">Count Leads by Bank Partner</option>
+                                  <option value="SELECT id, urn, created_at, full_name, phone, card_name, card_bank, source, mis_status FROM leads ORDER BY created_at DESC LIMIT 10;">Recent Credit Card Applications</option>
+                                  <option value="SELECT 'leads' as tbl, COUNT(*) as count FROM leads UNION SELECT 'sbi_company_codes', COUNT(*) FROM sbi_company_codes UNION SELECT 'agents', COUNT(*) FROM agents UNION SELECT 'cards', COUNT(*) FROM cards UNION SELECT 'locations', COUNT(*) FROM locations;">Compare All Table Row Counts</option>
+                                  <option value="SELECT id, name, username, status, assigned_bank, can_upload_mis, agent_mode FROM agents ORDER BY created_at ASC;">List Authorised Kiosk/MIS Agents</option>
+                                </select>
+                              </div>
                               <textarea
                                 className="form-input"
                                 rows="4"
@@ -8008,30 +8027,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                               />
                             </div>
 
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                                <button
-                                  type="button"
-                                  onClick={() => setSqlQuery('SELECT id, urn, full_name, company_name FROM leads ORDER BY created_at DESC LIMIT 5;')}
-                                  style={{ background: 'var(--paper-2)', border: '1px solid var(--line)', padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.7rem', color: 'var(--muted)', cursor: 'pointer' }}
-                                >
-                                  Leads Sample
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setSqlQuery("SELECT * FROM sbi_company_codes WHERE LOWER(company_name) LIKE '%reliance%' LIMIT 5;")}
-                                  style={{ background: 'var(--paper-2)', border: '1px solid var(--line)', padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.7rem', color: 'var(--muted)', cursor: 'pointer' }}
-                                >
-                                  Companies Sample
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setSqlQuery('SELECT COUNT(*), card_bank FROM leads GROUP BY card_bank;')}
-                                  style={{ background: 'var(--paper-2)', border: '1px solid var(--line)', padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.7rem', color: 'var(--muted)', cursor: 'pointer' }}
-                                >
-                                  Aggregations Sample
-                                </button>
-                              </div>
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
                               <button
                                 type="submit"
                                 className="btn-primary"
