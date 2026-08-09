@@ -100,36 +100,60 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
       setNegativePincodeNotice('');
       setIsFetchingPincode(true);
 
-      try {
-        // 1. Postal Pincode API lookup for City & State
-        const res = await fetch(`https://api.postalpincode.in/pincode/${pin}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data && data[0] && data[0].Status === 'Success') {
-            const postOffices = data[0].PostOffice || [];
-            if (postOffices.length > 0) {
-              const po = postOffices[0];
-              const fetchedCity = po.District || po.Block || po.Circle;
-              const fetchedState = po.State;
-              setPincodeLocationText(`${fetchedCity}, ${fetchedState}`);
-              
-              setFormData(prev => ({
-                ...prev,
-                city: prev.city || fetchedCity,
-                state: prev.state || fetchedState
-              }));
+      let fetchedCity = '';
+      let fetchedState = '';
 
-              // Clear city/state errors if populated
-              setErrors(prev => {
-                const next = { ...prev };
-                if (fetchedCity) delete next.city;
-                if (fetchedState) delete next.state;
-                return next;
-              });
+      try {
+        // 1. First try Backend Pincode Lookup Proxy (fast CDN & Zippopotam)
+        try {
+          const backendRes = await fetch(`${API_URL}/pincode/lookup/${pin}`);
+          if (backendRes.ok) {
+            const bData = await backendRes.json();
+            if (bData && bData.city && bData.state) {
+              fetchedCity = bData.city;
+              fetchedState = bData.state;
             }
-          } else {
-            setPincodeError('Invalid Pincode. Please enter a valid 6-digit Pincode.');
           }
+        } catch (bErr) {
+          console.warn('Backend pincode lookup fallback:', bErr);
+        }
+
+        // 2. Fallback to direct Postal Pincode API if needed
+        if (!fetchedCity || !fetchedState) {
+          const res = await fetch(`https://api.postalpincode.in/pincode/${pin}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data && data[0] && data[0].Status === 'Success') {
+              const postOffices = data[0].PostOffice || [];
+              if (postOffices.length > 0) {
+                const po = postOffices[0];
+                fetchedCity = po.District || po.Block || po.Circle || '';
+                fetchedState = po.State || '';
+              }
+            }
+          }
+        }
+
+        if (fetchedCity && fetchedState) {
+          setPincodeLocationText(`${fetchedCity}, ${fetchedState}`);
+          
+          // Auto-fill city and state fields
+          setFormData(prev => ({
+            ...prev,
+            city: fetchedCity,
+            state: fetchedState
+          }));
+
+          // Clear validation errors for city, state, and pincode
+          setErrors(prev => {
+            const next = { ...prev };
+            delete next.city;
+            delete next.state;
+            delete next.pincode;
+            return next;
+          });
+        } else {
+          setPincodeError('Invalid Pincode. Please enter a valid 6-digit Pincode.');
         }
       } catch (err) {
         console.error('Failed to lookup pincode details:', err);
@@ -137,7 +161,7 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
         setIsFetchingPincode(false);
       }
 
-      // 2. Check if pincode is in OCL & Negative pincode list
+      // 3. Check if pincode is in OCL & Negative pincode list
       try {
         const negRes = await fetch(`${API_URL}/pincodes/check-negative/${pin}`);
         if (negRes.ok) {

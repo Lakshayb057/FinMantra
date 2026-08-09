@@ -4603,7 +4603,7 @@ app.post('/api/whatsapp/test', async (req, res) => {
 });
 
 // --- PINCODE LOOKUP PROXY ---
-app.get('/api/pincode/lookup/:pincode', async (req, res) => {
+app.get(['/api/pincode/lookup/:pincode', '/api/pincodes/lookup/:pincode'], async (req, res) => {
   const { pincode } = req.params;
   const pin = (pincode || '').trim();
   if (pin.length !== 6 || !/^\d+$/.test(pin)) {
