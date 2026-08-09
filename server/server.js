@@ -5188,7 +5188,7 @@ app.patch('/api/meta/config', authenticateToken, requireAdmin, async (req, res) 
 
     if (meta_pixel_id !== undefined) await db.setSetting('meta_pixel_id', String(meta_pixel_id).trim());
     if (meta_ad_account_id !== undefined) await db.setSetting('meta_ad_account_id', String(meta_ad_account_id).trim());
-    if (meta_access_token !== undefined && !String(meta_access_token).includes('***')) {
+    if (meta_access_token !== undefined && !String(meta_access_token).includes('*') && !String(meta_access_token).includes('...') && String(meta_access_token).trim().length > 50) {
       await db.setSetting('meta_access_token', String(meta_access_token).trim());
     }
     if (meta_api_version !== undefined) await db.setSetting('meta_api_version', String(meta_api_version).trim());
