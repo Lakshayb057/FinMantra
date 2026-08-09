@@ -143,6 +143,11 @@ function getKiwiStatusCategory(lead, rawStatus, misData) {
     rawIpa.includes('decline') || rawIpa.includes('reject') || rawIpa.includes('fail')
   );
 
+  const yesRank = md.yes_rank !== undefined ? Number(md.yes_rank) : -1;
+  const auRank = md.au_rank !== undefined ? Number(md.au_rank) : -1;
+  const pnbRank = md.pnb_rank !== undefined ? Number(md.pnb_rank) : -1;
+  const winRank = md.winning_rank !== undefined ? Number(md.winning_rank) : (md.status_rank !== undefined ? Number(md.status_rank) : -1);
+
   // 2. SOFT DECLINE (9 leads - Pre-decline / DCLP / Pre-screen reject)
   const isSoftDecline = (
     fullStr.includes('dclp') || fullStr.includes('dacp') ||
@@ -152,6 +157,11 @@ function getKiwiStatusCategory(lead, rawStatus, misData) {
     fullStr.includes('prescreen') || fullStr.includes('"ipa":0') || fullStr.includes('"ipa":"0"') ||
     fullStr.includes('"ipa":"dclp"') || fullStr.includes('"ipa_status":"0"') || fullStr.includes('"ipa_status":"dclp"') ||
     isIpaZeroOrNegative ||
+    cs === 'dclp' || cs === 'dacp' || cs === 'not_started' || cs === 'not_applicable' ||
+    yesSt === 'dclp' || yesSt === 'dacp' || yesSt === 'not_started' || yesSt === 'not_applicable' || yesSt === 'rejected' ||
+    auSt === 'dclp' || auSt === 'dacp' || auSt === 'not_started' || auSt === 'not_applicable' ||
+    pnbSt === 'dclp' || pnbSt === 'dacp' || pnbSt === 'not_started' || pnbSt === 'not_applicable' ||
+    (winRank > 0 && winRank <= 3 && !cs.includes('hard') && !rawUpper.includes('FINAL')) ||
     (rawRejectReason.length > 0 && rawRejectReason !== 'none' && rawRejectReason !== 'null' && rawRejectReason !== 'na' && rawRejectReason !== 'undefined')
   );
 
