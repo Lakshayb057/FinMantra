@@ -2201,7 +2201,23 @@ const db = {
         `SELECT id, urn, full_name, phone, email, card_bank, card_name, mis_status, mis_data FROM leads ${whereClause}`,
         params
       );
-      return res.rows;
+      if (res.rows.length > 0) {
+        return res.rows;
+      }
+
+      // Fallback: If no leads strictly matched approval keywords, push all mapped leads with valid phone/email
+      console.log('[DB] No strict approved leads found. Fallback: Querying all mapped leads with phone/email...');
+      let fallbackWhere = ` WHERE (phone IS NOT NULL AND phone != '') OR (email IS NOT NULL AND email != '')`;
+      const fallbackParams = [];
+      if (bankName && bankName !== 'ALL') {
+        fallbackParams.push(`%${bankName.trim()}%`);
+        fallbackWhere += ` AND (UPPER(card_bank) LIKE UPPER($${fallbackParams.length}) OR UPPER(mis_data->>'mis_bank_name') LIKE UPPER($${fallbackParams.length}))`;
+      }
+      const fallbackRes = await pool.query(
+        `SELECT id, urn, full_name, phone, email, card_bank, card_name, mis_status, mis_data FROM leads ${fallbackWhere}`,
+        fallbackParams
+      );
+      return fallbackRes.rows;
     } catch (e) {
       console.error('[DB] getFinalApprovedLeadsForAudience error:', e.message);
       return [];
