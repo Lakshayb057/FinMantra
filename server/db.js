@@ -290,7 +290,7 @@ async function initPgSchema() {
       CREATE TABLE IF NOT EXISTS meta_audiences (
         id VARCHAR(50) PRIMARY KEY,
         name VARCHAR(255) UNIQUE NOT NULL,
-        audience_type VARCHAR(50) NOT NULL,
+        audience_type VARCHAR(50) NOT NULL DEFAULT 'CUSTOM',
         bank_name VARCHAR(255),
         status_category VARCHAR(50),
         meta_audience_id VARCHAR(100),
@@ -306,6 +306,23 @@ async function initPgSchema() {
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       )
+    `);
+
+    // Auto-migrate schema columns for pre-existing meta_audiences tables
+    await client.query(`
+      ALTER TABLE meta_audiences ADD COLUMN IF NOT EXISTS audience_type VARCHAR(50) DEFAULT 'CUSTOM';
+      ALTER TABLE meta_audiences ADD COLUMN IF NOT EXISTS bank_name VARCHAR(255);
+      ALTER TABLE meta_audiences ADD COLUMN IF NOT EXISTS status_category VARCHAR(50);
+      ALTER TABLE meta_audiences ADD COLUMN IF NOT EXISTS meta_audience_id VARCHAR(100);
+      ALTER TABLE meta_audiences ADD COLUMN IF NOT EXISTS description TEXT;
+      ALTER TABLE meta_audiences ADD COLUMN IF NOT EXISTS auto_push BOOLEAN DEFAULT TRUE;
+      ALTER TABLE meta_audiences ADD COLUMN IF NOT EXISTS rules JSONB DEFAULT '{}';
+      ALTER TABLE meta_audiences ADD COLUMN IF NOT EXISTS database_count INTEGER DEFAULT 0;
+      ALTER TABLE meta_audiences ADD COLUMN IF NOT EXISTS synced_count INTEGER DEFAULT 0;
+      ALTER TABLE meta_audiences ADD COLUMN IF NOT EXISTS pending_count INTEGER DEFAULT 0;
+      ALTER TABLE meta_audiences ADD COLUMN IF NOT EXISTS failed_count INTEGER DEFAULT 0;
+      ALTER TABLE meta_audiences ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'active';
+      ALTER TABLE meta_audiences ADD COLUMN IF NOT EXISTS last_synced_at TIMESTAMP WITH TIME ZONE;
     `);
 
     await client.query(`
