@@ -745,7 +745,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
     const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = isLocal
       ? `ws://${window.location.hostname}:5000` 
-      : `${wsProto}//${window.location.host}/api/ws`;
+      : `${wsProto}//${window.location.host}/ws`;
     let socket;
     let reconnectTimer;
     let reconnectDelay = 3000;

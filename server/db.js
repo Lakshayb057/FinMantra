@@ -323,6 +323,8 @@ async function initPgSchema() {
       ALTER TABLE meta_audiences ADD COLUMN IF NOT EXISTS failed_count INTEGER DEFAULT 0;
       ALTER TABLE meta_audiences ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'active';
       ALTER TABLE meta_audiences ADD COLUMN IF NOT EXISTS last_synced_at TIMESTAMP WITH TIME ZONE;
+      ALTER TABLE meta_audiences ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+      ALTER TABLE meta_audiences ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
     `);
 
     // Auto-correct pre-existing settings typo for meta_ad_account_id
@@ -2184,7 +2186,7 @@ const db = {
   async updateMetaAudience(id, updates) {
     try {
       const allowed = ['name', 'bank_name', 'status_category', 'meta_audience_id', 'description', 'auto_push', 'rules', 'database_count', 'synced_count', 'pending_count', 'failed_count', 'status', 'last_synced_at'];
-      const setClauses = ['updated_at = NOW()'];
+      const setClauses = [];
       const params = [id];
       let paramIdx = 2;
 
@@ -2200,6 +2202,8 @@ const db = {
           paramIdx++;
         }
       }
+
+      if (setClauses.length === 0) return await this.getMetaAudienceById(id);
 
       const query = `UPDATE meta_audiences SET ${setClauses.join(', ')} WHERE id = $1 RETURNING *`;
       const res = await pool.query(query, params);
