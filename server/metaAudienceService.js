@@ -508,6 +508,29 @@ async function getEligibleMappedLeadsForAudience(audience) {
 
       // Filter by status category matching
       const allLeads = await db.pool.query(query, params);
+      
+      // Debug: Log classification details for KIWI FINAL_APPROVE
+      if (bank_name === 'KIWI' && status_category === 'FINAL_APPROVE') {
+        console.log(`[KIWI DEBUG] Total KIWI leads from SQL: ${allLeads.rows.length}`);
+        const catCounts = {};
+        for (const l of allLeads.rows) {
+          let md = l.mis_data;
+          if (typeof md === 'string') try { md = JSON.parse(md); } catch(e) {}
+          md = md || {};
+          const cat = getNormalizedStatusCategory(l.mis_status, l.mis_data);
+          catCounts[cat || 'NULL'] = (catCounts[cat || 'NULL'] || 0) + 1;
+          
+          // Log leads that have ANY card_created value or mis_status=APPROVED
+          const cc = md.Card_Created || md.card_created || '';
+          const ft = md.first_txn || '';
+          const cs = md.current_state || '';
+          if (cc || ft || l.mis_status === 'APPROVED' || (cs && cs.toUpperCase().includes('CREATED'))) {
+            console.log(`[KIWI DEBUG LEAD] id=${l.id} urn=${l.urn} mis_status="${l.mis_status}" card_created="${cc}" first_txn="${ft}" current_state="${cs}" category=${cat}`);
+          }
+        }
+        console.log(`[KIWI DEBUG] Category distribution:`, JSON.stringify(catCounts));
+      }
+
       const filtered = allLeads.rows.filter(l => {
         const cat = getNormalizedStatusCategory(l.mis_status, l.mis_data);
         return cat === status_category;
