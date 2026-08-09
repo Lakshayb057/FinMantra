@@ -4119,6 +4119,20 @@ app.put('/api/leads/:id', authenticateToken, requireAdmin, async (req, res) => {
     invalidateMISCache();
     broadcast({ type: 'LEADS_UPDATED' });
     
+    // Automatically dispatch Meta CAPI Purchase event & Custom Audience sync if lead is approved/mapped
+    if (updated) {
+      setTimeout(async () => {
+        try {
+          if (isFinalApprovedStatus(updated.mis_status)) {
+            await sendMetaCapiEvent(updated, 'Purchase', 2000, updated.card_bank);
+          }
+          await syncLeadsToMetaCustomAudiences([updated]);
+        } catch (e) {
+          console.error('[Meta Event Auto-Dispatch] Error on lead update:', e.message);
+        }
+      }, 50);
+    }
+
     res.json(updated);
   } catch (err) {
     res.status(500).json({ error: err.message || 'Failed to update lead' });
