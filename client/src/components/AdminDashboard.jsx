@@ -8203,7 +8203,18 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                         onChange={(e) => {
                           const newBank = e.target.value;
                           const newSql = getOptimalSqlQuery(newBank, audienceFormData.mis_category);
-                          setAudienceFormData({ ...audienceFormData, bank_name: newBank, sql_filter: newSql });
+                          const bLabel = newBank === 'ALL' ? 'All Banks' : newBank;
+                          const catLabel = audienceFormData.mis_category === 'FINAL APPROVED' ? 'Final Approved' :
+                                           audienceFormData.mis_category === 'FINAL DECLINED' ? 'Final Declined' :
+                                           audienceFormData.mis_category === 'SOFT APPROVED' ? 'Soft Approved' :
+                                           audienceFormData.mis_category === 'SOFT DECLINED' ? 'Soft Declined' : 'All Mapped Leads';
+                          setAudienceFormData({
+                            ...audienceFormData,
+                            bank_name: newBank,
+                            name: `${bLabel} - ${catLabel}`,
+                            description: `Target audience built from ${bLabel} ${audienceFormData.mis_category.toLowerCase()} leads mapped in MIS.`,
+                            sql_filter: newSql
+                          });
                           setTestSqlResult(null);
                         }}
                       >
@@ -8223,7 +8234,18 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                         onChange={(e) => {
                           const newCat = e.target.value;
                           const newSql = getOptimalSqlQuery(audienceFormData.bank_name, newCat);
-                          setAudienceFormData({ ...audienceFormData, mis_category: newCat, sql_filter: newSql });
+                          const bLabel = audienceFormData.bank_name === 'ALL' ? 'All Banks' : audienceFormData.bank_name;
+                          const catLabel = newCat === 'FINAL APPROVED' ? 'Final Approved' :
+                                           newCat === 'FINAL DECLINED' ? 'Final Declined' :
+                                           newCat === 'SOFT APPROVED' ? 'Soft Approved' :
+                                           newCat === 'SOFT DECLINED' ? 'Soft Declined' : 'All Mapped Leads';
+                          setAudienceFormData({
+                            ...audienceFormData,
+                            mis_category: newCat,
+                            name: `${bLabel} - ${catLabel}`,
+                            description: `Target audience built from ${bLabel} ${newCat.toLowerCase()} leads mapped in MIS.`,
+                            sql_filter: newSql
+                          });
                           setTestSqlResult(null);
                         }}
                         style={{ fontWeight: 700 }}
