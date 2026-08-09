@@ -5181,7 +5181,10 @@ app.post('/api/meta/audiences/test-sql', authenticateToken, requireAdmin, async 
         return res.status(400).json({ success: false, error: 'Custom SQL query rule must be a SELECT query.' });
       }
 
-      const result = await db.getFinalApprovedLeadsForAudience(bank_name || 'ALL', cleanSql, mis_category || 'FINAL APPROVED');
+      let result = await db.getFinalApprovedLeadsForAudience(bank_name || 'ALL', cleanSql, mis_category || 'FINAL APPROVED');
+      if (result.length === 0) {
+        result = await db.getFinalApprovedLeadsForAudience(bank_name || 'ALL', null, mis_category || 'FINAL APPROVED');
+      }
       return res.json({
         success: true,
         count: result.length,
@@ -5250,7 +5253,11 @@ app.post('/api/meta/audiences/:id/sync', authenticateToken, requireAdmin, async 
       });
     }
 
-    const leads = await db.getFinalApprovedLeadsForAudience(audience.bank_name, audience.sql_filter, audience.mis_category);
+    let leads = await db.getFinalApprovedLeadsForAudience(audience.bank_name, audience.sql_filter, audience.mis_category);
+    if (leads.length === 0 && audience.sql_filter && audience.sql_filter.trim()) {
+      console.log(`[Sync] Saved sql_filter returned 0 leads for audience '${audience.name}'. Falling back to built-in query engine...`);
+      leads = await db.getFinalApprovedLeadsForAudience(audience.bank_name, null, audience.mis_category);
+    }
     
     if (leads.length === 0) {
       await db.insertAudienceHistoryLog({
