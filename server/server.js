@@ -1067,6 +1067,13 @@ async function sendMetaCapiBatchEvents(leadsList, eventName = 'Purchase', eventV
       const data = await res.json();
       if (res.ok) {
         console.log(`[Meta CAPI Batch] Successfully dispatched ${chunk.length} Purchase event(s) (₹${eventValue}) to Meta CAPI!`);
+        await db.createNotification({
+          type: 'success',
+          title: '⚡ Meta CAPI Purchase Events Dispatched',
+          message: `Dispatched ${chunk.length} Purchase event(s) (₹${eventValue.toLocaleString()} INR) to Meta Pixel ${pixelId}.`,
+          details: { count: chunk.length, pixel_id: pixelId, value: eventValue, currency: 'INR' }
+        }).catch(() => {});
+        broadcast({ type: 'NOTIFICATION_CREATED' });
       } else {
         console.error(`[Meta CAPI Batch] Failed to dispatch CAPI batch:`, data);
       }
@@ -1159,6 +1166,14 @@ async function syncLeadsToMetaCustomAudiences(leadsList, targetAudienceId = null
           status: 'SUCCESS'
         });
         console.log(`[Meta Audience Push] Successfully pushed ${addedCount} user(s) to audience '${audience.name}' (${audience.meta_audience_id}).`);
+
+        await db.createNotification({
+          type: 'success',
+          title: `🎯 Meta Audience Synced: ${audience.name}`,
+          message: `Successfully pushed ${addedCount} lead record(s) to Meta Custom Audience '${audience.name}' (ID: ${audience.meta_audience_id}).`,
+          details: { audience_id: audience.id, meta_audience_id: audience.meta_audience_id, count: addedCount, bank: targetBank }
+        }).catch(() => {});
+        broadcast({ type: 'NOTIFICATION_CREATED' });
 
         // Batch dispatch Meta Conversions API (CAPI) Purchase events (₹2,000 INR) for all matching leads
         sendMetaCapiBatchEvents(matchingLeads, 'Purchase', 2000).catch(err => {
