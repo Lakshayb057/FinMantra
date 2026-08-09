@@ -7866,7 +7866,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
               {/* Sub-tab 3: CAPI & META SETTINGS & TEST CONSOLE */}
               {activeAudienceTab === 'capi_settings' && (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: '1.25rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: '1.25rem' }}>
                   {/* Settings Form */}
                   <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                     <div>
@@ -8020,7 +8020,18 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                 }
               }}
             >
-              <div className="glass-panel modal-card animate-fade-in" style={{ width: '100%', maxWidth: '540px', padding: '1.75rem', borderRadius: '16px' }}>
+              <div
+                className="glass-panel modal-card animate-fade-in"
+                style={{
+                  width: '95%',
+                  maxWidth: '560px',
+                  maxHeight: '88vh',
+                  overflowY: 'auto',
+                  WebkitOverflowScrolling: 'touch',
+                  padding: '1.5rem',
+                  borderRadius: '16px'
+                }}
+              >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
                   <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <Target size={20} style={{ color: 'var(--gold-deep)' }} />
