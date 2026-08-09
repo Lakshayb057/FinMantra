@@ -4917,7 +4917,23 @@ app.post('/api/meta/audiences', authenticateToken, requireAdmin, async (req, res
           metaAudienceId = metaData.id;
           console.log(`[Meta API] Custom Audience created on Meta! Audience ID: ${metaAudienceId}`);
         } else {
-          console.error('[Meta API] Failed to auto-create custom audience on Meta (Ads Management permission required):', metaData);
+          console.error('[Meta API] Direct POST create failed (Ads Management required). Auto-discovering existing remote audience on Meta...');
+          // Auto-discover existing remote custom audiences via ads_read permission
+          try {
+            const cleanAdAcc = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
+            const remoteUrl = `https://graph.facebook.com/v20.0/${cleanAdAcc}/customaudiences?access_token=${accessToken}&fields=id,name,subtype&limit=100`;
+            const remoteRes = await fetch(remoteUrl);
+            const remoteData = await remoteRes.json();
+            if (remoteRes.ok && Array.isArray(remoteData.data) && remoteData.data.length > 0) {
+              const match = remoteData.data.find(a => a.name.toLowerCase().includes(name.trim().toLowerCase()) || name.trim().toLowerCase().includes(a.name.toLowerCase())) || remoteData.data[0];
+              if (match) {
+                metaAudienceId = match.id;
+                console.log(`[Meta API] Auto-discovered & linked existing Custom Audience '${match.name}' (${metaAudienceId}) from Meta!`);
+              }
+            }
+          } catch (findErr) {
+            console.error('[Meta API] Error auto-discovering remote audiences:', findErr.message);
+          }
         }
       } catch (metaErr) {
         console.error('[Meta API Error] Exception creating custom audience on Meta:', metaErr.message);
@@ -4981,12 +4997,12 @@ app.delete('/api/meta/audiences/:id', authenticateToken, requireAdmin, async (re
 // Manually Sync / Push Final Approved Leads to Meta Audience
 app.post('/api/meta/audiences/:id/sync', authenticateToken, requireAdmin, async (req, res) => {
   try {
-    const audience = await db.getMetaAudienceById(req.params.id);
+    let audience = await db.getMetaAudienceById(req.params.id);
     if (!audience) {
       return res.status(404).json({ error: 'Audience not found' });
     }
 
-    // If audience was created before Meta API keys were saved, auto-create it on Meta Ads Manager now
+    // Auto-discover Meta Audience ID if missing
     if (!audience.meta_audience_id) {
       const settings = await db.getSettings();
       const adAccountId = getSettingVal(settings, 'meta_ad_account_id', 'META_AD_ACCOUNT_ID');
@@ -4994,33 +5010,26 @@ app.post('/api/meta/audiences/:id/sync', authenticateToken, requireAdmin, async 
       if (adAccountId && accessToken) {
         try {
           const cleanAdAcc = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
-          const metaUrl = `https://graph.facebook.com/v20.0/${cleanAdAcc}/customaudiences?access_token=${accessToken}`;
-          const metaRes = await fetch(metaUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              name: audience.name,
-              subtype: 'CUSTOM',
-              description: audience.description || 'FinMantra Final Approved Leads Audience',
-              customer_file_source: 'USER_PROVIDED_ONLY'
-            })
-          });
-          const metaData = await metaRes.json();
-          if (metaRes.ok && metaData.id) {
-            audience.meta_audience_id = metaData.id;
-            await db.updateMetaAudience(audience.id, { meta_audience_id: metaData.id });
-            console.log(`[Meta API] Auto-created missing Custom Audience on Meta! Audience ID: ${metaData.id}`);
+          const remoteUrl = `https://graph.facebook.com/v20.0/${cleanAdAcc}/customaudiences?access_token=${accessToken}&fields=id,name,subtype&limit=100`;
+          const remoteRes = await fetch(remoteUrl);
+          const remoteData = await remoteRes.json();
+          if (remoteRes.ok && Array.isArray(remoteData.data) && remoteData.data.length > 0) {
+            const match = remoteData.data.find(a => a.name.toLowerCase().includes((audience.name || '').trim().toLowerCase()) || (audience.name || '').trim().toLowerCase().includes(a.name.toLowerCase())) || remoteData.data[0];
+            if (match) {
+              await db.updateMetaAudience(audience.id, { meta_audience_id: match.id });
+              audience.meta_audience_id = match.id;
+              console.log(`[Meta API Sync] Auto-linked Meta Audience ID ${match.id} ('${match.name}') to audience '${audience.name}'`);
+            }
           }
         } catch (e) {
-          console.error('[Meta API Error] Failed to auto-create audience on sync:', e.message);
+          console.error('[Meta API Error] Failed to auto-discover audience on sync:', e.message);
         }
       }
     }
 
-    // If meta_audience_id is still null, we cannot sync — tell the user to paste it manually
     if (!audience.meta_audience_id) {
       return res.status(400).json({
-        error: 'Meta Audience ID is missing. Please edit this audience and paste the Meta Audience ID from Meta Ads Manager (e.g. 120252069748690319).'
+        error: 'No Meta Custom Audience found on your Meta Ad Account. Please create a Customer List audience in Meta Ads Manager first.'
       });
     }
 
