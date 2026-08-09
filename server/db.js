@@ -2209,8 +2209,13 @@ const db = {
 
       const params = [];
       if (bankName && bankName !== 'ALL') {
-        params.push(`%${bankName.trim()}%`);
-        whereClause += ` AND (UPPER(card_bank) LIKE UPPER($${params.length}) OR UPPER(mis_data->>'mis_bank_name') LIKE UPPER($${params.length}) OR UPPER(card_name) LIKE UPPER($${params.length}))`;
+        const cleanB = bankName.trim().toUpperCase();
+        params.push(`%${cleanB}%`);
+        if (cleanB.includes('KIWI')) {
+          whereClause += ` AND (UPPER(card_bank) LIKE UPPER($${params.length}) OR UPPER(mis_data->>'mis_bank_name') LIKE UPPER($${params.length}) OR UPPER(card_name) LIKE UPPER($${params.length}) OR LOWER(source) = 'kiwi' OR mis_data->>'kiwi_winning_bank' IS NOT NULL OR UPPER(mis_data::text) LIKE '%KIWI%')`;
+        } else {
+          whereClause += ` AND (UPPER(card_bank) LIKE UPPER($${params.length}) OR UPPER(mis_data->>'mis_bank_name') LIKE UPPER($${params.length}) OR UPPER(card_name) LIKE UPPER($${params.length}) OR UPPER(mis_data::text) LIKE UPPER($${params.length}))`;
+        }
       }
 
       const res = await pool.query(

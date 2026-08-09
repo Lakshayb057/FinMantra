@@ -259,6 +259,39 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   const [testSqlResult, setTestSqlResult] = useState(null);
   const [testingSql, setTestingSql] = useState(false);
 
+  const getOptimalSqlQuery = (bankName, category) => {
+    const bank = String(bankName || 'ALL').toUpperCase().trim();
+    const cat = String(category || 'FINAL APPROVED').toUpperCase().trim();
+
+    let bankCond = '1=1';
+    if (bank.includes('KIWI')) {
+      bankCond = `(UPPER(COALESCE(card_bank,'')) LIKE '%KIWI%' OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE '%KIWI%' OR UPPER(COALESCE(card_name,'')) LIKE '%KIWI%' OR LOWER(source) = 'kiwi' OR mis_data->>'kiwi_winning_bank' IS NOT NULL OR UPPER(mis_data::text) LIKE '%KIWI%')`;
+    } else if (bank.includes('SBI')) {
+      bankCond = `(UPPER(COALESCE(card_bank,'')) LIKE '%SBI%' OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE '%SBI%' OR UPPER(COALESCE(card_name,'')) LIKE '%SBI%' OR UPPER(mis_data::text) LIKE '%SBI%')`;
+    } else if (bank.includes('HDFC')) {
+      bankCond = `(UPPER(COALESCE(card_bank,'')) LIKE '%HDFC%' OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE '%HDFC%' OR UPPER(COALESCE(card_name,'')) LIKE '%HDFC%' OR UPPER(mis_data::text) LIKE '%HDFC%')`;
+    } else if (bank.includes('SCAPIA')) {
+      bankCond = `(UPPER(COALESCE(card_bank,'')) LIKE '%SCAPIA%' OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE '%SCAPIA%' OR UPPER(COALESCE(card_name,'')) LIKE '%SCAPIA%' OR UPPER(mis_data::text) LIKE '%SCAPIA%')`;
+    }
+
+    let catCond = '1=1';
+    if (cat.includes('FINAL') && (cat.includes('APPROVED') || cat.includes('CARD'))) {
+      if (bank.includes('KIWI')) {
+        catCond = `(LOWER(mis_status) IN ('card created', 'card_created', 'card generated') OR LOWER(COALESCE(mis_data->>'current_state','')) IN ('card created', 'card_created') OR UPPER(mis_data::text) LIKE '%"CARD_CREATED":"1"%' OR UPPER(mis_data::text) LIKE '%"CARD_CREATED":1%' OR UPPER(mis_data::text) LIKE '%"CARD_CREATED":"YES"%') AND NOT (UPPER(mis_status) LIKE '%REJECT%' OR UPPER(mis_status) LIKE '%DECLINE%' OR UPPER(mis_status) LIKE '%PENDING%')`;
+      } else {
+        catCond = `(LOWER(mis_status) IN ('card created', 'card_created', 'approved', 'issued', 'disbursed', 'file generated') OR UPPER(mis_status) LIKE '%APPROV%' OR UPPER(mis_status) LIKE '%ISSUED%' OR UPPER(mis_status) LIKE '%DISBURS%' OR UPPER(COALESCE(mis_data->>'final_decision','')) LIKE '%APPROV%' OR UPPER(COALESCE(mis_data->>'final_decision','')) LIKE '%FILE GENERAT%') AND NOT (UPPER(mis_status) LIKE '%REJECT%' OR UPPER(mis_status) LIKE '%DECLINE%')`;
+      }
+    } else if (cat.includes('FINAL') && (cat.includes('DECLINED') || cat.includes('REJECTED'))) {
+      catCond = `(UPPER(mis_status) LIKE '%REJECT%' OR UPPER(mis_status) LIKE '%DECLINE%' OR UPPER(mis_status) LIKE '%CANCEL%' OR UPPER(COALESCE(mis_data->>'final_decision','')) LIKE '%REJECT%' OR UPPER(COALESCE(mis_data->>'final_decision','')) LIKE '%DECLINE%')`;
+    } else if (cat.includes('SOFT') && cat.includes('APPROVED')) {
+      catCond = `(UPPER(mis_status) LIKE '%SOFT%' OR UPPER(mis_status) LIKE '%PRE-APPROV%' OR UPPER(mis_status) LIKE '%IPA%' OR UPPER(mis_status) LIKE '%VKYC%' OR UPPER(mis_status) LIKE '%PROCESS%' OR UPPER(COALESCE(mis_data->>'ipa_status','')) LIKE '%APPROV%') AND NOT (UPPER(mis_status) LIKE '%REJECT%' OR UPPER(mis_status) LIKE '%DECLINE%')`;
+    } else if (cat.includes('SOFT') && cat.includes('DECLINED')) {
+      catCond = `(UPPER(mis_status) LIKE '%SOFT%REJECT%' OR UPPER(mis_status) LIKE '%SOFT%DECLINE%' OR UPPER(mis_status) LIKE '%DCLP%' OR UPPER(mis_status) LIKE '%DACP%')`;
+    }
+
+    return `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE mis_status IS NOT NULL AND ${bankCond} AND ${catCond};`;
+  };
+
   const fetchMetaAudiences = async () => {
     if (!token) return;
     setLoadingAudiences(true);
@@ -8167,7 +8200,12 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                       <select
                         className="form-select"
                         value={audienceFormData.bank_name}
-                        onChange={(e) => setAudienceFormData({ ...audienceFormData, bank_name: e.target.value })}
+                        onChange={(e) => {
+                          const newBank = e.target.value;
+                          const newSql = getOptimalSqlQuery(newBank, audienceFormData.mis_category);
+                          setAudienceFormData({ ...audienceFormData, bank_name: newBank, sql_filter: newSql });
+                          setTestSqlResult(null);
+                        }}
                       >
                         <option value="ALL">All Banks</option>
                         <option value="SBI">SBI Bank</option>
@@ -8182,7 +8220,12 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                       <select
                         className="form-select"
                         value={audienceFormData.mis_category || 'FINAL APPROVED'}
-                        onChange={(e) => setAudienceFormData({ ...audienceFormData, mis_category: e.target.value })}
+                        onChange={(e) => {
+                          const newCat = e.target.value;
+                          const newSql = getOptimalSqlQuery(audienceFormData.bank_name, newCat);
+                          setAudienceFormData({ ...audienceFormData, mis_category: newCat, sql_filter: newSql });
+                          setTestSqlResult(null);
+                        }}
                         style={{ fontWeight: 700 }}
                       >
                         <option value="FINAL APPROVED">🟢 FINAL APPROVED (Card Created / Approved / Issued)</option>
@@ -8196,7 +8239,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
                   <div className="form-group">
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
-                      <label className="form-label" style={{ fontWeight: 700, margin: 0 }}>Custom SQL Query Rule (Optional)</label>
+                      <label className="form-label" style={{ fontWeight: 700, margin: 0 }}>Custom SQL Query Rule (Auto-Preloaded & Editable)</label>
                       <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                         <button
                           type="button"
@@ -8242,11 +8285,11 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                     </div>
                     <textarea
                       className="form-textarea"
-                      rows={3}
+                      rows={5}
                       placeholder="SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE mis_status IS NOT NULL..."
                       value={audienceFormData.sql_filter}
                       onChange={(e) => { setAudienceFormData({ ...audienceFormData, sql_filter: e.target.value }); setTestSqlResult(null); }}
-                      style={{ fontFamily: 'monospace', fontSize: '0.8rem', background: '#f8fafc', border: '1px solid var(--line)' }}
+                      style={{ fontFamily: 'monospace', fontSize: '0.78rem', background: '#f8fafc', border: '1px solid var(--line)' }}
                     />
 
                     {/* Test SQL Live Preview Banner */}
@@ -8278,170 +8321,6 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                         )}
                       </div>
                     )}
-
-                    {/* Quick SQL Presets */}
-                    <div style={{ marginTop: '0.5rem', background: 'var(--paper-2)', padding: '0.6rem 0.75rem', borderRadius: '8px', border: '1px solid var(--line)' }}>
-                      <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--ink)', marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                        <span>⚡ Quick SQL Presets (Click to Auto-Fill):</span>
-                      </div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
-                        <button
-                          type="button"
-                          onClick={() => setAudienceFormData({
-                            ...audienceFormData,
-                            bank_name: 'KIWI',
-                            mis_category: 'FINAL APPROVED',
-                            sql_filter: `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE mis_status IS NOT NULL AND (UPPER(COALESCE(card_bank,'')) LIKE '%KIWI%' OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE '%KIWI%' OR UPPER(COALESCE(card_name,'')) LIKE '%KIWI%' OR LOWER(source) = 'kiwi' OR mis_data->>'kiwi_winning_bank' IS NOT NULL) AND (LOWER(mis_status) IN ('card created', 'card_created', 'card generated') OR LOWER(COALESCE(mis_data->>'Card_Created','')) IN ('1','yes','true') OR LOWER(COALESCE(mis_data->>'card_created','')) IN ('1','yes','true') OR UPPER(mis_data::text) LIKE '%"CARD_CREATED":"1"%' OR UPPER(mis_data::text) LIKE '%"CARD_CREATED":1%' OR UPPER(mis_data::text) LIKE '%"CARD_CREATED":"YES"%') AND NOT (UPPER(mis_status) LIKE '%REJECT%' OR UPPER(mis_status) LIKE '%DECLINE%' OR UPPER(mis_status) LIKE '%PENDING%')`
-                          })}
-                          style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '4px', background: 'rgba(234, 179, 8, 0.12)', border: '1px solid rgba(234, 179, 8, 0.3)', color: '#b45309', cursor: 'pointer', fontWeight: 700 }}
-                        >
-                          ⚡ KIWI Card Created
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setAudienceFormData({
-                            ...audienceFormData,
-                            bank_name: 'SBI',
-                            mis_category: 'FINAL APPROVED',
-                            sql_filter: `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE mis_status IS NOT NULL AND (UPPER(COALESCE(card_bank,'')) LIKE '%SBI%' OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE '%SBI%' OR UPPER(COALESCE(card_name,'')) LIKE '%SBI%') AND (UPPER(mis_status) LIKE '%APPROV%' OR UPPER(mis_status) LIKE '%CARD%CREATE%' OR UPPER(mis_status) LIKE '%CARD_CREATED%')`
-                          })}
-                          style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '4px', background: 'rgba(59, 130, 246, 0.12)', border: '1px solid rgba(59, 130, 246, 0.3)', color: '#1d4ed8', cursor: 'pointer', fontWeight: 700 }}
-                        >
-                          ⚡ SBI Final Approved
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setAudienceFormData({
-                            ...audienceFormData,
-                            bank_name: 'HDFC',
-                            mis_category: 'FINAL APPROVED',
-                            sql_filter: `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE mis_status IS NOT NULL AND (UPPER(COALESCE(card_bank,'')) LIKE '%HDFC%' OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE '%HDFC%' OR UPPER(COALESCE(card_name,'')) LIKE '%HDFC%') AND (UPPER(mis_status) LIKE '%APPROV%' OR UPPER(mis_status) LIKE '%CARD%CREATE%' OR UPPER(mis_status) LIKE '%CARD_CREATED%')`
-                          })}
-                          style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '4px', background: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.3)', color: '#047857', cursor: 'pointer', fontWeight: 700 }}
-                        >
-                          ⚡ HDFC Final Approved
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setAudienceFormData({
-                            ...audienceFormData,
-                            bank_name: 'Scapia',
-                            mis_category: 'FINAL APPROVED',
-                            sql_filter: `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE mis_status IS NOT NULL AND (UPPER(COALESCE(card_bank,'')) LIKE '%SCAPIA%' OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE '%SCAPIA%' OR UPPER(COALESCE(card_name,'')) LIKE '%SCAPIA%') AND (UPPER(mis_status) LIKE '%APPROV%' OR UPPER(mis_status) LIKE '%CARD%CREATE%' OR UPPER(mis_status) LIKE '%CARD_CREATED%')`
-                          })}
-                          style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '4px', background: 'rgba(168, 85, 247, 0.12)', border: '1px solid rgba(168, 85, 247, 0.3)', color: '#7e22ce', cursor: 'pointer', fontWeight: 700 }}
-                        >
-                          ⚡ Scapia Final Approved
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setAudienceFormData({
-                            ...audienceFormData,
-                            bank_name: 'SBI',
-                            mis_category: 'ALL MAPPED LEADS',
-                            sql_filter: `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE mis_status IS NOT NULL AND (UPPER(COALESCE(card_bank,'')) LIKE '%SBI%' OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE '%SBI%' OR UPPER(COALESCE(card_name,'')) LIKE '%SBI%')`
-                          })}
-                          style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '4px', background: 'rgba(59, 130, 246, 0.15)', border: '1px solid rgba(59, 130, 246, 0.4)', color: '#1d4ed8', cursor: 'pointer', fontWeight: 700 }}
-                        >
-                          ⚡ SBI All Mapped Leads
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setAudienceFormData({
-                            ...audienceFormData,
-                            bank_name: 'KIWI',
-                            mis_category: 'ALL MAPPED LEADS',
-                            sql_filter: `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE mis_status IS NOT NULL AND (UPPER(COALESCE(card_bank,'')) LIKE '%KIWI%' OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE '%KIWI%' OR UPPER(COALESCE(card_name,'')) LIKE '%KIWI%' OR LOWER(source) = 'kiwi' OR mis_data->>'kiwi_winning_bank' IS NOT NULL)`
-                          })}
-                          style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '4px', background: 'rgba(234, 179, 8, 0.15)', border: '1px solid rgba(234, 179, 8, 0.4)', color: '#b45309', cursor: 'pointer', fontWeight: 700 }}
-                        >
-                          ⚡ KIWI All Mapped Leads
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setAudienceFormData({
-                            ...audienceFormData,
-                            bank_name: 'HDFC',
-                            mis_category: 'ALL MAPPED LEADS',
-                            sql_filter: `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE mis_status IS NOT NULL AND (UPPER(COALESCE(card_bank,'')) LIKE '%HDFC%' OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE '%HDFC%' OR UPPER(COALESCE(card_name,'')) LIKE '%HDFC%')`
-                          })}
-                          style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '4px', background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.4)', color: '#047857', cursor: 'pointer', fontWeight: 700 }}
-                        >
-                          ⚡ HDFC All Mapped Leads
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setAudienceFormData({
-                            ...audienceFormData,
-                            bank_name: 'Scapia',
-                            mis_category: 'ALL MAPPED LEADS',
-                            sql_filter: `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE mis_status IS NOT NULL AND (UPPER(COALESCE(card_bank,'')) LIKE '%SCAPIA%' OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE '%SCAPIA%' OR UPPER(COALESCE(card_name,'')) LIKE '%SCAPIA%')`
-                          })}
-                          style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '4px', background: 'rgba(168, 85, 247, 0.15)', border: '1px solid rgba(168, 85, 247, 0.4)', color: '#7e22ce', cursor: 'pointer', fontWeight: 700 }}
-                        >
-                          ⚡ Scapia All Mapped Leads
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setAudienceFormData({
-                            ...audienceFormData,
-                            bank_name: 'ALL',
-                            mis_category: 'SOFT APPROVED',
-                            sql_filter: `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE mis_status IS NOT NULL AND (UPPER(mis_status) LIKE '%SOFT%' OR UPPER(mis_status) LIKE '%PRE-APPROV%' OR UPPER(mis_status) LIKE '%VKYC%' OR UPPER(mis_status) LIKE '%IPA%') AND NOT (UPPER(mis_status) LIKE '%REJECT%' OR UPPER(mis_status) LIKE '%DECLINE%')`
-                          })}
-                          style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '4px', background: 'rgba(59, 130, 246, 0.15)', border: '1px solid rgba(59, 130, 246, 0.4)', color: '#1e40af', cursor: 'pointer', fontWeight: 700 }}
-                        >
-                          ⚡ Soft Approved Leads
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setAudienceFormData({
-                            ...audienceFormData,
-                            bank_name: 'ALL',
-                            mis_category: 'FINAL DECLINED',
-                            sql_filter: `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE mis_status IS NOT NULL AND (UPPER(mis_status) LIKE '%REJECT%' OR UPPER(mis_status) LIKE '%DECLINE%' OR UPPER(mis_status) LIKE '%CANCEL%')`
-                          })}
-                          style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '4px', background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.4)', color: '#991b1b', cursor: 'pointer', fontWeight: 700 }}
-                        >
-                          ⚡ Final Declined Leads
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setAudienceFormData({
-                            ...audienceFormData,
-                            bank_name: 'ALL',
-                            mis_category: 'ALL MAPPED LEADS',
-                            sql_filter: `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE mis_status IS NOT NULL`
-                          })}
-                          style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '4px', background: 'rgba(100, 116, 139, 0.12)', border: '1px solid rgba(100, 116, 139, 0.3)', color: '#334155', cursor: 'pointer', fontWeight: 700 }}
-                        >
-                          ⚡ All Bank Mapped Leads
-                        </button>
-                      </div>
-
-                      {/* Database Field Headings Cheat-Sheet */}
-                      <div style={{ marginTop: '0.5rem', paddingTop: '0.4rem', borderTop: '1px dashed var(--line)' }}>
-                        <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--muted)', marginBottom: '0.25rem' }}>
-                          📋 Available Database Columns for Custom Query:
-                        </div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
-                          <code style={{ fontSize: '0.68rem', padding: '1px 5px', borderRadius: '3px', background: '#e2e8f0', color: '#0f172a' }}>mis_status</code>
-                          <code style={{ fontSize: '0.68rem', padding: '1px 5px', borderRadius: '3px', background: '#e2e8f0', color: '#0f172a' }}>card_bank</code>
-                          <code style={{ fontSize: '0.68rem', padding: '1px 5px', borderRadius: '3px', background: '#e2e8f0', color: '#0f172a' }}>card_name</code>
-                          <code style={{ fontSize: '0.68rem', padding: '1px 5px', borderRadius: '3px', background: '#e2e8f0', color: '#0f172a' }}>full_name</code>
-                          <code style={{ fontSize: '0.68rem', padding: '1px 5px', borderRadius: '3px', background: '#e2e8f0', color: '#0f172a' }}>phone</code>
-                          <code style={{ fontSize: '0.68rem', padding: '1px 5px', borderRadius: '3px', background: '#e2e8f0', color: '#0f172a' }}>email</code>
-                          <code style={{ fontSize: '0.68rem', padding: '1px 5px', borderRadius: '3px', background: '#e2e8f0', color: '#0f172a' }}>city</code>
-                          <code style={{ fontSize: '0.68rem', padding: '1px 5px', borderRadius: '3px', background: '#e2e8f0', color: '#0f172a' }}>pan_no</code>
-                          <code style={{ fontSize: '0.68rem', padding: '1px 5px', borderRadius: '3px', background: '#e2e8f0', color: '#0f172a' }}>pincode</code>
-                          <code style={{ fontSize: '0.68rem', padding: '1px 5px', borderRadius: '3px', background: '#e2e8f0', color: '#0f172a' }}>urn</code>
-                          <code style={{ fontSize: '0.68rem', padding: '1px 5px', borderRadius: '3px', background: '#e2e8f0', color: '#0f172a' }}>mis_mapped_at</code>
-                          <code style={{ fontSize: '0.68rem', padding: '1px 5px', borderRadius: '3px', background: '#e2e8f0', color: '#0f172a' }}>mis_data-&gt;&gt;'final_decision'</code>
-                          <code style={{ fontSize: '0.68rem', padding: '1px 5px', borderRadius: '3px', background: '#e2e8f0', color: '#0f172a' }}>mis_data-&gt;&gt;'mis_bank_name'</code>
-                          <code style={{ fontSize: '0.68rem', padding: '1px 5px', borderRadius: '3px', background: '#e2e8f0', color: '#0f172a' }}>mis_data-&gt;&gt;'Application_No'</code>
-                        </div>
-                      </div>
-                    </div>
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: 'var(--paper-2)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--line)' }}>
