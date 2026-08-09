@@ -1149,23 +1149,48 @@ async function syncLeadsToMetaCustomAudiences(leadsList, targetAudienceId = null
 
       if (matchingLeads.length === 0) continue;
 
-      const userRows = matchingLeads.map(l => {
+      const existingHashes = new Set(Array.isArray(audience.synced_hashes) ? audience.synced_hashes : []);
+
+      const newRows = [];
+      const newHashes = [];
+
+      for (const l of matchingLeads) {
         let ph = (l.phone || '').replace(/\D/g, '');
         if (ph.length === 10) ph = '91' + ph;
-        const { fn, ln } = splitName(l.full_name);
+        const emailHash = sha256Hash(l.email) || '';
+        const phoneHash = sha256Hash(ph) || '';
 
-        return [
-          sha256Hash(l.email) || '',
-          sha256Hash(ph) || ''
-        ];
-      }).filter(row => row[0] || row[1]);
+        if (!emailHash && !phoneHash) continue;
+        const leadHash = `${emailHash}_${phoneHash}`;
 
-      if (userRows.length === 0) continue;
+        if (!existingHashes.has(leadHash)) {
+          newRows.push([emailHash, phoneHash]);
+          newHashes.push(leadHash);
+        }
+      }
+
+      if (newRows.length === 0) {
+        console.log(`[Meta Audience Push] All ${matchingLeads.length} lead(s) for '${audience.name}' were already synced previously. Skipping duplicate push to Meta.`);
+        await db.updateMetaAudience(audience.id, {
+          total_records: matchingLeads.length,
+          last_synced_at: new Date().toISOString(),
+          status: 'active'
+        });
+        await db.insertAudienceHistoryLog({
+          audience_id: audience.id,
+          audience_name: audience.name,
+          records_processed: matchingLeads.length,
+          records_failed: 0,
+          query: audience.sql_filter || `Select finmatraid, where mis_status is ${audience.mis_category || 'Final Approved'} for bank ${audience.bank_name || 'ALL'}`,
+          status: 'SUCCESS'
+        });
+        continue;
+      }
 
       const payload = {
         payload: {
           schema: ['EMAIL_SHA256', 'PHONE_SHA256'],
-          data: userRows
+          data: newRows
         }
       };
 
@@ -1178,10 +1203,11 @@ async function syncLeadsToMetaCustomAudiences(leadsList, targetAudienceId = null
 
       const data = await response.json();
       if (response.ok) {
-        const addedCount = data.num_received || userRows.length;
-        const newTotal = (Number(audience.total_records) || 0) + addedCount;
+        const addedCount = data.num_received || newRows.length;
+        const updatedHashes = Array.from(new Set([...existingHashes, ...newHashes]));
         await db.updateMetaAudience(audience.id, {
-          total_records: newTotal,
+          total_records: matchingLeads.length,
+          synced_hashes: updatedHashes,
           last_synced_at: new Date().toISOString(),
           status: 'active'
         });
@@ -5197,39 +5223,23 @@ app.post('/api/meta/audiences/test-sql', authenticateToken, requireAdmin, async 
   try {
     const { sql_filter, bank_name, mis_category } = req.body;
     
-    if (sql_filter && sql_filter.trim()) {
-      const cleanSql = sql_filter.trim();
-      if (!cleanSql.toUpperCase().startsWith('SELECT')) {
-        return res.status(400).json({ success: false, error: 'Custom SQL query rule must be a SELECT query.' });
-      }
-
-      let result = await db.getFinalApprovedLeadsForAudience(bank_name || 'ALL', cleanSql, mis_category || 'FINAL APPROVED');
-      if (result.length === 0) {
-        result = await db.getFinalApprovedLeadsForAudience(bank_name || 'ALL', null, mis_category || 'FINAL APPROVED');
-      }
-      return res.json({
-        success: true,
-        count: result.length,
-        samples: result.slice(0, 3).map(r => ({
-          name: r.full_name || 'N/A',
-          phone: r.phone ? '******' + r.phone.slice(-4) : 'N/A',
-          bank: r.card_bank || (r.mis_data && r.mis_data.mis_bank_name) || 'N/A',
-          status: r.mis_status || 'N/A'
-        }))
-      });
-    } else {
-      const result = await db.getFinalApprovedLeadsForAudience(bank_name || 'ALL', null, mis_category || 'FINAL APPROVED');
-      return res.json({
-        success: true,
-        count: result.length,
-        samples: result.slice(0, 3).map(r => ({
-          name: r.full_name || 'N/A',
-          phone: r.phone ? '******' + r.phone.slice(-4) : 'N/A',
-          bank: r.card_bank || (r.mis_data && r.mis_data.mis_bank_name) || 'N/A',
-          status: r.mis_status || 'N/A'
-        }))
-      });
+    let result = await db.getFinalApprovedLeadsForAudience(bank_name || 'ALL', null, mis_category || 'FINAL APPROVED');
+    if (result.length === 0 && sql_filter && sql_filter.trim()) {
+      try {
+        result = await db.getFinalApprovedLeadsForAudience(bank_name || 'ALL', sql_filter.trim(), mis_category || 'FINAL APPROVED');
+      } catch (e) {}
     }
+
+    return res.json({
+      success: true,
+      count: result.length,
+      samples: result.slice(0, 3).map(r => ({
+        name: r.full_name || 'N/A',
+        phone: r.phone ? '******' + r.phone.slice(-4) : 'N/A',
+        bank: r.card_bank || (r.mis_data && r.mis_data.mis_bank_name) || 'N/A',
+        status: r.mis_status || 'N/A'
+      }))
+    });
   } catch (err) {
     console.error('[API Error] POST /api/meta/audiences/test-sql:', err.message);
     res.status(400).json({ success: false, error: 'SQL Query Error: ' + err.message });

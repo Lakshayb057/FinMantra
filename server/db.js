@@ -342,6 +342,7 @@ async function initPgSchema() {
       await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS capi_last_value NUMERIC");
       await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS capi_last_status VARCHAR(50)");
       await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS capi_last_at TIMESTAMP WITH TIME ZONE");
+      await client.query("ALTER TABLE meta_audiences ADD COLUMN IF NOT EXISTS synced_hashes JSONB DEFAULT '[]'");
     } catch (migErr) {}
     try {
       await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS pan_no VARCHAR(50)");
