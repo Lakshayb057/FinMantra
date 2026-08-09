@@ -5139,6 +5139,37 @@ app.delete('/api/meta/audiences/:id', authenticateToken, requireAdmin, async (re
   }
 });
 
+// Debug endpoint to inspect exact KIWI Card Created lead
+app.get('/api/debug/kiwi-card-created', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const allMapped = await pool.query(`SELECT id, urn, full_name, phone, email, card_bank, card_name, source, mis_status, mis_data FROM leads WHERE mis_mapped_at IS NOT NULL OR mis_status IS NOT NULL`);
+    
+    // Find leads where Card Created is indicated
+    const cardCreatedRows = allMapped.rows.filter(r => {
+      const md = r.mis_data || {};
+      const kiwiCard = (String(md.Card_Created || md.card_activation_status || md.card_created || md.card_state || md.current_state || md.winning_state || md.mis_status || r.mis_status || '') + ' ' + String(md.pnb_state || '') + ' ' + String(md.yes_state || '') + ' ' + String(md.au_state || '') + ' ' + JSON.stringify(md)).toLowerCase();
+      return kiwiCard.includes('card created') || kiwiCard.includes('card_created') || kiwiCard.includes('cards generated');
+    });
+
+    res.json({
+      totalMapped: allMapped.rows.length,
+      cardCreatedCount: cardCreatedRows.length,
+      cardCreatedLeads: cardCreatedRows.map(r => ({
+        id: r.id,
+        urn: r.urn,
+        full_name: r.full_name,
+        card_bank: r.card_bank,
+        card_name: r.card_name,
+        source: r.source,
+        mis_status: r.mis_status,
+        mis_data: r.mis_data
+      }))
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Test & Validate Custom SQL Query Rule before saving
 app.post('/api/meta/audiences/test-sql', authenticateToken, requireAdmin, async (req, res) => {
   try {
