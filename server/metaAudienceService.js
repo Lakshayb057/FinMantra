@@ -76,7 +76,7 @@ function getNormalizedStatusCategory(rawStatus, misData = null) {
   const firstTxnVal = String(md.first_txn || md.first_transaction || '').toUpperCase().trim();
   const currentStateVal = String(md.current_state || md.winning_state || md.final_decision || '').toUpperCase().trim();
 
-  // 1. FINAL APPROVE (Card Created / Card Issued) -> 1 lead
+  // 1. FINAL APPROVE (1 lead - Card Created / Card Issued)
   const isCardCreatedPositive = cardVal && cardVal !== 'NO' && cardVal !== 'FALSE' && cardVal !== '0' && cardVal !== 'NULL' && cardVal !== 'UNDEFINED' && cardVal !== 'NA' && cardVal !== 'N/A' && !cardVal.includes('REJECT') && !cardVal.includes('DECLINE');
   const isFirstTxnPositive = firstTxnVal && firstTxnVal !== 'NO' && firstTxnVal !== 'FALSE' && firstTxnVal !== '0' && firstTxnVal !== 'NULL' && firstTxnVal !== 'UNDEFINED' && !firstTxnVal.includes('REJECT') && !firstTxnVal.includes('DECLINE');
 
@@ -93,24 +93,7 @@ function getNormalizedStatusCategory(rawStatus, misData = null) {
     return 'FINAL_APPROVE';
   }
 
-  // 2. SOFT DECLINE (Pending / Soft Decline / Pre-Decline / DCLP / DACP) -> 9 leads
-  if (
-    rawUpper === 'PENDING' ||
-    rawUpper.includes('SOFT DECLINE') ||
-    rawUpper.includes('SOFT_DECLINE') ||
-    rawUpper.includes('PRE-DECLINE') ||
-    rawUpper.includes('PRE_DECLINE') ||
-    rawUpper.includes('DCLP') ||
-    rawUpper.includes('DACP') ||
-    currentStateVal.includes('DCLP') ||
-    currentStateVal.includes('DACP') ||
-    currentStateVal.includes('PRE_DECLINE') ||
-    currentStateVal.includes('SOFT_DECLINE')
-  ) {
-    return 'SOFT_DECLINE';
-  }
-
-  // 3. FINAL DECLINE (Rejected / Declined / Cancelled) -> 532 leads
+  // 2. FINAL DECLINE (532 leads - Hard Rejected / Declined / Cancelled)
   if (
     rawUpper.includes('DECLINE') ||
     rawUpper.includes('REJECT') ||
@@ -118,13 +101,43 @@ function getNormalizedStatusCategory(rawStatus, misData = null) {
     rawUpper.includes('FAIL') ||
     currentStateVal.includes('DECLINE') ||
     currentStateVal.includes('REJECT') ||
-    currentStateVal.includes('CANCEL')
+    currentStateVal.includes('CANCEL') ||
+    currentStateVal.includes('FAIL')
   ) {
     return 'FINAL_DECLINE';
   }
 
-  // 4. SOFT APPROVE (In Progress / IPA / VKYC / Active Funnel) -> 60 leads
-  return 'SOFT_APPROVE';
+  // 3. SOFT APPROVE (60 leads - Soft Approved / IPA Approved / In Progress / VKYC / Active Funnel)
+  const kiwiIpa = (
+    String(md.ipa || md.ipa_status || md.SOFT_DECISION || md.ipa_state || '') + ' ' + 
+    String(md.pnb_state || '') + ' ' + 
+    String(md.yes_state || '') + ' ' + 
+    String(md.au_state || '') + ' ' +
+    String(md.VKYC || md.vkyc_status || md.kyc_status || md.vkyc_state || md.kyc_state || '') + ' ' +
+    rawUpper
+  ).toUpperCase();
+
+  const isSoftApprove = (
+    kiwiIpa.includes('APPROV') ||
+    kiwiIpa.includes('PASS') ||
+    kiwiIpa.includes('SUCCESS') ||
+    kiwiIpa.includes('ELIGIBLE') ||
+    kiwiIpa.includes('DOC') ||
+    kiwiIpa.includes('IN_PROGRESS') ||
+    kiwiIpa.includes('IN PROGRESS') ||
+    kiwiIpa.includes('VKYC') ||
+    kiwiIpa.includes('KYC') ||
+    kiwiIpa.includes('SUBMITTED') ||
+    kiwiIpa.includes('OTP') ||
+    (md.ipa_date && String(md.ipa_date).trim() !== '')
+  );
+
+  if (isSoftApprove) {
+    return 'SOFT_APPROVE';
+  }
+
+  // 4. SOFT DECLINE (9 leads - Remaining unapproved / non-progressing leads)
+  return 'SOFT_DECLINE';
 }
 
 // Normalize bank name to uppercase clean canonical string
