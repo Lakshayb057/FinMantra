@@ -256,6 +256,8 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   const [testingCapi, setTestingCapi] = useState(false);
   const [remoteMetaAudiences, setRemoteMetaAudiences] = useState([]);
   const [loadingRemoteAudiences, setLoadingRemoteAudiences] = useState(false);
+  const [testSqlResult, setTestSqlResult] = useState(null);
+  const [testingSql, setTestingSql] = useState(false);
 
   const fetchMetaAudiences = async () => {
     if (!token) return;
@@ -8195,24 +8197,87 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                   <div className="form-group">
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
                       <label className="form-label" style={{ fontWeight: 700, margin: 0 }}>Custom SQL Query Rule (Optional)</label>
-                      {audienceFormData.sql_filter && (
+                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                         <button
                           type="button"
-                          onClick={() => setAudienceFormData({ ...audienceFormData, sql_filter: '' })}
-                          style={{ background: 'none', border: 'none', color: 'var(--err)', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 600 }}
+                          disabled={testingSql}
+                          onClick={async () => {
+                            setTestingSql(true);
+                            setTestSqlResult(null);
+                            try {
+                              const res = await fetch('/api/meta/audiences/test-sql', {
+                                method: 'POST',
+                                headers: {
+                                  'Authorization': `Bearer ${token}`,
+                                  'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify({
+                                  sql_filter: audienceFormData.sql_filter,
+                                  bank_name: audienceFormData.bank_name,
+                                  mis_category: audienceFormData.mis_category
+                                })
+                              });
+                              const data = await res.json();
+                              setTestSqlResult(data);
+                            } catch (err) {
+                              setTestSqlResult({ success: false, error: err.message });
+                            } finally {
+                              setTestingSql(false);
+                            }
+                          }}
+                          style={{ background: 'var(--gold-deep)', color: '#fff', border: 'none', borderRadius: '4px', padding: '2px 8px', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px' }}
                         >
-                          Clear Query
+                          {testingSql ? 'Testing...' : '🧪 Test Query'}
                         </button>
-                      )}
+                        {audienceFormData.sql_filter && (
+                          <button
+                            type="button"
+                            onClick={() => { setAudienceFormData({ ...audienceFormData, sql_filter: '' }); setTestSqlResult(null); }}
+                            style={{ background: 'none', border: 'none', color: 'var(--err)', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 600 }}
+                          >
+                            Clear Query
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <textarea
                       className="form-textarea"
                       rows={3}
                       placeholder="SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE mis_status IS NOT NULL..."
                       value={audienceFormData.sql_filter}
-                      onChange={(e) => setAudienceFormData({ ...audienceFormData, sql_filter: e.target.value })}
+                      onChange={(e) => { setAudienceFormData({ ...audienceFormData, sql_filter: e.target.value }); setTestSqlResult(null); }}
                       style={{ fontFamily: 'monospace', fontSize: '0.8rem', background: '#f8fafc', border: '1px solid var(--line)' }}
                     />
+
+                    {/* Test SQL Live Preview Banner */}
+                    {testSqlResult && (
+                      <div style={{
+                        marginTop: '0.4rem',
+                        padding: '0.6rem 0.75rem',
+                        borderRadius: '6px',
+                        fontSize: '0.75rem',
+                        background: testSqlResult.success ? (testSqlResult.count > 0 ? 'rgba(16, 185, 129, 0.12)' : 'rgba(234, 179, 8, 0.12)') : 'rgba(239, 68, 68, 0.12)',
+                        border: `1px solid ${testSqlResult.success ? (testSqlResult.count > 0 ? 'rgba(16, 185, 129, 0.3)' : 'rgba(234, 179, 8, 0.3)') : 'rgba(239, 68, 68, 0.3)'}`,
+                        color: testSqlResult.success ? (testSqlResult.count > 0 ? '#047857' : '#b45309') : '#b91c1c'
+                      }}>
+                        {testSqlResult.success ? (
+                          <div>
+                            <div style={{ fontWeight: 800, marginBottom: '2px' }}>
+                              {testSqlResult.count > 0 ? `✅ Query Validated: Found ${testSqlResult.count.toLocaleString()} matching lead record(s)!` : '⚠️ Query Executed: 0 matching leads found for this rule.'}
+                            </div>
+                            {testSqlResult.samples && testSqlResult.samples.length > 0 && (
+                              <div style={{ fontSize: '0.7rem', opacity: 0.9 }}>
+                                Sample Preview: {testSqlResult.samples.map(s => `${s.name} (${s.bank} - ${s.status})`).join(' | ')}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div style={{ fontWeight: 700 }}>
+                            ❌ {testSqlResult.error}
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {/* Quick SQL Presets */}
                     <div style={{ marginTop: '0.5rem', background: 'var(--paper-2)', padding: '0.6rem 0.75rem', borderRadius: '8px', border: '1px solid var(--line)' }}>

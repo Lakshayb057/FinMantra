@@ -5139,6 +5139,47 @@ app.delete('/api/meta/audiences/:id', authenticateToken, requireAdmin, async (re
   }
 });
 
+// Test & Validate Custom SQL Query Rule before saving
+app.post('/api/meta/audiences/test-sql', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { sql_filter, bank_name, mis_category } = req.body;
+    
+    if (sql_filter && sql_filter.trim()) {
+      const cleanSql = sql_filter.trim();
+      if (!cleanSql.toUpperCase().startsWith('SELECT')) {
+        return res.status(400).json({ success: false, error: 'Custom SQL query rule must be a SELECT query.' });
+      }
+
+      const result = await db.getFinalApprovedLeadsForAudience(bank_name || 'ALL', cleanSql, mis_category || 'FINAL APPROVED');
+      return res.json({
+        success: true,
+        count: result.length,
+        samples: result.slice(0, 3).map(r => ({
+          name: r.full_name || 'N/A',
+          phone: r.phone ? '******' + r.phone.slice(-4) : 'N/A',
+          bank: r.card_bank || (r.mis_data && r.mis_data.mis_bank_name) || 'N/A',
+          status: r.mis_status || 'N/A'
+        }))
+      });
+    } else {
+      const result = await db.getFinalApprovedLeadsForAudience(bank_name || 'ALL', null, mis_category || 'FINAL APPROVED');
+      return res.json({
+        success: true,
+        count: result.length,
+        samples: result.slice(0, 3).map(r => ({
+          name: r.full_name || 'N/A',
+          phone: r.phone ? '******' + r.phone.slice(-4) : 'N/A',
+          bank: r.card_bank || (r.mis_data && r.mis_data.mis_bank_name) || 'N/A',
+          status: r.mis_status || 'N/A'
+        }))
+      });
+    }
+  } catch (err) {
+    console.error('[API Error] POST /api/meta/audiences/test-sql:', err.message);
+    res.status(400).json({ success: false, error: 'SQL Query Error: ' + err.message });
+  }
+});
+
 // Manually Sync / Push Final Approved Leads to Meta Audience
 app.post('/api/meta/audiences/:id/sync', authenticateToken, requireAdmin, async (req, res) => {
   try {
