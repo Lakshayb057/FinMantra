@@ -75,8 +75,12 @@ function getNormalizedStatusCategory(rawStatus, misData = null) {
   const cardVal = String(md.Card_Created || md.card_created || md.card_activation_status || md.card_state || '').toUpperCase().trim();
   const firstTxnVal = String(md.first_txn || md.first_transaction || '').toUpperCase().trim();
   const currentStateVal = String(md.current_state || md.winning_state || md.final_decision || '').toUpperCase().trim();
+  const ipaVal = String(md.ipa || md.ipa_status || md.SOFT_DECISION || md.ipa_state || '').toUpperCase().trim();
+  const rejectReasonVal = String(md.reject_reason || '').toUpperCase().trim();
 
-  // 1. FINAL APPROVE (1 lead - Card Created / Card Issued)
+  const fullStateStr = (rawUpper + ' ' + cardVal + ' ' + firstTxnVal + ' ' + currentStateVal + ' ' + ipaVal + ' ' + rejectReasonVal + ' ' + String(md.yes_state || '') + ' ' + String(md.au_state || '') + ' ' + String(md.pnb_state || '')).toUpperCase();
+
+  // 1. FINAL APPROVE (1 lead - Card Created / Card Issued / Account Created)
   const isCardCreatedPositive = cardVal && cardVal !== 'NO' && cardVal !== 'FALSE' && cardVal !== '0' && cardVal !== 'NULL' && cardVal !== 'UNDEFINED' && cardVal !== 'NA' && cardVal !== 'N/A' && !cardVal.includes('REJECT') && !cardVal.includes('DECLINE');
   const isFirstTxnPositive = firstTxnVal && firstTxnVal !== 'NO' && firstTxnVal !== 'FALSE' && firstTxnVal !== '0' && firstTxnVal !== 'NULL' && firstTxnVal !== 'UNDEFINED' && !firstTxnVal.includes('REJECT') && !firstTxnVal.includes('DECLINE');
 
@@ -85,44 +89,39 @@ function getNormalizedStatusCategory(rawStatus, misData = null) {
     isFirstTxnPositive ||
     rawUpper === 'APPROVED' ||
     rawUpper === 'FINAL_APPROVE' ||
-    currentStateVal === 'AC_CREATED' ||
-    currentStateVal === 'ACCOUNT_CREATED' ||
-    currentStateVal === 'CARD_CREATED' ||
-    currentStateVal === 'CARD_ISSUED'
+    fullStateStr.includes('AC_CREATED') ||
+    fullStateStr.includes('ACCREATED') ||
+    fullStateStr.includes('ACCOUNT_CREATED') ||
+    fullStateStr.includes('ACCOUNTCREATED') ||
+    fullStateStr.includes('CARD_CREATED') ||
+    fullStateStr.includes('CARDCREATED') ||
+    fullStateStr.includes('CARD_ISSUED') ||
+    fullStateStr.includes('CARDISSUED')
   ) {
     return 'FINAL_APPROVE';
   }
 
   // 2. SOFT DECLINE (9 leads - Pre-decline / DCLP / DACP / Soft Decline)
-  const ipaVal = String(md.ipa || md.ipa_status || md.SOFT_DECISION || md.ipa_state || '').toUpperCase().trim();
   if (
-    rawUpper.includes('SOFT DECLINE') ||
-    rawUpper.includes('SOFT_DECLINE') ||
-    rawUpper.includes('PRE-DECLINE') ||
-    rawUpper.includes('PRE_DECLINE') ||
-    rawUpper.includes('DCLP') ||
-    rawUpper.includes('DACP') ||
-    currentStateVal.includes('DCLP') ||
-    currentStateVal.includes('DACP') ||
-    currentStateVal.includes('PRE_DECLINE') ||
-    currentStateVal.includes('SOFT_DECLINE') ||
-    ipaVal.includes('DCLP') ||
-    ipaVal.includes('DACP') ||
-    ipaVal.includes('PRE_DECLINE')
+    fullStateStr.includes('SOFT_DECLINE') ||
+    fullStateStr.includes('SOFT DECLINE') ||
+    fullStateStr.includes('PRE_DECLINE') ||
+    fullStateStr.includes('PRE-DECLINE') ||
+    fullStateStr.includes('PREDECLINE') ||
+    fullStateStr.includes('DCLP') ||
+    fullStateStr.includes('DACP') ||
+    fullStateStr.includes('SOFT_REJECT') ||
+    fullStateStr.includes('REJECT_SOFT')
   ) {
     return 'SOFT_DECLINE';
   }
 
   // 3. FINAL DECLINE (532 leads - Hard Rejected / Declined / Cancelled)
   if (
-    rawUpper.includes('DECLINE') ||
-    rawUpper.includes('REJECT') ||
-    rawUpper.includes('CANCEL') ||
-    rawUpper.includes('FAIL') ||
-    currentStateVal.includes('DECLINE') ||
-    currentStateVal.includes('REJECT') ||
-    currentStateVal.includes('CANCEL') ||
-    currentStateVal.includes('FAIL')
+    fullStateStr.includes('DECLINE') ||
+    fullStateStr.includes('REJECT') ||
+    fullStateStr.includes('CANCEL') ||
+    fullStateStr.includes('FAIL')
   ) {
     return 'FINAL_DECLINE';
   }
