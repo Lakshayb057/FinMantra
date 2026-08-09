@@ -4858,7 +4858,7 @@ app.get('/api/meta/audiences/remote', authenticateToken, requireAdmin, async (re
     }
 
     const cleanAdAcc = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
-    const metaUrl = `https://graph.facebook.com/v20.0/${cleanAdAcc}/customaudiences?access_token=${accessToken}&fields=id,name,subtype,approximate_count,time_created,time_updated&limit=100`;
+    const metaUrl = `https://graph.facebook.com/v20.0/${cleanAdAcc}/customaudiences?access_token=${accessToken}&fields=id,name,subtype,time_created,time_updated&limit=100`;
     const metaRes = await fetch(metaUrl);
     const metaData = await metaRes.json();
 
