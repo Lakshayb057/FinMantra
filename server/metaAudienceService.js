@@ -566,6 +566,20 @@ async function autoProvisionBankAudiences(broadcast = null) {
       }
     }
 
+    // 3. Generate missing Meta Audience IDs on Facebook Graph API for any pre-existing DB audiences
+    const allAudiences = await db.getMetaAudiences({});
+    for (const aud of allAudiences) {
+      if (!aud.meta_audience_id) {
+        console.log(`[Meta Provisioning] Generating Meta Audience ID on Meta API for '${aud.name}'...`);
+        const metaRes = await createMetaCustomAudience(aud.name, aud.description);
+        if (metaRes.metaAudienceId) {
+          aud.meta_audience_id = metaRes.metaAudienceId;
+          await db.updateMetaAudience(aud.id, { meta_audience_id: metaRes.metaAudienceId });
+          console.log(`[Meta Provisioning] Assigned Meta Audience ID ${metaRes.metaAudienceId} to '${aud.name}'`);
+        }
+      }
+    }
+
     if (broadcast) {
       broadcast({ type: 'META_AUDIENCES_UPDATED' });
     }
