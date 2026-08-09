@@ -254,6 +254,8 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   const [testCapiBank, setTestCapiBank] = useState('HDFC Bank');
   const [testCapiResult, setTestCapiResult] = useState(null);
   const [testingCapi, setTestingCapi] = useState(false);
+  const [remoteMetaAudiences, setRemoteMetaAudiences] = useState([]);
+  const [loadingRemoteAudiences, setLoadingRemoteAudiences] = useState(false);
 
   const fetchMetaAudiences = async () => {
     if (!token) return;
@@ -8053,14 +8055,60 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label" style={{ fontWeight: 700 }}>Meta Audience ID (Optional)</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      placeholder="e.g. 120252069748690319 (Leave empty to auto-create on Meta)"
-                      value={audienceFormData.meta_audience_id || ''}
-                      onChange={(e) => setAudienceFormData({ ...audienceFormData, meta_audience_id: e.target.value })}
-                    />
+                    <label className="form-label" style={{ fontWeight: 700 }}>Link Meta Audience</label>
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                      <select
+                        className="form-select"
+                        style={{ flex: 1 }}
+                        value={audienceFormData.meta_audience_id || ''}
+                        onChange={(e) => {
+                          const selectedId = e.target.value;
+                          const selectedAud = remoteMetaAudiences.find(a => a.id === selectedId);
+                          setAudienceFormData({
+                            ...audienceFormData,
+                            meta_audience_id: selectedId,
+                            name: audienceFormData.name || (selectedAud ? selectedAud.name : '')
+                          });
+                        }}
+                      >
+                        <option value="">-- Select a Meta Audience --</option>
+                        {remoteMetaAudiences.map(ra => (
+                          <option key={ra.id} value={ra.id}>
+                            {ra.name} (ID: {ra.id}, ~{ra.approximate_count} users)
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        disabled={loadingRemoteAudiences}
+                        onClick={async () => {
+                          setLoadingRemoteAudiences(true);
+                          try {
+                            const res = await fetch('/api/meta/audiences/remote', {
+                              headers: { 'Authorization': `Bearer ${token}` }
+                            });
+                            const data = await res.json();
+                            if (data.success && data.audiences) {
+                              setRemoteMetaAudiences(data.audiences);
+                              if (data.audiences.length === 0) alert('No Custom Audiences found on your Meta Ad Account.');
+                            } else {
+                              alert(data.error || 'Failed to fetch audiences from Meta');
+                            }
+                          } catch (err) {
+                            alert('Error fetching Meta audiences: ' + err.message);
+                          } finally {
+                            setLoadingRemoteAudiences(false);
+                          }
+                        }}
+                        className="btn-primary"
+                        style={{ padding: '0.45rem 0.8rem', fontSize: '0.78rem', fontWeight: 700, background: 'var(--gold-deep)', color: '#fff', borderRadius: '6px', whiteSpace: 'nowrap', cursor: 'pointer' }}
+                      >
+                        {loadingRemoteAudiences ? 'Fetching...' : '🔄 Fetch from Meta'}
+                      </button>
+                    </div>
+                    <p style={{ margin: '0.3rem 0 0', fontSize: '0.72rem', color: 'var(--muted)' }}>
+                      Click "Fetch from Meta" to load all existing Custom Audiences from your Meta Ads Manager account.
+                    </p>
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>

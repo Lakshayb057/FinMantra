@@ -4846,6 +4846,44 @@ app.get('/api/meta/audiences', authenticateToken, requireAdmin, async (req, res)
 });
 
 // Create a new Meta Custom Audience (In FinMantra DB & Meta Graph API)
+// Fetch existing Custom Audiences from Meta Ads Manager (uses ads_read permission)
+app.get('/api/meta/audiences/remote', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const settings = await db.getSettings();
+    const adAccountId = getSettingVal(settings, 'meta_ad_account_id', 'META_AD_ACCOUNT_ID');
+    const accessToken = getSettingVal(settings, 'meta_access_token', 'META_ACCESS_TOKEN');
+
+    if (!adAccountId || !accessToken) {
+      return res.status(400).json({ error: 'Meta Ad Account ID and Access Token must be configured first.' });
+    }
+
+    const cleanAdAcc = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
+    const metaUrl = `https://graph.facebook.com/v20.0/${cleanAdAcc}/customaudiences?access_token=${accessToken}&fields=id,name,subtype,approximate_count,time_created,time_updated&limit=100`;
+    const metaRes = await fetch(metaUrl);
+    const metaData = await metaRes.json();
+
+    if (!metaRes.ok) {
+      const errMsg = metaData?.error?.message || 'Failed to fetch audiences from Meta';
+      return res.status(400).json({ error: `Meta API Error: ${errMsg}` });
+    }
+
+    const audiences = (metaData.data || []).map(a => ({
+      id: a.id,
+      name: a.name,
+      subtype: a.subtype,
+      approximate_count: a.approximate_count || 0,
+      time_created: a.time_created,
+      time_updated: a.time_updated
+    }));
+
+    res.json({ success: true, audiences });
+  } catch (err) {
+    console.error('[API Error] GET /api/meta/audiences/remote:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Create a new Meta Custom Audience (In FinMantra DB & Meta Graph API)
 app.post('/api/meta/audiences', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const { name, description, meta_audience_id, bank_name, mis_category, sql_filter, auto_push } = req.body;
