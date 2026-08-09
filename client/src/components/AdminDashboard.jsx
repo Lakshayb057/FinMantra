@@ -274,22 +274,20 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       bankCond = `(UPPER(COALESCE(card_bank,'')) LIKE '%SCAPIA%' OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE '%SCAPIA%' OR UPPER(COALESCE(card_name,'')) LIKE '%SCAPIA%')`;
     }
 
-    let catCond = '1=1';
     if (cat.includes('FINAL') && (cat.includes('APPROVED') || cat.includes('CARD'))) {
       if (bank.includes('KIWI')) {
-        catCond = `(LOWER(mis_status) IN ('card created', 'card_created', 'card generated', 'approved', 'issued') OR COALESCE(mis_data->>'Card_Created','') IN ('1','yes','true') OR COALESCE(mis_data->>'card_created','') IN ('1','yes','true') OR COALESCE(mis_data->>'card_activation_status','') IN ('active','yes','1') OR LOWER(COALESCE(mis_data->>'current_state','')) IN ('card created', 'card_created', 'issued', 'active') OR LOWER(COALESCE(mis_data->>'winning_state','')) IN ('card created', 'card_created', 'issued', 'active') OR LOWER(COALESCE(mis_data->>'card_state','')) IN ('card created', 'card_created', 'issued', 'active') OR LOWER(COALESCE(mis_data->>'yes_state','')) LIKE '%card%create%' OR LOWER(COALESCE(mis_data->>'pnb_state','')) LIKE '%card%create%' OR LOWER(COALESCE(mis_data->>'au_state','')) LIKE '%card%create%' OR LOWER(COALESCE(mis_data->>'yes_state','')) LIKE '%create%' OR LOWER(COALESCE(mis_data->>'yes_state','')) LIKE '%active%' OR LOWER(COALESCE(mis_data->>'yes_state','')) LIKE '%yes%') AND NOT (UPPER(COALESCE(mis_status,'')) LIKE '%REJECT%' OR UPPER(COALESCE(mis_status,'')) LIKE '%DECLINE%')`;
-      } else {
-        catCond = `(LOWER(mis_status) IN ('card created', 'card_created', 'approved', 'issued', 'disbursed', 'file generated') OR UPPER(mis_status) LIKE '%APPROV%' OR UPPER(mis_status) LIKE '%ISSUED%' OR UPPER(mis_status) LIKE '%DISBURS%' OR UPPER(COALESCE(mis_data->>'final_decision','')) LIKE '%APPROV%' OR UPPER(COALESCE(mis_data->>'final_decision','')) LIKE '%FILE GENERAT%') AND NOT (UPPER(mis_status) LIKE '%REJECT%' OR UPPER(mis_status) LIKE '%DECLINE%')`;
+        return `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE LOWER(COALESCE(mis_data->>'yes_state','')) LIKE '%yes%' OR LOWER(COALESCE(mis_data->>'Card_Created','')) IN ('1','yes') OR LOWER(mis_status) IN ('card created','approved');`;
       }
+      return `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE UPPER(mis_status) LIKE '%APPROV%' OR UPPER(mis_status) LIKE '%CARD%CREATE%';`;
     } else if (cat.includes('FINAL') && (cat.includes('DECLINED') || cat.includes('REJECTED'))) {
-      catCond = `(UPPER(mis_status) LIKE '%REJECT%' OR UPPER(mis_status) LIKE '%DECLINE%' OR UPPER(mis_status) LIKE '%CANCEL%' OR UPPER(COALESCE(mis_data->>'final_decision','')) LIKE '%REJECT%' OR UPPER(COALESCE(mis_data->>'final_decision','')) LIKE '%DECLINE%')`;
+      return `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE UPPER(mis_status) LIKE '%DECLINE%' OR UPPER(mis_status) LIKE '%REJECT%';`;
     } else if (cat.includes('SOFT') && cat.includes('APPROVED')) {
-      catCond = `(UPPER(mis_status) LIKE '%SOFT%' OR UPPER(mis_status) LIKE '%PRE-APPROV%' OR UPPER(mis_status) LIKE '%IPA%' OR UPPER(mis_status) LIKE '%VKYC%' OR UPPER(mis_status) LIKE '%PROCESS%' OR UPPER(COALESCE(mis_data->>'ipa_status','')) LIKE '%APPROV%') AND NOT (UPPER(mis_status) LIKE '%REJECT%' OR UPPER(mis_status) LIKE '%DECLINE%')`;
+      return `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE UPPER(mis_status) LIKE '%IPA%' OR UPPER(mis_status) LIKE '%VKYC%';`;
     } else if (cat.includes('SOFT') && cat.includes('DECLINED')) {
-      catCond = `(UPPER(mis_status) LIKE '%SOFT%REJECT%' OR UPPER(mis_status) LIKE '%SOFT%DECLINE%' OR UPPER(mis_status) LIKE '%DCLP%' OR UPPER(mis_status) LIKE '%DACP%')`;
+      return `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE UPPER(mis_status) LIKE '%SOFT%DECLINE%';`;
     }
 
-    return `SELECT id, urn, full_name, phone, email, card_bank, mis_status\nFROM leads\nWHERE (mis_status IS NOT NULL OR mis_mapped_at IS NOT NULL)\n  AND ${catCond};`;
+    return `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE mis_status IS NOT NULL;`;
   };
 
   const fetchMetaAudiences = async () => {
