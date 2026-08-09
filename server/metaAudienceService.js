@@ -78,12 +78,20 @@ function getKiwiStatusCategory(lead, rawStatus, misData) {
   const ipaStr = String(md.ipa || md.ipa_status || md.SOFT_DECISION || md.ipa_state || '').trim().toLowerCase();
   const rejReason = String(md.reject_reason || '').trim().toLowerCase();
 
+  const kiwiCardStr = (
+    String(md.Card_Created || md.card_activation_status || md.card_created || md.card_state || md.current_state || md.winning_state || md.mis_status || lead.mis_status || '') + ' ' +
+    String(md.pnb_state || '') + ' ' +
+    String(md.yes_state || '') + ' ' +
+    String(md.au_state || '')
+  ).toLowerCase();
+
   // 1. FINAL APPROVE (1 lead - Card Created)
   const isCardCreated = (
     (cc && cc !== 'no' && cc !== 'false' && cc !== '0' && cc !== 'null' && cc !== 'undefined' && cc !== 'na' && cc !== 'n/a') ||
     (ft && ft !== 'no' && ft !== 'false' && ft !== '0' && ft !== 'null' && ft !== 'undefined') ||
     cs.includes('ac_created') || cs.includes('accreated') || cs.includes('card_created') || cs.includes('cardcreated') || cs.includes('card_issued') ||
-    rawUpper === 'APPROVED' || rawUpper === 'FINAL_APPROVE'
+    rawUpper === 'APPROVED' || rawUpper === 'FINAL_APPROVE' ||
+    ((kiwiCardStr.includes('approve') || kiwiCardStr.includes('active') || kiwiCardStr.includes('created') || kiwiCardStr.includes('issued') || kiwiCardStr.includes('disbursed') || kiwiCardStr.includes('card_created') || kiwiCardStr === '1') && !kiwiCardStr.includes('reject') && !kiwiCardStr.includes('decline'))
   );
 
   if (isCardCreated) {
