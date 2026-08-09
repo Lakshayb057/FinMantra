@@ -904,6 +904,30 @@ function isFinalApprovedStatus(rawStatus) {
   );
 }
 
+function isMatchingCategoryStatus(rawStatus, category = 'FINAL APPROVED') {
+  if (!rawStatus) return false;
+  const upper = String(rawStatus).toUpperCase().trim();
+  const cat = String(category || 'FINAL APPROVED').toUpperCase().trim();
+
+  if (cat.includes('DECLINE') || cat.includes('REJECT')) {
+    if (cat.includes('SOFT')) {
+      return (upper.includes('SOFT') && (upper.includes('DECLINE') || upper.includes('REJECT') || upper.includes('DCLP') || upper.includes('DACP'))) || upper.includes('DCLP') || upper.includes('DACP');
+    }
+    return upper.includes('DECLINE') || upper.includes('REJECT') || upper.includes('CANCEL') || upper.includes('FAIL');
+  }
+
+  if (cat.includes('SOFT')) {
+    return (upper.includes('SOFT') || upper.includes('PRE-APPROV') || upper.includes('VKYC') || upper.includes('IPA') || upper.includes('PROCESS') || upper.includes('PENDING')) && !upper.includes('DECLINE') && !upper.includes('REJECT');
+  }
+
+  if (cat.includes('ALL')) {
+    return true;
+  }
+
+  // Default: FINAL APPROVED
+  return isFinalApprovedStatus(rawStatus);
+}
+
 // Helper to split full name into first and last name
 function splitName(fullName) {
   if (!fullName) return { fn: '', ln: '' };
@@ -5154,7 +5178,7 @@ app.post('/api/meta/audiences/:id/sync', authenticateToken, requireAdmin, async 
       });
     }
 
-    const leads = await db.getFinalApprovedLeadsForAudience(audience.bank_name, audience.sql_filter);
+    const leads = await db.getFinalApprovedLeadsForAudience(audience.bank_name, audience.sql_filter, audience.mis_category);
     
     if (leads.length === 0) {
       await db.insertAudienceHistoryLog({
@@ -5162,7 +5186,7 @@ app.post('/api/meta/audiences/:id/sync', authenticateToken, requireAdmin, async 
         audience_name: audience.name,
         records_processed: 0,
         records_failed: 0,
-        query: `Select finmatraid, where mis_status is Final Approved for bank ${audience.bank_name}`,
+        query: audience.sql_filter || `Select finmatraid, where mis_status is ${audience.mis_category || 'Final Approved'} for bank ${audience.bank_name || 'ALL'}`,
         status: 'SUCCESS'
       });
       return res.json({ success: true, message: 'No matching Final Approved leads found to sync.', syncedCount: 0 });

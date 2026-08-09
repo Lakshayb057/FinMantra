@@ -2168,15 +2168,29 @@ const db = {
     }
   },
 
-  async getFinalApprovedLeadsForAudience(bankName = 'ALL', sqlFilter = null) {
+  async getFinalApprovedLeadsForAudience(bankName = 'ALL', sqlFilter = null, misCategory = 'FINAL APPROVED') {
     try {
       if (sqlFilter && sqlFilter.trim()) {
         const res = await pool.query(sqlFilter);
         return res.rows;
       }
 
-      let whereClause = ` WHERE (
-        mis_status IS NOT NULL AND (
+      const cat = String(misCategory || 'FINAL APPROVED').toUpperCase().trim();
+      let statusCondition = '';
+
+      if (cat.includes('DECLINED') || cat.includes('REJECTED')) {
+        if (cat.includes('SOFT')) {
+          statusCondition = `(UPPER(mis_status) LIKE '%SOFT%REJECT%' OR UPPER(mis_status) LIKE '%SOFT%DECLINE%' OR UPPER(mis_status) LIKE '%DCLP%' OR UPPER(mis_status) LIKE '%DACP%')`;
+        } else {
+          statusCondition = `(UPPER(mis_status) LIKE '%REJECT%' OR UPPER(mis_status) LIKE '%DECLINE%' OR UPPER(mis_status) LIKE '%CANCEL%' OR UPPER(mis_status) LIKE '%FAIL%' OR UPPER(COALESCE(mis_data->>'final_decision', '')) LIKE '%REJECT%' OR UPPER(COALESCE(mis_data->>'final_decision', '')) LIKE '%DECLINE%')`;
+        }
+      } else if (cat.includes('SOFT')) {
+        statusCondition = `(UPPER(mis_status) LIKE '%SOFT%' OR UPPER(mis_status) LIKE '%PRE-APPROV%' OR UPPER(mis_status) LIKE '%IPA%' OR UPPER(mis_status) LIKE '%VKYC%' OR UPPER(mis_status) LIKE '%PROCESS%' OR UPPER(mis_status) LIKE '%PENDING%' OR UPPER(COALESCE(mis_data->>'ipa_status', '')) LIKE '%APPROV%') AND NOT (UPPER(mis_status) LIKE '%REJECT%' OR UPPER(mis_status) LIKE '%DECLINE%')`;
+      } else if (cat.includes('ALL')) {
+        statusCondition = `(phone IS NOT NULL AND phone != '') OR (email IS NOT NULL AND email != '')`;
+      } else {
+        // Default: FINAL APPROVED
+        statusCondition = `(
           UPPER(mis_status) LIKE '%APPROV%' OR 
           UPPER(mis_status) LIKE '%ISSUED%' OR 
           UPPER(mis_status) LIKE '%DISBURS%' OR 
@@ -2190,8 +2204,10 @@ const db = {
           UPPER(mis_status) LIKE '%PASS%' OR
           UPPER(COALESCE(mis_data->>'final_decision', '')) LIKE '%APPROV%' OR
           UPPER(COALESCE(mis_data->>'STATUS', '')) LIKE '%APPROV%'
-        )
-      )`;
+        )`;
+      }
+
+      let whereClause = ` WHERE mis_status IS NOT NULL AND (${statusCondition})`;
 
       const params = [];
       if (bankName && bankName !== 'ALL') {
@@ -2207,8 +2223,8 @@ const db = {
         return res.rows;
       }
 
-      // Fallback: If no leads strictly matched approval keywords, push all MAPPED leads (mis_status IS NOT NULL) for that bank
-      console.log(`[DB] No strict approved leads found for bank ${bankName}. Fallback: Querying mapped leads (mis_status IS NOT NULL)...`);
+      // Fallback: If no leads strictly matched category keywords, push all MAPPED leads (mis_status IS NOT NULL) for that bank
+      console.log(`[DB] No strict leads found for category ${cat} & bank ${bankName}. Fallback: Querying mapped leads (mis_status IS NOT NULL)...`);
       let fallbackWhere = ` WHERE mis_status IS NOT NULL AND ( (phone IS NOT NULL AND phone != '') OR (email IS NOT NULL AND email != '') )`;
       const fallbackParams = [];
       if (bankName && bankName !== 'ALL') {

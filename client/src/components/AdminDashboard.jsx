@@ -7739,9 +7739,38 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                                 </span>
                               </td>
                               <td style={{ padding: '0.85rem 1rem' }}>
-                                <span style={{ padding: '0.2rem 0.6rem', borderRadius: '12px', background: 'rgba(16, 185, 129, 0.12)', color: 'var(--mint)', border: '1px solid rgba(16, 185, 129, 0.3)', fontWeight: 700, fontSize: '0.75rem' }}>
-                                  FINAL APPROVED
-                                </span>
+                                {(() => {
+                                  const cat = (aud.mis_category || 'FINAL APPROVED').toUpperCase();
+                                  let bg = 'rgba(16, 185, 129, 0.12)';
+                                  let color = '#047857';
+                                  let border = 'rgba(16, 185, 129, 0.3)';
+
+                                  if (cat.includes('DECLINED') || cat.includes('REJECTED')) {
+                                    bg = 'rgba(239, 68, 68, 0.12)';
+                                    color = '#b91c1c';
+                                    border = 'rgba(239, 68, 68, 0.3)';
+                                  } else if (cat.includes('SOFT')) {
+                                    if (cat.includes('DECLINE')) {
+                                      bg = 'rgba(245, 158, 11, 0.12)';
+                                      color = '#b45309';
+                                      border = 'rgba(245, 158, 11, 0.3)';
+                                    } else {
+                                      bg = 'rgba(59, 130, 246, 0.12)';
+                                      color = '#1d4ed8';
+                                      border = 'rgba(59, 130, 246, 0.3)';
+                                    }
+                                  } else if (cat.includes('ALL')) {
+                                    bg = 'rgba(168, 85, 247, 0.12)';
+                                    color = '#6b21a8';
+                                    border = 'rgba(168, 85, 247, 0.3)';
+                                  }
+
+                                  return (
+                                    <span style={{ padding: '0.25rem 0.65rem', borderRadius: '12px', background: bg, color, border: `1px solid ${border}`, fontWeight: 800, fontSize: '0.72rem', letterSpacing: '0.02em', textTransform: 'uppercase' }}>
+                                      {aud.mis_category || 'FINAL APPROVED'}
+                                    </span>
+                                  );
+                                })()}
                               </td>
                               <td style={{ padding: '0.85rem 1rem', textAlign: 'right', fontWeight: 800, color: 'var(--ink)' }}>
                                 {(Number(aud.total_records) || 0).toLocaleString()}
@@ -8148,13 +8177,18 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
                     <div className="form-group">
                       <label className="form-label" style={{ fontWeight: 700 }}>MIS Lead Rule</label>
-                      <input
-                        type="text"
-                        className="form-input"
-                        value="FINAL APPROVED"
-                        disabled
-                        style={{ opacity: 0.8, fontWeight: 700, color: 'var(--mint)' }}
-                      />
+                      <select
+                        className="form-select"
+                        value={audienceFormData.mis_category || 'FINAL APPROVED'}
+                        onChange={(e) => setAudienceFormData({ ...audienceFormData, mis_category: e.target.value })}
+                        style={{ fontWeight: 700 }}
+                      >
+                        <option value="FINAL APPROVED">🟢 FINAL APPROVED (Card Created / Approved / Issued)</option>
+                        <option value="FINAL DECLINED">🔴 FINAL DECLINED (Rejected / Declined / Cancelled)</option>
+                        <option value="SOFT APPROVED">🔵 SOFT APPROVED (Soft Approved / VKYC / IPA / In-Process)</option>
+                        <option value="SOFT DECLINED">🟠 SOFT DECLINED (Soft Declined / DCLP / DACP)</option>
+                        <option value="ALL MAPPED LEADS">🟣 ALL MAPPED LEADS (All Mapped Applications)</option>
+                      </select>
                     </div>
                   </div>
 
@@ -8191,6 +8225,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                           onClick={() => setAudienceFormData({
                             ...audienceFormData,
                             bank_name: 'KIWI',
+                            mis_category: 'FINAL APPROVED',
                             sql_filter: `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE mis_status IS NOT NULL AND (UPPER(card_bank) LIKE '%KIWI%' OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE '%KIWI%') AND (UPPER(mis_status) LIKE '%APPROV%' OR UPPER(mis_status) LIKE '%CARD%CREATE%' OR UPPER(mis_status) LIKE '%CARD_CREATED%')`
                           })}
                           style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '4px', background: 'rgba(234, 179, 8, 0.12)', border: '1px solid rgba(234, 179, 8, 0.3)', color: '#b45309', cursor: 'pointer', fontWeight: 700 }}
@@ -8202,39 +8237,67 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                           onClick={() => setAudienceFormData({
                             ...audienceFormData,
                             bank_name: 'SBI',
+                            mis_category: 'FINAL APPROVED',
                             sql_filter: `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE mis_status IS NOT NULL AND (UPPER(card_bank) LIKE '%SBI%' OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE '%SBI%') AND (UPPER(mis_status) LIKE '%APPROV%' OR UPPER(mis_status) LIKE '%CARD%CREATE%' OR UPPER(mis_status) LIKE '%CARD_CREATED%')`
                           })}
                           style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '4px', background: 'rgba(59, 130, 246, 0.12)', border: '1px solid rgba(59, 130, 246, 0.3)', color: '#1d4ed8', cursor: 'pointer', fontWeight: 700 }}
                         >
-                          ⚡ SBI Approved
+                          ⚡ SBI Final Approved
                         </button>
                         <button
                           type="button"
                           onClick={() => setAudienceFormData({
                             ...audienceFormData,
                             bank_name: 'HDFC',
+                            mis_category: 'FINAL APPROVED',
                             sql_filter: `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE mis_status IS NOT NULL AND (UPPER(card_bank) LIKE '%HDFC%' OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE '%HDFC%') AND (UPPER(mis_status) LIKE '%APPROV%' OR UPPER(mis_status) LIKE '%CARD%CREATE%' OR UPPER(mis_status) LIKE '%CARD_CREATED%')`
                           })}
                           style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '4px', background: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.3)', color: '#047857', cursor: 'pointer', fontWeight: 700 }}
                         >
-                          ⚡ HDFC Approved
+                          ⚡ HDFC Final Approved
                         </button>
                         <button
                           type="button"
                           onClick={() => setAudienceFormData({
                             ...audienceFormData,
                             bank_name: 'Scapia',
+                            mis_category: 'FINAL APPROVED',
                             sql_filter: `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE mis_status IS NOT NULL AND (UPPER(card_bank) LIKE '%SCAPIA%' OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE '%SCAPIA%') AND (UPPER(mis_status) LIKE '%APPROV%' OR UPPER(mis_status) LIKE '%CARD%CREATE%' OR UPPER(mis_status) LIKE '%CARD_CREATED%')`
                           })}
                           style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '4px', background: 'rgba(168, 85, 247, 0.12)', border: '1px solid rgba(168, 85, 247, 0.3)', color: '#7e22ce', cursor: 'pointer', fontWeight: 700 }}
                         >
-                          ⚡ Scapia Approved
+                          ⚡ Scapia Final Approved
                         </button>
                         <button
                           type="button"
                           onClick={() => setAudienceFormData({
                             ...audienceFormData,
                             bank_name: 'ALL',
+                            mis_category: 'SOFT APPROVED',
+                            sql_filter: `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE mis_status IS NOT NULL AND (UPPER(mis_status) LIKE '%SOFT%' OR UPPER(mis_status) LIKE '%PRE-APPROV%' OR UPPER(mis_status) LIKE '%VKYC%' OR UPPER(mis_status) LIKE '%IPA%') AND NOT (UPPER(mis_status) LIKE '%REJECT%' OR UPPER(mis_status) LIKE '%DECLINE%')`
+                          })}
+                          style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '4px', background: 'rgba(59, 130, 246, 0.15)', border: '1px solid rgba(59, 130, 246, 0.4)', color: '#1e40af', cursor: 'pointer', fontWeight: 700 }}
+                        >
+                          ⚡ Soft Approved Leads
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAudienceFormData({
+                            ...audienceFormData,
+                            bank_name: 'ALL',
+                            mis_category: 'FINAL DECLINED',
+                            sql_filter: `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE mis_status IS NOT NULL AND (UPPER(mis_status) LIKE '%REJECT%' OR UPPER(mis_status) LIKE '%DECLINE%' OR UPPER(mis_status) LIKE '%CANCEL%')`
+                          })}
+                          style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '4px', background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.4)', color: '#991b1b', cursor: 'pointer', fontWeight: 700 }}
+                        >
+                          ⚡ Final Declined Leads
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAudienceFormData({
+                            ...audienceFormData,
+                            bank_name: 'ALL',
+                            mis_category: 'ALL MAPPED LEADS',
                             sql_filter: `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE mis_status IS NOT NULL`
                           })}
                           style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '4px', background: 'rgba(100, 116, 139, 0.12)', border: '1px solid rgba(100, 116, 139, 0.3)', color: '#334155', cursor: 'pointer', fontWeight: 700 }}
