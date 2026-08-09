@@ -2175,13 +2175,20 @@ const db = {
         return res.rows;
       }
 
-      let whereClause = ` WHERE mis_status IS NOT NULL AND (
-        UPPER(mis_status) LIKE '%APPROVE%' OR 
-        UPPER(mis_status) LIKE '%ISSUED%' OR 
-        UPPER(mis_status) LIKE '%DISBURSED%' OR 
-        UPPER(mis_status) LIKE '%ACTIVAT%' OR 
-        UPPER(mis_status) LIKE '%FIRST_TXN%' OR
-        UPPER(mis_status) LIKE '%CARD_CREATED%'
+      let whereClause = ` WHERE (
+        mis_status IS NOT NULL AND (
+          UPPER(mis_status) LIKE '%APPROV%' OR 
+          UPPER(mis_status) LIKE '%ISSUED%' OR 
+          UPPER(mis_status) LIKE '%DISBURS%' OR 
+          UPPER(mis_status) LIKE '%ACTIVAT%' OR 
+          UPPER(mis_status) LIKE '%FIRST_TXN%' OR
+          UPPER(mis_status) LIKE '%CARD_CREATED%' OR
+          UPPER(mis_status) LIKE '%ACCOUNT CREAT%' OR
+          UPPER(mis_status) LIKE '%SUCCESS%' OR
+          UPPER(mis_status) LIKE '%PASS%' OR
+          UPPER(COALESCE(mis_data->>'final_decision', '')) LIKE '%APPROV%' OR
+          UPPER(COALESCE(mis_data->>'STATUS', '')) LIKE '%APPROV%'
+        )
       )`;
 
       const params = [];
