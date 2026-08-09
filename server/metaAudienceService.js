@@ -74,7 +74,17 @@ function getNormalizedStatusCategory(rawStatus, misData = null) {
   const rawUpper = String(rawStatus || '').toUpperCase().trim();
   const cardVal = String(md.Card_Created || md.card_created || md.card_activation_status || md.card_state || '').toUpperCase().trim();
   const firstTxnVal = String(md.first_txn || md.first_transaction || '').toUpperCase().trim();
-  const currentStateVal = String(md.current_state || md.winning_state || '').toUpperCase().trim();
+  
+  const allStatesStr = (
+    cardVal + ' ' +
+    firstTxnVal + ' ' +
+    String(md.current_state || md.winning_state || md.current_status || md.final_decision || rawStatus || '') + ' ' +
+    String(md.yes_state || '') + ' ' +
+    String(md.au_state || '') + ' ' +
+    String(md.pnb_state || '')
+  ).toUpperCase();
+
+  const cleanAllStates = allStatesStr.replace(/[^A-Z0-9]/g, '');
 
   // 1. FINAL APPROVE (Checked FIRST - Highest Precedence)
   const isCardCreatedPositive = cardVal && cardVal !== 'NO' && cardVal !== 'FALSE' && cardVal !== '0' && cardVal !== 'NULL' && cardVal !== 'UNDEFINED' && !cardVal.includes('REJECT') && !cardVal.includes('DECLINE');
@@ -83,21 +93,17 @@ function getNormalizedStatusCategory(rawStatus, misData = null) {
   if (
     isCardCreatedPositive ||
     isFirstTxnPositive ||
-    rawUpper.includes('CARD CREATED') ||
-    rawUpper.includes('CARD_CREATED') ||
-    rawUpper.includes('CARD ISSUED') ||
-    rawUpper.includes('CARD_ISSUED') ||
-    rawUpper.includes('AC_CREATED') ||
-    rawUpper.includes('ACCOUNT_CREATED') ||
-    rawUpper.includes('ACCOUNT CREATED') ||
+    cleanAllStates.includes('ACCREATED') ||
+    cleanAllStates.includes('ACCOUNTCREATED') ||
+    cleanAllStates.includes('CARDCREATED') ||
+    cleanAllStates.includes('CARDISSUED') ||
+    cleanAllStates.includes('CARDACTIVATED') ||
+    cleanAllStates.includes('FIRSTTXN') ||
+    cleanAllStates.includes('DISBURSED') ||
     rawUpper === 'APPROVED' ||
-    rawUpper === 'FINAL_APPROVE' ||
-    currentStateVal.includes('AC_CREATED') ||
-    currentStateVal.includes('ACCOUNT_CREATED') ||
-    currentStateVal.includes('CARD_CREATED') ||
-    currentStateVal.includes('CARD_ISSUED')
+    rawUpper === 'FINAL_APPROVE'
   ) {
-    if (!rawUpper.includes('REJECT') && !rawUpper.includes('DECLINE')) {
+    if (!rawUpper.includes('REJECT') && !rawUpper.includes('DECLINE') && !cleanAllStates.includes('REJECT') && !cleanAllStates.includes('DECLINE')) {
       return 'FINAL_APPROVE';
     }
   }
@@ -108,8 +114,9 @@ function getNormalizedStatusCategory(rawStatus, misData = null) {
     rawUpper.includes('REJECT') ||
     rawUpper.includes('CANCEL') ||
     rawUpper.includes('FAIL') ||
-    currentStateVal.includes('REJECT') ||
-    currentStateVal.includes('DECLINE')
+    cleanAllStates.includes('REJECT') ||
+    cleanAllStates.includes('DECLINE') ||
+    cleanAllStates.includes('CANCEL')
   ) {
     return 'FINAL_DECLINE';
   }
@@ -135,12 +142,18 @@ function getNormalizedStatusCategory(rawStatus, misData = null) {
     rawUpper.includes('IPA') ||
     rawUpper.includes('IN-PROCESS') ||
     rawUpper.includes('IN_PROCESS') ||
-    rawUpper.includes('PENDING')
+    rawUpper.includes('PENDING') ||
+    cleanAllStates.includes('NOTSTARTED') ||
+    cleanAllStates.includes('SUBMITTED') ||
+    cleanAllStates.includes('KYC') ||
+    cleanAllStates.includes('DOC') ||
+    cleanAllStates.includes('IPA')
   ) {
     return 'SOFT_APPROVE';
   }
 
-  return null;
+  // Fallback for mapped leads
+  return 'SOFT_APPROVE';
 }
 
 // Normalize bank name to uppercase clean canonical string
