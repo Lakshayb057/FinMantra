@@ -636,10 +636,10 @@ async function getEligibleMappedLeadsForAudience(audience) {
 
 // ── Automatic Bank Provisioning Engine ──
 
-async function autoProvisionBankAudiences(broadcast = null) {
+async function autoProvisionBankAudiences(broadcast = null, forceRecreate = false) {
   try {
     const activeBanks = await db.getAllActiveBanksFromDB();
-    console.log(`[Meta Provisioning] Checking automated Meta Custom Audiences for ${activeBanks.length} bank(s)...`);
+    console.log(`[Meta Provisioning] Checking automated Meta Custom Audiences for ${activeBanks.length} bank(s)... (forceRecreate=${forceRecreate})`);
 
     // 1. Ensure Global Master Audience exists
     let globalMaster = await db.getMetaAudienceByName('FinMantra - Global Master Audience');
@@ -703,7 +703,7 @@ async function autoProvisionBankAudiences(broadcast = null) {
     // 3. Generate missing Meta Audience IDs on Facebook Graph API for any pre-existing DB audiences
     const allAudiences = await db.getMetaAudiences({});
     for (const aud of allAudiences) {
-      if (!aud.meta_audience_id) {
+      if (!aud.meta_audience_id || forceRecreate) {
         console.log(`[Meta Provisioning] Generating Meta Audience ID on Meta API for '${aud.name}'...`);
         const metaRes = await createMetaCustomAudience(aud.name, aud.description);
         if (metaRes.metaAudienceId) {
