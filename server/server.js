@@ -5023,6 +5023,11 @@ app.post('/api/meta/audiences', authenticateToken, requireAdmin, async (req, res
       return res.status(400).json({ error: 'Audience name is required' });
     }
 
+    const existing = await db.getMetaAudienceByName(name);
+    if (existing) {
+      return res.status(400).json({ error: `An audience with the name '${name}' already exists.` });
+    }
+
     const metaRes = await metaAudienceService.createMetaCustomAudience(name, description);
     const audience = await db.createMetaAudience({
       name: String(name).trim(),
@@ -5144,9 +5149,8 @@ app.post('/api/meta/audiences/:id/full-sync', authenticateToken, requireAdmin, a
 // Full Resync for ALL active audiences
 app.post('/api/meta/audiences/full-sync-all', authenticateToken, requireAdmin, async (req, res) => {
   try {
-    await metaAudienceService.autoProvisionBankAudiences(broadcast);
     const audiences = await db.getMetaAudiences();
-    
+
     // Run asynchronously
     setTimeout(async () => {
       for (const aud of audiences) {
@@ -5367,8 +5371,6 @@ app.patch('/api/meta/config', authenticateToken, requireAdmin, async (req, res) 
     });
 
     const connResult = await metaAudienceService.testMetaConnection();
-    // Auto-provision Meta Custom Audiences on newly configured Ad Account in background
-    metaAudienceService.autoProvisionBankAudiences(broadcast).catch(err => console.error('[Meta Provisioning Error]:', err.message));
     res.json({ success: true, connected: connResult.connected, connection: connResult });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -5406,9 +5408,6 @@ server.listen(PORT, async () => {
     // Ensure database is fully connected and initialized before serving requests
     await db.init();
     console.log('[Startup] Database initialization completed successfully.');
-
-    // Auto-provision Meta Custom Audiences per bank
-    await metaAudienceService.autoProvisionBankAudiences(broadcast).catch(err => console.error('[Meta Provisioning Error]:', err.message));
 
     const settings = await db.getSettings();
     const gateway = settings.whatsapp_gateway || 'baileys';

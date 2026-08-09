@@ -326,10 +326,42 @@ async function testMetaConnection() {
   }
 }
 
+async function fetchMetaCustomAudiences() {
+  try {
+    const { adAccountId, accessToken, apiVersion } = await getMetaCredentials();
+    if (!accessToken) return [];
+
+    const cleanAdAccount = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
+    const url = `https://graph.facebook.com/${apiVersion}/${cleanAdAccount}/customaudiences?fields=id,name,description,subtype&limit=500&access_token=${accessToken}`;
+
+    const response = await fetch(url);
+    if (!response.ok) {
+      const errData = await response.json();
+      console.error('[Meta Audience] Failed to fetch existing audiences:', errData);
+      return [];
+    }
+    const data = await response.json();
+    return data.data || [];
+  } catch (err) {
+    console.error('[Meta Audience] fetchMetaCustomAudiences exception:', err.message);
+    return [];
+  }
+}
+
 async function createMetaCustomAudience(name, description = '') {
   try {
     const { adAccountId, accessToken, apiVersion } = await getMetaCredentials();
     if (!accessToken) throw new Error('META_ACCESS_TOKEN missing');
+
+    // 1. Fetch existing custom audiences from Meta to prevent duplicate creation
+    const existingMetaAuds = await fetchMetaCustomAudiences();
+    const cleanTargetName = String(name).trim().toLowerCase();
+    
+    const matched = existingMetaAuds.find(a => String(a.name).trim().toLowerCase() === cleanTargetName);
+    if (matched) {
+      console.log(`[Meta Audience] Reusing existing audience '${name}' on Meta API (ID: ${matched.id})`);
+      return { success: true, metaAudienceId: matched.id };
+    }
 
     const cleanAdAccount = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
     const url = `https://graph.facebook.com/${apiVersion}/${cleanAdAccount}/customaudiences`;
@@ -797,7 +829,7 @@ async function syncSingleAudience(audienceId, isFullSync = false, broadcast = nu
 
     for (const lead of eligibleLeads) {
       const currentState = existingMemMap.get(lead.id);
-      if (currentState === 'SYNCED' && !isFullSync) {
+      if (currentState === 'SYNCED') {
         skippedCount++;
       } else {
         leadsToAdd.push(lead);
@@ -920,9 +952,6 @@ async function enqueueLeadSyncForUpdatedLeads(updatedLeads, broadcast = null) {
   // Run asynchronously without blocking MIS HTTP response
   setTimeout(async () => {
     try {
-      // Ensure all bank audiences exist
-      await autoProvisionBankAudiences(broadcast);
-
       const allAudiences = await db.getMetaAudiences();
       const activeAudiences = allAudiences.filter(a => a.auto_push && a.status !== 'paused');
 
@@ -955,5 +984,6 @@ module.exports = {
   getEligibleMappedLeadsForAudience,
   autoProvisionBankAudiences,
   syncSingleAudience,
-  enqueueLeadSyncForUpdatedLeads
+  enqueueLeadSyncForUpdatedLeads,
+  fetchMetaCustomAudiences
 };
