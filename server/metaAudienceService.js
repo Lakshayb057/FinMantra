@@ -5,8 +5,10 @@ const db = require('./db');
 function getSettingVal(settings, key, envKey, defaultVal = null) {
   if (key === 'meta_ad_account_id') {
     const dbVal = settings && settings[key] ? String(settings[key]).trim() : '';
+    if (dbVal && dbVal.includes('145081')) return 'act_1450840068922146';
     if (dbVal && dbVal.startsWith('act_') && !dbVal.includes('*')) return dbVal;
-    const envVal = process.env.META_AD_ACCOUNT_ID;
+    const envVal = process.env.META_AD_ACCOUNT_ID ? String(process.env.META_AD_ACCOUNT_ID).trim() : '';
+    if (envVal && envVal.includes('145081')) return 'act_1450840068922146';
     if (envVal && !envVal.includes('*')) return envVal.startsWith('act_') ? envVal : `act_${envVal}`;
     return 'act_1450840068922146';
   }

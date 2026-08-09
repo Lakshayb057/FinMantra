@@ -325,6 +325,11 @@ async function initPgSchema() {
       ALTER TABLE meta_audiences ADD COLUMN IF NOT EXISTS last_synced_at TIMESTAMP WITH TIME ZONE;
     `);
 
+    // Auto-correct pre-existing settings typo for meta_ad_account_id
+    await client.query(`
+      UPDATE settings SET value = 'act_1450840068922146' WHERE key = 'meta_ad_account_id' AND (value LIKE '%145081%' OR value IS NULL);
+    `);
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS meta_audience_memberships (
         id VARCHAR(50) PRIMARY KEY,

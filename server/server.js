@@ -5169,7 +5169,7 @@ app.get('/api/meta/config/status', authenticateToken, async (req, res) => {
       success: true,
       connected: connResult.connected,
       meta_pixel_id: settings.meta_pixel_id || process.env.META_PIXEL_ID || '1015546961540665',
-      meta_ad_account_id: settings.meta_ad_account_id || process.env.META_AD_ACCOUNT_ID || 'act_1450840068922146',
+      meta_ad_account_id: (settings.meta_ad_account_id && !settings.meta_ad_account_id.includes('145081')) ? settings.meta_ad_account_id : 'act_1450840068922146',
       meta_api_version: settings.meta_api_version || process.env.META_API_VERSION || 'v20.0',
       meta_access_token_masked: maskedToken,
       meta_test_event_code: settings.meta_test_event_code || process.env.META_TEST_EVENT_CODE || '',
