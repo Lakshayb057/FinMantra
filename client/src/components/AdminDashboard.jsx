@@ -8363,75 +8363,112 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
       {/* Create Custom Audience Modal */}
       {showCreateAudienceModal && (
-        <div className="modal-overlay" style={{ backdropFilter: 'blur(6px)', background: 'rgba(0, 0, 0, 0.75)', zIndex: 99999 }}>
-          <div className="glass-panel admin-dialog-panel" style={{ width: '90%', maxWidth: '680px', borderTop: '4px solid var(--gold)', padding: '2rem', borderRadius: '16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-              <h3 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0, color: 'var(--ink)' }}>Create Custom Meta Audience</h3>
-              <button onClick={() => setShowCreateAudienceModal(false)} className="btn-secondary" style={{ padding: '0.35rem' }}><X size={18} /></button>
+        <div className="modal-overlay" style={{ backdropFilter: 'blur(8px)', background: 'rgba(15, 23, 42, 0.75)', zIndex: 99999 }}>
+          <div className="glass-panel admin-dialog-panel" style={{ width: '92%', maxWidth: '720px', borderTop: '4px solid var(--gold)', padding: '2rem', borderRadius: '20px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
+            
+            {/* Modal Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '1rem' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                  <div style={{ padding: '0.45rem', borderRadius: '10px', background: 'rgba(224, 168, 46, 0.15)', color: 'var(--gold-deep)', display: 'flex', alignItems: 'center' }}>
+                    <Target size={20} />
+                  </div>
+                  <h3 style={{ fontSize: '1.35rem', fontWeight: 800, margin: 0, color: 'var(--ink)' }}>Create Custom Meta Audience</h3>
+                  <span className="badge" style={{ background: 'rgba(224, 168, 46, 0.15)', color: 'var(--gold-deep)', fontWeight: 700, padding: '0.2rem 0.55rem', borderRadius: '12px', fontSize: '0.72rem' }}>
+                    Graph API v20.0
+                  </span>
+                </div>
+                <p style={{ margin: '0.4rem 0 0 0', fontSize: '0.84rem', color: 'hsl(var(--text-muted))', lineHeight: '1.4' }}>
+                  Segment customer leads dynamically using custom rules. SHA-256 hashed identifiers (phones/emails) auto-sync directly to your Meta Ads Manager custom audience.
+                </p>
+              </div>
+              <button 
+                onClick={() => setShowCreateAudienceModal(false)} 
+                className="btn-secondary" 
+                style={{ padding: '0.4rem', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                title="Close Form"
+              >
+                <X size={18} />
+              </button>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem', maxHeight: '75vh', overflowY: 'auto', paddingRight: '0.5rem' }}>
-              <div>
-                <label className="form-label" style={{ fontWeight: 600 }}>Audience Name *</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  placeholder="e.g. High Income SBI Approved Leads 2026"
-                  value={ruleBuilderState.name}
-                  onChange={(e) => setRuleBuilderState({ ...ruleBuilderState, name: e.target.value })}
-                />
-              </div>
-
-              <div>
-                <label className="form-label" style={{ fontWeight: 600 }}>Description</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  placeholder="Audience purpose or target campaign details"
-                  value={ruleBuilderState.description}
-                  onChange={(e) => setRuleBuilderState({ ...ruleBuilderState, description: e.target.value })}
-                />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.35rem', maxHeight: '75vh', overflowY: 'auto', paddingRight: '0.5rem' }}>
+              
+              {/* Audience Basic Details */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <div>
-                  <label className="form-label" style={{ fontWeight: 600 }}>Target Bank</label>
-                  <select
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                    <label className="form-label" style={{ fontWeight: 700, fontSize: '0.88rem', margin: 0, color: 'var(--ink)' }}>Audience Name *</label>
+                    <span style={{ fontSize: '0.73rem', color: 'hsl(var(--text-muted))' }}>Appears in Meta Ads Manager</span>
+                  </div>
+                  <input
+                    type="text"
                     className="form-control"
-                    value={ruleBuilderState.bank_name}
-                    onChange={(e) => setRuleBuilderState({ ...ruleBuilderState, bank_name: e.target.value })}
-                  >
-                    <option value="SBI">SBI Bank</option>
-                    <option value="HDFC">HDFC Bank</option>
-                    <option value="KIWI">KIWI</option>
-                    <option value="SCAPIA">Scapia</option>
-                    <option value="AXIS">Axis Bank</option>
-                    <option value="ALL">All Banks</option>
-                  </select>
+                    placeholder="e.g. High Income SBI Approved Leads 2026"
+                    value={ruleBuilderState.name}
+                    onChange={(e) => setRuleBuilderState({ ...ruleBuilderState, name: e.target.value })}
+                    style={{ fontSize: '0.88rem', padding: '0.65rem 0.85rem', borderRadius: '10px' }}
+                  />
                 </div>
 
                 <div>
-                  <label className="form-label" style={{ fontWeight: 600 }}>Status Category</label>
-                  <select
+                  <label className="form-label" style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--ink)' }}>Description</label>
+                  <input
+                    type="text"
                     className="form-control"
-                    value={ruleBuilderState.status_category}
-                    onChange={(e) => setRuleBuilderState({ ...ruleBuilderState, status_category: e.target.value })}
-                  >
-                    <option value="FINAL_APPROVE">Final Approve</option>
-                    <option value="FINAL_DECLINE">Final Decline</option>
-                    <option value="SOFT_APPROVE">Soft Approve</option>
-                    <option value="SOFT_DECLINE">Soft Decline</option>
-                    <option value="ALL">All Statuses</option>
-                  </select>
+                    placeholder="Describe audience targeting criteria, campaign purpose, or bank partner details"
+                    value={ruleBuilderState.description}
+                    onChange={(e) => setRuleBuilderState({ ...ruleBuilderState, description: e.target.value })}
+                    style={{ fontSize: '0.85rem', padding: '0.6rem 0.85rem', borderRadius: '10px' }}
+                  />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
+                  <div>
+                    <label className="form-label" style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--ink)' }}>Target Partner Bank</label>
+                    <select
+                      className="form-control"
+                      value={ruleBuilderState.bank_name}
+                      onChange={(e) => setRuleBuilderState({ ...ruleBuilderState, bank_name: e.target.value })}
+                      style={{ fontSize: '0.88rem', padding: '0.6rem 0.85rem', borderRadius: '10px' }}
+                    >
+                      <option value="SBI">SBI Bank</option>
+                      <option value="HDFC">HDFC Bank</option>
+                      <option value="KIWI">KIWI</option>
+                      <option value="SCAPIA">Scapia</option>
+                      <option value="AXIS">Axis Bank</option>
+                      <option value="ICICI">ICICI Bank</option>
+                      <option value="ALL">All Partner Banks</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="form-label" style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--ink)' }}>Status Category</label>
+                    <select
+                      className="form-control"
+                      value={ruleBuilderState.status_category}
+                      onChange={(e) => setRuleBuilderState({ ...ruleBuilderState, status_category: e.target.value })}
+                      style={{ fontSize: '0.88rem', padding: '0.6rem 0.85rem', borderRadius: '10px' }}
+                    >
+                      <option value="FINAL_APPROVE">Final Approve (Card Created / Active)</option>
+                      <option value="FINAL_DECLINE">Final Decline (Hard Declined)</option>
+                      <option value="SOFT_APPROVE">Soft Approve (In-Progress / Pre-Approved)</option>
+                      <option value="SOFT_DECLINE">Soft Decline (Pre-Screen Reject / DCLP)</option>
+                      <option value="ALL">All Lead Statuses</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 
-              {/* Dynamic SQL Rule Builder */}
-              <div style={{ background: 'var(--paper-2)', padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--border-light)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem' }}>
-                  <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--ink)' }}>Custom Filter Conditions</span>
+              {/* Dynamic Rule Builder Section */}
+              <div style={{ background: 'var(--paper-2)', padding: '1.35rem', borderRadius: '14px', border: '1px solid var(--border-light)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <span style={{ fontSize: '0.78rem', color: 'hsl(var(--text-muted))' }}>Logic:</span>
+                    <Layers size={16} color="var(--gold-deep)" />
+                    <span style={{ fontSize: '0.92rem', fontWeight: 800, color: 'var(--ink)' }}>Custom SQL Filter Rules</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--paper)', padding: '0.2rem 0.5rem', borderRadius: '8px', border: '1px solid var(--border-light)' }}>
+                    <span style={{ fontSize: '0.76rem', fontWeight: 600, color: 'hsl(var(--text-muted))' }}>Match Logic:</span>
                     <button
                       type="button"
                       onClick={() => setRuleBuilderState({
@@ -8439,83 +8476,91 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                         rules: { ...ruleBuilderState.rules, logic: ruleBuilderState.rules.logic === 'AND' ? 'OR' : 'AND' }
                       })}
                       className="btn-secondary"
-                      style={{ fontSize: '0.75rem', padding: '0.25rem 0.6rem', fontWeight: 700, color: 'var(--gold-deep)' }}
+                      style={{ fontSize: '0.75rem', padding: '0.2rem 0.65rem', fontWeight: 800, color: 'var(--gold-deep)', borderRadius: '6px' }}
+                      title="Click to toggle between AND (all rules must match) and OR (any rule matches)"
                     >
-                      {ruleBuilderState.rules.logic}
+                      {ruleBuilderState.rules.logic} ({ruleBuilderState.rules.logic === 'AND' ? 'ALL Must Match' : 'ANY Matches'})
                     </button>
                   </div>
                 </div>
 
-                {ruleBuilderState.rules.conditions.map((cond, idx) => (
-                  <div key={idx} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.65rem' }}>
-                    <select
-                      className="form-control"
-                      style={{ flex: 1, fontSize: '0.82rem' }}
-                      value={cond.field}
-                      onChange={(e) => {
-                        const nextConds = [...ruleBuilderState.rules.conditions];
-                        nextConds[idx].field = e.target.value;
-                        setRuleBuilderState({ ...ruleBuilderState, rules: { ...ruleBuilderState.rules, conditions: nextConds } });
-                      }}
-                    >
-                      <option value="bank">Bank</option>
-                      <option value="status">MIS Status</option>
-                      <option value="created_at">Created Date</option>
-                      <option value="source">Source</option>
-                      <option value="income">Monthly Income</option>
-                      <option value="pincode">Pincode</option>
-                      <option value="has_credit_card">Already Has Card</option>
-                    </select>
+                <p style={{ margin: '0 0 1rem 0', fontSize: '0.78rem', color: 'hsl(var(--text-muted))', lineHeight: '1.35' }}>
+                  💡 Add criteria to filter database leads. Rules execute safe SQL parameters server-side.
+                </p>
 
-                    <select
-                      className="form-control"
-                      style={{ width: '110px', fontSize: '0.82rem' }}
-                      value={cond.operator}
-                      onChange={(e) => {
-                        const nextConds = [...ruleBuilderState.rules.conditions];
-                        nextConds[idx].operator = e.target.value;
-                        setRuleBuilderState({ ...ruleBuilderState, rules: { ...ruleBuilderState.rules, conditions: nextConds } });
-                      }}
-                    >
-                      <option value="=">=</option>
-                      <option value="!=">!=</option>
-                      <option value="CONTAINS">CONTAINS</option>
-                      <option value="IN">IN</option>
-                      <option value=">">&gt;</option>
-                      <option value=">=">&gt;=</option>
-                      <option value="<">&lt;</option>
-                      <option value="<=">&lt;=</option>
-                      <option value="IS NOT NULL">NOT NULL</option>
-                    </select>
-
-                    <input
-                      type="text"
-                      className="form-control"
-                      style={{ flex: 1, fontSize: '0.82rem' }}
-                      placeholder="Value"
-                      value={cond.value || ''}
-                      onChange={(e) => {
-                        const nextConds = [...ruleBuilderState.rules.conditions];
-                        nextConds[idx].value = e.target.value;
-                        setRuleBuilderState({ ...ruleBuilderState, rules: { ...ruleBuilderState.rules, conditions: nextConds } });
-                      }}
-                    />
-
-                    {ruleBuilderState.rules.conditions.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const nextConds = ruleBuilderState.rules.conditions.filter((_, i) => i !== idx);
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                  {ruleBuilderState.rules.conditions.map((cond, idx) => (
+                    <div key={idx} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', background: 'var(--paper)', padding: '0.6rem 0.75rem', borderRadius: '10px', border: '1px solid var(--line)' }}>
+                      <select
+                        className="form-control"
+                        style={{ flex: '1 1 140px', fontSize: '0.83rem', padding: '0.45rem 0.65rem' }}
+                        value={cond.field}
+                        onChange={(e) => {
+                          const nextConds = [...ruleBuilderState.rules.conditions];
+                          nextConds[idx].field = e.target.value;
                           setRuleBuilderState({ ...ruleBuilderState, rules: { ...ruleBuilderState.rules, conditions: nextConds } });
                         }}
-                        className="btn-secondary"
-                        style={{ padding: '0.4rem', color: '#ef4444' }}
                       >
-                        <X size={14} />
-                      </button>
-                    )}
-                  </div>
-                ))}
+                        <option value="bank">Bank Partner</option>
+                        <option value="status">MIS Status</option>
+                        <option value="created_at">Lead Created Date</option>
+                        <option value="source">Source / UTM</option>
+                        <option value="income">Monthly Income</option>
+                        <option value="pincode">Pincode</option>
+                        <option value="has_credit_card">Credit Card Holder</option>
+                      </select>
+
+                      <select
+                        className="form-control"
+                        style={{ width: '120px', fontSize: '0.83rem', padding: '0.45rem 0.65rem' }}
+                        value={cond.operator}
+                        onChange={(e) => {
+                          const nextConds = [...ruleBuilderState.rules.conditions];
+                          nextConds[idx].operator = e.target.value;
+                          setRuleBuilderState({ ...ruleBuilderState, rules: { ...ruleBuilderState.rules, conditions: nextConds } });
+                        }}
+                      >
+                        <option value="=">Equals (=)</option>
+                        <option value="!=">Not Equals (!=)</option>
+                        <option value="CONTAINS">Contains</option>
+                        <option value="IN">In List (IN)</option>
+                        <option value=">">Greater Than (&gt;)</option>
+                        <option value=">=">Greater / Equal (&gt;=)</option>
+                        <option value="<">Less Than (&lt;)</option>
+                        <option value="<=">Less / Equal (&lt;=)</option>
+                        <option value="IS NOT NULL">Is Not Empty</option>
+                      </select>
+
+                      <input
+                        type="text"
+                        className="form-control"
+                        style={{ flex: '1 1 140px', fontSize: '0.83rem', padding: '0.45rem 0.65rem' }}
+                        placeholder="Value (e.g. Approved / SBI)"
+                        value={cond.value || ''}
+                        onChange={(e) => {
+                          const nextConds = [...ruleBuilderState.rules.conditions];
+                          nextConds[idx].value = e.target.value;
+                          setRuleBuilderState({ ...ruleBuilderState, rules: { ...ruleBuilderState.rules, conditions: nextConds } });
+                        }}
+                      />
+
+                      {ruleBuilderState.rules.conditions.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const nextConds = ruleBuilderState.rules.conditions.filter((_, i) => i !== idx);
+                            setRuleBuilderState({ ...ruleBuilderState, rules: { ...ruleBuilderState.rules, conditions: nextConds } });
+                          }}
+                          className="btn-secondary"
+                          style={{ padding: '0.45rem', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.3)', borderRadius: '8px' }}
+                          title="Remove Rule"
+                        >
+                          <X size={15} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
 
                 <button
                   type="button"
@@ -8529,35 +8574,59 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                     });
                   }}
                   className="btn-secondary"
-                  style={{ fontSize: '0.78rem', padding: '0.35rem 0.65rem', marginTop: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}
+                  style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem', marginTop: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', borderRadius: '8px', fontWeight: 600 }}
                 >
-                  <Plus size={13} /> Add Condition
+                  <Plus size={14} /> Add Filter Condition
                 </button>
               </div>
 
-              {/* Preview Match Result */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <button
-                  type="button"
-                  onClick={handlePreviewRules}
+              {/* Preview Lead Calculation Engine */}
+              <div className="glass-panel" style={{ padding: '1.1rem 1.25rem', borderRadius: '12px', background: 'rgba(224, 168, 46, 0.06)', border: '1px solid rgba(224, 168, 46, 0.2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+                <div>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--ink)' }}>Live Lead Match Preview</div>
+                  <div style={{ fontSize: '0.76rem', color: 'hsl(var(--text-muted))' }}>Calculate exact DB leads matching criteria prior to Meta creation.</div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <button
+                    type="button"
+                    onClick={handlePreviewRules}
+                    className="btn-secondary"
+                    disabled={previewLoading}
+                    style={{ fontSize: '0.82rem', padding: '0.5rem 0.9rem', display: 'flex', alignItems: 'center', gap: '0.4rem', borderRadius: '8px', fontWeight: 700 }}
+                  >
+                    <Eye size={14} /> {previewLoading ? 'Calculating Match...' : 'Preview Matching Leads'}
+                  </button>
+
+                  {previewResult && (
+                    <div style={{ background: 'var(--paper)', padding: '0.4rem 0.75rem', borderRadius: '8px', border: '1px solid var(--gold)', fontSize: '0.9rem', fontWeight: 800, color: 'var(--gold-deep)' }}>
+                      {previewResult.totalMatchingLeads.toLocaleString()} Leads
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Modal Action Buttons */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.75rem', borderTop: '1px solid var(--border-light)', paddingTop: '1.1rem' }}>
+                <button 
+                  type="button" 
+                  onClick={() => setShowCreateAudienceModal(false)} 
                   className="btn-secondary"
-                  disabled={previewLoading}
-                  style={{ fontSize: '0.82rem', padding: '0.5rem 0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+                  style={{ padding: '0.65rem 1.2rem', fontSize: '0.88rem', borderRadius: '10px' }}
                 >
-                  <Eye size={14} /> {previewLoading ? 'Calculating Match Count...' : 'Preview Matching Leads'}
+                  Cancel
                 </button>
 
-                {previewResult && (
-                  <div style={{ fontSize: '0.88rem', fontWeight: 800, color: 'var(--gold-deep)' }}>
-                    Matching Leads: {previewResult.totalMatchingLeads.toLocaleString()}
-                  </div>
-                )}
+                <button 
+                  type="button" 
+                  onClick={handleCreateCustomAudience} 
+                  className="btn-primary"
+                  style={{ padding: '0.65rem 1.35rem', fontSize: '0.88rem', fontWeight: 700, borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                >
+                  <Plus size={16} /> Create Custom Audience
+                </button>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem' }}>
-                <button type="button" onClick={() => setShowCreateAudienceModal(false)} className="btn-secondary">Cancel</button>
-                <button type="button" onClick={handleCreateCustomAudience} className="btn-primary">Create Custom Audience</button>
-              </div>
             </div>
           </div>
         </div>
