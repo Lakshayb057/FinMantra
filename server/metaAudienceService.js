@@ -140,15 +140,10 @@ function getKiwiStatusCategory(lead, rawStatus, misData) {
   const isIpaZeroOrNegative = (
     rawIpa === '0' || rawIpa === '0.0' || rawIpa === 'no' || rawIpa === 'false' || rawIpa === 'n' || rawIpa === 'f' ||
     rawIpa === 'dclp' || rawIpa === 'dacp' || rawIpa.includes('dclp') || rawIpa.includes('dacp') ||
-    rawIpa.includes('decline') || rawIpa.includes('reject') || rawIpa.includes('fail')
+    rawIpa.includes('decline') || rawIpa.includes('reject') || rawIpa.includes('fail') || rawIpa.includes('pre')
   );
 
-  const yesRank = md.yes_rank !== undefined ? Number(md.yes_rank) : -1;
-  const auRank = md.au_rank !== undefined ? Number(md.au_rank) : -1;
-  const pnbRank = md.pnb_rank !== undefined ? Number(md.pnb_rank) : -1;
-  const winRank = md.winning_rank !== undefined ? Number(md.winning_rank) : (md.status_rank !== undefined ? Number(md.status_rank) : -1);
-
-  // 2. SOFT DECLINE (9 leads - Pre-decline / DCLP / Pre-screen reject)
+  // 2. SOFT DECLINE (9 leads - Pre-decline / DCLP)
   const isSoftDecline = (
     fullStr.includes('dclp') || fullStr.includes('dacp') ||
     fullStr.includes('pre_decline') || fullStr.includes('pre-decline') || fullStr.includes('predecline') ||
@@ -157,12 +152,7 @@ function getKiwiStatusCategory(lead, rawStatus, misData) {
     fullStr.includes('prescreen') || fullStr.includes('"ipa":0') || fullStr.includes('"ipa":"0"') ||
     fullStr.includes('"ipa":"dclp"') || fullStr.includes('"ipa_status":"0"') || fullStr.includes('"ipa_status":"dclp"') ||
     isIpaZeroOrNegative ||
-    cs === 'dclp' || cs === 'dacp' || cs === 'not_started' || cs === 'not_applicable' ||
-    yesSt === 'dclp' || yesSt === 'dacp' || yesSt === 'not_started' || yesSt === 'not_applicable' || yesSt === 'rejected' ||
-    auSt === 'dclp' || auSt === 'dacp' || auSt === 'not_started' || auSt === 'not_applicable' ||
-    pnbSt === 'dclp' || pnbSt === 'dacp' || pnbSt === 'not_started' || pnbSt === 'not_applicable' ||
-    (winRank > 0 && winRank <= 3 && !cs.includes('hard') && !rawUpper.includes('FINAL')) ||
-    (rawRejectReason.length > 0 && rawRejectReason !== 'none' && rawRejectReason !== 'null' && rawRejectReason !== 'na' && rawRejectReason !== 'undefined')
+    (rawRejectReason.includes('dclp') || rawRejectReason.includes('dacp') || rawRejectReason.includes('pre_decline') || rawRejectReason.includes('pre-decline') || rawRejectReason.includes('pre') || rawRejectReason.includes('soft') || rawRejectReason.includes('bre') || rawRejectReason.includes('policy') || rawRejectReason.includes('cibil') || rawRejectReason.includes('score'))
   );
 
   if (isSoftDecline) {
