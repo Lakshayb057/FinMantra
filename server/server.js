@@ -5153,6 +5153,36 @@ app.post('/api/meta/provision/banks', authenticateToken, requireAdmin, async (re
   }
 });
 
+// TEMPORARY: Public debug endpoint to inspect KIWI SOFT_APPROVE leads
+app.get('/api/debug/kiwi-soft-approve', async (req, res) => {
+  try {
+    const query = `
+      SELECT id, urn, full_name, phone, mis_status, mis_data
+      FROM leads
+      WHERE (card_bank ILIKE '%KIWI%' OR mis_data->>'mis_bank_name' ILIKE '%KIWI%' OR (mis_data->>'kiwi_winning_bank' IS NOT NULL AND mis_data->>'kiwi_winning_bank' != '') OR card_name ILIKE '%KIWI%' OR landing_page ILIKE '%KIWI%' OR landing_page ILIKE '%GOKIWI%' OR utm_source ILIKE '%KIWI%' OR utm_source ILIKE '%GOKIWI%')
+    `;
+    const result = await db.pool.query(query);
+    const allLeads = result.rows.map(l => {
+      let md = l.mis_data;
+      if (typeof md === 'string') { try { md = JSON.parse(md); } catch (e) {} }
+      md = md || {};
+      const cat = metaAudienceService.getKiwiStatusCategory(l, l.mis_status, md);
+      return { id: l.id, urn: l.urn, name: l.full_name, mis_status: l.mis_status, category: cat, mis_data: md };
+    });
+    const softApprove = allLeads.filter(l => l.category === 'SOFT_APPROVE');
+    const softDecline = allLeads.filter(l => l.category === 'SOFT_DECLINE');
+    const finalDecline = allLeads.filter(l => l.category === 'FINAL_DECLINE');
+    const finalApprove = allLeads.filter(l => l.category === 'FINAL_APPROVE');
+    res.json({
+      counts: { SOFT_APPROVE: softApprove.length, SOFT_DECLINE: softDecline.length, FINAL_DECLINE: finalDecline.length, FINAL_APPROVE: finalApprove.length, TOTAL: allLeads.length },
+      softApproveLeads: softApprove,
+      softDeclineLeads: softDecline
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Debug endpoint to inspect all KIWI lead statuses in DB
 app.get('/api/debug/kiwi-leads', authenticateToken, async (req, res) => {
   try {

@@ -944,6 +944,7 @@ module.exports = {
   splitName,
   normalizePhone,
   getNormalizedStatusCategory,
+  getKiwiStatusCategory,
   normalizeBankName,
   testMetaConnection,
   createMetaCustomAudience,
