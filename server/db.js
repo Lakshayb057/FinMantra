@@ -2189,36 +2189,19 @@ const db = {
       } else if (cat.includes('ALL')) {
         statusCondition = `(phone IS NOT NULL AND phone != '') OR (email IS NOT NULL AND email != '')`;
       } else {
-        // Default: FINAL APPROVED
+        // Default: FINAL APPROVED (Card Created)
         statusCondition = `(
-          UPPER(mis_status) LIKE '%APPROV%' OR 
-          UPPER(mis_status) LIKE '%ISSUED%' OR 
-          UPPER(mis_status) LIKE '%DISBURS%' OR 
-          UPPER(mis_status) LIKE '%ACTIVAT%' OR 
-          UPPER(mis_status) LIKE '%FIRST_TXN%' OR
-          UPPER(mis_status) LIKE '%CARD_CREATED%' OR
-          UPPER(mis_status) LIKE '%CARD%CREATE%' OR
-          UPPER(mis_status) LIKE '%CARD%GENERATE%' OR
-          UPPER(mis_status) LIKE '%ACCOUNT CREAT%' OR
-          UPPER(mis_status) LIKE '%SUCCESS%' OR
-          UPPER(mis_status) LIKE '%PASS%' OR
-          UPPER(COALESCE(mis_data->>'final_decision', '')) LIKE '%APPROV%' OR
-          UPPER(COALESCE(mis_data->>'STATUS', '')) LIKE '%APPROV%' OR
-          UPPER(COALESCE(mis_data->>'Card_Created', '')) LIKE '%YES%' OR
-          UPPER(COALESCE(mis_data->>'Card_Created', '')) LIKE '%APPROV%' OR
-          UPPER(COALESCE(mis_data->>'Card_Created', '')) LIKE '%CREATE%' OR
-          mis_data->>'Card_Created' = '1' OR
-          UPPER(COALESCE(mis_data->>'card_created', '')) LIKE '%YES%' OR
-          UPPER(COALESCE(mis_data->>'card_created', '')) LIKE '%APPROV%' OR
-          UPPER(COALESCE(mis_data->>'card_created', '')) LIKE '%CREATE%' OR
-          mis_data->>'card_created' = '1' OR
-          UPPER(COALESCE(mis_data->>'current_state', '')) LIKE '%CARD%CREATE%' OR
-          UPPER(COALESCE(mis_data->>'current_state', '')) LIKE '%CREATE%' OR
-          UPPER(COALESCE(mis_data::text, '')) LIKE '%CARD%CREATE%' OR
-          UPPER(COALESCE(mis_data::text, '')) LIKE '%CARD_CREATED%' OR
-          UPPER(COALESCE(mis_data::text, '')) LIKE '%"CARD_CREATED":"1"%' OR
-          UPPER(COALESCE(mis_data::text, '')) LIKE '%"CARD_CREATED":1%' OR
-          UPPER(COALESCE(mis_data::text, '')) LIKE '%"CARD_CREATED":"YES"%'
+          LOWER(mis_status) IN ('card created', 'card_created', 'card generated', 'card_generated') OR
+          LOWER(COALESCE(mis_data->>'Card_Created', '')) IN ('1', 'yes', 'true') OR
+          LOWER(COALESCE(mis_data->>'card_created', '')) IN ('1', 'yes', 'true') OR
+          LOWER(COALESCE(mis_data->>'current_state', '')) IN ('card created', 'card_created') OR
+          UPPER(mis_data::text) LIKE '%"CARD_CREATED":"1"%' OR
+          UPPER(mis_data::text) LIKE '%"CARD_CREATED":1%' OR
+          UPPER(mis_data::text) LIKE '%"CARD_CREATED":"YES"%'
+        ) AND NOT (
+          UPPER(mis_status) LIKE '%REJECT%' OR 
+          UPPER(mis_status) LIKE '%DECLINE%' OR 
+          UPPER(mis_status) LIKE '%PENDING%'
         )`;
       }
 
