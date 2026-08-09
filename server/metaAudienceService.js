@@ -269,7 +269,7 @@ async function addUsersToMetaCustomAudience(metaAudienceId, leadsList) {
 
       const payload = {
         payload: {
-          schema: ['EMAIL_SHA256', 'PHONE_SHA256', 'FN_SHA256', 'LN_SHA256'],
+          schema: ['EMAIL', 'PHONE', 'FN', 'LN'],
           data: chunk
         }
       };
@@ -352,7 +352,7 @@ async function removeUsersFromMetaCustomAudience(metaAudienceId, leadsList) {
 
     const payload = {
       payload: {
-        schema: ['EMAIL_SHA256', 'PHONE_SHA256', 'FN_SHA256', 'LN_SHA256'],
+        schema: ['EMAIL', 'PHONE', 'FN', 'LN'],
         data: userRows
       }
     };
