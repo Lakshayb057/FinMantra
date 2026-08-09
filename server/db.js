@@ -2196,7 +2196,7 @@ const db = {
       const params = [];
       if (bankName && bankName !== 'ALL') {
         params.push(`%${bankName.trim()}%`);
-        whereClause += ` AND (UPPER(card_bank) LIKE UPPER($${params.length}) OR UPPER(mis_data->>'mis_bank_name') LIKE UPPER($${params.length}))`;
+        whereClause += ` AND (UPPER(card_bank) LIKE UPPER($${params.length}) OR UPPER(mis_data->>'mis_bank_name') LIKE UPPER($${params.length}) OR UPPER(card_name) LIKE UPPER($${params.length}))`;
       }
 
       const res = await pool.query(
@@ -2213,7 +2213,7 @@ const db = {
       const fallbackParams = [];
       if (bankName && bankName !== 'ALL') {
         fallbackParams.push(`%${bankName.trim()}%`);
-        fallbackWhere += ` AND (UPPER(card_bank) LIKE UPPER($${fallbackParams.length}) OR UPPER(mis_data->>'mis_bank_name') LIKE UPPER($${fallbackParams.length}))`;
+        fallbackWhere += ` AND (UPPER(card_bank) LIKE UPPER($${fallbackParams.length}) OR UPPER(mis_data->>'mis_bank_name') LIKE UPPER($${fallbackParams.length}) OR UPPER(card_name) LIKE UPPER($${fallbackParams.length}))`;
       }
       const fallbackRes = await pool.query(
         `SELECT id, urn, full_name, phone, email, card_bank, card_name, mis_status, mis_data FROM leads ${fallbackWhere}`,

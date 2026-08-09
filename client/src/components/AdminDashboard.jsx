@@ -8064,10 +8064,18 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                         onChange={(e) => {
                           const selectedId = e.target.value;
                           const selectedAud = remoteMetaAudiences.find(a => a.id === selectedId);
+                          const audName = selectedAud ? selectedAud.name : '';
+                          let autoBank = audienceFormData.bank_name;
+                          if (audName.toUpperCase().includes('SBI')) autoBank = 'SBI';
+                          else if (audName.toUpperCase().includes('KIWI')) autoBank = 'KIWI';
+                          else if (audName.toUpperCase().includes('HDFC')) autoBank = 'HDFC';
+                          else if (audName.toUpperCase().includes('SCAPIA')) autoBank = 'Scapia';
+
                           setAudienceFormData({
                             ...audienceFormData,
                             meta_audience_id: selectedId,
-                            name: audienceFormData.name || (selectedAud ? selectedAud.name : '')
+                            name: audienceFormData.name || audName,
+                            bank_name: autoBank
                           });
                         }}
                       >
