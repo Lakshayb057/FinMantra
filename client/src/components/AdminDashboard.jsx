@@ -8148,15 +8148,113 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label" style={{ fontWeight: 700 }}>Custom SQL Query Rule (Optional)</label>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                      <label className="form-label" style={{ fontWeight: 700, margin: 0 }}>Custom SQL Query Rule (Optional)</label>
+                      {audienceFormData.sql_filter && (
+                        <button
+                          type="button"
+                          onClick={() => setAudienceFormData({ ...audienceFormData, sql_filter: '' })}
+                          style={{ background: 'none', border: 'none', color: 'var(--err)', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 600 }}
+                        >
+                          Clear Query
+                        </button>
+                      )}
+                    </div>
                     <textarea
                       className="form-textarea"
-                      rows={2}
-                      placeholder="Select finmatraid, where mis_status is Final Approved for bank..."
+                      rows={3}
+                      placeholder="SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE mis_status IS NOT NULL..."
                       value={audienceFormData.sql_filter}
                       onChange={(e) => setAudienceFormData({ ...audienceFormData, sql_filter: e.target.value })}
-                      style={{ fontFamily: 'monospace', fontSize: '0.8rem' }}
+                      style={{ fontFamily: 'monospace', fontSize: '0.8rem', background: '#f8fafc', border: '1px solid var(--line)' }}
                     />
+
+                    {/* Quick SQL Presets */}
+                    <div style={{ marginTop: '0.5rem', background: 'var(--paper-2)', padding: '0.6rem 0.75rem', borderRadius: '8px', border: '1px solid var(--line)' }}>
+                      <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--ink)', marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <span>⚡ Quick SQL Presets (Click to Auto-Fill):</span>
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                        <button
+                          type="button"
+                          onClick={() => setAudienceFormData({
+                            ...audienceFormData,
+                            bank_name: 'KIWI',
+                            sql_filter: `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE mis_status IS NOT NULL AND (UPPER(card_bank) LIKE '%KIWI%' OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE '%KIWI%') AND (UPPER(mis_status) LIKE '%APPROV%' OR UPPER(mis_status) LIKE '%CARD%CREATE%' OR UPPER(mis_status) LIKE '%CARD_CREATED%')`
+                          })}
+                          style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '4px', background: 'rgba(234, 179, 8, 0.12)', border: '1px solid rgba(234, 179, 8, 0.3)', color: '#b45309', cursor: 'pointer', fontWeight: 700 }}
+                        >
+                          ⚡ KIWI Card Created
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAudienceFormData({
+                            ...audienceFormData,
+                            bank_name: 'SBI',
+                            sql_filter: `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE mis_status IS NOT NULL AND (UPPER(card_bank) LIKE '%SBI%' OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE '%SBI%') AND (UPPER(mis_status) LIKE '%APPROV%' OR UPPER(mis_status) LIKE '%CARD%CREATE%' OR UPPER(mis_status) LIKE '%CARD_CREATED%')`
+                          })}
+                          style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '4px', background: 'rgba(59, 130, 246, 0.12)', border: '1px solid rgba(59, 130, 246, 0.3)', color: '#1d4ed8', cursor: 'pointer', fontWeight: 700 }}
+                        >
+                          ⚡ SBI Approved
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAudienceFormData({
+                            ...audienceFormData,
+                            bank_name: 'HDFC',
+                            sql_filter: `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE mis_status IS NOT NULL AND (UPPER(card_bank) LIKE '%HDFC%' OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE '%HDFC%') AND (UPPER(mis_status) LIKE '%APPROV%' OR UPPER(mis_status) LIKE '%CARD%CREATE%' OR UPPER(mis_status) LIKE '%CARD_CREATED%')`
+                          })}
+                          style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '4px', background: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.3)', color: '#047857', cursor: 'pointer', fontWeight: 700 }}
+                        >
+                          ⚡ HDFC Approved
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAudienceFormData({
+                            ...audienceFormData,
+                            bank_name: 'Scapia',
+                            sql_filter: `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE mis_status IS NOT NULL AND (UPPER(card_bank) LIKE '%SCAPIA%' OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE '%SCAPIA%') AND (UPPER(mis_status) LIKE '%APPROV%' OR UPPER(mis_status) LIKE '%CARD%CREATE%' OR UPPER(mis_status) LIKE '%CARD_CREATED%')`
+                          })}
+                          style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '4px', background: 'rgba(168, 85, 247, 0.12)', border: '1px solid rgba(168, 85, 247, 0.3)', color: '#7e22ce', cursor: 'pointer', fontWeight: 700 }}
+                        >
+                          ⚡ Scapia Approved
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAudienceFormData({
+                            ...audienceFormData,
+                            bank_name: 'ALL',
+                            sql_filter: `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE mis_status IS NOT NULL`
+                          })}
+                          style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '4px', background: 'rgba(100, 116, 139, 0.12)', border: '1px solid rgba(100, 116, 139, 0.3)', color: '#334155', cursor: 'pointer', fontWeight: 700 }}
+                        >
+                          ⚡ All Bank Mapped Leads
+                        </button>
+                      </div>
+
+                      {/* Database Field Headings Cheat-Sheet */}
+                      <div style={{ marginTop: '0.5rem', paddingTop: '0.4rem', borderTop: '1px dashed var(--line)' }}>
+                        <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--muted)', marginBottom: '0.25rem' }}>
+                          📋 Available Database Columns for Custom Query:
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+                          <code style={{ fontSize: '0.68rem', padding: '1px 5px', borderRadius: '3px', background: '#e2e8f0', color: '#0f172a' }}>mis_status</code>
+                          <code style={{ fontSize: '0.68rem', padding: '1px 5px', borderRadius: '3px', background: '#e2e8f0', color: '#0f172a' }}>card_bank</code>
+                          <code style={{ fontSize: '0.68rem', padding: '1px 5px', borderRadius: '3px', background: '#e2e8f0', color: '#0f172a' }}>card_name</code>
+                          <code style={{ fontSize: '0.68rem', padding: '1px 5px', borderRadius: '3px', background: '#e2e8f0', color: '#0f172a' }}>full_name</code>
+                          <code style={{ fontSize: '0.68rem', padding: '1px 5px', borderRadius: '3px', background: '#e2e8f0', color: '#0f172a' }}>phone</code>
+                          <code style={{ fontSize: '0.68rem', padding: '1px 5px', borderRadius: '3px', background: '#e2e8f0', color: '#0f172a' }}>email</code>
+                          <code style={{ fontSize: '0.68rem', padding: '1px 5px', borderRadius: '3px', background: '#e2e8f0', color: '#0f172a' }}>city</code>
+                          <code style={{ fontSize: '0.68rem', padding: '1px 5px', borderRadius: '3px', background: '#e2e8f0', color: '#0f172a' }}>pan_no</code>
+                          <code style={{ fontSize: '0.68rem', padding: '1px 5px', borderRadius: '3px', background: '#e2e8f0', color: '#0f172a' }}>pincode</code>
+                          <code style={{ fontSize: '0.68rem', padding: '1px 5px', borderRadius: '3px', background: '#e2e8f0', color: '#0f172a' }}>urn</code>
+                          <code style={{ fontSize: '0.68rem', padding: '1px 5px', borderRadius: '3px', background: '#e2e8f0', color: '#0f172a' }}>mis_mapped_at</code>
+                          <code style={{ fontSize: '0.68rem', padding: '1px 5px', borderRadius: '3px', background: '#e2e8f0', color: '#0f172a' }}>mis_data-&gt;&gt;'final_decision'</code>
+                          <code style={{ fontSize: '0.68rem', padding: '1px 5px', borderRadius: '3px', background: '#e2e8f0', color: '#0f172a' }}>mis_data-&gt;&gt;'mis_bank_name'</code>
+                          <code style={{ fontSize: '0.68rem', padding: '1px 5px', borderRadius: '3px', background: '#e2e8f0', color: '#0f172a' }}>mis_data-&gt;&gt;'Application_No'</code>
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: 'var(--paper-2)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--line)' }}>
