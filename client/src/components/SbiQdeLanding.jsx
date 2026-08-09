@@ -228,23 +228,26 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
         errorText = "Mother's Name is required";
       } else if (!/^[a-zA-Z\s.]+$/.test(trimmedMother)) {
         errorText = "Mother's Name should contain only letters and spaces";
-      } else {
-        const motherWords = trimmedMother.toLowerCase().split(/\s+/).filter(Boolean);
-        const fullWords = trimmedFull.toLowerCase().split(/\s+/).filter(Boolean);
+      } else if (trimmedFull) {
+        const motherLower = trimmedMother.toLowerCase();
+        const fullLower = trimmedFull.toLowerCase();
+        const motherWords = motherLower.split(' ').filter(Boolean);
+        const fullWords = fullLower.split(' ').filter(Boolean);
 
-        if (motherWords.length < 2) {
-          errorText = "Please enter Mother's Full Name (First and Last Name)";
-        } else if (trimmedFull && trimmedMother.toLowerCase() === trimmedFull.toLowerCase()) {
+        const firstName = fullWords[0] || '';
+        const secondName = fullWords.length > 1 ? fullWords[fullWords.length - 1] : '';
+
+        // 1. Full name match
+        if (motherLower === fullLower) {
           errorText = "Mother's name cannot be the same as Full Name";
-        } else if (fullWords.length > 0) {
-          const applicantFirstName = fullWords[0];
-          const motherFirstName = motherWords[0];
-
-          if (motherFirstName === applicantFirstName) {
-            errorText = "Mother's first name cannot be the same as applicant's first name";
-          } else if (motherWords.includes(applicantFirstName)) {
-            errorText = "Mother's name cannot contain applicant's first name";
-          }
+        }
+        // 2. First name match
+        else if (firstName && (motherLower === firstName || motherWords[0] === firstName || motherWords.includes(firstName))) {
+          errorText = "Mother's name cannot be the same as First Name";
+        }
+        // 3. Second name / Last name match
+        else if (secondName && (motherLower === secondName || (motherWords.length === 1 && motherWords[0] === secondName))) {
+          errorText = "Mother's name cannot be the same as Second Name";
         }
       }
     }
@@ -373,21 +376,26 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
           fieldError = "Mother's Name is required";
         } else if (!/^[a-zA-Z\s.]+$/.test(trimmedMother)) {
           fieldError = "Mother's Name should contain only letters and spaces";
-        } else {
-          const motherWords = trimmedMother.toLowerCase().split(/\s+/).filter(Boolean);
-          const fullWords = trimmedFull.toLowerCase().split(/\s+/).filter(Boolean);
-          if (motherWords.length < 2) {
-            fieldError = "Please enter Mother's Full Name (First and Last Name)";
-          } else if (trimmedFull && trimmedMother.toLowerCase() === trimmedFull.toLowerCase()) {
+        } else if (trimmedFull) {
+          const motherLower = trimmedMother.toLowerCase();
+          const fullLower = trimmedFull.toLowerCase();
+          const motherWords = motherLower.split(' ').filter(Boolean);
+          const fullWords = fullLower.split(' ').filter(Boolean);
+
+          const firstName = fullWords[0] || '';
+          const secondName = fullWords.length > 1 ? fullWords[fullWords.length - 1] : '';
+
+          // 1. Full name match
+          if (motherLower === fullLower) {
             fieldError = "Mother's name cannot be the same as Full Name";
-          } else if (fullWords.length > 0) {
-            const applicantFirstName = fullWords[0];
-            const motherFirstName = motherWords[0];
-            if (motherFirstName === applicantFirstName) {
-              fieldError = "Mother's first name cannot be the same as applicant's first name";
-            } else if (motherWords.includes(applicantFirstName)) {
-              fieldError = "Mother's name cannot contain applicant's first name";
-            }
+          }
+          // 2. First name match
+          else if (firstName && (motherLower === firstName || motherWords[0] === firstName || motherWords.includes(firstName))) {
+            fieldError = "Mother's name cannot be the same as First Name";
+          }
+          // 3. Second name / Last name match
+          else if (secondName && (motherLower === secondName || (motherWords.length === 1 && motherWords[0] === secondName))) {
+            fieldError = "Mother's name cannot be the same as Second Name";
           }
         }
       } else if (field === 'current_address') {
