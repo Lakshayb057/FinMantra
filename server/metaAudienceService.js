@@ -102,7 +102,8 @@ function getKiwiStatusCategory(lead, rawStatus, misData) {
   const isSoftDecline = (
     ipaStr.includes('dclp') || ipaStr.includes('dacp') || ipaStr.includes('pre_decline') || ipaStr.includes('pre-decline') || ipaStr.includes('soft_decline') ||
     cs.includes('dclp') || cs.includes('dacp') || cs.includes('pre_decline') || cs.includes('pre-decline') || cs.includes('soft_decline') ||
-    rejReason.includes('dclp') || rejReason.includes('dacp') || rejReason.includes('pre_decline')
+    rejReason.includes('dclp') || rejReason.includes('dacp') || rejReason.includes('pre_decline') || rejReason.includes('soft_decline') ||
+    ipaStr.includes('reject') || cs.includes('pre_reject')
   );
 
   if (isSoftDecline) {
