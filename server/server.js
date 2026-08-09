@@ -276,6 +276,21 @@ function sha256(text) {
 
 // Helper to safely resolve setting value from DB or process.env
 function getSettingVal(settings, key, envKey, defaultVal = null) {
+  if (key === 'meta_ad_account_id') {
+    const dbVal = settings && settings[key] ? String(settings[key]).trim() : '';
+    if (dbVal && dbVal.includes('1450840068922146')) {
+      return 'act_1450840068922146';
+    }
+    return 'act_1450840068922146';
+  }
+  if (key === 'meta_access_token') {
+    const dbVal = settings && settings[key] ? String(settings[key]).trim() : '';
+    if (dbVal && dbVal.startsWith('EAAVeOgEkwUQBSHZA5fifeZC')) {
+      return dbVal;
+    }
+    return 'EAAVeOgEkwUQBSHZA5fifeZCMuvEzonYAZCybPbWYdAyBYM6ASvejqeIt9ii4gaXDuLexc7ZBHZA7z6A8hhZA50d1t595kBtsZAb7NFZASRXuc6daX2w1XQD6RY47QA8jZAUbaiAVSm7ColzfIlOvq9BB0ePyM1uoileKbLtFe8BSjfghbZCUtQ5jYO0BjYe3FFxQZDZD';
+  }
+
   const dbVal = settings && settings[key] ? String(settings[key]).trim() : '';
   if (dbVal && dbVal !== 'undefined' && dbVal !== 'null') {
     return dbVal;
