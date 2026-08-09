@@ -5275,10 +5275,19 @@ app.post('/api/meta/audiences/:id/sync', authenticateToken, requireAdmin, async 
       });
     }
 
-    let leads = await db.getFinalApprovedLeadsForAudience(audience.bank_name, audience.sql_filter, audience.mis_category);
-    if (leads.length === 0 && audience.sql_filter && audience.sql_filter.trim()) {
-      console.log(`[Sync] Saved sql_filter returned 0 leads for audience '${audience.name}'. Falling back to built-in query engine...`);
+    let leads = [];
+    if (audience.sql_filter && audience.sql_filter.trim() && !audience.sql_filter.includes('PENDING%')) {
+      leads = await db.getFinalApprovedLeadsForAudience(audience.bank_name, audience.sql_filter, audience.mis_category);
+    }
+    if (leads.length === 0) {
+      console.log(`[Sync] Executing built-in query engine for audience '${audience.name}' (${audience.bank_name} - ${audience.mis_category})...`);
       leads = await db.getFinalApprovedLeadsForAudience(audience.bank_name, null, audience.mis_category);
+      if (audience.sql_filter && audience.sql_filter.trim()) {
+        try {
+          await db.updateMetaAudience(audience.id, { sql_filter: '' });
+          console.log(`[Sync] Cleared outdated sql_filter string for audience '${audience.name}'`);
+        } catch (e) {}
+      }
     }
     
     if (leads.length === 0) {
