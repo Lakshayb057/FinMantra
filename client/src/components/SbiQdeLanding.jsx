@@ -143,7 +143,18 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
         if (negRes.ok) {
           const negData = await negRes.json();
           if (negData.isNegative) {
-            setNegativePincodeNotice('This PINCODE is negative for card delivery, please share the alternative address if you have, but we will still try.');
+            const negMsg = 'This PINCODE is negative for card delivery, please share the alternative address if you have, but we will still try.';
+            setNegativePincodeNotice(negMsg);
+            setPincodeError(negMsg);
+            setErrors(prev => ({ ...prev, pincode: negMsg }));
+          } else {
+            setNegativePincodeNotice('');
+            setPincodeError('');
+            setErrors(prev => {
+              const next = { ...prev };
+              delete next.pincode;
+              return next;
+            });
           }
         }
       } catch (err) {
@@ -263,6 +274,8 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
         errorText = 'Pincode is required';
       } else if (value.length !== 6 || !/^\d+$/.test(value)) {
         errorText = 'Pincode must be exactly 6 digits.';
+      } else if (negativePincodeNotice) {
+        errorText = negativePincodeNotice;
       } else if (pincodeError) {
         errorText = pincodeError;
       }
@@ -403,6 +416,7 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
       } else if (field === 'pincode') {
         if (!val) fieldError = 'Pincode is required';
         else if (val.length !== 6 || !/^\d+$/.test(val)) fieldError = 'Pincode must be exactly 6 digits.';
+        else if (negativePincodeNotice) fieldError = negativePincodeNotice;
         else if (pincodeError) fieldError = pincodeError;
       } else if (field === 'landmark') {
         if (!val || !String(val).trim()) fieldError = 'Landmark is required';
@@ -447,6 +461,10 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
 
   // Send Step 1 WhatsApp OTP
   const sendStep1Otp = async () => {
+    if (negativePincodeNotice) {
+      setFormError('This PINCODE is negative for card delivery. Application cannot proceed.');
+      return;
+    }
     setIsSubmitting(true);
     setFormError('');
     try {
@@ -478,6 +496,10 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
 
   // Verify OTP
   const handleVerifyOtp = async () => {
+    if (negativePincodeNotice) {
+      setOtpStatus('This PINCODE is negative for card delivery. Application cannot proceed.');
+      return;
+    }
     setOtpStatus('Verifying...');
     setIsSubmitting(true);
     try {
