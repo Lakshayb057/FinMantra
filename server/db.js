@@ -2250,12 +2250,12 @@ const db = {
         `SELECT id, urn, full_name, phone, email, card_bank, card_name, mis_status, mis_data FROM leads ${whereClause}`,
         params
       );
-      if (res.rows.length > 0) {
+      if (res.rows.length > 0 || !cat.includes('ALL')) {
         return res.rows;
       }
 
-      // Fallback: If no leads strictly matched category keywords, push all MAPPED leads (mis_status IS NOT NULL) for that bank
-      console.log(`[DB] No strict leads found for category ${cat} & bank ${bankName}. Fallback: Querying mapped leads (mis_status IS NOT NULL)...`);
+      // Fallback: ONLY run fallback for ALL MAPPED LEADS category (mis_status IS NOT NULL)
+      console.log(`[DB] Fallback: Querying all mapped leads for bank ${bankName}...`);
       let fallbackWhere = ` WHERE mis_status IS NOT NULL AND ( (phone IS NOT NULL AND phone != '') OR (email IS NOT NULL AND email != '') )`;
       const fallbackParams = [];
       if (bankName && bankName !== 'ALL') {
