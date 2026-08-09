@@ -277,7 +277,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
     let catCond = '1=1';
     if (cat.includes('FINAL') && (cat.includes('APPROVED') || cat.includes('CARD'))) {
       if (bank.includes('KIWI')) {
-        catCond = `(LOWER(mis_status) IN ('card created', 'card_created', 'card generated') OR LOWER(COALESCE(mis_data->>'current_state','')) IN ('card created', 'card_created') OR UPPER(mis_data::text) LIKE '%"CARD_CREATED":"1"%' OR UPPER(mis_data::text) LIKE '%"CARD_CREATED":1%' OR UPPER(mis_data::text) LIKE '%"CARD_CREATED":"YES"%') AND NOT (UPPER(mis_status) LIKE '%REJECT%' OR UPPER(mis_status) LIKE '%DECLINE%' OR UPPER(mis_status) LIKE '%PENDING%')`;
+        catCond = `(UPPER(COALESCE(mis_status,'')) LIKE '%CARD%' OR UPPER(COALESCE(mis_status,'')) LIKE '%CREATE%' OR UPPER(COALESCE(mis_status,'')) LIKE '%APPROV%' OR UPPER(mis_data::text) LIKE '%CARD%CREATE%' OR UPPER(mis_data::text) LIKE '%CARD_CREATED%') AND NOT (UPPER(mis_status) LIKE '%REJECT%' OR UPPER(mis_status) LIKE '%DECLINE%')`;
       } else {
         catCond = `(LOWER(mis_status) IN ('card created', 'card_created', 'approved', 'issued', 'disbursed', 'file generated') OR UPPER(mis_status) LIKE '%APPROV%' OR UPPER(mis_status) LIKE '%ISSUED%' OR UPPER(mis_status) LIKE '%DISBURS%' OR UPPER(COALESCE(mis_data->>'final_decision','')) LIKE '%APPROV%' OR UPPER(COALESCE(mis_data->>'final_decision','')) LIKE '%FILE GENERAT%') AND NOT (UPPER(mis_status) LIKE '%REJECT%' OR UPPER(mis_status) LIKE '%DECLINE%')`;
       }

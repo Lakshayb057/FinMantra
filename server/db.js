@@ -2208,9 +2208,8 @@ const db = {
           LOWER(COALESCE(mis_data->>'pnb_state', '')) LIKE '%card%create%' OR
           UPPER(COALESCE(mis_data->>'final_decision', '')) LIKE '%APPROV%' OR
           UPPER(COALESCE(mis_data->>'final_decision', '')) LIKE '%FILE GENERAT%' OR
-          UPPER(mis_data::text) LIKE '%"CARD_CREATED":"1"%' OR
-          UPPER(mis_data::text) LIKE '%"CARD_CREATED":1%' OR
-          UPPER(mis_data::text) LIKE '%"CARD_CREATED":"YES"%'
+          UPPER(mis_data::text) LIKE '%CARD_CREATED%' OR
+          UPPER(mis_data::text) LIKE '%CARD CREATED%'
         ) AND NOT (
           UPPER(mis_status) LIKE '%REJECT%' OR 
           UPPER(mis_status) LIKE '%DECLINE%'
