@@ -5153,6 +5153,49 @@ app.post('/api/meta/provision/banks', authenticateToken, requireAdmin, async (re
   }
 });
 
+// Debug endpoint to inspect all KIWI lead statuses in DB
+app.get('/api/debug/kiwi-leads', authenticateToken, async (req, res) => {
+  try {
+    const query = `
+      SELECT id, urn, full_name, phone, mis_status, mis_data
+      FROM leads
+      WHERE (card_bank ILIKE '%KIWI%' OR mis_data->>'mis_bank_name' ILIKE '%KIWI%' OR (mis_data->>'kiwi_winning_bank' IS NOT NULL AND mis_data->>'kiwi_winning_bank' != '') OR card_name ILIKE '%KIWI%' OR landing_page ILIKE '%KIWI%' OR landing_page ILIKE '%GOKIWI%' OR utm_source ILIKE '%KIWI%' OR utm_source ILIKE '%GOKIWI%')
+    `;
+    const result = await db.pool.query(query);
+    const inspectList = result.rows.map(l => {
+      let md = l.mis_data;
+      if (typeof md === 'string') { try { md = JSON.parse(md); } catch (e) {} }
+      md = md || {};
+      const cat = metaAudienceService.getNormalizedStatusCategory ? metaAudienceService.getNormalizedStatusCategory(l.mis_status, l.mis_data) : null;
+      return {
+        id: l.id,
+        urn: l.urn,
+        name: l.full_name,
+        mis_status: l.mis_status,
+        calculated_category: cat,
+        card_created: md.card_created || md.Card_Created || null,
+        card_activation_status: md.card_activation_status || null,
+        current_state: md.current_state || null,
+        winning_state: md.winning_state || null,
+        yes_state: md.yes_state || null,
+        au_state: md.au_state || null,
+        pnb_state: md.pnb_state || null,
+        first_txn: md.first_txn || null
+      };
+    });
+
+    const categoriesCount = {};
+    inspectList.forEach(item => {
+      const c = item.calculated_category || 'UNCLASSIFIED';
+      categoriesCount[c] = (categoriesCount[c] || 0) + 1;
+    });
+
+    res.json({ total: inspectList.length, categoriesCount, leads: inspectList });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Meta Connection Status Check
 app.get('/api/meta/config/status', authenticateToken, async (req, res) => {
   try {
