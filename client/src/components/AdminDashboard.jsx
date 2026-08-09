@@ -8015,6 +8015,8 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                                   <option value="SELECT id, urn, created_at, full_name, phone, card_name, card_bank, source, mis_status FROM leads ORDER BY created_at DESC LIMIT 10;">Recent Credit Card Applications</option>
                                   <option value="SELECT 'leads' as tbl, COUNT(*) as count FROM leads UNION SELECT 'sbi_company_codes', COUNT(*) FROM sbi_company_codes UNION SELECT 'agents', COUNT(*) FROM agents UNION SELECT 'cards', COUNT(*) FROM cards UNION SELECT 'locations', COUNT(*) FROM locations;">Compare All Table Row Counts</option>
                                   <option value="SELECT id, name, username, status, assigned_bank, can_upload_mis, agent_mode FROM agents ORDER BY created_at ASC;">List Authorised Kiosk/MIS Agents</option>
+                                  <option value="SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name;">Find All Table Names</option>
+                                  <option value="SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_schema = 'public' ORDER BY table_name, ordinal_position;">Find All Table Columns / Headings</option>
                                 </select>
                               </div>
                               <textarea
