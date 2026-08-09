@@ -289,7 +289,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       catCond = `(UPPER(mis_status) LIKE '%SOFT%REJECT%' OR UPPER(mis_status) LIKE '%SOFT%DECLINE%' OR UPPER(mis_status) LIKE '%DCLP%' OR UPPER(mis_status) LIKE '%DACP%')`;
     }
 
-    return `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE mis_status IS NOT NULL AND ${bankCond} AND ${catCond};`;
+    return `SELECT id, urn, full_name, phone, email, card_bank, mis_status\nFROM leads\nWHERE mis_status IS NOT NULL\n  AND ${bankCond}\n  AND ${catCond};`;
   };
 
   const fetchMetaAudiences = async () => {
@@ -8285,11 +8285,26 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                     </div>
                     <textarea
                       className="form-textarea"
-                      rows={5}
+                      rows={6}
                       placeholder="SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE mis_status IS NOT NULL..."
                       value={audienceFormData.sql_filter}
                       onChange={(e) => { setAudienceFormData({ ...audienceFormData, sql_filter: e.target.value }); setTestSqlResult(null); }}
-                      style={{ fontFamily: 'monospace', fontSize: '0.78rem', background: '#f8fafc', border: '1px solid var(--line)' }}
+                      style={{
+                        width: '100%',
+                        minHeight: '150px',
+                        maxHeight: '320px',
+                        fontFamily: 'Consolas, Monaco, "Courier New", monospace',
+                        fontSize: '0.78rem',
+                        lineHeight: '1.45',
+                        padding: '0.75rem',
+                        background: '#0f172a',
+                        color: '#38bdf8',
+                        borderRadius: '8px',
+                        border: '1.5px solid #334155',
+                        resize: 'vertical',
+                        boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.2)',
+                        boxSizing: 'border-box'
+                      }}
                     />
 
                     {/* Test SQL Live Preview Banner */}
