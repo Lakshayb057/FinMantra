@@ -130,8 +130,7 @@ function getKiwiStatusCategory(lead, rawStatus, misData) {
   // 3. FINAL DECLINE (532 leads - Hard Declined)
   const isHardDecline = (
     cs.includes('reject') || cs.includes('declin') || cs.includes('cancel') || cs.includes('fail') ||
-    rawUpper.includes('REJECT') || rawUpper.includes('DECLIN') || rawUpper.includes('CANCEL') || rawUpper.includes('FAIL') ||
-    yesSt.includes('reject') || auSt.includes('reject') || pnbSt.includes('reject')
+    rawUpper.includes('REJECT') || rawUpper.includes('DECLIN') || rawUpper.includes('CANCEL') || rawUpper.includes('FAIL')
   );
 
   if (isHardDecline) {
