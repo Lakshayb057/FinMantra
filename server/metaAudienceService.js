@@ -93,7 +93,25 @@ function getNormalizedStatusCategory(rawStatus, misData = null) {
     return 'FINAL_APPROVE';
   }
 
-  // 2. FINAL DECLINE (532 leads - Hard Rejected / Declined / Cancelled)
+  // 2. SOFT DECLINE (9 leads - Pre-decline / DCLP / DACP / Soft Decline)
+  if (
+    rawUpper.includes('SOFT DECLINE') ||
+    rawUpper.includes('SOFT_DECLINE') ||
+    rawUpper.includes('PRE-DECLINE') ||
+    rawUpper.includes('PRE_DECLINE') ||
+    rawUpper.includes('DCLP') ||
+    rawUpper.includes('DACP') ||
+    currentStateVal.includes('DCLP') ||
+    currentStateVal.includes('DACP') ||
+    currentStateVal.includes('PRE_DECLINE') ||
+    currentStateVal.includes('SOFT_DECLINE') ||
+    currentStateVal.includes('NOT_STARTED') ||
+    currentStateVal.includes('NOT_APPLICABLE')
+  ) {
+    return 'SOFT_DECLINE';
+  }
+
+  // 3. FINAL DECLINE (532 leads - Hard Rejected / Declined / Cancelled)
   if (
     rawUpper.includes('DECLINE') ||
     rawUpper.includes('REJECT') ||
@@ -107,37 +125,8 @@ function getNormalizedStatusCategory(rawStatus, misData = null) {
     return 'FINAL_DECLINE';
   }
 
-  // 3. SOFT APPROVE (60 leads - Soft Approved / IPA Approved / In Progress / VKYC / Active Funnel)
-  const kiwiIpa = (
-    String(md.ipa || md.ipa_status || md.SOFT_DECISION || md.ipa_state || '') + ' ' + 
-    String(md.pnb_state || '') + ' ' + 
-    String(md.yes_state || '') + ' ' + 
-    String(md.au_state || '') + ' ' +
-    String(md.VKYC || md.vkyc_status || md.kyc_status || md.vkyc_state || md.kyc_state || '') + ' ' +
-    rawUpper
-  ).toUpperCase();
-
-  const isSoftApprove = (
-    kiwiIpa.includes('APPROV') ||
-    kiwiIpa.includes('PASS') ||
-    kiwiIpa.includes('SUCCESS') ||
-    kiwiIpa.includes('ELIGIBLE') ||
-    kiwiIpa.includes('DOC') ||
-    kiwiIpa.includes('IN_PROGRESS') ||
-    kiwiIpa.includes('IN PROGRESS') ||
-    kiwiIpa.includes('VKYC') ||
-    kiwiIpa.includes('KYC') ||
-    kiwiIpa.includes('SUBMITTED') ||
-    kiwiIpa.includes('OTP') ||
-    (md.ipa_date && String(md.ipa_date).trim() !== '')
-  );
-
-  if (isSoftApprove) {
-    return 'SOFT_APPROVE';
-  }
-
-  // 4. SOFT DECLINE (9 leads - Remaining unapproved / non-progressing leads)
-  return 'SOFT_DECLINE';
+  // 4. SOFT APPROVE (60 leads - All active in-progress / pending mapped leads)
+  return 'SOFT_APPROVE';
 }
 
 // Normalize bank name to uppercase clean canonical string
