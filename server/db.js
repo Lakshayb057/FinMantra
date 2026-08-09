@@ -1473,6 +1473,10 @@ const db = {
     }
   },
 
+  async setSetting(key, val) {
+    return this.saveSetting(key, val);
+  },
+
   async getSetting(key) {
     try {
       const res = await pool.query(`SELECT value FROM settings WHERE key = $1`, [key]);

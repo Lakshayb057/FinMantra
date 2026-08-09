@@ -65,73 +65,107 @@ function normalizePhone(rawPhone) {
 
 // Classify KIWI status into 4 business categories matching the Leads Dashboard
 function getKiwiStatusCategory(lead, rawStatus, misData) {
-  let md = misData || lead.mis_data || {};
+  let md = misData || (lead ? lead.mis_data : null) || {};
   if (typeof md === 'string') {
     try { md = JSON.parse(md); } catch (e) {}
   }
   md = md || {};
 
-  const rawUpper = String(rawStatus || lead.mis_status || '').toUpperCase().trim();
-  const cc = String(md.card_created || md.Card_Created || '').trim().toLowerCase();
-  const ft = String(md.first_txn || md.first_transaction || '').trim().toLowerCase();
-  const cs = String(md.current_state || md.winning_state || md.final_decision || '').trim().toLowerCase();
+  const rawUpper = String(rawStatus || (lead ? lead.mis_status : '') || '').toUpperCase().trim();
 
-  const kiwiCardStr = (
-    String(md.Card_Created || md.card_activation_status || md.card_created || md.card_state || md.current_state || md.winning_state || md.mis_status || lead.mis_status || '') + ' ' +
-    String(md.pnb_state || '') + ' ' +
-    String(md.yes_state || '') + ' ' +
-    String(md.au_state || '')
-  ).toLowerCase();
+  // Helper to check if a value represents positive Card Created / Approval
+  const isPosCardVal = (val) => {
+    if (val === null || val === undefined) return false;
+    const s = String(val).trim().toLowerCase();
+    return (
+      s === '1' || s === 'yes' || s === 'true' || s === 'active' ||
+      s === 'created' || s === 'issued' || s === 'disbursed' ||
+      s === 'card_created' || s === 'ac_created' || s === 'accreated' ||
+      s === 'approved' || s === 'card created' || s === 'card issued'
+    );
+  };
+
+  const cardCreatedCheck = [
+    md.Card_Created, md.card_created, md.card_activation_status, md.card_state,
+    md.first_txn, md.first_transaction, md.card_issued
+  ].some(isPosCardVal);
+
+  const cs = String(md.current_state || md.winning_state || md.final_decision || md.current_status || '').toLowerCase().trim();
+  const yesSt = String(md.kiwi_yes_status || md.yes_state || '').toLowerCase().trim();
+  const auSt = String(md.kiwi_au_status || md.au_state || '').toLowerCase().trim();
+  const pnbSt = String(md.kiwi_pnb_status || md.pnb_state || '').toLowerCase().trim();
 
   // 1. FINAL APPROVE (1 lead - Card Created)
   const isCardCreated = (
-    (cc && cc !== 'no' && cc !== 'false' && cc !== '0' && cc !== 'null' && cc !== 'undefined' && cc !== 'na' && cc !== 'n/a') ||
-    (ft && ft !== 'no' && ft !== 'false' && ft !== '0' && ft !== 'null' && ft !== 'undefined') ||
+    cardCreatedCheck ||
     cs.includes('ac_created') || cs.includes('accreated') || cs.includes('card_created') || cs.includes('cardcreated') || cs.includes('card_issued') ||
-    rawUpper === 'APPROVED' || rawUpper === 'FINAL_APPROVE' ||
-    ((kiwiCardStr.includes('approve') || kiwiCardStr.includes('active') || kiwiCardStr.includes('created') || kiwiCardStr.includes('issued') || kiwiCardStr.includes('disbursed') || kiwiCardStr.includes('card_created') || kiwiCardStr === '1') && !kiwiCardStr.includes('reject') && !kiwiCardStr.includes('decline'))
+    yesSt.includes('ac_created') || yesSt.includes('accreated') ||
+    auSt.includes('ac_created') || auSt.includes('accreated') ||
+    pnbSt.includes('ac_created') || pnbSt.includes('accreated') ||
+    rawUpper === 'APPROVED' || rawUpper === 'FINAL_APPROVE'
   );
 
   if (isCardCreated) {
     return 'FINAL_APPROVE';
   }
 
-  // 2. SOFT DECLINE (9 leads - Pre-decline / DCLP / DACP / Soft Decline)
-  const ipaRaw = (String(md.ipa || md.ipa_status || md.SOFT_DECISION || md.ipa_state || '') + ' ' + String(md.reject_reason || '')).toLowerCase();
-  const fullStr = (rawUpper + ' ' + cs + ' ' + ipaRaw + ' ' + String(md.yes_state || '') + ' ' + String(md.au_state || '') + ' ' + String(md.pnb_state || '')).toLowerCase();
+  // 2. SOFT DECLINE (9 leads - Pre-decline / DCLP)
+  const ipaVal = String(md.ipa || md.IPA || md.ipa_status || md.SOFT_DECISION || md.ipa_state || '').toLowerCase().trim();
+  const rejectReason = String(md.reject_reason || md.Reject_Reason || '').toLowerCase().trim();
+  const fullStr = (rawUpper + ' ' + cs + ' ' + ipaVal + ' ' + rejectReason + ' ' + yesSt + ' ' + auSt + ' ' + pnbSt).toLowerCase();
 
   const isSoftDecline = (
-    fullStr.includes('dclp') || fullStr.includes('dacp') || fullStr.includes('pre_decline') || fullStr.includes('pre-decline') || fullStr.includes('soft_decline') || fullStr.includes('soft decline') || fullStr.includes('soft_reject') ||
-    ipaRaw.includes('dclp') || ipaRaw.includes('dacp') || ipaRaw.includes('pre_decline') || ipaRaw.includes('pre-decline')
+    fullStr.includes('dclp') || fullStr.includes('dacp') ||
+    fullStr.includes('pre_decline') || fullStr.includes('pre-decline') || fullStr.includes('predecline') ||
+    fullStr.includes('soft_decline') || fullStr.includes('soft decline') || fullStr.includes('soft_reject') ||
+    ipaVal === 'dclp' || ipaVal === 'dacp' || ipaVal === '0' || ipaVal === 'no' || ipaVal === 'false' ||
+    (ipaVal.includes('decline') || ipaVal.includes('reject') || ipaVal.includes('fail')) ||
+    (rejectReason.includes('dclp') || rejectReason.includes('dacp') || rejectReason.includes('pre_decline') || rejectReason.includes('pre-decline') || rejectReason.includes('pre') || rejectReason.includes('soft') || rejectReason.includes('bre') || rejectReason.includes('policy') || rejectReason.includes('cibil') || rejectReason.includes('score'))
   );
 
   if (isSoftDecline) {
     return 'SOFT_DECLINE';
   }
 
-  // 3. FINAL DECLINE (532 leads - Hard Rejected / Declined)
+  // 3. FINAL DECLINE (532 leads - Hard Declined)
   const isHardDecline = (
-    (rawUpper.includes('REJECT') || rawUpper.includes('DECLIN') || rawUpper.includes('CANCEL') || cs.includes('reject') || cs.includes('declin')) &&
-    !ipaRaw.includes('approve') && !ipaRaw.includes('pass') && !ipaRaw.includes('eligible')
+    cs.includes('reject') || cs.includes('declin') || cs.includes('cancel') || cs.includes('fail') ||
+    rawUpper.includes('REJECT') || rawUpper.includes('DECLIN') || rawUpper.includes('CANCEL') || rawUpper.includes('FAIL') ||
+    yesSt.includes('reject') || auSt.includes('reject') || pnbSt.includes('reject')
   );
 
   if (isHardDecline) {
     return 'FINAL_DECLINE';
   }
 
-  // 4. SOFT APPROVE (60 leads - Soft Approved / In-progress)
+  // 4. SOFT APPROVE (60 leads - In-progress / IPA)
   return 'SOFT_APPROVE';
 }
 
 // Classify raw MIS status into 4 business categories
-function getNormalizedStatusCategory(rawStatus, misData = null) {
+function getNormalizedStatusCategory(rawStatus, misData = null, leadObj = null) {
   let md = misData;
   if (md && typeof md === 'string') {
     try { md = JSON.parse(md); } catch (e) {}
   }
   md = md && typeof md === 'object' ? md : {};
 
-  const rawUpper = String(rawStatus || '').toUpperCase().trim();
+  const lead = leadObj || (typeof rawStatus === 'object' && rawStatus ? rawStatus : null);
+  const statusStr = typeof rawStatus === 'string' ? rawStatus : (lead ? lead.mis_status : '');
+
+  const bankNameUpper = (
+    String(md.mis_bank_name || '') + ' ' +
+    String(lead ? lead.card_bank || '' : '') + ' ' +
+    String(lead ? lead.card_name || '' : '') + ' ' +
+    String(md.kiwi_bank || '') + ' ' +
+    String(md.kiwi_winning_bank || '')
+  ).toUpperCase();
+
+  if (bankNameUpper.includes('KIWI')) {
+    return getKiwiStatusCategory(lead || { mis_status: statusStr, mis_data: md }, statusStr, md);
+  }
+
+  const rawUpper = String(statusStr || '').toUpperCase().trim();
   const cardVal = String(md.Card_Created || md.card_created || md.card_activation_status || md.card_state || '').toUpperCase().trim();
   const firstTxnVal = String(md.first_txn || md.first_transaction || '').toUpperCase().trim();
   const currentStateVal = String(md.current_state || md.winning_state || md.final_decision || '').toUpperCase().trim();
@@ -139,12 +173,6 @@ function getNormalizedStatusCategory(rawStatus, misData = null) {
   const rejectReasonVal = String(md.reject_reason || '').toUpperCase().trim();
 
   const fullStateStr = (rawUpper + ' ' + cardVal + ' ' + firstTxnVal + ' ' + currentStateVal + ' ' + ipaVal + ' ' + rejectReasonVal + ' ' + String(md.yes_state || '') + ' ' + String(md.au_state || '') + ' ' + String(md.pnb_state || '')).toUpperCase();
-
-  // Check KIWI bank override in mis_data
-  const bankNameUpper = String(md.mis_bank_name || '').toUpperCase();
-  if (bankNameUpper.includes('KIWI') || md.kiwi_bank || md.kiwi_winning_bank) {
-    return getKiwiStatusCategory({ mis_status: rawStatus, mis_data: md }, rawStatus, md);
-  }
 
   // 1. FINAL APPROVE
   const isCardCreatedPositive = cardVal && cardVal !== 'NO' && cardVal !== 'FALSE' && cardVal !== '0' && cardVal !== 'NULL' && cardVal !== 'UNDEFINED' && cardVal !== 'NA' && cardVal !== 'N/A' && !cardVal.includes('REJECT') && !cardVal.includes('DECLINE');
