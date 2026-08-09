@@ -263,31 +263,36 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
     const bank = String(bankName || 'ALL').toUpperCase().trim();
     const cat = String(category || 'FINAL APPROVED').toUpperCase().trim();
 
+    let bTerm = 'ALL';
     let bankCond = '1=1';
     if (bank.includes('KIWI')) {
-      bankCond = `(UPPER(COALESCE(card_bank,'')) LIKE '%KIWI%' OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE '%KIWI%' OR UPPER(COALESCE(card_name,'')) LIKE '%KIWI%' OR LOWER(COALESCE(source,'')) = 'kiwi' OR (mis_data->>'kiwi_winning_bank' IS NOT NULL AND mis_data->>'kiwi_winning_bank' != 'null') OR LOWER(COALESCE(mis_data->>'partner','')) LIKE '%kiwi%' OR LOWER(COALESCE(mis_data->>'app_type','')) LIKE '%kiwi%')`;
+      bTerm = 'KIWI';
+      bankCond = `(UPPER(COALESCE(card_bank,'')) LIKE '%KIWI%' OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE '%KIWI%' OR UPPER(COALESCE(card_name,'')) LIKE '%KIWI%' OR LOWER(COALESCE(source,'')) = 'kiwi' OR (mis_data->>'kiwi_winning_bank' IS NOT NULL AND mis_data->>'kiwi_winning_bank' != 'null'))`;
     } else if (bank.includes('SBI')) {
+      bTerm = 'SBI';
       bankCond = `(UPPER(COALESCE(card_bank,'')) LIKE '%SBI%' OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE '%SBI%' OR UPPER(COALESCE(card_name,'')) LIKE '%SBI%')`;
     } else if (bank.includes('HDFC')) {
+      bTerm = 'HDFC';
       bankCond = `(UPPER(COALESCE(card_bank,'')) LIKE '%HDFC%' OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE '%HDFC%' OR UPPER(COALESCE(card_name,'')) LIKE '%HDFC%')`;
     } else if (bank.includes('SCAPIA')) {
+      bTerm = 'SCAPIA';
       bankCond = `(UPPER(COALESCE(card_bank,'')) LIKE '%SCAPIA%' OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE '%SCAPIA%' OR UPPER(COALESCE(card_name,'')) LIKE '%SCAPIA%')`;
     }
 
     if (cat.includes('FINAL') && (cat.includes('APPROVED') || cat.includes('CARD'))) {
-      if (bank.includes('KIWI')) {
-        return `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE LOWER(mis_status) IN ('card created', 'card_created', 'issued') OR COALESCE(mis_data->>'Card_Created','') IN ('1','yes') OR LOWER(COALESCE(mis_data->>'yes_state','')) LIKE '%yes%';`;
+      if (bTerm === 'KIWI') {
+        return `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE ${bankCond} AND (LOWER(mis_status) IN ('card created', 'card_created', 'issued') OR COALESCE(mis_data->>'Card_Created','') IN ('1','yes') OR LOWER(COALESCE(mis_data->>'yes_state','')) LIKE '%yes%');`;
       }
-      return `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE UPPER(mis_status) LIKE '%APPROV%' OR UPPER(mis_status) LIKE '%CARD%CREATE%';`;
+      return `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE ${bankCond} AND (UPPER(mis_status) LIKE '%APPROV%' OR UPPER(mis_status) LIKE '%CARD%CREATE%');`;
     } else if (cat.includes('FINAL') && (cat.includes('DECLINED') || cat.includes('REJECTED'))) {
-      return `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE UPPER(mis_status) LIKE '%DECLINE%' OR UPPER(mis_status) LIKE '%REJECT%' OR UPPER(mis_status) LIKE '%CANCEL%';`;
+      return `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE ${bankCond} AND (UPPER(mis_status) LIKE '%DECLINE%' OR UPPER(mis_status) LIKE '%REJECT%' OR UPPER(mis_status) LIKE '%CANCEL%');`;
     } else if (cat.includes('SOFT') && cat.includes('APPROVED')) {
-      return `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE UPPER(mis_status) LIKE '%IPA%' OR UPPER(mis_status) LIKE '%VKYC%' OR UPPER(mis_status) LIKE '%SOFT%';`;
+      return `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE ${bankCond} AND (UPPER(mis_status) LIKE '%IPA%' OR UPPER(mis_status) LIKE '%VKYC%' OR UPPER(mis_status) LIKE '%SOFT%');`;
     } else if (cat.includes('SOFT') && cat.includes('DECLINED')) {
-      return `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE UPPER(mis_status) LIKE '%SOFT%REJECT%' OR UPPER(mis_status) LIKE '%SOFT%DECLINE%';`;
+      return `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE ${bankCond} AND (UPPER(mis_status) LIKE '%SOFT%REJECT%' OR UPPER(mis_status) LIKE '%SOFT%DECLINE%');`;
     }
 
-    return `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE mis_status IS NOT NULL OR mis_mapped_at IS NOT NULL;`;
+    return `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE ${bankCond} AND (mis_status IS NOT NULL OR mis_mapped_at IS NOT NULL);`;
   };
 
   const fetchMetaAudiences = async () => {
