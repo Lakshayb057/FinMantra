@@ -276,7 +276,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   const [metaConfigSaving, setMetaConfigSaving] = useState(false);
   const [metaConfigInput, setMetaConfigInput] = useState({
     meta_pixel_id: '1015546961540665',
-    meta_ad_account_id: 'act_1450810068922146',
+    meta_ad_account_id: 'act_1450840068922146',
     meta_access_token: '',
     meta_api_version: 'v20.0',
     meta_test_event_code: ''

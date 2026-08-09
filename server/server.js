@@ -5160,8 +5160,8 @@ app.get('/api/meta/config/status', authenticateToken, async (req, res) => {
     const connResult = await metaAudienceService.testMetaConnection();
     
     let rawToken = settings.meta_access_token || process.env.META_ACCESS_TOKEN || '';
-    if (!rawToken || !rawToken.startsWith('EAAVcOgE')) {
-      rawToken = 'EAAVcOgEkwUQBSMZA5fifzCMuvEzonYAZCybPbWYdAy0YM6ASvcjqcIt9ii4gaXDuLexc7ZBHZA7zGA0hhZA5d1t59SkUtszAb/NFZASRXucGdaX2w1XQD6RY4/QA8jZAUbaiAVSn/ColzfIlOvq9BU0ePyM1uoileKbLtFe0BSjfghbZCUtQSjY0BBjYe3FFXQZDZD';
+    if (!rawToken || !rawToken.startsWith('EAAVeOgE') || rawToken.includes('*') || rawToken.length < 50) {
+      rawToken = 'EAAVeOgEkwUQBR0suCgkJqWVJSi84GUu8QcWZCy0bNv7jBO5tQ3RmhGt9BzmJgiZBwNcwVoYtrucvrDKlyfa1ZB0ibFjMa7HHZA2Xbm8yzO7fPuz9iZA3ZCMnSzVcLdauBZC8GyNRO3pxemOOlzvlb8Y2bJHIA8MoDGwDOGxrpbK9UUZBooPPCWzKrZBwbq5n2H9MvSQZDZD';
     }
     const maskedToken = `${rawToken.substring(0, 8)}************${rawToken.slice(-6)}`;
 
@@ -5169,7 +5169,7 @@ app.get('/api/meta/config/status', authenticateToken, async (req, res) => {
       success: true,
       connected: connResult.connected,
       meta_pixel_id: settings.meta_pixel_id || process.env.META_PIXEL_ID || '1015546961540665',
-      meta_ad_account_id: settings.meta_ad_account_id || process.env.META_AD_ACCOUNT_ID || 'act_1450810068922146',
+      meta_ad_account_id: settings.meta_ad_account_id || process.env.META_AD_ACCOUNT_ID || 'act_1450840068922146',
       meta_api_version: settings.meta_api_version || process.env.META_API_VERSION || 'v20.0',
       meta_access_token_masked: maskedToken,
       meta_test_event_code: settings.meta_test_event_code || process.env.META_TEST_EVENT_CODE || '',

@@ -8,7 +8,7 @@ function getSettingVal(settings, key, envKey, defaultVal = null) {
     if (dbVal && dbVal.startsWith('act_') && !dbVal.includes('*')) return dbVal;
     const envVal = process.env.META_AD_ACCOUNT_ID;
     if (envVal && !envVal.includes('*')) return envVal.startsWith('act_') ? envVal : `act_${envVal}`;
-    return 'act_1450810068922146';
+    return 'act_1450840068922146';
   }
 
   if (key === 'meta_access_token') {
@@ -20,7 +20,7 @@ function getSettingVal(settings, key, envKey, defaultVal = null) {
     if (envVal && envVal.startsWith('EAAV') && !envVal.includes('*') && !envVal.includes('...') && envVal.length > 50) {
       return envVal;
     }
-    return 'EAAVcOgEkwUQBSMZA5fifzCMuvEzonYAZCybPbWYdAy0YM6ASvcjqcIt9ii4gaXDuLexc7ZBHZA7zGA0hhZA5d1t59SkUtszAb/NFZASRXucGdaX2w1XQD6RY4/QA8jZAUbaiAVSn/ColzfIlOvq9BU0ePyM1uoileKbLtFe0BSjfghbZCUtQSjY0BBjYe3FFXQZDZD';
+    return 'EAAVeOgEkwUQBR0suCgkJqWVJSi84GUu8QcWZCy0bNv7jBO5tQ3RmhGt9BzmJgiZBwNcwVoYtrucvrDKlyfa1ZB0ibFjMa7HHZA2Xbm8yzO7fPuz9iZA3ZCMnSzVcLdauBZC8GyNRO3pxemOOlzvlb8Y2bJHIA8MoDGwDOGxrpbK9UUZBooPPCWzKrZBwbq5n2H9MvSQZDZD';
   }
 
   const dbVal = settings && settings[key] ? String(settings[key]).trim() : '';
