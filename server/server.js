@@ -4948,6 +4948,37 @@ app.post('/api/meta/audiences/:id/sync', authenticateToken, requireAdmin, async 
       return res.status(404).json({ error: 'Audience not found' });
     }
 
+    // If audience was created before Meta API keys were saved, auto-create it on Meta Ads Manager now
+    if (!audience.meta_audience_id) {
+      const settings = await db.getSettings();
+      const adAccountId = getSettingVal(settings, 'meta_ad_account_id', 'META_AD_ACCOUNT_ID');
+      const accessToken = getSettingVal(settings, 'meta_access_token', 'META_ACCESS_TOKEN');
+      if (adAccountId && accessToken) {
+        try {
+          const cleanAdAcc = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
+          const metaUrl = `https://graph.facebook.com/v20.0/${cleanAdAcc}/customaudiences?access_token=${accessToken}`;
+          const metaRes = await fetch(metaUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: audience.name,
+              subtype: 'CUSTOM',
+              description: audience.description || 'FinMantra Final Approved Leads Audience',
+              customer_file_source: 'USER_PROVIDED_ONLY'
+            })
+          });
+          const metaData = await metaRes.json();
+          if (metaRes.ok && metaData.id) {
+            audience.meta_audience_id = metaData.id;
+            await db.updateMetaAudience(audience.id, { meta_audience_id: metaData.id });
+            console.log(`[Meta API] Auto-created missing Custom Audience on Meta! Audience ID: ${metaData.id}`);
+          }
+        } catch (e) {
+          console.error('[Meta API Error] Failed to auto-create audience on sync:', e.message);
+        }
+      }
+    }
+
     const leads = await db.getFinalApprovedLeadsForAudience(audience.bank_name, audience.sql_filter);
     
     if (leads.length === 0) {
