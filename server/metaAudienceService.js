@@ -94,6 +94,7 @@ function getNormalizedStatusCategory(rawStatus, misData = null) {
   }
 
   // 2. SOFT DECLINE (9 leads - Pre-decline / DCLP / DACP / Soft Decline)
+  const ipaVal = String(md.ipa || md.ipa_status || md.SOFT_DECISION || md.ipa_state || '').toUpperCase().trim();
   if (
     rawUpper.includes('SOFT DECLINE') ||
     rawUpper.includes('SOFT_DECLINE') ||
@@ -105,8 +106,9 @@ function getNormalizedStatusCategory(rawStatus, misData = null) {
     currentStateVal.includes('DACP') ||
     currentStateVal.includes('PRE_DECLINE') ||
     currentStateVal.includes('SOFT_DECLINE') ||
-    currentStateVal.includes('NOT_STARTED') ||
-    currentStateVal.includes('NOT_APPLICABLE')
+    ipaVal.includes('DCLP') ||
+    ipaVal.includes('DACP') ||
+    ipaVal.includes('PRE_DECLINE')
   ) {
     return 'SOFT_DECLINE';
   }
