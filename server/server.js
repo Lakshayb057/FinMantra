@@ -4879,14 +4879,10 @@ app.post('/api/meta/audiences', authenticateToken, requireAdmin, async (req, res
           metaAudienceId = metaData.id;
           console.log(`[Meta API] Custom Audience created on Meta! Audience ID: ${metaAudienceId}`);
         } else {
-          console.error('[Meta API] Failed to create custom audience on Meta:', metaData);
-          if (metaData && metaData.error && metaData.error.message) {
-            return res.status(400).json({ error: `Meta Ads API Error: ${metaData.error.message}` });
-          }
+          console.error('[Meta API] Failed to auto-create custom audience on Meta (Ads Management permission required):', metaData);
         }
       } catch (metaErr) {
         console.error('[Meta API Error] Exception creating custom audience on Meta:', metaErr.message);
-        return res.status(500).json({ error: `Meta API Connection Exception: ${metaErr.message}` });
       }
     }
 
