@@ -1113,11 +1113,14 @@ async function syncLeadsToMetaCustomAudiences(leadsList, targetAudienceId = null
       if (!audience.meta_audience_id) continue;
 
       const targetBank = audience.bank_name || 'ALL';
+      const bankTerm = targetBank.toUpperCase().replace(/BANK/g, '').trim();
+
       const matchingLeads = leadsList.filter(l => {
+        if (audience.sql_filter && audience.sql_filter.trim()) return true; // Trust custom SQL query rule 100%
         if (!targetAudienceId && l.mis_status && !isFinalApprovedStatus(l.mis_status)) return false;
         if (targetBank === 'ALL') return true;
-        const leadBank = String(l.card_bank || (l.mis_data && l.mis_data.mis_bank_name) || '').toUpperCase();
-        return leadBank.includes(targetBank.toUpperCase());
+        const leadBank = String(l.card_bank || (l.mis_data && l.mis_data.mis_bank_name) || l.card_name || '').toUpperCase();
+        return leadBank.includes(bankTerm);
       });
 
       if (matchingLeads.length === 0) continue;
