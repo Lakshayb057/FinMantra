@@ -2243,8 +2243,13 @@ const db = {
       let fallbackWhere = ` WHERE mis_status IS NOT NULL AND ( (phone IS NOT NULL AND phone != '') OR (email IS NOT NULL AND email != '') )`;
       const fallbackParams = [];
       if (bankName && bankName !== 'ALL') {
-        fallbackParams.push(`%${bankName.trim()}%`);
-        fallbackWhere += ` AND (UPPER(card_bank) LIKE UPPER($${fallbackParams.length}) OR UPPER(mis_data->>'mis_bank_name') LIKE UPPER($${fallbackParams.length}) OR UPPER(card_name) LIKE UPPER($${fallbackParams.length}))`;
+        const cleanB = bankName.trim().toUpperCase();
+        fallbackParams.push(`%${cleanB}%`);
+        if (cleanB.includes('KIWI')) {
+          fallbackWhere += ` AND (UPPER(card_bank) LIKE UPPER($${fallbackParams.length}) OR UPPER(mis_data->>'mis_bank_name') LIKE UPPER($${fallbackParams.length}) OR UPPER(card_name) LIKE UPPER($${fallbackParams.length}) OR LOWER(source) = 'kiwi' OR mis_data->>'kiwi_winning_bank' IS NOT NULL OR UPPER(mis_data::text) LIKE '%KIWI%')`;
+        } else {
+          fallbackWhere += ` AND (UPPER(card_bank) LIKE UPPER($${fallbackParams.length}) OR UPPER(mis_data->>'mis_bank_name') LIKE UPPER($${fallbackParams.length}) OR UPPER(card_name) LIKE UPPER($${fallbackParams.length}) OR UPPER(mis_data::text) LIKE UPPER($${fallbackParams.length}))`;
+        }
       }
       const fallbackRes = await pool.query(
         `SELECT id, urn, full_name, phone, email, card_bank, card_name, mis_status, mis_data FROM leads ${fallbackWhere}`,
