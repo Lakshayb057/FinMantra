@@ -35,6 +35,20 @@ const upload = multer({
   limits: { fileSize: 100 * 1024 * 1024 } // 100MB limit for large Excel MIS uploads
 });
 
+// Load Negative & OCL Pincodes into Memory
+let negativePincodesSet = new Set();
+try {
+  const negPinPath = path.join(__dirname, 'data', 'negative_pincodes.json');
+  if (fs.existsSync(negPinPath)) {
+    const raw = fs.readFileSync(negPinPath, 'utf8');
+    const arr = JSON.parse(raw);
+    negativePincodesSet = new Set(arr.map(p => String(p).trim()));
+    console.log(`[Negative Pincodes] Loaded ${negativePincodesSet.size} negative pincodes into memory.`);
+  }
+} catch (err) {
+  console.error('[Negative Pincodes Error] Failed to load negative pincodes JSON:', err.message);
+}
+
 // Automatically wrap async route handlers to propagate exceptions to global error handler
 const Layer = require('express/lib/router/layer');
 Object.defineProperty(Layer.prototype, 'handle', {
@@ -1166,6 +1180,8 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
     utm_internal,
     has_credit_card,
     pincode,
+    state,
+    landmark,
     monthly_income,
     pan_no,
     dob,
@@ -1201,6 +1217,36 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
   // Validate email: standard regex
   if (!/\S+@\S+\.\S+/.test(trimmedEmail)) {
     return res.status(400).json({ error: 'Please enter a valid email address.' });
+  }
+
+  // Validate Mother's Name != Full Name
+  if (mother_name && full_name && String(mother_name).trim().toLowerCase() === String(full_name).trim().toLowerCase()) {
+    return res.status(400).json({ error: "Mother's name cannot be the same as Full Name." });
+  }
+
+  // Validate all 14 required fields for SBI QDE application
+  if (source === 'sbi_qde') {
+    const requiredSbiQdeFields = [
+      { key: pan_no, name: 'PAN Number' },
+      { key: full_name, name: 'Full Name' },
+      { key: dob, name: 'Date of Birth' },
+      { key: mother_name, name: "Mother's Name" },
+      { key: current_address, name: 'Current Address' },
+      { key: pincode, name: 'Pincode' },
+      { key: city, name: 'City' },
+      { key: state, name: 'State' },
+      { key: landmark, name: 'Landmark' },
+      { key: phone, name: 'Phone Number' },
+      { key: email, name: 'Email Address' },
+      { key: employment, name: 'Employment Type' },
+      { key: designation, name: 'Designation' },
+      { key: company || company_name, name: 'Company Name' }
+    ];
+    for (const f of requiredSbiQdeFields) {
+      if (!f.key || !String(f.key).trim()) {
+        return res.status(400).json({ error: `${f.name} is required.` });
+      }
+    }
   }
 
   // Validate PAN format if provided
@@ -1244,9 +1290,9 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
   if (!card) {
     let matchedCard = null;
     
-    if (source === 'kiwi' || source === 'simplyclick_sbi') {
+    if (source === 'kiwi' || source === 'simplyclick_sbi' || source === 'sbi_qde') {
       const activeCards = await db.getCards(false);
-      // For kiwi and simplyclick_sbi sources, check utm_internal first
+      // For kiwi, simplyclick_sbi, and sbi_qde sources, check utm_internal first
       if (utm_internal) {
         const altStr = String(utm_internal).trim().toLowerCase();
         matchedCard = activeCards.find(c => {
@@ -1269,15 +1315,15 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
           console.log(`[Card Matching] Fallback matched card ${matchedCard.name} (${matchedCard.id}) for kiwi source`);
         }
       }
-      // For simplyclick_sbi, fallback to active SimplyClick / SBI card if utm_internal is missing or unmatched
-      if (!matchedCard && source === 'simplyclick_sbi') {
+      // For simplyclick_sbi & sbi_qde, fallback to active SimplyClick / SBI card if utm_internal is missing or unmatched
+      if (!matchedCard && (source === 'simplyclick_sbi' || source === 'sbi_qde')) {
         matchedCard = activeCards.find(c => {
           const n = String(c.name || '').toLowerCase();
           const i = String(c.id || '').toLowerCase();
           return n.includes('simplyclick') || i.includes('simplyclick') || n.includes('sbi') || i.includes('sbi');
         });
         if (matchedCard) {
-          console.log(`[Card Matching] Fallback matched card ${matchedCard.name} (${matchedCard.id}) for simplyclick_sbi source`);
+          console.log(`[Card Matching] Fallback matched card ${matchedCard.name} (${matchedCard.id}) for ${source} source`);
         }
       }
     } else {
@@ -1472,6 +1518,8 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
     dob: dob || null,
     mother_name: mother_name || null,
     current_address: current_address || null,
+    state: state || null,
+    landmark: landmark || null,
     designation: designation || null,
     company_name: company || company_name || null,
     application_id: application_id || application_no || app_id || null,
@@ -1586,6 +1634,25 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
     console.log(`[WhatsApp Referral Link for ${trimmedPhone}]:`);
     console.log(referralMsg);
     console.log(`=========================================`);
+  }
+
+  // Send Custom WhatsApp Confirmation for SBI QDE Landing Page
+  if (source === 'sbi_qde') {
+    const qdeMsg = "Thank you for submitting this application. We will submit your application with bank and if you’re eligible for any credit card with bank, our representative will call you shortly";
+    console.log(`[WhatsApp SBI QDE Creation] Sending confirmation message to ${trimmedPhone}`);
+    try {
+      const settings = await db.getSettings();
+      const gateway = settings.whatsapp_gateway || 'baileys';
+      if (gateway === 'baileys' && baileys.getBaileysStatus().status === 'CONNECTED') {
+        await baileys.sendBaileysMessage(trimmedPhone, qdeMsg);
+        console.log(`[WhatsApp Baileys] Sent SBI QDE thank you message to ${trimmedPhone}`);
+      } else {
+        await sendWhatsAppTemplate(trimmedPhone, 'finmantra_welcome', [trimmedName, qdeMsg]).catch(() => {});
+        console.log(`[WhatsApp Meta API] Dispatched SBI QDE thank you template to ${trimmedPhone}`);
+      }
+    } catch (waErr) {
+      console.error('[WhatsApp SBI QDE Error]', waErr.message);
+    }
   }
 
   res.json({
@@ -4637,6 +4704,13 @@ app.put('/api/settings', authenticateToken, requireAdmin, async (req, res) => {
   broadcast({ type: 'AGENTS_UPDATED' }); // Broadcast agent update since assignments might have changed
   
   res.json(updated);
+});
+
+// Check if pincode is in OCL & Negative Pincode List
+app.get('/api/pincodes/check-negative/:pincode', (req, res) => {
+  const pin = String(req.params.pincode || '').trim();
+  const isNegative = negativePincodesSet.has(pin);
+  res.json({ pincode: pin, isNegative });
 });
 
 // Parse Pincode File (supports .xlsx, .xls, .csv, .txt)

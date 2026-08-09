@@ -380,92 +380,81 @@ async function initPgSchema() {
       )
     `);
 
-    try {
-      await client.query("CREATE INDEX IF NOT EXISTS idx_meta_audiences_type_bank ON meta_audiences (audience_type, bank_name)");
-      await client.query("CREATE INDEX IF NOT EXISTS idx_meta_audiences_meta_id ON meta_audiences (meta_audience_id) WHERE meta_audience_id IS NOT NULL");
-      await client.query("CREATE INDEX IF NOT EXISTS idx_meta_memberships_aud_lead ON meta_audience_memberships (audience_id, lead_id)");
-      await client.query("CREATE INDEX IF NOT EXISTS idx_meta_memberships_state ON meta_audience_memberships (state)");
-      await client.query("CREATE INDEX IF NOT EXISTS idx_meta_sync_jobs_aud ON meta_audience_sync_jobs (audience_id)");
-      await client.query("CREATE INDEX IF NOT EXISTS idx_meta_audit_logs_created ON meta_audience_audit_logs (created_at DESC)");
-    } catch (migErr) {}
+    const safeQuery = async (qStr, params = []) => {
+      try {
+        await client.query('SAVEPOINT mig_sp');
+        await client.query(qStr, params);
+        await client.query('RELEASE SAVEPOINT mig_sp');
+      } catch (migErr) {
+        try { await client.query('ROLLBACK TO SAVEPOINT mig_sp'); } catch (rbErr) {}
+      }
+    };
 
-    try {
-      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS application_id VARCHAR(255)");
-    } catch (migErr) {}
+    await safeQuery("CREATE INDEX IF NOT EXISTS idx_meta_audiences_type_bank ON meta_audiences (audience_type, bank_name)");
+    await safeQuery("CREATE INDEX IF NOT EXISTS idx_meta_audiences_meta_id ON meta_audiences (meta_audience_id) WHERE meta_audience_id IS NOT NULL");
+    await safeQuery("CREATE INDEX IF NOT EXISTS idx_meta_memberships_aud_lead ON meta_audience_memberships (audience_id, lead_id)");
+    await safeQuery("CREATE INDEX IF NOT EXISTS idx_meta_memberships_state ON meta_audience_memberships (state)");
+    await safeQuery("CREATE INDEX IF NOT EXISTS idx_meta_sync_jobs_aud ON meta_audience_sync_jobs (audience_id)");
+    await safeQuery("CREATE INDEX IF NOT EXISTS idx_meta_audit_logs_created ON meta_audience_audit_logs (created_at DESC)");
 
-    try {
-      await client.query("UPDATE cards SET category = 'Offline' WHERE category NOT IN ('Offline', 'Digital')");
-    } catch (migErr) {}
+    await safeQuery("ALTER TABLE leads ADD COLUMN IF NOT EXISTS application_id VARCHAR(255)");
+    await safeQuery("UPDATE cards SET category = 'Offline' WHERE category NOT IN ('Offline', 'Digital')");
+    await safeQuery("ALTER TABLE cards ADD COLUMN IF NOT EXISTS card_locations JSONB DEFAULT '[]'");
+    await safeQuery("ALTER TABLE cards ADD COLUMN IF NOT EXISTS ad_id VARCHAR(100)");
+    await safeQuery("ALTER TABLE cards ADD COLUMN IF NOT EXISTS utm_internal VARCHAR(100)");
+    await safeQuery("ALTER TABLE cards ALTER COLUMN ad_id TYPE TEXT");
 
-    try {
-      await client.query("ALTER TABLE cards ADD COLUMN IF NOT EXISTS card_locations JSONB DEFAULT '[]'");
-    } catch (migErr) {}
+    await safeQuery("ALTER TABLE leads ADD COLUMN IF NOT EXISTS utm_id VARCHAR(255)");
+    await safeQuery("ALTER TABLE leads ADD COLUMN IF NOT EXISTS utm_creative VARCHAR(255)");
+    await safeQuery("ALTER TABLE leads ADD COLUMN IF NOT EXISTS utm_keyword VARCHAR(255)");
+    await safeQuery("ALTER TABLE leads ADD COLUMN IF NOT EXISTS utm_matchtype VARCHAR(100)");
+    await safeQuery("ALTER TABLE leads ADD COLUMN IF NOT EXISTS utm_network VARCHAR(100)");
+    await safeQuery("ALTER TABLE leads ADD COLUMN IF NOT EXISTS utm_placement VARCHAR(255)");
+    await safeQuery("ALTER TABLE leads ADD COLUMN IF NOT EXISTS utm_device VARCHAR(100)");
+    await safeQuery("ALTER TABLE leads ADD COLUMN IF NOT EXISTS utm_location VARCHAR(255)");
+    await safeQuery("ALTER TABLE leads ADD COLUMN IF NOT EXISTS gbraid VARCHAR(255)");
+    await safeQuery("ALTER TABLE leads ADD COLUMN IF NOT EXISTS wbraid VARCHAR(255)");
+    await safeQuery("ALTER TABLE leads ADD COLUMN IF NOT EXISTS landing_page TEXT");
+    await safeQuery("ALTER TABLE leads ADD COLUMN IF NOT EXISTS first_landing_page TEXT");
+    await safeQuery("ALTER TABLE leads ADD COLUMN IF NOT EXISTS referrer TEXT");
+    await safeQuery("ALTER TABLE leads ADD COLUMN IF NOT EXISTS ad_id VARCHAR(100)");
+    await safeQuery("ALTER TABLE leads ADD COLUMN IF NOT EXISTS utm_internal VARCHAR(100)");
+    await safeQuery("ALTER TABLE leads ALTER COLUMN ad_id TYPE TEXT");
+    await safeQuery("ALTER TABLE leads ADD COLUMN IF NOT EXISTS has_credit_card VARCHAR(100)");
+    await safeQuery("ALTER TABLE leads ADD COLUMN IF NOT EXISTS pincode VARCHAR(100)");
+    await safeQuery("ALTER TABLE leads ADD COLUMN IF NOT EXISTS monthly_income VARCHAR(100)");
+    await safeQuery("ALTER TABLE leads ADD COLUMN IF NOT EXISTS mis_status VARCHAR(100)");
+    await safeQuery("ALTER TABLE leads ADD COLUMN IF NOT EXISTS mis_mapped_at TIMESTAMP WITH TIME ZONE");
+    await safeQuery("ALTER TABLE leads ADD COLUMN IF NOT EXISTS mis_data JSONB DEFAULT '{}'");
+    await safeQuery("ALTER TABLE leads ADD COLUMN IF NOT EXISTS state VARCHAR(255)");
+    await safeQuery("ALTER TABLE leads ADD COLUMN IF NOT EXISTS landmark VARCHAR(255)");
+    await safeQuery("ALTER TABLE leads ADD COLUMN IF NOT EXISTS ip_address VARCHAR(100)");
+    await safeQuery("ALTER TABLE leads ADD COLUMN IF NOT EXISTS user_agent TEXT");
 
-    try {
-      await client.query("ALTER TABLE cards ADD COLUMN IF NOT EXISTS ad_id VARCHAR(100)");
-      await client.query("ALTER TABLE cards ADD COLUMN IF NOT EXISTS utm_internal VARCHAR(100)");
-      await client.query("ALTER TABLE cards ALTER COLUMN ad_id TYPE TEXT");
-    } catch (migErr) {}
-
-    try {
-      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS utm_id VARCHAR(255)");
-      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS utm_creative VARCHAR(255)");
-      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS utm_keyword VARCHAR(255)");
-      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS utm_matchtype VARCHAR(100)");
-      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS utm_network VARCHAR(100)");
-      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS utm_placement VARCHAR(255)");
-      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS utm_device VARCHAR(100)");
-      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS utm_location VARCHAR(255)");
-      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS gbraid VARCHAR(255)");
-      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS wbraid VARCHAR(255)");
-      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS landing_page TEXT");
-      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS first_landing_page TEXT");
-      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS referrer TEXT");
-      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS ad_id VARCHAR(100)");
-      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS utm_internal VARCHAR(100)");
-      await client.query("ALTER TABLE leads ALTER COLUMN ad_id TYPE TEXT");
-      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS has_credit_card VARCHAR(100)");
-      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS pincode VARCHAR(100)");
-      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS monthly_income VARCHAR(100)");
-      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS mis_status VARCHAR(100)");
-      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS mis_mapped_at TIMESTAMP WITH TIME ZONE");
-      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS mis_data JSONB DEFAULT '{}'");
-    } catch (migErr) {}
-
-    try {
-      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS ip_address VARCHAR(100)");
-    } catch (migErr) {}
-    try {
-      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS user_agent TEXT");
-    } catch (migErr) {}
-    try {
-      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS capi_status VARCHAR(50)");
-      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS capi_response JSONB");
-      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS capi_last_event VARCHAR(100)");
-      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS capi_last_value NUMERIC");
-      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS capi_last_status VARCHAR(50)");
-      await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS capi_last_at TIMESTAMP WITH TIME ZONE");
-    } catch (migErr) {}
+    await safeQuery("ALTER TABLE leads ADD COLUMN IF NOT EXISTS capi_status VARCHAR(50)");
+    await safeQuery("ALTER TABLE leads ADD COLUMN IF NOT EXISTS capi_response JSONB");
+    await safeQuery("ALTER TABLE leads ADD COLUMN IF NOT EXISTS capi_last_event VARCHAR(100)");
+    await safeQuery("ALTER TABLE leads ADD COLUMN IF NOT EXISTS capi_last_value NUMERIC");
+    await safeQuery("ALTER TABLE leads ADD COLUMN IF NOT EXISTS capi_last_status VARCHAR(50)");
+    await safeQuery("ALTER TABLE leads ADD COLUMN IF NOT EXISTS capi_last_at TIMESTAMP WITH TIME ZONE");
 
     // Performance indexes for high-speed dashboard & repository queries
-    try {
-      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_mis_status ON leads (mis_status) WHERE mis_status IS NOT NULL");
-      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_mis_mapped_at ON leads (mis_mapped_at DESC) WHERE mis_status IS NOT NULL");
-      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_mis_mapped_at_all ON leads (mis_mapped_at DESC)");
-      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_created_at ON leads (created_at DESC)");
-      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_agent_id ON leads (agent_id)");
-      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_application_id ON leads (application_id) WHERE application_id IS NOT NULL");
-      await client.query("CREATE INDEX IF NOT EXISTS idx_uploaded_lead_files_created_at ON uploaded_lead_files (created_at DESC)");
-      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_card_id ON leads (card_id)");
-      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_source ON leads (source)");
-      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_phone ON leads (phone)");
-      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_urn ON leads (urn)");
-      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_pan_no ON leads (pan_no) WHERE pan_no IS NOT NULL");
-      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_utm_campaign ON leads (utm_campaign) WHERE utm_campaign IS NOT NULL AND utm_campaign != ''");
-      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_utm_term ON leads (utm_term) WHERE utm_term IS NOT NULL AND utm_term != ''");
-      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_utm_info ON leads (utm_info) WHERE utm_info IS NOT NULL AND utm_info != ''");
-      await client.query("CREATE INDEX IF NOT EXISTS idx_leads_card_bank ON leads (card_bank)");
-    } catch (migErr) {}
+    await safeQuery("CREATE INDEX IF NOT EXISTS idx_leads_mis_status ON leads (mis_status) WHERE mis_status IS NOT NULL");
+    await safeQuery("CREATE INDEX IF NOT EXISTS idx_leads_mis_mapped_at ON leads (mis_mapped_at DESC) WHERE mis_status IS NOT NULL");
+    await safeQuery("CREATE INDEX IF NOT EXISTS idx_leads_mis_mapped_at_all ON leads (mis_mapped_at DESC)");
+    await safeQuery("CREATE INDEX IF NOT EXISTS idx_leads_created_at ON leads (created_at DESC)");
+    await safeQuery("CREATE INDEX IF NOT EXISTS idx_leads_agent_id ON leads (agent_id)");
+    await safeQuery("CREATE INDEX IF NOT EXISTS idx_leads_application_id ON leads (application_id) WHERE application_id IS NOT NULL");
+    await safeQuery("CREATE INDEX IF NOT EXISTS idx_uploaded_lead_files_created_at ON uploaded_lead_files (created_at DESC)");
+    await safeQuery("CREATE INDEX IF NOT EXISTS idx_leads_card_id ON leads (card_id)");
+    await safeQuery("CREATE INDEX IF NOT EXISTS idx_leads_source ON leads (source)");
+    await safeQuery("CREATE INDEX IF NOT EXISTS idx_leads_phone ON leads (phone)");
+    await safeQuery("CREATE INDEX IF NOT EXISTS idx_leads_urn ON leads (urn)");
+    await safeQuery("CREATE INDEX IF NOT EXISTS idx_leads_pan_no ON leads (pan_no) WHERE pan_no IS NOT NULL");
+    await safeQuery("CREATE INDEX IF NOT EXISTS idx_leads_utm_campaign ON leads (utm_campaign) WHERE utm_campaign IS NOT NULL AND utm_campaign != ''");
+    await safeQuery("CREATE INDEX IF NOT EXISTS idx_leads_utm_term ON leads (utm_term) WHERE utm_term IS NOT NULL AND utm_term != ''");
+    await safeQuery("CREATE INDEX IF NOT EXISTS idx_leads_utm_info ON leads (utm_info) WHERE utm_info IS NOT NULL AND utm_info != ''");
+    await safeQuery("CREATE INDEX IF NOT EXISTS idx_leads_card_bank ON leads (card_bank)");
 
     try {
       const formSchemaQuery = await client.query("SELECT value FROM settings WHERE key = 'landing_form_schema'");
