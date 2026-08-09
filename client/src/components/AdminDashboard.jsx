@@ -510,18 +510,19 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   };
 
   const handleDeleteAudience = async (id, name) => {
-    if (!window.confirm(`Are you sure you want to delete audience '${name}'? This will also remove it from Meta Graph API.`)) return;
+    if (!window.confirm(`⚠️ Are you sure you want to delete audience '${name}'?\n\nThis will permanently delete the custom audience from Meta Ads Manager (Facebook) and remove it completely from FinMantra software!`)) return;
     try {
+      showToast(`Deleting audience '${name}' from Meta & software...`, 'info');
       const res = await fetch(`/api/meta/audiences/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
       if (data.success) {
-        showToast(`Audience '${name}' deleted.`, 'info');
+        showToast(`🎉 Audience '${name}' permanently deleted from Meta Ads Manager and FinMantra!`, 'success');
         fetchMetaAudiences();
       } else {
-        showToast(`Failed to delete: ${data.error}`, 'error');
+        showToast(`Failed to delete audience: ${data.error}`, 'error');
       }
     } catch (err) {
       showToast(`Error deleting audience: ${err.message}`, 'error');
@@ -8130,16 +8131,14 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                                         <RefreshCw size={13} /> Full Sync
                                       </button>
 
-                                      {aud.audience_type === 'CUSTOM' && (
-                                        <button
-                                          onClick={() => handleDeleteAudience(aud.id, aud.name)}
-                                          className="btn-secondary"
-                                          style={{ padding: '0.35rem 0.65rem', fontSize: '0.78rem', borderRadius: '6px', color: '#ef4444' }}
-                                          title="Delete Custom Audience"
-                                        >
-                                          <Trash2 size={13} />
-                                        </button>
-                                      )}
+                                      <button
+                                        onClick={() => handleDeleteAudience(aud.id, aud.name)}
+                                        className="btn-secondary"
+                                        style={{ padding: '0.35rem 0.65rem', fontSize: '0.78rem', borderRadius: '6px', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.3)' }}
+                                        title="Delete Audience from Meta & Software"
+                                      >
+                                        <Trash2 size={13} /> Delete
+                                      </button>
                                     </div>
                                   </td>
                                 </tr>
