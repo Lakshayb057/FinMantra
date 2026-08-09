@@ -1008,6 +1008,74 @@ async function sendMetaCapiEvent(lead, eventName = 'Purchase', eventValue = 2000
   }
 }
 
+// Batch send Meta Conversions API (CAPI) events for a list of leads (chunks of 500 events)
+async function sendMetaCapiBatchEvents(leadsList, eventName = 'Purchase', eventValue = 2000) {
+  if (!leadsList || !Array.isArray(leadsList) || leadsList.length === 0) return;
+  try {
+    const settings = await db.getSettings().catch(() => ({}));
+    const pixelId = getSettingVal(settings, 'meta_pixel_id', 'META_PIXEL_ID');
+    const accessToken = getSettingVal(settings, 'meta_access_token', 'META_ACCESS_TOKEN');
+    if (!pixelId || !accessToken) return;
+
+    const events = leadsList.map(lead => {
+      let rawPhone = lead.phone || '';
+      rawPhone = rawPhone.replace(/\D/g, '');
+      if (rawPhone.length === 10) rawPhone = '91' + rawPhone;
+      const { fn, ln } = splitName(lead.full_name);
+
+      const userData = {
+        ph: [sha256Hash(rawPhone)],
+        em: [sha256Hash(lead.email)],
+        fn: fn ? [sha256Hash(fn)] : undefined,
+        ln: ln ? [sha256Hash(ln)] : undefined
+      };
+
+      const leadBank = lead.card_bank || (lead.mis_data && lead.mis_data.mis_bank_name) || 'FinMantra Partner';
+      const cardName = lead.card_name || (lead.mis_data && lead.mis_data.card_name) || 'Credit Card';
+
+      return {
+        event_name: eventName,
+        event_time: Math.floor(Date.now() / 1000),
+        event_id: `${lead.id}_Purchase_${lead.mis_status || 'Approved'}`,
+        event_source_url: lead.landing_page || 'https://finmantra.org/',
+        action_source: 'website',
+        user_data: userData,
+        custom_data: {
+          currency: 'INR',
+          value: Number(eventValue) || 2000,
+          content_name: cardName,
+          content_category: leadBank,
+          bank: leadBank,
+          status: lead.mis_status || 'Final Approved'
+        }
+      };
+    });
+
+    const chunkSize = 500;
+    for (let i = 0; i < events.length; i += chunkSize) {
+      const chunk = events.slice(i, i + chunkSize);
+      const payload = { data: chunk };
+      const activeTestCode = settings.meta_test_event_code || process.env.META_TEST_EVENT_CODE;
+      if (activeTestCode) payload.test_event_code = activeTestCode;
+
+      const url = `https://graph.facebook.com/v20.0/${pixelId}/events?access_token=${accessToken}`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (res.ok) {
+        console.log(`[Meta CAPI Batch] Successfully dispatched ${chunk.length} Purchase event(s) (₹${eventValue}) to Meta CAPI!`);
+      } else {
+        console.error(`[Meta CAPI Batch] Failed to dispatch CAPI batch:`, data);
+      }
+    }
+  } catch (err) {
+    console.error('[Meta CAPI Batch] Execution error:', err.message);
+  }
+}
+
 // Push lead records to active Meta Custom Audiences
 async function syncLeadsToMetaCustomAudiences(leadsList, targetAudienceId = null) {
   if (!leadsList || !Array.isArray(leadsList) || leadsList.length === 0) return;
@@ -1091,6 +1159,11 @@ async function syncLeadsToMetaCustomAudiences(leadsList, targetAudienceId = null
           status: 'SUCCESS'
         });
         console.log(`[Meta Audience Push] Successfully pushed ${addedCount} user(s) to audience '${audience.name}' (${audience.meta_audience_id}).`);
+
+        // Batch dispatch Meta Conversions API (CAPI) Purchase events (₹2,000 INR) for all matching leads
+        sendMetaCapiBatchEvents(matchingLeads, 'Purchase', 2000).catch(err => {
+          console.error('[Meta CAPI Batch] Error in async batch dispatch:', err.message);
+        });
       } else {
         console.error(`[Meta Audience Push] Error pushing to '${audience.name}':`, data);
         await db.insertAudienceHistoryLog({
