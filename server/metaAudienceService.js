@@ -65,9 +65,12 @@ function normalizePhone(rawPhone) {
 
 // Classify raw MIS status into 4 business categories
 function getNormalizedStatusCategory(rawStatus, misData = null) {
-  // Check misData for KIWI card_created or card_issued positive flags first!
-  if (misData && typeof misData === 'object') {
-    const cardCreated = String(misData.card_created || misData.Card_Created || '').toUpperCase().trim();
+  let md = misData;
+  if (md && typeof md === 'string') {
+    try { md = JSON.parse(md); } catch (e) {}
+  }
+  if (md && typeof md === 'object') {
+    const cardCreated = String(md.card_created || md.Card_Created || md.card_activation_status || '').toUpperCase().trim();
     if (cardCreated && cardCreated !== 'NO' && cardCreated !== 'FALSE' && cardCreated !== '0' && cardCreated !== 'NULL' && cardCreated !== 'UNDEFINED' && !cardCreated.includes('REJECT') && !cardCreated.includes('DECLINE')) {
       return 'FINAL_APPROVE';
     }
@@ -500,7 +503,7 @@ async function getEligibleMappedLeadsForAudience(audience) {
       // Filter by status category matching
       const allLeads = await db.pool.query(query, params);
       const filtered = allLeads.rows.filter(l => {
-        const cat = getNormalizedStatusCategory(l.mis_status);
+        const cat = getNormalizedStatusCategory(l.mis_status, l.mis_data);
         return cat === status_category;
       });
       return filtered;
