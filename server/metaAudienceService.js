@@ -111,9 +111,19 @@ function getKiwiStatusCategory(lead, rawStatus, misData) {
 
   // Helper to safely extract string representation of property (returns exact string, preserving '0')
   const getPropVal = (obj, ...keys) => {
+    if (!obj || typeof obj !== 'object') return '';
     for (const k of keys) {
-      if (obj && obj[k] !== undefined && obj[k] !== null) {
+      if (obj[k] !== undefined && obj[k] !== null) {
         const str = String(obj[k]).trim();
+        if (str !== '') return str;
+      }
+    }
+    const lowerKeys = Object.keys(obj).map(k => ({ orig: k, clean: k.toLowerCase().replace(/[^a-z0-9]/g, '') }));
+    for (const k of keys) {
+      const cleanK = k.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const found = lowerKeys.find(item => item.clean === cleanK);
+      if (found && obj[found.orig] !== undefined && obj[found.orig] !== null) {
+        const str = String(obj[found.orig]).trim();
         if (str !== '') return str;
       }
     }
@@ -623,9 +633,10 @@ async function getEligibleMappedLeadsForAudience(audience) {
         let md = l.mis_data;
         if (typeof md === 'string') try { md = JSON.parse(md); } catch(e) {}
         md = md || {};
-        const isKiwi = bank_name === 'KIWI' || String(l.card_bank || '').toUpperCase().includes('KIWI') || String(md.mis_bank_name || '').toUpperCase().includes('KIWI');
+        const isKiwi = bank_name === 'KIWI' || String(l.card_bank || '').toUpperCase().includes('KIWI') || String(md.mis_bank_name || '').toUpperCase().includes('KIWI') || String(md.kiwi_winning_bank || '').toUpperCase().includes('KIWI') || String(l.card_name || '').toUpperCase().includes('KIWI');
         const cat = isKiwi ? getKiwiStatusCategory(l, l.mis_status, md) : getNormalizedStatusCategory(l.mis_status, md);
-        return cat === status_category;
+        const norm = (s) => String(s || '').toUpperCase().trim().replace(/[\s-]+/g, '_');
+        return norm(cat) === norm(status_category);
       });
       return filtered;
     } else if (audience_type === 'CUSTOM') {
