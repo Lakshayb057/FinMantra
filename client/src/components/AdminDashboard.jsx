@@ -8291,7 +8291,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                             ...audienceFormData,
                             bank_name: 'KIWI',
                             mis_category: 'FINAL APPROVED',
-                            sql_filter: `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE mis_status IS NOT NULL AND (UPPER(COALESCE(card_bank,'')) LIKE '%KIWI%' OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE '%KIWI%' OR UPPER(COALESCE(card_name,'')) LIKE '%KIWI%') AND (UPPER(mis_status) LIKE '%APPROV%' OR UPPER(mis_status) LIKE '%CARD%' OR UPPER(mis_status) LIKE '%CREATE%')`
+                            sql_filter: `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE mis_status IS NOT NULL AND (UPPER(COALESCE(card_bank,'')) LIKE '%KIWI%' OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE '%KIWI%' OR UPPER(COALESCE(card_name,'')) LIKE '%KIWI%' OR LOWER(source) = 'kiwi' OR mis_data->>'kiwi_winning_bank' IS NOT NULL) AND (UPPER(mis_status) LIKE '%APPROV%' OR UPPER(mis_status) LIKE '%CARD%' OR UPPER(mis_status) LIKE '%CREATE%')`
                           })}
                           style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '4px', background: 'rgba(234, 179, 8, 0.12)', border: '1px solid rgba(234, 179, 8, 0.3)', color: '#b45309', cursor: 'pointer', fontWeight: 700 }}
                         >
@@ -8351,7 +8351,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                             ...audienceFormData,
                             bank_name: 'KIWI',
                             mis_category: 'ALL MAPPED LEADS',
-                            sql_filter: `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE mis_status IS NOT NULL AND (UPPER(COALESCE(card_bank,'')) LIKE '%KIWI%' OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE '%KIWI%' OR UPPER(COALESCE(card_name,'')) LIKE '%KIWI%')`
+                            sql_filter: `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE mis_status IS NOT NULL AND (UPPER(COALESCE(card_bank,'')) LIKE '%KIWI%' OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE '%KIWI%' OR UPPER(COALESCE(card_name,'')) LIKE '%KIWI%' OR LOWER(source) = 'kiwi' OR mis_data->>'kiwi_winning_bank' IS NOT NULL)`
                           })}
                           style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '4px', background: 'rgba(234, 179, 8, 0.15)', border: '1px solid rgba(234, 179, 8, 0.4)', color: '#b45309', cursor: 'pointer', fontWeight: 700 }}
                         >
