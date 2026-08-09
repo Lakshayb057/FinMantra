@@ -8272,6 +8272,54 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                           type="button"
                           onClick={() => setAudienceFormData({
                             ...audienceFormData,
+                            bank_name: 'SBI',
+                            mis_category: 'ALL MAPPED LEADS',
+                            sql_filter: `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE mis_status IS NOT NULL AND (UPPER(COALESCE(card_bank,'')) LIKE '%SBI%' OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE '%SBI%' OR UPPER(COALESCE(card_name,'')) LIKE '%SBI%')`
+                          })}
+                          style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '4px', background: 'rgba(59, 130, 246, 0.15)', border: '1px solid rgba(59, 130, 246, 0.4)', color: '#1d4ed8', cursor: 'pointer', fontWeight: 700 }}
+                        >
+                          ⚡ SBI All Mapped Leads
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAudienceFormData({
+                            ...audienceFormData,
+                            bank_name: 'KIWI',
+                            mis_category: 'ALL MAPPED LEADS',
+                            sql_filter: `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE mis_status IS NOT NULL AND (UPPER(COALESCE(card_bank,'')) LIKE '%KIWI%' OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE '%KIWI%' OR UPPER(COALESCE(card_name,'')) LIKE '%KIWI%')`
+                          })}
+                          style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '4px', background: 'rgba(234, 179, 8, 0.15)', border: '1px solid rgba(234, 179, 8, 0.4)', color: '#b45309', cursor: 'pointer', fontWeight: 700 }}
+                        >
+                          ⚡ KIWI All Mapped Leads
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAudienceFormData({
+                            ...audienceFormData,
+                            bank_name: 'HDFC',
+                            mis_category: 'ALL MAPPED LEADS',
+                            sql_filter: `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE mis_status IS NOT NULL AND (UPPER(COALESCE(card_bank,'')) LIKE '%HDFC%' OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE '%HDFC%' OR UPPER(COALESCE(card_name,'')) LIKE '%HDFC%')`
+                          })}
+                          style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '4px', background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.4)', color: '#047857', cursor: 'pointer', fontWeight: 700 }}
+                        >
+                          ⚡ HDFC All Mapped Leads
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAudienceFormData({
+                            ...audienceFormData,
+                            bank_name: 'Scapia',
+                            mis_category: 'ALL MAPPED LEADS',
+                            sql_filter: `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE mis_status IS NOT NULL AND (UPPER(COALESCE(card_bank,'')) LIKE '%SCAPIA%' OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE '%SCAPIA%' OR UPPER(COALESCE(card_name,'')) LIKE '%SCAPIA%')`
+                          })}
+                          style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '4px', background: 'rgba(168, 85, 247, 0.15)', border: '1px solid rgba(168, 85, 247, 0.4)', color: '#7e22ce', cursor: 'pointer', fontWeight: 700 }}
+                        >
+                          ⚡ Scapia All Mapped Leads
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAudienceFormData({
+                            ...audienceFormData,
                             bank_name: 'ALL',
                             mis_category: 'SOFT APPROVED',
                             sql_filter: `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE mis_status IS NOT NULL AND (UPPER(mis_status) LIKE '%SOFT%' OR UPPER(mis_status) LIKE '%PRE-APPROV%' OR UPPER(mis_status) LIKE '%VKYC%' OR UPPER(mis_status) LIKE '%IPA%') AND NOT (UPPER(mis_status) LIKE '%REJECT%' OR UPPER(mis_status) LIKE '%DECLINE%')`
