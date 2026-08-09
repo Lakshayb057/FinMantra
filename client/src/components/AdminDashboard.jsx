@@ -8052,6 +8052,17 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                     />
                   </div>
 
+                  <div className="form-group">
+                    <label className="form-label" style={{ fontWeight: 700 }}>Meta Audience ID (Optional)</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="e.g. 120252069748690319 (Leave empty to auto-create on Meta)"
+                      value={audienceFormData.meta_audience_id || ''}
+                      onChange={(e) => setAudienceFormData({ ...audienceFormData, meta_audience_id: e.target.value })}
+                    />
+                  </div>
+
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                     <div className="form-group">
                       <label className="form-label" style={{ fontWeight: 700 }}>Target Bank</label>
