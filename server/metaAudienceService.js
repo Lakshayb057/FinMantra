@@ -70,9 +70,26 @@ function getNormalizedStatusCategory(rawStatus, misData = null) {
     try { md = JSON.parse(md); } catch (e) {}
   }
   if (md && typeof md === 'object') {
-    const cardCreated = String(md.card_created || md.Card_Created || md.card_activation_status || '').toUpperCase().trim();
-    if (cardCreated && cardCreated !== 'NO' && cardCreated !== 'FALSE' && cardCreated !== '0' && cardCreated !== 'NULL' && cardCreated !== 'UNDEFINED' && !cardCreated.includes('REJECT') && !cardCreated.includes('DECLINE')) {
-      return 'FINAL_APPROVE';
+    const kiwiCard = (
+      String(md.Card_Created || md.card_activation_status || md.card_created || md.card_state || md.current_state || md.winning_state || md.mis_status || rawStatus || '') + ' ' + 
+      String(md.pnb_state || '') + ' ' + 
+      String(md.yes_state || '') + ' ' + 
+      String(md.au_state || '')
+    ).toUpperCase();
+
+    if (
+      kiwiCard.includes('YES') ||
+      kiwiCard.includes('CARD CREATED') ||
+      kiwiCard.includes('CARD_CREATED') ||
+      kiwiCard.includes('CARD ISSUED') ||
+      kiwiCard.includes('CARD_ISSUED') ||
+      kiwiCard.includes('AC_CREATED') ||
+      kiwiCard.includes('ACCOUNT_CREATED') ||
+      kiwiCard.includes('ACCOUNT CREATED')
+    ) {
+      if (!kiwiCard.includes('REJECT') && !kiwiCard.includes('DECLINE')) {
+        return 'FINAL_APPROVE';
+      }
     }
   }
 
@@ -492,13 +509,21 @@ async function getEligibleMappedLeadsForAudience(audience) {
     let pIdx = 1;
 
     if (audience_type === 'BANK_MASTER') {
-      query += ` AND (card_bank ILIKE $${pIdx} OR mis_data->>'mis_bank_name' ILIKE $${pIdx})`;
-      params.push(`%${bank_name}%`);
-      pIdx++;
+      if (bank_name === 'KIWI') {
+        query += ` AND (card_bank ILIKE '%KIWI%' OR card_bank ILIKE '%YES%' OR card_bank ILIKE '%AU%' OR card_bank ILIKE '%PNB%' OR mis_data->>'mis_bank_name' ILIKE '%KIWI%' OR mis_data->>'winning_bank' IS NOT NULL OR mis_data->>'kiwi_winning_bank' IS NOT NULL OR card_name ILIKE '%KIWI%' OR landing_page ILIKE '%KIWI%' OR utm_source ILIKE '%KIWI%')`;
+      } else {
+        query += ` AND (card_bank ILIKE $${pIdx} OR mis_data->>'mis_bank_name' ILIKE $${pIdx})`;
+        params.push(`%${bank_name}%`);
+        pIdx++;
+      }
     } else if (audience_type === 'BANK_STATUS') {
-      query += ` AND (card_bank ILIKE $${pIdx} OR mis_data->>'mis_bank_name' ILIKE $${pIdx})`;
-      params.push(`%${bank_name}%`);
-      pIdx++;
+      if (bank_name === 'KIWI') {
+        query += ` AND (card_bank ILIKE '%KIWI%' OR card_bank ILIKE '%YES%' OR card_bank ILIKE '%AU%' OR card_bank ILIKE '%PNB%' OR mis_data->>'mis_bank_name' ILIKE '%KIWI%' OR mis_data->>'winning_bank' IS NOT NULL OR mis_data->>'kiwi_winning_bank' IS NOT NULL OR card_name ILIKE '%KIWI%' OR landing_page ILIKE '%KIWI%' OR utm_source ILIKE '%KIWI%')`;
+      } else {
+        query += ` AND (card_bank ILIKE $${pIdx} OR mis_data->>'mis_bank_name' ILIKE $${pIdx})`;
+        params.push(`%${bank_name}%`);
+        pIdx++;
+      }
 
       // Filter by status category matching
       const allLeads = await db.pool.query(query, params);
