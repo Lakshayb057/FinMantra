@@ -2606,6 +2606,42 @@ const db = {
       console.error('[DB] getAllActiveBanksFromDB error:', e.message);
       return ['SBI', 'HDFC', 'KIWI', 'SCAPIA'];
     }
+  },
+
+  async getDatabaseStatus() {
+    const status = {
+      connected: true,
+      host: process.env.DB_HOST || 'localhost',
+      database: process.env.DB_NAME || 'finmantra',
+      dbSize: 'Unknown',
+      rowCounts: {
+        leads: 0,
+        sbi_company_codes: 0,
+        agents: 0,
+        cards: 0,
+        locations: 0
+      }
+    };
+    try {
+      const sizeRes = await pool.query("SELECT pg_size_pretty(pg_database_size(current_database())) AS size");
+      if (sizeRes.rows[0]) {
+        status.dbSize = sizeRes.rows[0].size;
+      }
+      
+      const tables = ['leads', 'sbi_company_codes', 'agents', 'cards', 'locations'];
+      for (const t of tables) {
+        try {
+          const countRes = await pool.query(`SELECT COUNT(*) FROM ${t}`);
+          status.rowCounts[t] = parseInt(countRes.rows[0].count, 10);
+        } catch (e) {
+          status.rowCounts[t] = 0;
+        }
+      }
+    } catch (err) {
+      status.connected = false;
+      status.error = err.message;
+    }
+    return status;
   }
 }
 

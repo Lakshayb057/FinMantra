@@ -1256,6 +1256,32 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
     }
   };
 
+  const [dbStatus, setDbStatus] = useState(null);
+  const [isLoadingDbStatus, setIsLoadingDbStatus] = useState(false);
+
+  const fetchDbStatus = async () => {
+    if (!token) return;
+    setIsLoadingDbStatus(true);
+    try {
+      const headers = { 'Authorization': `Bearer ${token}` };
+      const res = await fetch(`${API_URL}/admin/db-status`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setDbStatus(data);
+      }
+    } catch (err) {
+      console.error('Error fetching database status:', err);
+    } finally {
+      setIsLoadingDbStatus(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeSettingsSubTab === 'database_status' && activeTab === 'settings') {
+      fetchDbStatus();
+    }
+  }, [activeSettingsSubTab, activeTab]);
+
   // Reset page to 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
@@ -6496,6 +6522,23 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                     Bank MIS Mapping
                   </button>
                 )}
+                <button 
+                  onClick={() => setActiveSettingsSubTab('database_status')} 
+                  style={{
+                    padding: '0.5rem 1rem',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    borderRadius: '6px',
+                    border: '1px solid var(--line)',
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                    transition: 'all 0.2s',
+                    background: activeSettingsSubTab === 'database_status' ? 'var(--gold-deep)' : 'var(--paper-2)',
+                    color: activeSettingsSubTab === 'database_status' ? '#fff' : 'var(--ink)'
+                  }}
+                >
+                  Database Status
+                </button>
               </div>
 
               {/* Settings Sub-Tab Contents */}
@@ -7816,6 +7859,104 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                         })()}
                       </div>
                     </div>
+                  </div>
+                )}
+
+                {activeSettingsSubTab === 'database_status' && (
+                  <div>
+                    <h3 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.75rem', color: 'var(--gold-deep)' }}>
+                      <Database size={20} />
+                      <span>Database Status & Connectivity Stats</span>
+                    </h3>
+                    <p style={{ fontSize: '0.82rem', color: 'var(--muted)', marginBottom: '1.5rem' }}>
+                      Real-time database connection metrics, host details, instance sizes, and table row counts.
+                    </p>
+
+                    {isLoadingDbStatus ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '3rem 0', gap: '1rem' }}>
+                        <RefreshCw size={28} className="spin" style={{ color: 'var(--gold-deep)' }} />
+                        <span style={{ fontSize: '0.9rem', color: 'var(--muted)', fontWeight: 600 }}>Querying database metadata...</span>
+                      </div>
+                    ) : dbStatus ? (
+                      <div>
+                        {/* Summary Cards */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
+                          <div style={{ background: 'var(--paper-2)', border: '1px solid var(--line)', padding: '1.25rem', borderRadius: '12px' }}>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--muted)', fontWeight: 700, textTransform: 'uppercase', marginBottom: '0.35rem' }}>Connection State</div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: dbStatus.connected ? '#10b981' : '#d14343' }}></span>
+                              <span style={{ fontSize: '1.2rem', fontWeight: 800, color: dbStatus.connected ? 'var(--mint)' : 'var(--err)' }}>
+                                {dbStatus.connected ? 'Connected' : 'Disconnected'}
+                              </span>
+                            </div>
+                          </div>
+                          <div style={{ background: 'var(--paper-2)', border: '1px solid var(--line)', padding: '1.25rem', borderRadius: '12px' }}>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--muted)', fontWeight: 700, textTransform: 'uppercase', marginBottom: '0.35rem' }}>Database Host</div>
+                            <div style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--ink)', wordBreak: 'break-all' }}>{dbStatus.host}</div>
+                          </div>
+                          <div style={{ background: 'var(--paper-2)', border: '1px solid var(--line)', padding: '1.25rem', borderRadius: '12px' }}>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--muted)', fontWeight: 700, textTransform: 'uppercase', marginBottom: '0.35rem' }}>Instance Size</div>
+                            <div style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--gold-deep)' }}>{dbStatus.dbSize}</div>
+                          </div>
+                        </div>
+
+                        {/* Table Counts */}
+                        <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '0.75rem', color: 'var(--ink)' }}>Table Statistics & Row Counts</h4>
+                        <div style={{ overflowX: 'auto', background: 'var(--paper)', borderRadius: '10px', border: '1px solid var(--line)' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'left' }}>
+                            <thead>
+                              <tr style={{ background: 'rgba(224, 168, 46, 0.08)', borderBottom: '1px solid var(--line)' }}>
+                                <th style={{ padding: '0.75rem 1rem', fontWeight: 700 }}>Database Table Name</th>
+                                <th style={{ padding: '0.75rem 1rem', fontWeight: 700 }}>Record Count</th>
+                                <th style={{ padding: '0.75rem 1rem', fontWeight: 700 }}>Purpose</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr style={{ borderBottom: '1px solid var(--line)' }}>
+                                <td style={{ padding: '0.75rem 1rem', fontWeight: 600 }}><code>leads</code></td>
+                                <td style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--gold-deep)' }}>{dbStatus.rowCounts?.leads?.toLocaleString() || 0}</td>
+                                <td style={{ padding: '0.75rem 1rem', color: 'var(--muted)' }}>Contains all generated credit card application leads and metadata.</td>
+                              </tr>
+                              <tr style={{ borderBottom: '1px solid var(--line)' }}>
+                                <td style={{ padding: '0.75rem 1rem', fontWeight: 600 }}><code>sbi_company_codes</code></td>
+                                <td style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--gold-deep)' }}>{dbStatus.rowCounts?.sbi_company_codes?.toLocaleString() || 0}</td>
+                                <td style={{ padding: '0.75rem 1rem', color: 'var(--muted)' }}>Deduplicated SBI Corporate Company Codes list + LTF pricing rules (227k+ entries).</td>
+                              </tr>
+                              <tr style={{ borderBottom: '1px solid var(--line)' }}>
+                                <td style={{ padding: '0.75rem 1rem', fontWeight: 600 }}><code>agents</code></td>
+                                <td style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--gold-deep)' }}>{dbStatus.rowCounts?.agents?.toLocaleString() || 0}</td>
+                                <td style={{ padding: '0.75rem 1rem', color: 'var(--muted)' }}>Contains agents authorized to capture leads on-field or map bank MIS documents.</td>
+                              </tr>
+                              <tr style={{ borderBottom: '1px solid var(--line)' }}>
+                                <td style={{ padding: '0.75rem 1rem', fontWeight: 600 }}><code>cards</code></td>
+                                <td style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--gold-deep)' }}>{dbStatus.rowCounts?.cards?.toLocaleString() || 0}</td>
+                                <td style={{ padding: '0.75rem 1rem', color: 'var(--muted)' }}>Credit card catalog, pricing, and specific bank routing rules.</td>
+                              </tr>
+                              <tr style={{ borderBottom: '1px solid var(--line)' }}>
+                                <td style={{ padding: '0.75rem 1rem', fontWeight: 600 }}><code>locations</code></td>
+                                <td style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--gold-deep)' }}>{dbStatus.rowCounts?.locations?.toLocaleString() || 0}</td>
+                                <td style={{ padding: '0.75rem 1rem', color: 'var(--muted)' }}>Kiosk / desk location tags for physical kiosk agents.</td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
+                          <button 
+                            type="button" 
+                            onClick={fetchDbStatus} 
+                            className="btn-primary" 
+                            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--gold-deep)', color: '#fff', borderRadius: '8px' }}
+                          >
+                            <RefreshCw size={14} /> Refresh Stats
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ color: 'var(--err)', fontSize: '0.9rem', fontWeight: 600 }}>
+                        Failed to fetch database information.
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

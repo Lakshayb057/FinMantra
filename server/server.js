@@ -4058,6 +4058,17 @@ app.get('/api/leads', authenticateToken, async (req, res) => {
   }
 });
 
+// Get Database Connectivity and Tables Status (Admin Only)
+app.get('/api/admin/db-status', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const dbStatus = await db.getDatabaseStatus();
+    return res.json(dbStatus);
+  } catch (err) {
+    console.error('[API Error] /api/admin/db-status:', err);
+    return res.status(500).json({ error: 'Failed to retrieve database status' });
+  }
+});
+
 // Bulk/Single Delete Leads (Admin Only)
 app.post('/api/leads/delete-bulk', authenticateToken, requireAdmin, async (req, res) => {
   const adminPassword = req.headers['x-admin-password'] || req.body?.adminPassword;
