@@ -5189,7 +5189,7 @@ app.post('/api/meta/audiences/:id/sync', authenticateToken, requireAdmin, async 
         query: audience.sql_filter || `Select finmatraid, where mis_status is ${audience.mis_category || 'Final Approved'} for bank ${audience.bank_name || 'ALL'}`,
         status: 'SUCCESS'
       });
-      return res.json({ success: true, message: 'No matching Final Approved leads found to sync.', syncedCount: 0 });
+      return res.json({ success: true, message: `No matching ${audience.mis_category || 'mapped'} leads found for audience rule.`, syncedCount: 0 });
     }
 
     await syncLeadsToMetaCustomAudiences(leads, audience.id);
