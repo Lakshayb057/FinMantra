@@ -2177,6 +2177,7 @@ const db = {
       }
 
       const cat = String(misCategory || 'FINAL APPROVED').toUpperCase().trim();
+      const cleanB = String(bankName || 'ALL').toUpperCase().trim();
       let statusCondition = '';
 
       if (cat.includes('DECLINED') || cat.includes('REJECTED')) {
@@ -2190,7 +2191,6 @@ const db = {
       } else if (cat.includes('ALL')) {
         statusCondition = `(phone IS NOT NULL AND phone != '') OR (email IS NOT NULL AND email != '')`;
       } else {
-        const cleanB = String(bankName || '').toUpperCase();
         if (cleanB.includes('KIWI')) {
           statusCondition = `(
             LOWER(mis_status) IN ('card created', 'card_created', 'card generated', 'card_generated') OR
@@ -2244,7 +2244,6 @@ const db = {
 
       const params = [];
       if (bankName && bankName !== 'ALL') {
-        const cleanB = bankName.trim().toUpperCase();
         params.push(`%${cleanB}%`);
         if (cleanB.includes('KIWI')) {
           whereClause += ` AND (UPPER(COALESCE(card_bank,'')) LIKE UPPER($${params.length}) OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE UPPER($${params.length}) OR UPPER(COALESCE(card_name,'')) LIKE UPPER($${params.length}) OR LOWER(COALESCE(source,'')) = 'kiwi' OR mis_data->>'kiwi_winning_bank' IS NOT NULL OR mis_data->>'winning_bank' IS NOT NULL OR LOWER(COALESCE(mis_data->>'partner','')) LIKE '%kiwi%' OR LOWER(COALESCE(mis_data->>'app_type','')) LIKE '%kiwi%')`;
