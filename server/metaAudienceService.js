@@ -63,6 +63,74 @@ function normalizePhone(rawPhone) {
   return ph;
 }
 
+// Classify KIWI status into 4 business categories matching the Leads Dashboard
+function getKiwiStatusCategory(lead, rawStatus, misData) {
+  let md = misData || lead.mis_data || {};
+  if (typeof md === 'string') {
+    try { md = JSON.parse(md); } catch (e) {}
+  }
+  md = md || {};
+
+  const rawUpper = String(rawStatus || lead.mis_status || '').toUpperCase().trim();
+  const cc = String(md.card_created || md.Card_Created || '').trim().toLowerCase();
+  const ft = String(md.first_txn || md.first_transaction || '').trim().toLowerCase();
+  const cs = String(md.current_state || md.winning_state || md.final_decision || '').trim().toLowerCase();
+  const ipaStr = String(md.ipa || md.ipa_status || md.SOFT_DECISION || md.ipa_state || '').trim().toLowerCase();
+  const rejReason = String(md.reject_reason || '').trim().toLowerCase();
+  const yesSt = String(md.yes_state || '').trim().toLowerCase();
+  const auSt = String(md.au_state || '').trim().toLowerCase();
+  const pnbSt = String(md.pnb_state || '').trim().toLowerCase();
+
+  const fullStr = (rawUpper + ' ' + cc + ' ' + ft + ' ' + cs + ' ' + ipaStr + ' ' + rejReason + ' ' + yesSt + ' ' + auSt + ' ' + pnbSt).toLowerCase();
+
+  // 1. FINAL APPROVE (1 lead - Card Created)
+  const isCardCreated = (
+    (cc && cc !== 'no' && cc !== 'false' && cc !== '0' && cc !== 'null' && cc !== 'undefined' && cc !== 'na' && cc !== 'n/a' && !cc.includes('reject') && !cc.includes('decline')) ||
+    (ft && ft !== 'no' && ft !== 'false' && ft !== '0' && ft !== 'null' && ft !== 'undefined' && !ft.includes('reject') && !ft.includes('decline')) ||
+    cs === 'ac_created' || cs === 'account_created' || cs === 'card_created' || cs === 'card_issued' ||
+    rawUpper === 'APPROVED' || rawUpper === 'FINAL_APPROVE'
+  );
+
+  if (isCardCreated) {
+    return 'FINAL_APPROVE';
+  }
+
+  // 2. SOFT DECLINE (9 leads - Pre-decline / DCLP / DACP)
+  const isSoftDecline = (
+    fullStr.includes('dclp') ||
+    fullStr.includes('dacp') ||
+    fullStr.includes('pre_decline') ||
+    fullStr.includes('pre-decline') ||
+    fullStr.includes('predecline') ||
+    fullStr.includes('soft_decline') ||
+    fullStr.includes('soft decline') ||
+    fullStr.includes('softdecline') ||
+    fullStr.includes('soft_reject') ||
+    fullStr.includes('reject_soft')
+  );
+
+  if (isSoftDecline) {
+    return 'SOFT_DECLINE';
+  }
+
+  // 3. FINAL DECLINE (532 leads - Hard Rejected / Declined)
+  const isFinalDecline = (
+    rawUpper.includes('REJECT') ||
+    rawUpper.includes('DECLIN') ||
+    rawUpper.includes('CANCEL') ||
+    cs.includes('reject') ||
+    cs.includes('declin') ||
+    cs.includes('cancel')
+  );
+
+  if (isFinalDecline) {
+    return 'FINAL_DECLINE';
+  }
+
+  // 4. SOFT APPROVE (60 leads - All remaining in-progress mapped leads)
+  return 'SOFT_APPROVE';
+}
+
 // Classify raw MIS status into 4 business categories
 function getNormalizedStatusCategory(rawStatus, misData = null) {
   let md = misData;
@@ -80,7 +148,12 @@ function getNormalizedStatusCategory(rawStatus, misData = null) {
 
   const fullStateStr = (rawUpper + ' ' + cardVal + ' ' + firstTxnVal + ' ' + currentStateVal + ' ' + ipaVal + ' ' + rejectReasonVal + ' ' + String(md.yes_state || '') + ' ' + String(md.au_state || '') + ' ' + String(md.pnb_state || '')).toUpperCase();
 
-  // 1. FINAL APPROVE (1 lead - Card Created / Card Issued / Account Created)
+  // Check KIWI bank override in mis_data
+  if (md.mis_bank_name === 'KIWI' || md.kiwi_bank || md.kiwi_winning_bank) {
+    return getKiwiStatusCategory({ mis_status: rawStatus, mis_data: md }, rawStatus, md);
+  }
+
+  // 1. FINAL APPROVE
   const isCardCreatedPositive = cardVal && cardVal !== 'NO' && cardVal !== 'FALSE' && cardVal !== '0' && cardVal !== 'NULL' && cardVal !== 'UNDEFINED' && cardVal !== 'NA' && cardVal !== 'N/A' && !cardVal.includes('REJECT') && !cardVal.includes('DECLINE');
   const isFirstTxnPositive = firstTxnVal && firstTxnVal !== 'NO' && firstTxnVal !== 'FALSE' && firstTxnVal !== '0' && firstTxnVal !== 'NULL' && firstTxnVal !== 'UNDEFINED' && !firstTxnVal.includes('REJECT') && !firstTxnVal.includes('DECLINE');
 
@@ -101,7 +174,7 @@ function getNormalizedStatusCategory(rawStatus, misData = null) {
     return 'FINAL_APPROVE';
   }
 
-  // 2. SOFT DECLINE (9 leads - Pre-decline / DCLP / DACP / Soft Decline / BRE / Policy)
+  // 2. SOFT DECLINE
   if (
     fullStateStr.includes('SOFT_DECLINE') ||
     fullStateStr.includes('SOFT DECLINE') ||
@@ -111,37 +184,23 @@ function getNormalizedStatusCategory(rawStatus, misData = null) {
     fullStateStr.includes('DCLP') ||
     fullStateStr.includes('DACP') ||
     fullStateStr.includes('SOFT_REJECT') ||
-    fullStateStr.includes('REJECT_SOFT') ||
-    fullStateStr.includes('POLICY') ||
-    fullStateStr.includes('BRE_DECLINE') ||
-    fullStateStr.includes('BRE')
+    fullStateStr.includes('REJECT_SOFT')
   ) {
     return 'SOFT_DECLINE';
   }
 
-  // 3. SOFT APPROVE (60 leads - Soft Approved / IPA Approved / In Progress / VKYC / Submitted / Active Funnel)
-  const isSoftApprove = (
-    fullStateStr.includes('APPROV') ||
-    fullStateStr.includes('PASS') ||
-    fullStateStr.includes('SUCCESS') ||
-    fullStateStr.includes('ELIGIBLE') ||
-    fullStateStr.includes('DOC') ||
-    fullStateStr.includes('IN_PROGRESS') ||
-    fullStateStr.includes('IN PROGRESS') ||
-    fullStateStr.includes('VKYC') ||
-    fullStateStr.includes('KYC') ||
-    fullStateStr.includes('SUBMITTED') ||
-    fullStateStr.includes('OTP') ||
-    rawUpper === 'PENDING' ||
-    (md.ipa_date && String(md.ipa_date).trim() !== '')
-  );
-
-  if (isSoftApprove) {
-    return 'SOFT_APPROVE';
+  // 3. FINAL DECLINE
+  if (
+    fullStateStr.includes('DECLINE') ||
+    fullStateStr.includes('REJECT') ||
+    fullStateStr.includes('CANCEL') ||
+    fullStateStr.includes('FAIL')
+  ) {
+    return 'FINAL_DECLINE';
   }
 
-  // 4. FINAL DECLINE (532 leads - All remaining hard rejected / declined leads)
-  return 'FINAL_DECLINE';
+  // 4. SOFT APPROVE
+  return 'SOFT_APPROVE';
 }
 
 // Normalize bank name to uppercase clean canonical string
@@ -532,7 +591,7 @@ async function getEligibleMappedLeadsForAudience(audience) {
       }
 
       const filtered = allLeads.rows.filter(l => {
-        const cat = getNormalizedStatusCategory(l.mis_status, l.mis_data);
+        const cat = bank_name === 'KIWI' ? getKiwiStatusCategory(l, l.mis_status, l.mis_data) : getNormalizedStatusCategory(l.mis_status, l.mis_data);
         return cat === status_category;
       });
       return filtered;
