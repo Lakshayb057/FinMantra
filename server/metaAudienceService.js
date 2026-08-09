@@ -77,17 +77,12 @@ function getKiwiStatusCategory(lead, rawStatus, misData) {
   const cs = String(md.current_state || md.winning_state || md.final_decision || '').trim().toLowerCase();
   const ipaStr = String(md.ipa || md.ipa_status || md.SOFT_DECISION || md.ipa_state || '').trim().toLowerCase();
   const rejReason = String(md.reject_reason || '').trim().toLowerCase();
-  const yesSt = String(md.yes_state || '').trim().toLowerCase();
-  const auSt = String(md.au_state || '').trim().toLowerCase();
-  const pnbSt = String(md.pnb_state || '').trim().toLowerCase();
-
-  const fullStr = (rawUpper + ' ' + cc + ' ' + ft + ' ' + cs + ' ' + ipaStr + ' ' + rejReason + ' ' + yesSt + ' ' + auSt + ' ' + pnbSt).toLowerCase();
 
   // 1. FINAL APPROVE (1 lead - Card Created)
   const isCardCreated = (
-    (cc && cc !== 'no' && cc !== 'false' && cc !== '0' && cc !== 'null' && cc !== 'undefined' && cc !== 'na' && cc !== 'n/a' && !cc.includes('reject') && !cc.includes('decline')) ||
-    (ft && ft !== 'no' && ft !== 'false' && ft !== '0' && ft !== 'null' && ft !== 'undefined' && !ft.includes('reject') && !ft.includes('decline')) ||
-    cs === 'ac_created' || cs === 'account_created' || cs === 'card_created' || cs === 'card_issued' ||
+    (cc && cc !== 'no' && cc !== 'false' && cc !== '0' && cc !== 'null' && cc !== 'undefined' && cc !== 'na' && cc !== 'n/a') ||
+    (ft && ft !== 'no' && ft !== 'false' && ft !== '0' && ft !== 'null' && ft !== 'undefined') ||
+    cs.includes('ac_created') || cs.includes('accreated') || cs.includes('card_created') || cs.includes('cardcreated') || cs.includes('card_issued') ||
     rawUpper === 'APPROVED' || rawUpper === 'FINAL_APPROVE'
   );
 
@@ -97,16 +92,9 @@ function getKiwiStatusCategory(lead, rawStatus, misData) {
 
   // 2. SOFT DECLINE (9 leads - Pre-decline / DCLP / DACP)
   const isSoftDecline = (
-    fullStr.includes('dclp') ||
-    fullStr.includes('dacp') ||
-    fullStr.includes('pre_decline') ||
-    fullStr.includes('pre-decline') ||
-    fullStr.includes('predecline') ||
-    fullStr.includes('soft_decline') ||
-    fullStr.includes('soft decline') ||
-    fullStr.includes('softdecline') ||
-    fullStr.includes('soft_reject') ||
-    fullStr.includes('reject_soft')
+    ipaStr.includes('dclp') || ipaStr.includes('dacp') || ipaStr.includes('pre_decline') || ipaStr.includes('pre-decline') || ipaStr.includes('soft_decline') ||
+    cs.includes('dclp') || cs.includes('dacp') || cs.includes('pre_decline') || cs.includes('pre-decline') || cs.includes('soft_decline') ||
+    rejReason.includes('dclp') || rejReason.includes('dacp') || rejReason.includes('pre_decline')
   );
 
   if (isSoftDecline) {
