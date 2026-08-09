@@ -280,14 +280,14 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       }
       return `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE UPPER(mis_status) LIKE '%APPROV%' OR UPPER(mis_status) LIKE '%CARD%CREATE%';`;
     } else if (cat.includes('FINAL') && (cat.includes('DECLINED') || cat.includes('REJECTED'))) {
-      return `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE UPPER(mis_status) LIKE '%DECLINE%' OR UPPER(mis_status) LIKE '%REJECT%';`;
+      return `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE UPPER(mis_status) LIKE '%DECLINE%' OR UPPER(mis_status) LIKE '%REJECT%' OR UPPER(mis_status) LIKE '%CANCEL%';`;
     } else if (cat.includes('SOFT') && cat.includes('APPROVED')) {
-      return `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE UPPER(mis_status) LIKE '%IPA%' OR UPPER(mis_status) LIKE '%VKYC%';`;
+      return `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE UPPER(mis_status) LIKE '%IPA%' OR UPPER(mis_status) LIKE '%VKYC%' OR UPPER(mis_status) LIKE '%SOFT%';`;
     } else if (cat.includes('SOFT') && cat.includes('DECLINED')) {
-      return `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE UPPER(mis_status) LIKE '%SOFT%DECLINE%';`;
+      return `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE UPPER(mis_status) LIKE '%SOFT%REJECT%' OR UPPER(mis_status) LIKE '%SOFT%DECLINE%';`;
     }
 
-    return `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE mis_status IS NOT NULL;`;
+    return `SELECT id, urn, full_name, phone, email, card_bank, mis_status FROM leads WHERE mis_status IS NOT NULL OR mis_mapped_at IS NOT NULL;`;
   };
 
   const fetchMetaAudiences = async () => {
