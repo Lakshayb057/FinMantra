@@ -109,20 +109,17 @@ function getKiwiStatusCategory(lead, rawStatus, misData) {
     return 'SOFT_DECLINE';
   }
 
-  // 3. SOFT APPROVE (60 leads - In-progress / Soft Approved / IPA Approved)
-  const kiwiIpa = (String(md.ipa || md.ipa_status || md.SOFT_DECISION || md.ipa_state || '') + ' ' + String(md.pnb_state || '') + ' ' + String(md.yes_state || '') + ' ' + String(md.au_state || '')).toLowerCase();
-  const isKiwiSoftApprove = kiwiIpa.includes('approve') || kiwiIpa.includes('pass') || kiwiIpa.includes('success') || kiwiIpa.includes('eligible') || kiwiIpa.includes('doc_upload') || kiwiIpa.includes('in_progress') || (md.ipa_date && String(md.ipa_date).trim() !== '');
+  // 3. FINAL DECLINE (532 leads - Hard Rejected / Declined)
+  const isHardDecline = (
+    (rawUpper.includes('REJECT') || rawUpper.includes('DECLIN') || rawUpper.includes('CANCEL') || cs.includes('reject') || cs.includes('declin')) &&
+    !ipaRaw.includes('approve') && !ipaRaw.includes('pass') && !ipaRaw.includes('eligible')
+  );
 
-  if (isKiwiSoftApprove && !rawUpper.includes('REJECT') && !rawUpper.includes('DECLIN')) {
-    return 'SOFT_APPROVE';
-  }
-
-  // 4. FINAL DECLINE (532 leads - Hard Rejected / Declined)
-  if (rawUpper.includes('REJECT') || rawUpper.includes('DECLIN') || rawUpper.includes('CANCEL') || cs.includes('reject') || cs.includes('declin')) {
+  if (isHardDecline) {
     return 'FINAL_DECLINE';
   }
 
-  // Fallback for remaining active leads -> SOFT_APPROVE
+  // 4. SOFT APPROVE (60 leads - Soft Approved / In-progress)
   return 'SOFT_APPROVE';
 }
 
