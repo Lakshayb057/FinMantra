@@ -2192,23 +2192,16 @@ const db = {
         const cleanB = String(bankName || '').toUpperCase();
         if (cleanB.includes('KIWI')) {
           statusCondition = `(
-            LOWER(mis_status) IN ('card created', 'card_created', 'card generated', 'card_generated') OR
-            LOWER(COALESCE(mis_data->>'Card_Created', '')) IN ('1', 'yes', 'true') OR
-            LOWER(COALESCE(mis_data->>'card_created', '')) IN ('1', 'yes', 'true') OR
-            LOWER(COALESCE(mis_data->>'current_state', '')) IN ('card created', 'card_created') OR
-            LOWER(COALESCE(mis_data->>'card_activation_status', '')) IN ('active', 'yes', '1') OR
-            LOWER(COALESCE(mis_data->>'yes_state', '')) LIKE '%card%create%' OR
-            LOWER(COALESCE(mis_data->>'au_state', '')) LIKE '%card%create%' OR
-            LOWER(COALESCE(mis_data->>'pnb_state', '')) LIKE '%card%create%' OR
-            UPPER(mis_data::text) LIKE '%"CARD_CREATED":"1"%' OR
-            UPPER(mis_data::text) LIKE '%"CARD_CREATED": "1"%' OR
-            UPPER(mis_data::text) LIKE '%"CARD_CREATED":"YES"%' OR
-            UPPER(mis_data::text) LIKE '%"CARD_CREATED": "YES"%' OR
-            UPPER(mis_data::text) LIKE '%"CARD_CREATED":1%' OR
-            UPPER(mis_data::text) LIKE '%"CARD_CREATED": 1%'
+            UPPER(mis_data::text) LIKE '%CARD%CREATE%' OR 
+            UPPER(mis_data::text) LIKE '%CARD_CREATED%' OR 
+            UPPER(COALESCE(mis_status,'')) LIKE '%CARD%CREATE%' OR 
+            UPPER(COALESCE(mis_status,'')) LIKE '%CARD_CREATED%' OR
+            LOWER(COALESCE(mis_data->>'card_activation_status', '')) IN ('active', 'yes', '1')
           ) AND NOT (
-            UPPER(mis_status) LIKE '%REJECT%' OR 
-            UPPER(mis_status) LIKE '%DECLINE%'
+            UPPER(COALESCE(mis_status,'')) LIKE '%REJECT%' OR 
+            UPPER(COALESCE(mis_status,'')) LIKE '%DECLINE%' OR
+            UPPER(COALESCE(mis_data->>'final_decision','')) LIKE '%REJECT%' OR
+            UPPER(COALESCE(mis_data->>'final_decision','')) LIKE '%DECLINE%'
           )`;
         } else {
           statusCondition = `(
