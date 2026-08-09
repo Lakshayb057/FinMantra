@@ -165,8 +165,14 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
       cleanVal = value.replace(/[^0-9]/g, '').slice(0, name === 'mobile' ? 10 : 6);
     }
 
-    setFormData(prev => ({ ...prev, [name]: cleanVal }));
-    validateField(name, cleanVal, { ...formData, [name]: cleanVal });
+    const nextFormState = { ...formData, [name]: cleanVal };
+    setFormData(nextFormState);
+    validateField(name, cleanVal, nextFormState);
+
+    // Cross-field validation: if full name changed, re-validate mother's name immediately
+    if (name === 'name' && nextFormState.mother_name) {
+      validateField('mother_name', nextFormState.mother_name, nextFormState);
+    }
   };
 
   // Field validation
@@ -215,8 +221,8 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
     }
 
     if (name === 'mother_name') {
-      const trimmedMother = value ? String(value).trim() : '';
-      const trimmedFull = currentFormState.name ? String(currentFormState.name).trim() : '';
+      const trimmedMother = value ? String(value).trim().replace(/\s+/g, ' ') : '';
+      const trimmedFull = currentFormState.name ? String(currentFormState.name).trim().replace(/\s+/g, ' ') : '';
 
       if (!trimmedMother) {
         errorText = "Mother's Name is required";
@@ -229,7 +235,7 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
 
     if (name === 'current_address') {
       if (!value || String(value).trim().length < 5) {
-        errorText = 'Please enter complete current residential address.';
+        errorText = 'Please enter complete current residential address (min 5 characters).';
       }
     }
 
@@ -310,7 +316,7 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
     return !errorText;
   };
 
-  // Validate entire form
+  // Validate entire form strictly before proceeding
   const validateForm = () => {
     let isValid = true;
     const requiredFields = [
@@ -319,11 +325,82 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
       'employment', 'designation', 'company_name', 'consent'
     ];
 
+    const currentErrors = {};
+
     requiredFields.forEach(field => {
       const val = formData[field];
-      const ok = validateField(field, val, formData);
-      if (!ok) isValid = false;
+      let fieldError = '';
+
+      if (field === 'pan') {
+        if (!val) fieldError = 'PAN Number is required';
+        else if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(val)) fieldError = 'Invalid PAN format (e.g. ABCDE1234F).';
+      } else if (field === 'name') {
+        const trimmed = val ? String(val).trim() : '';
+        if (!trimmed) fieldError = 'Full Name is required';
+        else if (!/^[a-zA-Z\s.]+$/.test(trimmed)) fieldError = 'Full Name should contain only letters and spaces';
+        else if (trimmed.split(/\s+/).filter(Boolean).length < 2) fieldError = 'Please enter your Full Name (First and Last Name)';
+      } else if (field === 'dob') {
+        if (!val) fieldError = 'Date of Birth is required';
+        else {
+          const dobDate = new Date(val);
+          const today = new Date();
+          let age = today.getFullYear() - dobDate.getFullYear();
+          const monthDiff = today.getMonth() - dobDate.getMonth();
+          if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dobDate.getDate())) age--;
+          if (isNaN(age) || age < 18) fieldError = 'You must be at least 18 years old to apply.';
+          else if (age > 75) fieldError = 'Age limit for application is 75 years.';
+        }
+      } else if (field === 'mother_name') {
+        const trimmedMother = val ? String(val).trim().replace(/\s+/g, ' ') : '';
+        const trimmedFull = formData.name ? String(formData.name).trim().replace(/\s+/g, ' ') : '';
+        if (!trimmedMother) fieldError = "Mother's Name is required";
+        else if (!/^[a-zA-Z\s.]+$/.test(trimmedMother)) fieldError = "Mother's Name should contain only letters and spaces";
+        else if (trimmedFull && trimmedMother.toLowerCase() === trimmedFull.toLowerCase()) {
+          fieldError = "Mother's name cannot be the same as Full Name";
+        }
+      } else if (field === 'current_address') {
+        if (!val || String(val).trim().length < 5) fieldError = 'Complete residential address is required (min 5 characters).';
+      } else if (field === 'pincode') {
+        if (!val) fieldError = 'Pincode is required';
+        else if (val.length !== 6 || !/^\d+$/.test(val)) fieldError = 'Pincode must be exactly 6 digits.';
+        else if (pincodeError) fieldError = pincodeError;
+      } else if (field === 'landmark') {
+        if (!val || !String(val).trim()) fieldError = 'Landmark is required';
+      } else if (field === 'city') {
+        if (!val || !String(val).trim()) fieldError = 'City is required';
+      } else if (field === 'state') {
+        if (!val || !String(val).trim()) fieldError = 'State is required';
+      } else if (field === 'mobile') {
+        if (!val) fieldError = 'Phone number is required';
+        else if (!/^[6-9]/.test(val)) fieldError = 'Phone number must start with 6, 7, 8, or 9';
+        else if (val.length !== 10) fieldError = 'Phone number must be exactly 10 digits.';
+      } else if (field === 'email') {
+        if (!val) fieldError = 'Email is required';
+        else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) fieldError = 'Please enter a valid email address.';
+      } else if (field === 'employment') {
+        if (!val || !String(val).trim()) fieldError = 'Employment type is required';
+      } else if (field === 'designation') {
+        if (!val || !String(val).trim()) fieldError = 'Designation is required';
+      } else if (field === 'company_name') {
+        if (!val || !String(val).trim()) fieldError = 'Company Name is required';
+      } else if (field === 'consent') {
+        if (!val) fieldError = 'Please check the consent checkbox to continue.';
+      }
+
+      if (fieldError) {
+        currentErrors[field] = fieldError;
+        isValid = false;
+      }
     });
+
+    setErrors(currentErrors);
+
+    if (!isValid) {
+      const firstKey = Object.keys(currentErrors)[0];
+      setFormError(`Please correct the error: ${currentErrors[firstKey]}`);
+    } else {
+      setFormError('');
+    }
 
     return isValid;
   };
