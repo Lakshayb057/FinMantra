@@ -1219,9 +1219,26 @@ app.post('/api/leads', leadSubmitRateLimiter.middleware(), async (req, res) => {
     return res.status(400).json({ error: 'Please enter a valid email address.' });
   }
 
-  // Validate Mother's Name != Full Name
-  if (mother_name && full_name && String(mother_name).trim().toLowerCase() === String(full_name).trim().toLowerCase()) {
-    return res.status(400).json({ error: "Mother's name cannot be the same as Full Name." });
+  // Validate Mother's Name != Full Name & check for both first and last name
+  if (mother_name && full_name) {
+    const cleanMother = String(mother_name).trim().replace(/\s+/g, ' ').toLowerCase();
+    const cleanFull = String(full_name).trim().replace(/\s+/g, ' ').toLowerCase();
+    const motherWords = cleanMother.split(/\s+/).filter(Boolean);
+    const fullWords = cleanFull.split(/\s+/).filter(Boolean);
+
+    if (cleanMother === cleanFull) {
+      return res.status(400).json({ error: "Mother's name cannot be the same as Full Name." });
+    }
+    if (motherWords.length < 2) {
+      return res.status(400).json({ error: "Please enter Mother's Full Name (First and Last Name)." });
+    }
+    if (fullWords.length > 0) {
+      const applicantFirstName = fullWords[0];
+      const motherFirstName = motherWords[0];
+      if (motherFirstName === applicantFirstName || motherWords.includes(applicantFirstName)) {
+        return res.status(400).json({ error: "Mother's name cannot be the same as applicant's first name." });
+      }
+    }
   }
 
   const isSbiQde = source === 'sbi_qde' || source === 'SBI (QDE)' || (landing_page && String(landing_page).toLowerCase().includes('sbi_qde'));

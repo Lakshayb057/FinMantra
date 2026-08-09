@@ -228,8 +228,24 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
         errorText = "Mother's Name is required";
       } else if (!/^[a-zA-Z\s.]+$/.test(trimmedMother)) {
         errorText = "Mother's Name should contain only letters and spaces";
-      } else if (trimmedFull && trimmedMother.toLowerCase() === trimmedFull.toLowerCase()) {
-        errorText = "Mother's name cannot be the same as Full Name";
+      } else {
+        const motherWords = trimmedMother.toLowerCase().split(/\s+/).filter(Boolean);
+        const fullWords = trimmedFull.toLowerCase().split(/\s+/).filter(Boolean);
+
+        if (motherWords.length < 2) {
+          errorText = "Please enter Mother's Full Name (First and Last Name)";
+        } else if (trimmedFull && trimmedMother.toLowerCase() === trimmedFull.toLowerCase()) {
+          errorText = "Mother's name cannot be the same as Full Name";
+        } else if (fullWords.length > 0) {
+          const applicantFirstName = fullWords[0];
+          const motherFirstName = motherWords[0];
+
+          if (motherFirstName === applicantFirstName) {
+            errorText = "Mother's first name cannot be the same as applicant's first name";
+          } else if (motherWords.includes(applicantFirstName)) {
+            errorText = "Mother's name cannot contain applicant's first name";
+          }
+        }
       }
     }
 
@@ -353,10 +369,26 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
       } else if (field === 'mother_name') {
         const trimmedMother = val ? String(val).trim().replace(/\s+/g, ' ') : '';
         const trimmedFull = formData.name ? String(formData.name).trim().replace(/\s+/g, ' ') : '';
-        if (!trimmedMother) fieldError = "Mother's Name is required";
-        else if (!/^[a-zA-Z\s.]+$/.test(trimmedMother)) fieldError = "Mother's Name should contain only letters and spaces";
-        else if (trimmedFull && trimmedMother.toLowerCase() === trimmedFull.toLowerCase()) {
-          fieldError = "Mother's name cannot be the same as Full Name";
+        if (!trimmedMother) {
+          fieldError = "Mother's Name is required";
+        } else if (!/^[a-zA-Z\s.]+$/.test(trimmedMother)) {
+          fieldError = "Mother's Name should contain only letters and spaces";
+        } else {
+          const motherWords = trimmedMother.toLowerCase().split(/\s+/).filter(Boolean);
+          const fullWords = trimmedFull.toLowerCase().split(/\s+/).filter(Boolean);
+          if (motherWords.length < 2) {
+            fieldError = "Please enter Mother's Full Name (First and Last Name)";
+          } else if (trimmedFull && trimmedMother.toLowerCase() === trimmedFull.toLowerCase()) {
+            fieldError = "Mother's name cannot be the same as Full Name";
+          } else if (fullWords.length > 0) {
+            const applicantFirstName = fullWords[0];
+            const motherFirstName = motherWords[0];
+            if (motherFirstName === applicantFirstName) {
+              fieldError = "Mother's first name cannot be the same as applicant's first name";
+            } else if (motherWords.includes(applicantFirstName)) {
+              fieldError = "Mother's name cannot contain applicant's first name";
+            }
+          }
         }
       } else if (field === 'current_address') {
         if (!val || String(val).trim().length < 5) fieldError = 'Complete residential address is required (min 5 characters).';
