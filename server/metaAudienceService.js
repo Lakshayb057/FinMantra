@@ -137,7 +137,8 @@ function getNormalizedStatusCategory(rawStatus, misData = null) {
   const fullStateStr = (rawUpper + ' ' + cardVal + ' ' + firstTxnVal + ' ' + currentStateVal + ' ' + ipaVal + ' ' + rejectReasonVal + ' ' + String(md.yes_state || '') + ' ' + String(md.au_state || '') + ' ' + String(md.pnb_state || '')).toUpperCase();
 
   // Check KIWI bank override in mis_data
-  if (md.mis_bank_name === 'KIWI' || md.kiwi_bank || md.kiwi_winning_bank) {
+  const bankNameUpper = String(md.mis_bank_name || '').toUpperCase();
+  if (bankNameUpper.includes('KIWI') || md.kiwi_bank || md.kiwi_winning_bank) {
     return getKiwiStatusCategory({ mis_status: rawStatus, mis_data: md }, rawStatus, md);
   }
 
@@ -579,7 +580,11 @@ async function getEligibleMappedLeadsForAudience(audience) {
       }
 
       const filtered = allLeads.rows.filter(l => {
-        const cat = bank_name === 'KIWI' ? getKiwiStatusCategory(l, l.mis_status, l.mis_data) : getNormalizedStatusCategory(l.mis_status, l.mis_data);
+        let md = l.mis_data;
+        if (typeof md === 'string') try { md = JSON.parse(md); } catch(e) {}
+        md = md || {};
+        const isKiwi = bank_name === 'KIWI' || String(l.card_bank || '').toUpperCase().includes('KIWI') || String(md.mis_bank_name || '').toUpperCase().includes('KIWI');
+        const cat = isKiwi ? getKiwiStatusCategory(l, l.mis_status, md) : getNormalizedStatusCategory(l.mis_status, md);
         return cat === status_category;
       });
       return filtered;
