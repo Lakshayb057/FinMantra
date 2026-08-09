@@ -1126,9 +1126,7 @@ async function syncLeadsToMetaCustomAudiences(leadsList, targetAudienceId = null
 
         return [
           sha256Hash(l.email) || '',
-          sha256Hash(ph) || '',
-          sha256Hash(fn) || '',
-          sha256Hash(ln) || ''
+          sha256Hash(ph) || ''
         ];
       }).filter(row => row[0] || row[1]);
 
@@ -1136,7 +1134,7 @@ async function syncLeadsToMetaCustomAudiences(leadsList, targetAudienceId = null
 
       const payload = {
         payload: {
-          schema: ['EMAIL_SHA256', 'PHONE_SHA256', 'FN_SHA256', 'LN_SHA256'],
+          schema: ['EMAIL_SHA256', 'PHONE_SHA256'],
           data: userRows
         }
       };
