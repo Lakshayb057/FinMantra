@@ -5036,6 +5036,28 @@ app.post('/api/meta/audiences', authenticateToken, requireAdmin, async (req, res
       return res.status(400).json({ error: 'Audience name is required' });
     }
 
+    // Check if an audience with the same name or same bank + category already exists to prevent duplicate audiences
+    const existingList = await db.getMetaAudiences();
+    const existingAud = existingList.find(a => 
+      a.name.toLowerCase().trim() === name.toLowerCase().trim() ||
+      (a.bank_name && a.bank_name.toUpperCase().trim() === (bank_name || 'ALL').toUpperCase().trim() &&
+       a.mis_category && a.mis_category.toUpperCase().trim() === (mis_category || 'FINAL APPROVED').toUpperCase().trim())
+    );
+
+    if (existingAud) {
+      console.log(`[Meta API] Duplicate audience detected for '${name}'. Updating existing audience ID ${existingAud.id}...`);
+      const updatedAud = await db.updateMetaAudience(existingAud.id, {
+        name: name.trim(),
+        description: description || existingAud.description,
+        meta_audience_id: meta_audience_id || existingAud.meta_audience_id,
+        bank_name: bank_name || existingAud.bank_name,
+        mis_category: mis_category || existingAud.mis_category,
+        sql_filter: sql_filter !== undefined ? sql_filter : existingAud.sql_filter,
+        auto_push: auto_push !== undefined ? auto_push : existingAud.auto_push
+      });
+      return res.json({ success: true, audience: updatedAud, updated: true });
+    }
+
     const settings = await db.getSettings();
     const adAccountId = getSettingVal(settings, 'meta_ad_account_id', 'META_AD_ACCOUNT_ID');
     const accessToken = getSettingVal(settings, 'meta_access_token', 'META_ACCESS_TOKEN');
