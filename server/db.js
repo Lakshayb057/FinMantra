@@ -2189,12 +2189,21 @@ const db = {
       } else if (cat.includes('ALL')) {
         statusCondition = `(phone IS NOT NULL AND phone != '') OR (email IS NOT NULL AND email != '')`;
       } else {
-        // Default: FINAL APPROVED (Card Created)
+        // Default: FINAL APPROVED (Card Created / Approved / Issued / File Generated)
         statusCondition = `(
-          LOWER(mis_status) IN ('card created', 'card_created', 'card generated', 'card_generated') OR
+          LOWER(mis_status) IN ('card created', 'card_created', 'card generated', 'card_generated', 'approved', 'issued', 'disbursed', 'file generated') OR
+          UPPER(mis_status) LIKE '%APPROV%' OR 
+          UPPER(mis_status) LIKE '%CARD%CREATE%' OR 
+          UPPER(mis_status) LIKE '%CARD%GENERATE%' OR 
+          UPPER(mis_status) LIKE '%ISSUED%' OR 
+          UPPER(mis_status) LIKE '%DISBURS%' OR 
+          UPPER(mis_status) LIKE '%FILE GENERAT%' OR 
+          UPPER(mis_status) LIKE '%APPL FILE%' OR 
           LOWER(COALESCE(mis_data->>'Card_Created', '')) IN ('1', 'yes', 'true') OR
           LOWER(COALESCE(mis_data->>'card_created', '')) IN ('1', 'yes', 'true') OR
-          LOWER(COALESCE(mis_data->>'current_state', '')) IN ('card created', 'card_created') OR
+          LOWER(COALESCE(mis_data->>'current_state', '')) IN ('card created', 'card_created', 'approved', 'issued') OR
+          UPPER(COALESCE(mis_data->>'final_decision', '')) LIKE '%APPROV%' OR
+          UPPER(COALESCE(mis_data->>'final_decision', '')) LIKE '%FILE GENERAT%' OR
           UPPER(mis_data::text) LIKE '%"CARD_CREATED":"1"%' OR
           UPPER(mis_data::text) LIKE '%"CARD_CREATED":1%' OR
           UPPER(mis_data::text) LIKE '%"CARD_CREATED":"YES"%'
