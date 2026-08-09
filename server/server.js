@@ -5244,6 +5244,8 @@ app.patch('/api/meta/config', authenticateToken, requireAdmin, async (req, res) 
     });
 
     const connResult = await metaAudienceService.testMetaConnection();
+    // Auto-provision Meta Custom Audiences on newly configured Ad Account in background
+    metaAudienceService.autoProvisionBankAudiences(broadcast).catch(err => console.error('[Meta Provisioning Error]:', err.message));
     res.json({ success: true, connected: connResult.connected, connection: connResult });
   } catch (err) {
     res.status(500).json({ error: err.message });
