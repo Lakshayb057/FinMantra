@@ -2231,7 +2231,7 @@ const db = {
         }
       }
 
-      let whereClause = ` WHERE mis_status IS NOT NULL AND (${statusCondition})`;
+      let whereClause = ` WHERE (mis_status IS NOT NULL OR mis_mapped_at IS NOT NULL) AND (${statusCondition})`;
 
       const params = [];
       if (bankName && bankName !== 'ALL') {
@@ -2252,9 +2252,9 @@ const db = {
         return res.rows;
       }
 
-      // Fallback: ONLY run fallback for ALL MAPPED LEADS category (mis_status IS NOT NULL)
+      // Fallback: ONLY run fallback for ALL MAPPED LEADS category
       console.log(`[DB] Fallback: Querying all mapped leads for bank ${bankName}...`);
-      let fallbackWhere = ` WHERE mis_status IS NOT NULL AND ( (phone IS NOT NULL AND phone != '') OR (email IS NOT NULL AND email != '') )`;
+      let fallbackWhere = ` WHERE (mis_status IS NOT NULL OR mis_mapped_at IS NOT NULL) AND ( (phone IS NOT NULL AND phone != '') OR (email IS NOT NULL AND email != '') )`;
       const fallbackParams = [];
       if (bankName && bankName !== 'ALL') {
         const cleanB = bankName.trim().toUpperCase();

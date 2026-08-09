@@ -289,7 +289,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       catCond = `(UPPER(mis_status) LIKE '%SOFT%REJECT%' OR UPPER(mis_status) LIKE '%SOFT%DECLINE%' OR UPPER(mis_status) LIKE '%DCLP%' OR UPPER(mis_status) LIKE '%DACP%')`;
     }
 
-    return `SELECT id, urn, full_name, phone, email, card_bank, mis_status\nFROM leads\nWHERE mis_status IS NOT NULL\n  AND ${bankCond}\n  AND ${catCond};`;
+    return `SELECT id, urn, full_name, phone, email, card_bank, mis_status\nFROM leads\nWHERE (mis_status IS NOT NULL OR mis_mapped_at IS NOT NULL)\n  AND ${bankCond}\n  AND ${catCond};`;
   };
 
   const fetchMetaAudiences = async () => {
