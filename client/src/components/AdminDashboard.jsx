@@ -2806,7 +2806,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       if (isKiwiVkycApprove) kiwiVkycApproved++;
 
       const kiwiCard = (String(md.Card_Created || md.card_activation_status || md.card_created || md.card_state || md.current_state || md.winning_state || md.mis_status || l.mis_status || '') + ' ' + String(md.pnb_state || '') + ' ' + String(md.yes_state || '') + ' ' + String(md.au_state || '')).toLowerCase();
-      const isKiwiCardCreated = kiwiCard.includes('yes') || kiwiCard.includes('approve') || kiwiCard.includes('active') || kiwiCard.includes('created') || kiwiCard.includes('issued') || kiwiCard.includes('disbursed') || kiwiCard.includes('card_created') || kiwiCard === '1';
+      const isKiwiCardCreated = (kiwiCard.includes('approve') || kiwiCard.includes('active') || kiwiCard.includes('created') || kiwiCard.includes('issued') || kiwiCard.includes('disbursed') || kiwiCard.includes('card_created') || kiwiCard === '1') && !kiwiCard.includes('reject') && !kiwiCard.includes('decline');
       if (isKiwiCardCreated) kiwiCardCreated++;
 
       const kiwiTxn = (String(md.first_txn || md.first_transaction || md.txn_state || md.card_activation_status || '') + ' ' + String(md.pnb_state || '') + ' ' + String(md.yes_state || '') + ' ' + String(md.au_state || '')).toLowerCase();
