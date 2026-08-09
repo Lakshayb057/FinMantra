@@ -1296,6 +1296,10 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
     try {
       const res = await apiFetch(`${API_URL}/admin/db-query`, {
         method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
         body: JSON.stringify({ query: sqlQuery })
       });
       if (res && res.success) {
