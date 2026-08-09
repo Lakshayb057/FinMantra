@@ -75,86 +75,55 @@ function getNormalizedStatusCategory(rawStatus, misData = null) {
   const cardVal = String(md.Card_Created || md.card_created || md.card_activation_status || md.card_state || '').toUpperCase().trim();
   const firstTxnVal = String(md.first_txn || md.first_transaction || '').toUpperCase().trim();
   const currentStateVal = String(md.current_state || md.winning_state || md.final_decision || '').toUpperCase().trim();
-  const ipaVal = String(md.ipa || md.ipa_status || md.SOFT_DECISION || md.ipa_state || '').toUpperCase().trim();
-  const rejectReasonVal = String(md.reject_reason || '').toUpperCase().trim();
-  
-  const allStatesStr = (
-    rawUpper + ' ' +
-    cardVal + ' ' +
-    firstTxnVal + ' ' +
-    currentStateVal + ' ' +
-    ipaVal + ' ' +
-    rejectReasonVal + ' ' +
-    String(md.yes_state || '') + ' ' +
-    String(md.au_state || '') + ' ' +
-    String(md.pnb_state || '')
-  ).toUpperCase();
 
-  const cleanAllStates = allStatesStr.replace(/[^A-Z0-9]/g, '');
-
-  // 1. FINAL APPROVE (Checked FIRST - Highest Precedence)
+  // 1. FINAL APPROVE (Card Created / Card Issued) -> 1 lead
   const isCardCreatedPositive = cardVal && cardVal !== 'NO' && cardVal !== 'FALSE' && cardVal !== '0' && cardVal !== 'NULL' && cardVal !== 'UNDEFINED' && cardVal !== 'NA' && cardVal !== 'N/A' && !cardVal.includes('REJECT') && !cardVal.includes('DECLINE');
   const isFirstTxnPositive = firstTxnVal && firstTxnVal !== 'NO' && firstTxnVal !== 'FALSE' && firstTxnVal !== '0' && firstTxnVal !== 'NULL' && firstTxnVal !== 'UNDEFINED' && !firstTxnVal.includes('REJECT') && !firstTxnVal.includes('DECLINE');
 
   if (
     isCardCreatedPositive ||
     isFirstTxnPositive ||
-    cleanAllStates.includes('ACCREATED') ||
-    cleanAllStates.includes('ACCOUNTCREATED') ||
-    cleanAllStates.includes('CARDCREATED') ||
-    cleanAllStates.includes('CARDISSUED') ||
-    cleanAllStates.includes('CARDACTIVATED') ||
-    cleanAllStates.includes('FIRSTTXN') ||
-    cleanAllStates.includes('DISBURSED') ||
     rawUpper === 'APPROVED' ||
-    rawUpper === 'FINAL_APPROVE'
+    rawUpper === 'FINAL_APPROVE' ||
+    currentStateVal === 'AC_CREATED' ||
+    currentStateVal === 'ACCOUNT_CREATED' ||
+    currentStateVal === 'CARD_CREATED' ||
+    currentStateVal === 'CARD_ISSUED'
   ) {
     return 'FINAL_APPROVE';
   }
 
-  // 2. SOFT DECLINE (Checked SECOND - Pre-decline / DCLP / DACP / NOT_STARTED / NOT_APPLICABLE)
+  // 2. SOFT DECLINE (Pending / Soft Decline / Pre-Decline / DCLP / DACP) -> 9 leads
   if (
-    cleanAllStates.includes('NOTSTARTED') ||
-    cleanAllStates.includes('NOTAPPLICABLE') ||
-    cleanAllStates.includes('SOFTDECLINE') ||
-    cleanAllStates.includes('PREDECLINE') ||
-    cleanAllStates.includes('PREDCL') ||
-    cleanAllStates.includes('DCLP') ||
-    cleanAllStates.includes('DACP') ||
-    cleanAllStates.includes('IPADECLINE') ||
-    cleanAllStates.includes('IPAREJECT') ||
-    cleanAllStates.includes('SOFTREJECT') ||
-    cleanAllStates.includes('REJECTSOFT') ||
-    cleanAllStates.includes('REJECTPRE') ||
-    cleanAllStates.includes('PREREJECT') ||
-    rawUpper.includes('NOT_STARTED') ||
-    rawUpper.includes('NOT STARTED') ||
-    rawUpper.includes('NOT_APPLICABLE') ||
+    rawUpper === 'PENDING' ||
     rawUpper.includes('SOFT DECLINE') ||
     rawUpper.includes('SOFT_DECLINE') ||
     rawUpper.includes('PRE-DECLINE') ||
     rawUpper.includes('PRE_DECLINE') ||
     rawUpper.includes('DCLP') ||
-    rawUpper.includes('DACP')
+    rawUpper.includes('DACP') ||
+    currentStateVal.includes('DCLP') ||
+    currentStateVal.includes('DACP') ||
+    currentStateVal.includes('PRE_DECLINE') ||
+    currentStateVal.includes('SOFT_DECLINE')
   ) {
     return 'SOFT_DECLINE';
   }
 
-  // 3. FINAL DECLINE (Checked THIRD - Rejected / Declined / Cancelled)
+  // 3. FINAL DECLINE (Rejected / Declined / Cancelled) -> 532 leads
   if (
     rawUpper.includes('DECLINE') ||
     rawUpper.includes('REJECT') ||
     rawUpper.includes('CANCEL') ||
     rawUpper.includes('FAIL') ||
-    cleanAllStates.includes('DECLINE') ||
-    cleanAllStates.includes('REJECT') ||
-    cleanAllStates.includes('CANCEL') ||
-    cleanAllStates.includes('FAILED')
+    currentStateVal.includes('DECLINE') ||
+    currentStateVal.includes('REJECT') ||
+    currentStateVal.includes('CANCEL')
   ) {
     return 'FINAL_DECLINE';
   }
 
-  // 4. SOFT APPROVE (Remaining mapped active/in-progress leads)
+  // 4. SOFT APPROVE (In Progress / IPA / VKYC / Active Funnel) -> 60 leads
   return 'SOFT_APPROVE';
 }
 
