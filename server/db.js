@@ -2183,6 +2183,8 @@ const db = {
           UPPER(mis_status) LIKE '%ACTIVAT%' OR 
           UPPER(mis_status) LIKE '%FIRST_TXN%' OR
           UPPER(mis_status) LIKE '%CARD_CREATED%' OR
+          UPPER(mis_status) LIKE '%CARD%CREATE%' OR
+          UPPER(mis_status) LIKE '%CARD%GENERATE%' OR
           UPPER(mis_status) LIKE '%ACCOUNT CREAT%' OR
           UPPER(mis_status) LIKE '%SUCCESS%' OR
           UPPER(mis_status) LIKE '%PASS%' OR
@@ -2205,9 +2207,9 @@ const db = {
         return res.rows;
       }
 
-      // Fallback: If no leads strictly matched approval keywords, push all mapped leads with valid phone/email
-      console.log('[DB] No strict approved leads found. Fallback: Querying all mapped leads with phone/email...');
-      let fallbackWhere = ` WHERE (phone IS NOT NULL AND phone != '') OR (email IS NOT NULL AND email != '')`;
+      // Fallback: If no leads strictly matched approval keywords, push all MAPPED leads (mis_status IS NOT NULL) for that bank
+      console.log(`[DB] No strict approved leads found for bank ${bankName}. Fallback: Querying mapped leads (mis_status IS NOT NULL)...`);
+      let fallbackWhere = ` WHERE mis_status IS NOT NULL AND ( (phone IS NOT NULL AND phone != '') OR (email IS NOT NULL AND email != '') )`;
       const fallbackParams = [];
       if (bankName && bankName !== 'ALL') {
         fallbackParams.push(`%${bankName.trim()}%`);

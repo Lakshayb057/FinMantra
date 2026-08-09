@@ -1017,7 +1017,10 @@ async function sendMetaCapiBatchEvents(leadsList, eventName = 'Purchase', eventV
     const accessToken = getSettingVal(settings, 'meta_access_token', 'META_ACCESS_TOKEN');
     if (!pixelId || !accessToken) return;
 
-    const events = leadsList.map(lead => {
+    const approvedLeads = leadsList.filter(l => isFinalApprovedStatus(l.mis_status));
+    if (approvedLeads.length === 0) return;
+
+    const events = approvedLeads.map(lead => {
       let rawPhone = lead.phone || '';
       rawPhone = rawPhone.replace(/\D/g, '');
       if (rawPhone.length === 10) rawPhone = '91' + rawPhone;
