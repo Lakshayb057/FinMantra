@@ -22,6 +22,7 @@ const bcrypt = require('bcryptjs');
 const http = require('http');
 const WebSocket = require('ws');
 const db = require('./db');
+const metaAudienceService = require('./metaAudienceService');
 const baileys = require('./baileys');
 const sbiEmailFetcher = require('./sbiEmailFetcher');
 const kiwiEmailFetcher = require('./kiwiEmailFetcher');
@@ -2833,7 +2834,7 @@ app.post('/api/leads/upload-mis', authenticateToken, upload.single('file'), asyn
     broadcast({ type: 'MIS_UPDATED' });
     broadcast({ type: 'LEADS_UPDATED' });
 
-    // Trigger Meta CAPI Purchase Events for Final Approved leads asynchronously
+    // Trigger Meta CAPI Purchase Events & Audience Sync for updated leads asynchronously
     if (updatedLeads && updatedLeads.length > 0) {
       setTimeout(async () => {
         for (const lead of updatedLeads) {
@@ -2841,6 +2842,7 @@ app.post('/api/leads/upload-mis', authenticateToken, upload.single('file'), asyn
             await sendMetaCapiEvent(lead, 'Purchase', 2000, selectedBank);
           }
         }
+        await metaAudienceService.enqueueLeadSyncForUpdatedLeads(updatedLeads, broadcast);
       }, 100);
     }
   }
@@ -4894,6 +4896,325 @@ app.post('/api/meta/test-capi', authenticateToken, requireAdmin, async (req, res
   }
 });
 
+// ── Meta Custom Audience Management API Routes ──
+
+// List Audiences with filters
+app.get('/api/meta/audiences', authenticateToken, async (req, res) => {
+  try {
+    const { bank, status, type, search } = req.query;
+    const audiences = await db.getMetaAudiences({
+      bank_name: bank,
+      status_category: status,
+      audience_type: type,
+      search
+    });
+
+    // Auto-calculate current matching database count for each audience
+    for (const aud of audiences) {
+      const eligible = await metaAudienceService.getEligibleMappedLeadsForAudience(aud);
+      aud.database_count = eligible.length;
+    }
+
+    res.json({ success: true, audiences });
+  } catch (err) {
+    console.error('[API Error] GET /api/meta/audiences:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Create Custom Audience
+app.post('/api/meta/audiences', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { name, bank_name, status_category, description, auto_push, rules } = req.body;
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: 'Audience name is required' });
+    }
+
+    const metaRes = await metaAudienceService.createMetaCustomAudience(name, description);
+    const audience = await db.createMetaAudience({
+      name: String(name).trim(),
+      audience_type: 'CUSTOM',
+      bank_name: bank_name || null,
+      status_category: status_category || null,
+      meta_audience_id: metaRes.metaAudienceId || null,
+      description: description || '',
+      auto_push: auto_push !== undefined ? auto_push : true,
+      rules: rules || {}
+    });
+
+    await db.insertAudienceAuditLog({
+      user_id: req.user.id,
+      user_name: req.user.name,
+      action: 'AUDIENCE_CREATED',
+      audience_id: audience.id,
+      audience_name: audience.name,
+      details: { rules }
+    });
+
+    broadcast({ type: 'META_AUDIENCES_UPDATED' });
+    res.json({ success: true, audience });
+  } catch (err) {
+    console.error('[API Error] POST /api/meta/audiences:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get Single Audience Details
+app.get('/api/meta/audiences/:id', authenticateToken, async (req, res) => {
+  try {
+    const audience = await db.getMetaAudienceById(req.params.id);
+    if (!audience) {
+      return res.status(404).json({ error: 'Audience not found' });
+    }
+
+    const eligible = await metaAudienceService.getEligibleMappedLeadsForAudience(audience);
+    audience.database_count = eligible.length;
+
+    res.json({ success: true, audience });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update Audience Rules / Config
+app.patch('/api/meta/audiences/:id', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const audience = await db.updateMetaAudience(req.params.id, req.body);
+    if (!audience) {
+      return res.status(404).json({ error: 'Audience not found' });
+    }
+
+    await db.insertAudienceAuditLog({
+      user_id: req.user.id,
+      user_name: req.user.name,
+      action: 'AUDIENCE_UPDATED',
+      audience_id: audience.id,
+      audience_name: audience.name,
+      details: req.body
+    });
+
+    broadcast({ type: 'META_AUDIENCES_UPDATED' });
+    res.json({ success: true, audience });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Delete Custom Audience
+app.delete('/api/meta/audiences/:id', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const audience = await db.getMetaAudienceById(req.params.id);
+    if (!audience) {
+      return res.status(404).json({ error: 'Audience not found' });
+    }
+
+    if (audience.meta_audience_id) {
+      await metaAudienceService.deleteMetaCustomAudience(audience.meta_audience_id);
+    }
+
+    await db.deleteMetaAudience(audience.id);
+    await db.insertAudienceAuditLog({
+      user_id: req.user.id,
+      user_name: req.user.name,
+      action: 'AUDIENCE_DELETED',
+      audience_id: audience.id,
+      audience_name: audience.name
+    });
+
+    broadcast({ type: 'META_AUDIENCES_UPDATED' });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Incremental Sync for single audience
+app.post('/api/meta/audiences/:id/sync', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const result = await metaAudienceService.syncSingleAudience(req.params.id, false, broadcast);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Full Resync & Reconciliation for single audience
+app.post('/api/meta/audiences/:id/full-sync', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const result = await metaAudienceService.syncSingleAudience(req.params.id, true, broadcast);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Full Resync for ALL active audiences
+app.post('/api/meta/audiences/full-sync-all', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    await metaAudienceService.autoProvisionBankAudiences(broadcast);
+    const audiences = await db.getMetaAudiences();
+    
+    // Run asynchronously
+    setTimeout(async () => {
+      for (const aud of audiences) {
+        if (aud.auto_push && aud.status !== 'paused') {
+          await metaAudienceService.syncSingleAudience(aud.id, true, broadcast);
+        }
+      }
+    }, 100);
+
+    res.json({ success: true, message: `Full resync triggered for ${audiences.length} audience(s)` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Retry Failed Members for single audience
+app.post('/api/meta/audiences/:id/retry', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const result = await metaAudienceService.syncSingleAudience(req.params.id, true, broadcast);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Preview Custom Audience Rules Match Count & Sample Records
+app.post('/api/meta/audiences/preview', authenticateToken, async (req, res) => {
+  try {
+    const { rules, audience_type, bank_name, status_category } = req.body;
+    const tempAudience = {
+      audience_type: audience_type || 'CUSTOM',
+      bank_name: bank_name || null,
+      status_category: status_category || null,
+      rules: rules || {}
+    };
+
+    const eligible = await metaAudienceService.getEligibleMappedLeadsForAudience(tempAudience);
+    const sample = eligible.slice(0, 10).map(l => ({
+      id: l.id,
+      urn: l.urn,
+      full_name: l.full_name,
+      phone: l.phone ? `${l.phone.substring(0, 4)}****${l.phone.slice(-2)}` : '',
+      email: l.email ? `${l.email.substring(0, 3)}***@***` : '',
+      card_bank: l.card_bank,
+      card_name: l.card_name,
+      mis_status: l.mis_status,
+      created_at: l.created_at
+    }));
+
+    res.json({
+      success: true,
+      totalMatchingLeads: eligible.length,
+      sample
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Paginated Audience Members
+app.get('/api/meta/audiences/:id/members', authenticateToken, async (req, res) => {
+  try {
+    const { limit, offset, state } = req.query;
+    const result = await db.getMetaAudienceMemberships(req.params.id, {
+      limit: parseInt(limit, 10) || 50,
+      offset: parseInt(offset, 10) || 0,
+      state
+    });
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Sync Execution History Logs
+app.get('/api/meta/audiences/:id/sync-history', authenticateToken, async (req, res) => {
+  try {
+    const { limit, offset } = req.query;
+    const result = await db.getSyncJobs(req.params.id, {
+      limit: parseInt(limit, 10) || 50,
+      offset: parseInt(offset, 10) || 0
+    });
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Auto-provision Bank Audiences for all existing/new banks
+app.post('/api/meta/provision/banks', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    await metaAudienceService.autoProvisionBankAudiences(broadcast);
+    const audiences = await db.getMetaAudiences();
+    res.json({ success: true, totalAudiences: audiences.length, audiences });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Meta Connection Status Check
+app.get('/api/meta/config/status', authenticateToken, async (req, res) => {
+  try {
+    const settings = await db.getSettings();
+    const connResult = await metaAudienceService.testMetaConnection();
+    
+    // Mask access token for non-developer admin
+    const rawToken = settings.meta_access_token || process.env.META_ACCESS_TOKEN || '';
+    const maskedToken = rawToken ? `${rawToken.substring(0, 8)}************${rawToken.slice(-6)}` : '';
+
+    res.json({
+      success: true,
+      connected: connResult.connected,
+      meta_pixel_id: settings.meta_pixel_id || process.env.META_PIXEL_ID || '1015546961540665',
+      meta_ad_account_id: settings.meta_ad_account_id || process.env.META_AD_ACCOUNT_ID || 'act_1450810068922146',
+      meta_api_version: settings.meta_api_version || process.env.META_API_VERSION || 'v20.0',
+      meta_access_token_masked: maskedToken,
+      meta_test_event_code: settings.meta_test_event_code || process.env.META_TEST_EVENT_CODE || '',
+      adAccountName: connResult.adAccountName || null,
+      error: connResult.error || null
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Save Meta Configuration Credentials (Developer Admin Only)
+app.patch('/api/meta/config', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { meta_pixel_id, meta_ad_account_id, meta_access_token, meta_api_version, meta_test_event_code } = req.body;
+
+    if (meta_pixel_id !== undefined) await db.setSetting('meta_pixel_id', String(meta_pixel_id).trim());
+    if (meta_ad_account_id !== undefined) await db.setSetting('meta_ad_account_id', String(meta_ad_account_id).trim());
+    if (meta_access_token !== undefined && !String(meta_access_token).includes('***')) {
+      await db.setSetting('meta_access_token', String(meta_access_token).trim());
+    }
+    if (meta_api_version !== undefined) await db.setSetting('meta_api_version', String(meta_api_version).trim());
+    if (meta_test_event_code !== undefined) await db.setSetting('meta_test_event_code', String(meta_test_event_code).trim());
+
+    await db.insertAudienceAuditLog({
+      user_id: req.user.id,
+      user_name: req.user.name,
+      action: 'META_CONFIG_UPDATED'
+    });
+
+    const connResult = await metaAudienceService.testMetaConnection();
+    res.json({ success: true, connected: connResult.connected, connection: connResult });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Test Meta API Connection Endpoint
+app.post('/api/meta/test-connection', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const connResult = await metaAudienceService.testMetaConnection();
+    res.json(connResult);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Global exception and error handling middleware
 app.use((err, req, res, next) => {
   console.error('[Express Async Error Handler Exception]:', err);
@@ -4915,6 +5236,9 @@ server.listen(PORT, async () => {
     // Ensure database is fully connected and initialized before serving requests
     await db.init();
     console.log('[Startup] Database initialization completed successfully.');
+
+    // Auto-provision Meta Custom Audiences per bank
+    await metaAudienceService.autoProvisionBankAudiences(broadcast).catch(err => console.error('[Meta Provisioning Error]:', err.message));
 
     const settings = await db.getSettings();
     const gateway = settings.whatsapp_gateway || 'baileys';

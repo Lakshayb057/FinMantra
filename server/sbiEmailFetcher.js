@@ -4,6 +4,7 @@ const xlsx = require('xlsx');
 const ExcelJS = require('exceljs');
 const db = require('./db');
 const metaCapi = require('./metaCapi');
+const metaAudienceService = require('./metaAudienceService');
 
 // Default SBI IMAP Email Sync Config
 const DEFAULT_CONFIG = {
@@ -387,7 +388,7 @@ async function processSbiMisRows(rows, attachmentName, broadcastFn = null) {
             await metaCapi.sendMetaCapiEvent(lead, 'Purchase', 2000, 'SBI');
           }
         }
-        await metaCapi.syncLeadsToMetaCustomAudiences(updatedLeads);
+        await metaAudienceService.enqueueLeadSyncForUpdatedLeads(updatedLeads, broadcast);
       }, 100);
     }
   }

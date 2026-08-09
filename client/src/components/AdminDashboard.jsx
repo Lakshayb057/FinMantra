@@ -262,6 +262,329 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
     }
   };
 
+  // ── Meta Custom Audiences Management State & Handlers ──
+  const [metaAudiences, setMetaAudiences] = useState([]);
+  const [metaAudiencesLoading, setMetaAudiencesLoading] = useState(false);
+  const [metaAudienceFilterBank, setMetaAudienceFilterBank] = useState('ALL');
+  const [metaAudienceFilterStatus, setMetaAudienceFilterStatus] = useState('ALL');
+  const [metaAudienceFilterType, setMetaAudienceFilterType] = useState('ALL');
+  const [metaAudienceSearch, setMetaAudienceSearch] = useState('');
+  const [metaActiveSubTab, setMetaActiveSubTab] = useState('audiences');
+
+  const [metaConfigStatus, setMetaConfigStatus] = useState(null);
+  const [metaConfigLoading, setMetaConfigLoading] = useState(false);
+  const [metaConfigSaving, setMetaConfigSaving] = useState(false);
+  const [metaConfigInput, setMetaConfigInput] = useState({
+    meta_pixel_id: '1015546961540665',
+    meta_ad_account_id: 'act_1450810068922146',
+    meta_access_token: '',
+    meta_api_version: 'v20.0',
+    meta_test_event_code: ''
+  });
+
+  const [showCreateAudienceModal, setShowCreateAudienceModal] = useState(false);
+  const [showAudienceDetailsModal, setShowAudienceDetailsModal] = useState(false);
+  const [selectedAudience, setSelectedAudience] = useState(null);
+  const [audienceMembers, setAudienceMembers] = useState([]);
+  const [audienceMembersTotal, setAudienceMembersTotal] = useState(0);
+  const [audienceMembersPage, setAudienceMembersPage] = useState(1);
+  const [audienceMembersStateFilter, setAudienceMembersStateFilter] = useState('');
+  const [audienceHistoryLogs, setAudienceHistoryLogs] = useState([]);
+  const [audienceHistoryTotal, setAudienceHistoryTotal] = useState(0);
+  const [syncProgressMap, setSyncProgressMap] = useState({});
+
+  const [ruleBuilderState, setRuleBuilderState] = useState({
+    name: '',
+    description: '',
+    bank_name: 'SBI',
+    status_category: 'FINAL_APPROVE',
+    auto_push: true,
+    rules: {
+      logic: 'AND',
+      conditions: [{ field: 'bank', operator: '=', value: 'SBI' }]
+    }
+  });
+
+  const [previewResult, setPreviewResult] = useState(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  const fetchMetaAudiences = useCallback(async () => {
+    if (!token) return;
+    setMetaAudiencesLoading(true);
+    try {
+      const queryParams = new URLSearchParams();
+      if (metaAudienceFilterBank !== 'ALL') queryParams.append('bank', metaAudienceFilterBank);
+      if (metaAudienceFilterStatus !== 'ALL') queryParams.append('status', metaAudienceFilterStatus);
+      if (metaAudienceFilterType !== 'ALL') queryParams.append('type', metaAudienceFilterType);
+      if (metaAudienceSearch) queryParams.append('search', metaAudienceSearch);
+
+      const res = await fetch(`/api/meta/audiences?${queryParams.toString()}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        setMetaAudiences(data.audiences || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch Meta Audiences:', err);
+    } finally {
+      setMetaAudiencesLoading(false);
+    }
+  }, [token, metaAudienceFilterBank, metaAudienceFilterStatus, metaAudienceFilterType, metaAudienceSearch]);
+
+  const fetchMetaConfigStatus = useCallback(async () => {
+    if (!token) return;
+    setMetaConfigLoading(true);
+    try {
+      const res = await fetch('/api/meta/config/status', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        setMetaConfigStatus(data);
+        setMetaConfigInput({
+          meta_pixel_id: data.meta_pixel_id || '1015546961540665',
+          meta_ad_account_id: data.meta_ad_account_id || 'act_1450810068922146',
+          meta_access_token: data.meta_access_token_masked || '',
+          meta_api_version: data.meta_api_version || 'v20.0',
+          meta_test_event_code: data.meta_test_event_code || ''
+        });
+      }
+    } catch (err) {
+      console.error('Failed to fetch Meta Config status:', err);
+    } finally {
+      setMetaConfigLoading(false);
+    }
+  }, [token]);
+
+  const fetchAudienceHistoryLogs = useCallback(async (audienceId = null) => {
+    if (!token) return;
+    try {
+      const url = audienceId ? `/api/meta/audiences/${audienceId}/sync-history` : '/api/meta/audiences/all/sync-history';
+      const res = await fetch(url, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        setAudienceHistoryLogs(data.rows || []);
+        setAudienceHistoryTotal(data.total || 0);
+      }
+    } catch (err) {
+      console.error('Failed to fetch Audience History:', err);
+    }
+  }, [token]);
+
+  const handleSaveMetaConfig = async () => {
+    if (!token) return;
+    setMetaConfigSaving(true);
+    try {
+      const res = await fetch('/api/meta/config', {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(metaConfigInput)
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast('Meta API configuration saved successfully!', 'success');
+        fetchMetaConfigStatus();
+      } else {
+        showToast(`Failed to save config: ${data.error}`, 'error');
+      }
+    } catch (err) {
+      showToast(`Error saving config: ${err.message}`, 'error');
+    } finally {
+      setMetaConfigSaving(false);
+    }
+  };
+
+  const handleTestMetaConnection = async () => {
+    if (!token) return;
+    setMetaConfigLoading(true);
+    try {
+      const res = await fetch('/api/meta/test-connection', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.connected) {
+        showToast(`🎉 Meta Graph API Connected! Ad Account: ${data.adAccountName || data.adAccountId}`, 'success');
+      } else {
+        showToast(`Meta API Connection Failed: ${data.error}`, 'error');
+      }
+      fetchMetaConfigStatus();
+    } catch (err) {
+      showToast(`Network error testing Meta connection: ${err.message}`, 'error');
+    } finally {
+      setMetaConfigLoading(false);
+    }
+  };
+
+  const handleProvisionBankAudiences = async () => {
+    if (!token) return;
+    showToast('Auto-provisioning Meta Custom Audiences for all banks...', 'info');
+    try {
+      const res = await fetch('/api/meta/provision/banks', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(`🎉 Auto-provisioning completed! Total Audiences: ${data.totalAudiences}`, 'success');
+        fetchMetaAudiences();
+      } else {
+        showToast(`Provisioning failed: ${data.error}`, 'error');
+      }
+    } catch (err) {
+      showToast(`Error provisioning bank audiences: ${err.message}`, 'error');
+    }
+  };
+
+  const handleSyncSingleAudience = async (audienceId, isFullSync = false) => {
+    if (!token) return;
+    showToast(`Starting ${isFullSync ? 'Full Resync' : 'Incremental Sync'}...`, 'info');
+    try {
+      const endpoint = isFullSync ? `/api/meta/audiences/${audienceId}/full-sync` : `/api/meta/audiences/${audienceId}/sync`;
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(`🎉 Sync completed! Pushed ${data.added || 0} user(s).`, 'success');
+        fetchMetaAudiences();
+      } else {
+        showToast(`Sync failed: ${data.error}`, 'error');
+      }
+    } catch (err) {
+      showToast(`Error triggering sync: ${err.message}`, 'error');
+    }
+  };
+
+  const handleFullSyncAll = async () => {
+    if (!token) return;
+    showToast('Triggering Full Resync across ALL active Meta audiences...', 'info');
+    try {
+      const res = await fetch('/api/meta/audiences/full-sync-all', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(`🎉 ${data.message}`, 'success');
+        fetchMetaAudiences();
+      }
+    } catch (err) {
+      showToast(`Error triggering full sync: ${err.message}`, 'error');
+    }
+  };
+
+  const handleCreateCustomAudience = async () => {
+    if (!token) return;
+    if (!ruleBuilderState.name.trim()) {
+      showToast('Audience Name is required', 'error');
+      return;
+    }
+    try {
+      const res = await fetch('/api/meta/audiences', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(ruleBuilderState)
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(`🎉 Custom Audience '${data.audience.name}' created successfully!`, 'success');
+        setShowCreateAudienceModal(false);
+        fetchMetaAudiences();
+      } else {
+        showToast(`Failed to create audience: ${data.error}`, 'error');
+      }
+    } catch (err) {
+      showToast(`Error creating custom audience: ${err.message}`, 'error');
+    }
+  };
+
+  const handleDeleteAudience = async (id, name) => {
+    if (!window.confirm(`Are you sure you want to delete audience '${name}'? This will also remove it from Meta Graph API.`)) return;
+    try {
+      const res = await fetch(`/api/meta/audiences/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(`Audience '${name}' deleted.`, 'info');
+        fetchMetaAudiences();
+      } else {
+        showToast(`Failed to delete: ${data.error}`, 'error');
+      }
+    } catch (err) {
+      showToast(`Error deleting audience: ${err.message}`, 'error');
+    }
+  };
+
+  const handlePreviewRules = async () => {
+    if (!token) return;
+    setPreviewLoading(true);
+    try {
+      const res = await fetch('/api/meta/audiences/preview', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          rules: ruleBuilderState.rules,
+          bank_name: ruleBuilderState.bank_name,
+          status_category: ruleBuilderState.status_category
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPreviewResult(data);
+      }
+    } catch (err) {
+      showToast(`Preview error: ${err.message}`, 'error');
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const fetchAudienceMembers = async (audienceId, page = 1, state = '') => {
+    if (!token || !audienceId) return;
+    try {
+      const limit = 20;
+      const offset = (page - 1) * limit;
+      let url = `/api/meta/audiences/${audienceId}/members?limit=${limit}&offset=${offset}`;
+      if (state) url += `&state=${state}`;
+
+      const res = await fetch(url, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        setAudienceMembers(data.rows || []);
+        setAudienceMembersTotal(data.total || 0);
+        setAudienceMembersPage(page);
+      }
+    } catch (err) {
+      console.error('Error fetching members:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'meta') {
+      fetchMetaAudiences();
+      fetchMetaConfigStatus();
+      fetchAudienceHistoryLogs();
+    }
+  }, [activeTab, fetchMetaAudiences, fetchMetaConfigStatus, fetchAudienceHistoryLogs]);
+
   const defaultCreateLeadForm = {
     application_id: '',
     full_name: '',
@@ -451,13 +774,13 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
               fetchNotifications();
             } else if (message.type === 'WA_STATUS_UPDATE') {
               setBaileysStatus(message.data);
-            } else if (
-              message.type === 'CARDS_UPDATED' || 
-              message.type === 'AGENTS_UPDATED' || 
-              message.type === 'LOCATIONS_UPDATED' || 
-              message.type === 'SETTINGS_UPDATED'
-            ) {
-              loadAllAdminData();
+            } else if (message.type === 'META_AUDIENCES_UPDATED') {
+              if (activeTab === 'meta') fetchMetaAudiences();
+            } else if (message.type === 'META_AUDIENCE_SYNC_PROGRESS') {
+              if (message.audienceId && message.percent !== undefined) {
+                setSyncProgressMap(prev => ({ ...prev, [message.audienceId]: message.percent }));
+              }
+              if (activeTab === 'meta') fetchMetaAudiences();
             }
           } catch (err) {
             // silent
@@ -3263,6 +3586,28 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
               <MapPin size={20} />
             </button>
 
+            <button
+              onClick={() => setActiveTab('meta')}
+              title="Meta Custom Audiences"
+              className={`sidebar-icon-btn ${activeTab === 'meta' ? 'active' : ''}`}
+              style={{
+                width: '44px',
+                height: '44px',
+                borderRadius: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: activeTab === 'meta' ? '1px solid var(--gold)' : '1px solid transparent',
+                background: activeTab === 'meta' ? 'var(--paper)' : 'transparent',
+                color: activeTab === 'meta' ? 'var(--gold-deep)' : 'var(--muted)',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                boxShadow: activeTab === 'meta' ? '0 4px 12px rgba(224, 168, 46, 0.15)' : 'none'
+              }}
+            >
+              <Target size={20} />
+            </button>
+
 
 
             {/* Notification Center Bell Icon */}
@@ -3487,6 +3832,28 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                     }}
                   >
                     <Activity size={13} /> Meta CAPI & GTM
+                  </button>
+
+                  <button 
+                    onClick={() => { setActiveTab('meta'); setShowSettingsFlyout(false); }}
+                    className="sidebar-flyout-item"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.55rem',
+                      padding: '0.4rem 0.55rem',
+                      borderRadius: '4px',
+                      border: 'none',
+                      background: activeTab === 'meta' ? 'rgba(224, 168, 46, 0.15)' : 'transparent',
+                      color: activeTab === 'meta' ? 'var(--gold-deep)' : 'var(--ink)',
+                      fontSize: '0.78rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      transition: 'background 0.15s'
+                    }}
+                  >
+                    <Target size={13} /> Meta Custom Audiences
                   </button>
 
                   {canDelete && (
@@ -7418,7 +7785,852 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
             </div>
           )}
 
-          {/* META AUDIENCES & CAPI TAB REMOVED */}
+          {/* META CUSTOM AUDIENCES MANAGEMENT DASHBOARD */}
+          {activeTab === 'meta' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%' }}>
+              
+              {/* Header Banner */}
+              <div className="glass-panel" style={{ padding: '1.5rem 1.75rem', borderRadius: '16px', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', borderTop: '4px solid var(--gold)' }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <h2 style={{ fontSize: '1.4rem', fontWeight: 800, margin: 0, color: 'var(--ink)' }}>Meta Custom Audiences</h2>
+                    <span className="badge" style={{ background: 'rgba(224, 168, 46, 0.15)', color: 'var(--gold-deep)', fontWeight: 700, padding: '0.2rem 0.6rem', borderRadius: '20px', fontSize: '0.75rem' }}>
+                      Graph API v20.0
+                    </span>
+                  </div>
+                  <p style={{ margin: '0.35rem 0 0 0', fontSize: '0.85rem', color: 'hsl(var(--text-muted))' }}>
+                    Automated bank-level lead segmentation, custom SQL rules, real-time MIS sync dispatches, and secure credential management.
+                  </p>
+                </div>
+
+                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.65rem' }}>
+                  <button 
+                    onClick={handleProvisionBankAudiences} 
+                    className="btn-secondary" 
+                    style={{ fontSize: '0.82rem', padding: '0.5rem 0.9rem', display: 'flex', alignItems: 'center', gap: '0.4rem', borderRadius: '8px' }}
+                  >
+                    <Layers size={14} /> Provision Bank Audiences
+                  </button>
+
+                  <button 
+                    onClick={handleFullSyncAll} 
+                    className="btn-secondary" 
+                    style={{ fontSize: '0.82rem', padding: '0.5rem 0.9rem', display: 'flex', alignItems: 'center', gap: '0.4rem', borderRadius: '8px' }}
+                  >
+                    <Zap size={14} /> Full Sync All
+                  </button>
+
+                  <button 
+                    onClick={() => {
+                      setRuleBuilderState({
+                        name: '',
+                        description: '',
+                        bank_name: 'SBI',
+                        status_category: 'FINAL_APPROVE',
+                        auto_push: true,
+                        rules: {
+                          logic: 'AND',
+                          conditions: [{ field: 'bank', operator: '=', value: 'SBI' }]
+                        }
+                      });
+                      setPreviewResult(null);
+                      setShowCreateAudienceModal(true);
+                    }} 
+                    className="btn-primary" 
+                    style={{ fontSize: '0.82rem', padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '0.4rem', borderRadius: '8px' }}
+                  >
+                    <Plus size={15} /> Create Custom Audience
+                  </button>
+
+                  <button 
+                    onClick={fetchMetaAudiences} 
+                    className="btn-secondary" 
+                    style={{ padding: '0.5rem 0.75rem', borderRadius: '8px' }}
+                    title="Refresh Audiences"
+                  >
+                    <RefreshCw size={15} className={metaAudiencesLoading ? 'spin' : ''} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Sub-tab Navigation */}
+              <div style={{ display: 'flex', gap: '0.5rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.5rem' }}>
+                <button
+                  onClick={() => setMetaActiveSubTab('audiences')}
+                  style={{
+                    padding: '0.6rem 1.25rem',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontWeight: 600,
+                    fontSize: '0.88rem',
+                    cursor: 'pointer',
+                    background: metaActiveSubTab === 'audiences' ? 'var(--gold-deep)' : 'transparent',
+                    color: metaActiveSubTab === 'audiences' ? '#fff' : 'var(--ink)'
+                  }}
+                >
+                  <Target size={15} style={{ verticalAlign: 'middle', marginRight: '0.4rem' }} /> Custom Audiences ({metaAudiences.length})
+                </button>
+
+                <button
+                  onClick={() => setMetaActiveSubTab('history')}
+                  style={{
+                    padding: '0.6rem 1.25rem',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontWeight: 600,
+                    fontSize: '0.88rem',
+                    cursor: 'pointer',
+                    background: metaActiveSubTab === 'history' ? 'var(--gold-deep)' : 'transparent',
+                    color: metaActiveSubTab === 'history' ? '#fff' : 'var(--ink)'
+                  }}
+                >
+                  <Activity size={15} style={{ verticalAlign: 'middle', marginRight: '0.4rem' }} /> Audience History Logs ({audienceHistoryTotal})
+                </button>
+
+                <button
+                  onClick={() => setMetaActiveSubTab('config')}
+                  style={{
+                    padding: '0.6rem 1.25rem',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontWeight: 600,
+                    fontSize: '0.88rem',
+                    cursor: 'pointer',
+                    background: metaActiveSubTab === 'config' ? 'var(--gold-deep)' : 'transparent',
+                    color: metaActiveSubTab === 'config' ? '#fff' : 'var(--ink)'
+                  }}
+                >
+                  <Key size={15} style={{ verticalAlign: 'middle', marginRight: '0.4rem' }} /> CAPI & Meta Credentials
+                </button>
+              </div>
+
+              {/* SUBTAB 1: AUDIENCES DASHBOARD */}
+              {metaActiveSubTab === 'audiences' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                  
+                  {/* Summary Metric Cards */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+                    {(() => {
+                      const totalAudiences = metaAudiences.length;
+                      const activeCount = metaAudiences.filter(a => a.status === 'active').length;
+                      const errorCount = metaAudiences.filter(a => a.status === 'error').length;
+                      const totalSyncedLeads = metaAudiences.reduce((sum, a) => sum + (Number(a.synced_count) || 0), 0);
+                      const totalMatchingDbLeads = metaAudiences.reduce((sum, a) => sum + (Number(a.database_count) || 0), 0);
+
+                      return [
+                        { label: 'Total Audiences', val: totalAudiences, icon: <Target size={18} color="var(--gold)" />, bg: 'rgba(224, 168, 46, 0.08)' },
+                        { label: 'Active Audiences', val: activeCount, icon: <CheckCircle2 size={18} color="#22c55e" />, bg: 'rgba(34, 197, 94, 0.08)' },
+                        { label: 'Sync Errors / Failed', val: errorCount, icon: <AlertTriangle size={18} color="#ef4444" />, bg: 'rgba(239, 68, 68, 0.08)' },
+                        { label: 'DB Eligible Leads', val: totalMatchingDbLeads.toLocaleString(), icon: <Database size={18} color="#3b82f6" />, bg: 'rgba(59, 130, 246, 0.08)' },
+                        { label: 'Total Synced to Meta', val: totalSyncedLeads.toLocaleString(), icon: <Zap size={18} color="#a855f7" />, bg: 'rgba(168, 85, 247, 0.08)' }
+                      ].map((card, idx) => (
+                        <div key={idx} className="glass-panel" style={{ padding: '1.15rem 1.25rem', borderRadius: '12px', background: card.bg, display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                          <div style={{ padding: '0.6rem', borderRadius: '10px', background: 'var(--paper)' }}>{card.icon}</div>
+                          <div>
+                            <div style={{ fontSize: '0.78rem', color: 'hsl(var(--text-muted))', fontWeight: 600 }}>{card.label}</div>
+                            <div style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--ink)', marginTop: '0.1rem' }}>{card.val}</div>
+                          </div>
+                        </div>
+                      ));
+                    })()}
+                  </div>
+
+                  {/* Filter Toolbar */}
+                  <div className="glass-panel" style={{ padding: '1rem 1.25rem', borderRadius: '12px', display: 'flex', flexWrap: 'wrap', gap: '0.85rem', alignItems: 'center' }}>
+                    <div style={{ flex: '1 1 220px', position: 'relative' }}>
+                      <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} />
+                      <input
+                        type="text"
+                        placeholder="Search audience name..."
+                        value={metaAudienceSearch}
+                        onChange={(e) => setMetaAudienceSearch(e.target.value)}
+                        className="form-control"
+                        style={{ paddingLeft: '2.4rem', width: '100%', fontSize: '0.85rem' }}
+                      />
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'hsl(var(--text-muted))' }}>Bank:</span>
+                      <select
+                        value={metaAudienceFilterBank}
+                        onChange={(e) => setMetaAudienceFilterBank(e.target.value)}
+                        className="form-control"
+                        style={{ fontSize: '0.83rem', padding: '0.45rem 0.75rem' }}
+                      >
+                        <option value="ALL">All Banks</option>
+                        <option value="SBI">SBI Bank</option>
+                        <option value="HDFC">HDFC Bank</option>
+                        <option value="KIWI">KIWI</option>
+                        <option value="SCAPIA">Scapia</option>
+                        <option value="AXIS">Axis Bank</option>
+                        <option value="ICICI">ICICI Bank</option>
+                      </select>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'hsl(var(--text-muted))' }}>Status:</span>
+                      <select
+                        value={metaAudienceFilterStatus}
+                        onChange={(e) => setMetaAudienceFilterStatus(e.target.value)}
+                        className="form-control"
+                        style={{ fontSize: '0.83rem', padding: '0.45rem 0.75rem' }}
+                      >
+                        <option value="ALL">All Statuses</option>
+                        <option value="FINAL_APPROVE">Final Approve</option>
+                        <option value="FINAL_DECLINE">Final Decline</option>
+                        <option value="SOFT_APPROVE">Soft Approve</option>
+                        <option value="SOFT_DECLINE">Soft Decline</option>
+                      </select>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'hsl(var(--text-muted))' }}>Type:</span>
+                      <select
+                        value={metaAudienceFilterType}
+                        onChange={(e) => setMetaAudienceFilterType(e.target.value)}
+                        className="form-control"
+                        style={{ fontSize: '0.83rem', padding: '0.45rem 0.75rem' }}
+                      >
+                        <option value="ALL">All Types</option>
+                        <option value="GLOBAL_MASTER">Global Master</option>
+                        <option value="BANK_MASTER">Bank Master</option>
+                        <option value="BANK_STATUS">Bank Status</option>
+                        <option value="CUSTOM">Custom Rule</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Audiences Table */}
+                  <div className="glass-panel" style={{ borderRadius: '12px', overflow: 'hidden' }}>
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
+                        <thead>
+                          <tr style={{ background: 'var(--paper-2)', borderBottom: '1px solid var(--border-light)', color: 'var(--ink)' }}>
+                            <th style={{ padding: '0.85rem 1rem', fontWeight: 700 }}>Audience Name</th>
+                            <th style={{ padding: '0.85rem 0.75rem', fontWeight: 700 }}>Type</th>
+                            <th style={{ padding: '0.85rem 0.75rem', fontWeight: 700 }}>Bank / Status</th>
+                            <th style={{ padding: '0.85rem 0.75rem', fontWeight: 700 }}>Meta Audience ID</th>
+                            <th style={{ padding: '0.85rem 0.75rem', fontWeight: 700, textAlign: 'center' }}>DB Match</th>
+                            <th style={{ padding: '0.85rem 0.75rem', fontWeight: 700, textAlign: 'center' }}>Synced</th>
+                            <th style={{ padding: '0.85rem 0.75rem', fontWeight: 700 }}>Status</th>
+                            <th style={{ padding: '0.85rem 0.75rem', fontWeight: 700 }}>Last Synced</th>
+                            <th style={{ padding: '0.85rem 1rem', fontWeight: 700, textAlign: 'right' }}>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {metaAudiencesLoading ? (
+                            <tr>
+                              <td colSpan="9" style={{ padding: '3rem', textAlign: 'center', color: 'hsl(var(--text-muted))' }}>
+                                <RefreshCw size={24} className="spin" style={{ display: 'block', margin: '0 auto 0.5rem' }} />
+                                Loading Meta Custom Audiences...
+                              </td>
+                            </tr>
+                          ) : metaAudiences.length === 0 ? (
+                            <tr>
+                              <td colSpan="9" style={{ padding: '3rem', textAlign: 'center', color: 'hsl(var(--text-muted))' }}>
+                                No audiences found matching current filters. Click "Provision Bank Audiences" or "Create Custom Audience" to begin.
+                              </td>
+                            </tr>
+                          ) : (
+                            metaAudiences.map((aud) => {
+                              const syncPct = syncProgressMap[aud.id];
+                              return (
+                                <tr key={aud.id} style={{ borderBottom: '1px solid var(--line)' }}>
+                                  <td style={{ padding: '0.85rem 1rem', fontWeight: 700, color: 'var(--ink)' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                      {aud.name}
+                                    </div>
+                                    {aud.description && <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', marginTop: '0.15rem' }}>{aud.description}</div>}
+                                  </td>
+
+                                  <td style={{ padding: '0.85rem 0.75rem' }}>
+                                    <span className="badge" style={{
+                                      background: aud.audience_type === 'GLOBAL_MASTER' ? 'rgba(168, 85, 247, 0.15)' : aud.audience_type === 'BANK_MASTER' ? 'rgba(59, 130, 246, 0.15)' : aud.audience_type === 'BANK_STATUS' ? 'rgba(224, 168, 46, 0.15)' : 'rgba(34, 197, 94, 0.15)',
+                                      color: aud.audience_type === 'GLOBAL_MASTER' ? '#a855f7' : aud.audience_type === 'BANK_MASTER' ? '#3b82f6' : aud.audience_type === 'BANK_STATUS' ? 'var(--gold-deep)' : '#22c55e',
+                                      fontWeight: 700, fontSize: '0.72rem', padding: '0.2rem 0.55rem', borderRadius: '12px'
+                                    }}>
+                                      {aud.audience_type}
+                                    </span>
+                                  </td>
+
+                                  <td style={{ padding: '0.85rem 0.75rem' }}>
+                                    <div style={{ fontWeight: 600, color: 'var(--ink)' }}>{aud.bank_name || 'All Banks'}</div>
+                                    {aud.status_category && <div style={{ fontSize: '0.73rem', color: 'var(--gold-deep)', fontWeight: 600 }}>{aud.status_category}</div>}
+                                  </td>
+
+                                  <td style={{ padding: '0.85rem 0.75rem', fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>
+                                    {aud.meta_audience_id ? (
+                                      <code style={{ background: 'var(--paper-2)', padding: '0.2rem 0.4rem', borderRadius: '4px' }}>{aud.meta_audience_id}</code>
+                                    ) : (
+                                      <span style={{ color: '#ef4444', fontSize: '0.75rem' }}>Pending Meta Creation</span>
+                                    )}
+                                  </td>
+
+                                  <td style={{ padding: '0.85rem 0.75rem', textAlign: 'center', fontWeight: 700, color: 'var(--ink)' }}>
+                                    {(Number(aud.database_count) || 0).toLocaleString()}
+                                  </td>
+
+                                  <td style={{ padding: '0.85rem 0.75rem', textAlign: 'center', fontWeight: 700, color: '#22c55e' }}>
+                                    {(Number(aud.synced_count) || 0).toLocaleString()}
+                                  </td>
+
+                                  <td style={{ padding: '0.85rem 0.75rem' }}>
+                                    {syncPct !== undefined && syncPct < 100 ? (
+                                      <div style={{ minWidth: '90px' }}>
+                                        <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--gold-deep)', marginBottom: '0.2rem' }}>Syncing {syncPct}%</div>
+                                        <div style={{ width: '100%', height: '5px', background: 'var(--paper-2)', borderRadius: '3px', overflow: 'hidden' }}>
+                                          <div style={{ width: `${syncPct}%`, height: '100%', background: 'var(--gold-deep)', transition: 'width 0.3s' }}></div>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <span className="badge" style={{
+                                        background: aud.status === 'active' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                                        color: aud.status === 'active' ? '#22c55e' : '#ef4444',
+                                        fontWeight: 700, fontSize: '0.72rem', padding: '0.2rem 0.55rem', borderRadius: '12px'
+                                      }}>
+                                        {aud.status ? aud.status.toUpperCase() : 'ACTIVE'}
+                                      </span>
+                                    )}
+                                  </td>
+
+                                  <td style={{ padding: '0.85rem 0.75rem', fontSize: '0.78rem', color: 'hsl(var(--text-muted))' }}>
+                                    {formatDateTime(aud.last_synced_at) || 'Never'}
+                                  </td>
+
+                                  <td style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.35rem' }}>
+                                      <button
+                                        onClick={() => {
+                                          setSelectedAudience(aud);
+                                          fetchAudienceMembers(aud.id, 1);
+                                          setShowAudienceDetailsModal(true);
+                                        }}
+                                        className="btn-secondary"
+                                        style={{ padding: '0.35rem 0.65rem', fontSize: '0.78rem', borderRadius: '6px' }}
+                                        title="View Audience Details & Members"
+                                      >
+                                        <Eye size={13} /> Details
+                                      </button>
+
+                                      <button
+                                        onClick={() => handleSyncSingleAudience(aud.id, false)}
+                                        className="btn-secondary"
+                                        style={{ padding: '0.35rem 0.65rem', fontSize: '0.78rem', borderRadius: '6px' }}
+                                        title="Sync New Mapped Leads"
+                                      >
+                                        <Zap size={13} /> Sync
+                                      </button>
+
+                                      <button
+                                        onClick={() => handleSyncSingleAudience(aud.id, true)}
+                                        className="btn-secondary"
+                                        style={{ padding: '0.35rem 0.65rem', fontSize: '0.78rem', borderRadius: '6px' }}
+                                        title="Full Resync All Members"
+                                      >
+                                        <RefreshCw size={13} /> Full Sync
+                                      </button>
+
+                                      {aud.audience_type === 'CUSTOM' && (
+                                        <button
+                                          onClick={() => handleDeleteAudience(aud.id, aud.name)}
+                                          className="btn-secondary"
+                                          style={{ padding: '0.35rem 0.65rem', fontSize: '0.78rem', borderRadius: '6px', color: '#ef4444' }}
+                                          title="Delete Custom Audience"
+                                        >
+                                          <Trash2 size={13} />
+                                        </button>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* SUBTAB 2: AUDIENCE HISTORY LOGS */}
+              {metaActiveSubTab === 'history' && (
+                <div className="glass-panel" style={{ padding: '1.5rem', borderRadius: '12px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+                    <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0 }}>Meta Audience Sync Job History</h3>
+                    <button onClick={() => fetchAudienceHistoryLogs()} className="btn-secondary" style={{ padding: '0.4rem 0.75rem', fontSize: '0.8rem' }}>
+                      <RefreshCw size={14} /> Refresh Logs
+                    </button>
+                  </div>
+
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.83rem', textAlign: 'left' }}>
+                      <thead>
+                        <tr style={{ background: 'var(--paper-2)', borderBottom: '1px solid var(--border-light)' }}>
+                          <th style={{ padding: '0.75rem 1rem' }}>Job ID</th>
+                          <th style={{ padding: '0.75rem' }}>Audience Name</th>
+                          <th style={{ padding: '0.75rem' }}>Type</th>
+                          <th style={{ padding: '0.75rem' }}>Status</th>
+                          <th style={{ padding: '0.75rem', textAlign: 'center' }}>Total Records</th>
+                          <th style={{ padding: '0.75rem', textAlign: 'center' }}>Successful</th>
+                          <th style={{ padding: '0.75rem', textAlign: 'center' }}>Skipped</th>
+                          <th style={{ padding: '0.75rem' }}>Started At</th>
+                          <th style={{ padding: '0.75rem' }}>Duration</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {audienceHistoryLogs.length === 0 ? (
+                          <tr>
+                            <td colSpan="9" style={{ padding: '2.5rem', textAlign: 'center', color: 'hsl(var(--text-muted))' }}>
+                              No sync job history logs recorded yet.
+                            </td>
+                          </tr>
+                        ) : (
+                          audienceHistoryLogs.map((log) => (
+                            <tr key={log.id} style={{ borderBottom: '1px solid var(--line)' }}>
+                              <td style={{ padding: '0.75rem 1rem', fontFamily: 'var(--font-mono)', fontSize: '0.78rem' }}><code>{log.id}</code></td>
+                              <td style={{ padding: '0.75rem', fontWeight: 600 }}>{log.audience_name || 'Global / Bank Sync'}</td>
+                              <td style={{ padding: '0.75rem' }}>
+                                <span className="badge" style={{ background: 'var(--paper-2)', padding: '0.15rem 0.45rem', fontSize: '0.7rem', borderRadius: '4px' }}>
+                                  {log.job_type}
+                                </span>
+                              </td>
+                              <td style={{ padding: '0.75rem' }}>
+                                <span className="badge" style={{
+                                  background: log.status === 'COMPLETED' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                                  color: log.status === 'COMPLETED' ? '#22c55e' : '#ef4444',
+                                  fontWeight: 700, fontSize: '0.72rem', padding: '0.2rem 0.5rem', borderRadius: '10px'
+                                }}>
+                                  {log.status}
+                                </span>
+                              </td>
+                              <td style={{ padding: '0.75rem', textAlign: 'center', fontWeight: 600 }}>{(Number(log.total_records) || 0).toLocaleString()}</td>
+                              <td style={{ padding: '0.75rem', textAlign: 'center', fontWeight: 600, color: '#22c55e' }}>{(Number(log.successful_records) || 0).toLocaleString()}</td>
+                              <td style={{ padding: '0.75rem', textAlign: 'center', color: 'hsl(var(--text-muted))' }}>{(Number(log.skipped_records) || 0).toLocaleString()}</td>
+                              <td style={{ padding: '0.75rem', fontSize: '0.78rem', color: 'hsl(var(--text-muted))' }}>{formatDateTime(log.started_at)}</td>
+                              <td style={{ padding: '0.75rem', fontSize: '0.78rem' }}>{log.duration_ms ? `${log.duration_ms} ms` : 'In Progress'}</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* SUBTAB 3: CAPI & META CREDENTIALS SETUP */}
+              {metaActiveSubTab === 'config' && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '1.5rem' }}>
+                  
+                  {/* Credentials Form */}
+                  <div className="glass-panel" style={{ padding: '1.75rem', borderRadius: '16px', borderTop: '4px solid var(--gold)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyBetween: 'space-between', marginBottom: '1.25rem' }}>
+                      <h3 style={{ fontSize: '1.15rem', fontWeight: 800, margin: 0, color: 'var(--ink)' }}>Meta API Credentials Setup</h3>
+                    </div>
+
+                    <p style={{ fontSize: '0.83rem', color: 'hsl(var(--text-muted))', marginTop: 0, marginBottom: '1.25rem' }}>
+                      Configure your Meta Developer App (App ID 1510978103853380) and Business System User Token for CAPI & Custom Audiences. Tokens are securely encrypted server-side.
+                    </p>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
+                      <div>
+                        <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Meta Pixel ID / Dataset ID</label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          value={metaConfigInput.meta_pixel_id}
+                          onChange={(e) => setMetaConfigInput({ ...metaConfigInput, meta_pixel_id: e.target.value.trim() })}
+                          placeholder="e.g. 1015546961540665"
+                          style={{ fontFamily: 'var(--font-mono)', fontSize: '0.88rem' }}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Meta Ad Account ID</label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          value={metaConfigInput.meta_ad_account_id}
+                          onChange={(e) => setMetaConfigInput({ ...metaConfigInput, meta_ad_account_id: e.target.value.trim() })}
+                          placeholder="e.g. act_1450810068922146"
+                          style={{ fontFamily: 'var(--font-mono)', fontSize: '0.88rem' }}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Permanent System User Access Token</label>
+                        <textarea
+                          rows={4}
+                          className="form-control"
+                          value={metaConfigInput.meta_access_token}
+                          onChange={(e) => setMetaConfigInput({ ...metaConfigInput, meta_access_token: e.target.value.trim() })}
+                          placeholder="Paste EAAV... permanent system user token"
+                          style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem' }}
+                        />
+                        <div style={{ fontSize: '0.73rem', color: 'hsl(var(--text-muted))', marginTop: '0.35rem' }}>
+                          🔒 Access token is masked for security. Only Developer Admins can update tokens.
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Test Event Code (Optional for CAPI Testing)</label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          value={metaConfigInput.meta_test_event_code}
+                          onChange={(e) => setMetaConfigInput({ ...metaConfigInput, meta_test_event_code: e.target.value.trim() })}
+                          placeholder="e.g. TEST12345"
+                          style={{ fontFamily: 'var(--font-mono)', fontSize: '0.85rem' }}
+                        />
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
+                        <button
+                          onClick={handleSaveMetaConfig}
+                          className="btn-primary"
+                          disabled={metaConfigSaving}
+                          style={{ flex: 1, padding: '0.65rem', fontSize: '0.88rem', fontWeight: 700 }}
+                        >
+                          {metaConfigSaving ? 'Saving Credentials...' : 'Save Meta Credentials'}
+                        </button>
+
+                        <button
+                          onClick={handleTestMetaConnection}
+                          className="btn-secondary"
+                          disabled={metaConfigLoading}
+                          style={{ padding: '0.65rem 1rem', fontSize: '0.88rem', fontWeight: 600 }}
+                        >
+                          {metaConfigLoading ? 'Testing...' : 'Test Connection'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* CAPI Live Test Event Console */}
+                  <div className="glass-panel" style={{ padding: '1.75rem', borderRadius: '16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+                      <Zap size={20} color="var(--gold-deep)" />
+                      <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, color: 'var(--ink)' }}>CAPI Live Test Event Console</h3>
+                    </div>
+
+                    <p style={{ fontSize: '0.83rem', color: 'hsl(var(--text-muted))', marginTop: 0, marginBottom: '1.25rem' }}>
+                      Trigger a real-time static Purchase event (value ₹2,000 INR) to verify Meta Conversions API connectivity.
+                    </p>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                      <div>
+                        <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Select Target Partner Bank</label>
+                        <select
+                          value={testCapiBank}
+                          onChange={(e) => setTestCapiBank(e.target.value)}
+                          className="form-control"
+                          style={{ width: '100%', fontSize: '0.88rem' }}
+                        >
+                          <option value="HDFC Bank">HDFC Bank</option>
+                          <option value="SBI Bank">SBI Bank</option>
+                          <option value="KIWI">KIWI</option>
+                          <option value="Scapia">Scapia</option>
+                          <option value="Axis Bank">Axis Bank</option>
+                        </select>
+                      </div>
+
+                      <button
+                        onClick={handleTestCapiTrigger}
+                        className="btn-primary"
+                        disabled={testingCapi}
+                        style={{ padding: '0.75rem', fontSize: '0.9rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+                      >
+                        <Zap size={16} /> {testingCapi ? 'Dispatching Test Purchase...' : 'Dispatch Test Purchase Event (₹2,000)'}
+                      </button>
+
+                      {testCapiResult && (
+                        <div style={{ marginTop: '1rem', padding: '1rem', borderRadius: '8px', background: testCapiResult.error ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)', border: testCapiResult.error ? '1px solid #ef4444' : '1px solid #22c55e' }}>
+                          <div style={{ fontSize: '0.85rem', fontWeight: 700, color: testCapiResult.error ? '#ef4444' : '#22c55e', marginBottom: '0.35rem' }}>
+                            {testCapiResult.error ? '❌ CAPI Test Failed' : '✅ CAPI Event Dispatched Successfully'}
+                          </div>
+                          <pre style={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', margin: 0, whiteSpace: 'pre-wrap', maxHeight: '180px', overflowY: 'auto' }}>
+                            {JSON.stringify(testCapiResult, null, 2)}
+                          </pre>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                </div>
+              )}
+
+            </div>
+          )}
+
+      {/* Create Custom Audience Modal */}
+      {showCreateAudienceModal && (
+        <div className="modal-overlay" style={{ backdropFilter: 'blur(6px)', background: 'rgba(0, 0, 0, 0.75)', zIndex: 99999 }}>
+          <div className="glass-panel admin-dialog-panel" style={{ width: '90%', maxWidth: '680px', borderTop: '4px solid var(--gold)', padding: '2rem', borderRadius: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+              <h3 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0, color: 'var(--ink)' }}>Create Custom Meta Audience</h3>
+              <button onClick={() => setShowCreateAudienceModal(false)} className="btn-secondary" style={{ padding: '0.35rem' }}><X size={18} /></button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem', maxHeight: '75vh', overflowY: 'auto', paddingRight: '0.5rem' }}>
+              <div>
+                <label className="form-label" style={{ fontWeight: 600 }}>Audience Name *</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="e.g. High Income SBI Approved Leads 2026"
+                  value={ruleBuilderState.name}
+                  onChange={(e) => setRuleBuilderState({ ...ruleBuilderState, name: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <label className="form-label" style={{ fontWeight: 600 }}>Description</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="Audience purpose or target campaign details"
+                  value={ruleBuilderState.description}
+                  onChange={(e) => setRuleBuilderState({ ...ruleBuilderState, description: e.target.value })}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div>
+                  <label className="form-label" style={{ fontWeight: 600 }}>Target Bank</label>
+                  <select
+                    className="form-control"
+                    value={ruleBuilderState.bank_name}
+                    onChange={(e) => setRuleBuilderState({ ...ruleBuilderState, bank_name: e.target.value })}
+                  >
+                    <option value="SBI">SBI Bank</option>
+                    <option value="HDFC">HDFC Bank</option>
+                    <option value="KIWI">KIWI</option>
+                    <option value="SCAPIA">Scapia</option>
+                    <option value="AXIS">Axis Bank</option>
+                    <option value="ALL">All Banks</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="form-label" style={{ fontWeight: 600 }}>Status Category</label>
+                  <select
+                    className="form-control"
+                    value={ruleBuilderState.status_category}
+                    onChange={(e) => setRuleBuilderState({ ...ruleBuilderState, status_category: e.target.value })}
+                  >
+                    <option value="FINAL_APPROVE">Final Approve</option>
+                    <option value="FINAL_DECLINE">Final Decline</option>
+                    <option value="SOFT_APPROVE">Soft Approve</option>
+                    <option value="SOFT_DECLINE">Soft Decline</option>
+                    <option value="ALL">All Statuses</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Dynamic SQL Rule Builder */}
+              <div style={{ background: 'var(--paper-2)', padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--border-light)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem' }}>
+                  <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--ink)' }}>Custom Filter Conditions</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span style={{ fontSize: '0.78rem', color: 'hsl(var(--text-muted))' }}>Logic:</span>
+                    <button
+                      type="button"
+                      onClick={() => setRuleBuilderState({
+                        ...ruleBuilderState,
+                        rules: { ...ruleBuilderState.rules, logic: ruleBuilderState.rules.logic === 'AND' ? 'OR' : 'AND' }
+                      })}
+                      className="btn-secondary"
+                      style={{ fontSize: '0.75rem', padding: '0.25rem 0.6rem', fontWeight: 700, color: 'var(--gold-deep)' }}
+                    >
+                      {ruleBuilderState.rules.logic}
+                    </button>
+                  </div>
+                </div>
+
+                {ruleBuilderState.rules.conditions.map((cond, idx) => (
+                  <div key={idx} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.65rem' }}>
+                    <select
+                      className="form-control"
+                      style={{ flex: 1, fontSize: '0.82rem' }}
+                      value={cond.field}
+                      onChange={(e) => {
+                        const nextConds = [...ruleBuilderState.rules.conditions];
+                        nextConds[idx].field = e.target.value;
+                        setRuleBuilderState({ ...ruleBuilderState, rules: { ...ruleBuilderState.rules, conditions: nextConds } });
+                      }}
+                    >
+                      <option value="bank">Bank</option>
+                      <option value="status">MIS Status</option>
+                      <option value="created_at">Created Date</option>
+                      <option value="source">Source</option>
+                      <option value="income">Monthly Income</option>
+                      <option value="pincode">Pincode</option>
+                      <option value="has_credit_card">Already Has Card</option>
+                    </select>
+
+                    <select
+                      className="form-control"
+                      style={{ width: '110px', fontSize: '0.82rem' }}
+                      value={cond.operator}
+                      onChange={(e) => {
+                        const nextConds = [...ruleBuilderState.rules.conditions];
+                        nextConds[idx].operator = e.target.value;
+                        setRuleBuilderState({ ...ruleBuilderState, rules: { ...ruleBuilderState.rules, conditions: nextConds } });
+                      }}
+                    >
+                      <option value="=">=</option>
+                      <option value="!=">!=</option>
+                      <option value="CONTAINS">CONTAINS</option>
+                      <option value="IN">IN</option>
+                      <option value=">">&gt;</option>
+                      <option value=">=">&gt;=</option>
+                      <option value="<">&lt;</option>
+                      <option value="<=">&lt;=</option>
+                      <option value="IS NOT NULL">NOT NULL</option>
+                    </select>
+
+                    <input
+                      type="text"
+                      className="form-control"
+                      style={{ flex: 1, fontSize: '0.82rem' }}
+                      placeholder="Value"
+                      value={cond.value || ''}
+                      onChange={(e) => {
+                        const nextConds = [...ruleBuilderState.rules.conditions];
+                        nextConds[idx].value = e.target.value;
+                        setRuleBuilderState({ ...ruleBuilderState, rules: { ...ruleBuilderState.rules, conditions: nextConds } });
+                      }}
+                    />
+
+                    {ruleBuilderState.rules.conditions.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nextConds = ruleBuilderState.rules.conditions.filter((_, i) => i !== idx);
+                          setRuleBuilderState({ ...ruleBuilderState, rules: { ...ruleBuilderState.rules, conditions: nextConds } });
+                        }}
+                        className="btn-secondary"
+                        style={{ padding: '0.4rem', color: '#ef4444' }}
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRuleBuilderState({
+                      ...ruleBuilderState,
+                      rules: {
+                        ...ruleBuilderState.rules,
+                        conditions: [...ruleBuilderState.rules.conditions, { field: 'status', operator: '=', value: 'Approved' }]
+                      }
+                    });
+                  }}
+                  className="btn-secondary"
+                  style={{ fontSize: '0.78rem', padding: '0.35rem 0.65rem', marginTop: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}
+                >
+                  <Plus size={13} /> Add Condition
+                </button>
+              </div>
+
+              {/* Preview Match Result */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  onClick={handlePreviewRules}
+                  className="btn-secondary"
+                  disabled={previewLoading}
+                  style={{ fontSize: '0.82rem', padding: '0.5rem 0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+                >
+                  <Eye size={14} /> {previewLoading ? 'Calculating Match Count...' : 'Preview Matching Leads'}
+                </button>
+
+                {previewResult && (
+                  <div style={{ fontSize: '0.88rem', fontWeight: 800, color: 'var(--gold-deep)' }}>
+                    Matching Leads: {previewResult.totalMatchingLeads.toLocaleString()}
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem' }}>
+                <button type="button" onClick={() => setShowCreateAudienceModal(false)} className="btn-secondary">Cancel</button>
+                <button type="button" onClick={handleCreateCustomAudience} className="btn-primary">Create Custom Audience</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Audience Details Modal */}
+      {showAudienceDetailsModal && selectedAudience && (
+        <div className="modal-overlay" style={{ backdropFilter: 'blur(6px)', background: 'rgba(0, 0, 0, 0.75)', zIndex: 99999 }}>
+          <div className="glass-panel admin-dialog-panel" style={{ width: '92%', maxWidth: '850px', borderTop: '4px solid var(--gold)', padding: '2rem', borderRadius: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+              <div>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0, color: 'var(--ink)' }}>{selectedAudience.name}</h3>
+                <div style={{ fontSize: '0.8rem', color: 'hsl(var(--text-muted))', marginTop: '0.2rem' }}>
+                  Meta Audience ID: <code>{selectedAudience.meta_audience_id || 'Not Synced'}</code>
+                </div>
+              </div>
+              <button onClick={() => setShowAudienceDetailsModal(false)} className="btn-secondary" style={{ padding: '0.35rem' }}><X size={18} /></button>
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.5rem' }}>
+              <button className="btn-secondary" style={{ fontSize: '0.8rem', fontWeight: 700 }}>Audience Members ({audienceMembersTotal})</button>
+            </div>
+
+            <div style={{ overflowX: 'auto', maxHeight: '55vh' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem', textAlign: 'left' }}>
+                <thead>
+                  <tr style={{ background: 'var(--paper-2)', borderBottom: '1px solid var(--border-light)' }}>
+                    <th style={{ padding: '0.65rem 0.85rem' }}>Lead Name</th>
+                    <th style={{ padding: '0.65rem 0.85rem' }}>Phone</th>
+                    <th style={{ padding: '0.65rem 0.85rem' }}>Bank</th>
+                    <th style={{ padding: '0.65rem 0.85rem' }}>MIS Status</th>
+                    <th style={{ padding: '0.65rem 0.85rem' }}>Sync State</th>
+                    <th style={{ padding: '0.65rem 0.85rem' }}>Last Synced</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {audienceMembers.length === 0 ? (
+                    <tr>
+                      <td colSpan="6" style={{ padding: '2rem', textAlign: 'center', color: 'hsl(var(--text-muted))' }}>
+                        No member sync records found for this audience yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    audienceMembers.map((m) => (
+                      <tr key={m.id} style={{ borderBottom: '1px solid var(--line)' }}>
+                        <td style={{ padding: '0.65rem 0.85rem', fontWeight: 600 }}>{m.full_name || 'Customer'}</td>
+                        <td style={{ padding: '0.65rem 0.85rem', fontFamily: 'var(--font-mono)' }}>{m.phone ? `${m.phone.substring(0, 4)}****${m.phone.slice(-2)}` : ''}</td>
+                        <td style={{ padding: '0.65rem 0.85rem' }}>{m.card_bank || 'FinMantra'}</td>
+                        <td style={{ padding: '0.65rem 0.85rem', fontWeight: 600, color: 'var(--gold-deep)' }}>{m.mis_status || 'Mapped'}</td>
+                        <td style={{ padding: '0.65rem 0.85rem' }}>
+                          <span className="badge" style={{
+                            background: m.state === 'SYNCED' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                            color: m.state === 'SYNCED' ? '#22c55e' : '#ef4444',
+                            fontWeight: 700, fontSize: '0.72rem', padding: '0.15rem 0.45rem', borderRadius: '10px'
+                          }}>
+                            {m.state}
+                          </span>
+                        </td>
+                        <td style={{ padding: '0.65rem 0.85rem', color: 'hsl(var(--text-muted))' }}>{formatDateTime(m.last_synced_at)}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.25rem' }}>
+              <button onClick={() => setShowAudienceDetailsModal(false)} className="btn-secondary">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
 
 
         </div>

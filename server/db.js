@@ -286,6 +286,85 @@ async function initPgSchema() {
       )
     `);
 
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS meta_audiences (
+        id VARCHAR(50) PRIMARY KEY,
+        name VARCHAR(255) UNIQUE NOT NULL,
+        audience_type VARCHAR(50) NOT NULL,
+        bank_name VARCHAR(255),
+        status_category VARCHAR(50),
+        meta_audience_id VARCHAR(100),
+        description TEXT,
+        auto_push BOOLEAN DEFAULT TRUE,
+        rules JSONB DEFAULT '{}',
+        database_count INTEGER DEFAULT 0,
+        synced_count INTEGER DEFAULT 0,
+        pending_count INTEGER DEFAULT 0,
+        failed_count INTEGER DEFAULT 0,
+        status VARCHAR(50) DEFAULT 'active',
+        last_synced_at TIMESTAMP WITH TIME ZONE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS meta_audience_memberships (
+        id VARCHAR(50) PRIMARY KEY,
+        audience_id VARCHAR(50) REFERENCES meta_audiences(id) ON DELETE CASCADE,
+        lead_id VARCHAR(50) REFERENCES leads(id) ON DELETE CASCADE,
+        state VARCHAR(50) NOT NULL DEFAULT 'PENDING',
+        last_synced_at TIMESTAMP WITH TIME ZONE,
+        error_message TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(audience_id, lead_id)
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS meta_audience_sync_jobs (
+        id VARCHAR(50) PRIMARY KEY,
+        audience_id VARCHAR(50),
+        job_type VARCHAR(50) NOT NULL,
+        status VARCHAR(50) NOT NULL DEFAULT 'PENDING',
+        total_records INTEGER DEFAULT 0,
+        processed_records INTEGER DEFAULT 0,
+        successful_records INTEGER DEFAULT 0,
+        failed_records INTEGER DEFAULT 0,
+        skipped_records INTEGER DEFAULT 0,
+        duration_ms INTEGER DEFAULT 0,
+        error_message TEXT,
+        started_at TIMESTAMP WITH TIME ZONE,
+        completed_at TIMESTAMP WITH TIME ZONE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS meta_audience_audit_logs (
+        id VARCHAR(50) PRIMARY KEY,
+        user_id VARCHAR(50),
+        user_name VARCHAR(255),
+        action VARCHAR(100) NOT NULL,
+        audience_id VARCHAR(50),
+        audience_name VARCHAR(255),
+        records_processed INTEGER DEFAULT 0,
+        records_failed INTEGER DEFAULT 0,
+        details JSONB DEFAULT '{}',
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    try {
+      await client.query("CREATE INDEX IF NOT EXISTS idx_meta_audiences_type_bank ON meta_audiences (audience_type, bank_name)");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_meta_audiences_meta_id ON meta_audiences (meta_audience_id) WHERE meta_audience_id IS NOT NULL");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_meta_memberships_aud_lead ON meta_audience_memberships (audience_id, lead_id)");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_meta_memberships_state ON meta_audience_memberships (state)");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_meta_sync_jobs_aud ON meta_audience_sync_jobs (audience_id)");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_meta_audit_logs_created ON meta_audience_audit_logs (created_at DESC)");
+    } catch (migErr) {}
+
     try {
       await client.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS application_id VARCHAR(255)");
     } catch (migErr) {}
@@ -1986,7 +2065,383 @@ const db = {
     } catch (e) {
       console.error('[DB] updateLeadCapiStatus error:', e.message);
     }
+  },
+
+  // --- Meta Custom Audiences DB Helpers ---
+  async getMetaAudiences(filters = {}) {
+    try {
+      let query = 'SELECT * FROM meta_audiences WHERE 1=1';
+      const params = [];
+      let paramIdx = 1;
+
+      if (filters.bank_name && filters.bank_name !== 'ALL') {
+        query += ` AND (bank_name ILIKE $${paramIdx} OR audience_type = 'GLOBAL_MASTER')`;
+        params.push(`%${filters.bank_name}%`);
+        paramIdx++;
+      }
+
+      if (filters.status_category && filters.status_category !== 'ALL') {
+        query += ` AND (status_category = $${paramIdx} OR audience_type IN ('GLOBAL_MASTER', 'BANK_MASTER'))`;
+        params.push(filters.status_category);
+        paramIdx++;
+      }
+
+      if (filters.audience_type && filters.audience_type !== 'ALL') {
+        query += ` AND audience_type = $${paramIdx}`;
+        params.push(filters.audience_type);
+        paramIdx++;
+      }
+
+      if (filters.search) {
+        query += ` AND name ILIKE $${paramIdx}`;
+        params.push(`%${filters.search}%`);
+        paramIdx++;
+      }
+
+      query += ' ORDER BY created_at DESC';
+      const res = await pool.query(query, params);
+      return res.rows;
+    } catch (e) {
+      console.error('[DB] getMetaAudiences error:', e.message);
+      return [];
+    }
+  },
+
+  async getMetaAudienceById(id) {
+    try {
+      const res = await pool.query('SELECT * FROM meta_audiences WHERE id = $1', [id]);
+      return res.rows[0] || null;
+    } catch (e) {
+      console.error('[DB] getMetaAudienceById error:', e.message);
+      return null;
+    }
+  },
+
+  async getMetaAudienceByName(name) {
+    try {
+      const res = await pool.query('SELECT * FROM meta_audiences WHERE name = $1', [name]);
+      return res.rows[0] || null;
+    } catch (e) {
+      console.error('[DB] getMetaAudienceByName error:', e.message);
+      return null;
+    }
+  },
+
+  async createMetaAudience(aud) {
+    try {
+      const id = aud.id || `aud_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const res = await pool.query(
+        `INSERT INTO meta_audiences (
+           id, name, audience_type, bank_name, status_category, meta_audience_id, description, auto_push, rules, database_count, synced_count, pending_count, failed_count, status
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+         RETURNING *`,
+        [
+          id,
+          aud.name,
+          aud.audience_type,
+          aud.bank_name || null,
+          aud.status_category || null,
+          aud.meta_audience_id || null,
+          aud.description || '',
+          aud.auto_push !== undefined ? aud.auto_push : true,
+          JSON.stringify(aud.rules || {}),
+          aud.database_count || 0,
+          aud.synced_count || 0,
+          aud.pending_count || 0,
+          aud.failed_count || 0,
+          aud.status || 'active'
+        ]
+      );
+      return res.rows[0];
+    } catch (e) {
+      console.error('[DB] createMetaAudience error:', e.message);
+      throw e;
+    }
+  },
+
+  async updateMetaAudience(id, updates) {
+    try {
+      const allowed = ['name', 'bank_name', 'status_category', 'meta_audience_id', 'description', 'auto_push', 'rules', 'database_count', 'synced_count', 'pending_count', 'failed_count', 'status', 'last_synced_at'];
+      const setClauses = ['updated_at = NOW()'];
+      const params = [id];
+      let paramIdx = 2;
+
+      for (const field of allowed) {
+        if (updates[field] !== undefined) {
+          if (field === 'rules') {
+            setClauses.push(`${field} = $${paramIdx}`);
+            params.push(JSON.stringify(updates[field]));
+          } else {
+            setClauses.push(`${field} = $${paramIdx}`);
+            params.push(updates[field]);
+          }
+          paramIdx++;
+        }
+      }
+
+      const query = `UPDATE meta_audiences SET ${setClauses.join(', ')} WHERE id = $1 RETURNING *`;
+      const res = await pool.query(query, params);
+      return res.rows[0] || null;
+    } catch (e) {
+      console.error('[DB] updateMetaAudience error:', e.message);
+      return null;
+    }
+  },
+
+  async deleteMetaAudience(id) {
+    try {
+      await pool.query('DELETE FROM meta_audiences WHERE id = $1', [id]);
+      return true;
+    } catch (e) {
+      console.error('[DB] deleteMetaAudience error:', e.message);
+      return false;
+    }
+  },
+
+  async upsertMetaAudienceMembership(audienceId, leadId, state = 'PENDING', errorMessage = null) {
+    try {
+      const id = `mem_${audienceId}_${leadId}`;
+      const res = await pool.query(
+        `INSERT INTO meta_audience_memberships (id, audience_id, lead_id, state, error_message, last_synced_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+         ON CONFLICT (audience_id, lead_id)
+         DO UPDATE SET state = EXCLUDED.state, error_message = EXCLUDED.error_message, last_synced_at = NOW(), updated_at = NOW()
+         RETURNING *`,
+        [id, audienceId, leadId, state, errorMessage]
+      );
+      return res.rows[0];
+    } catch (e) {
+      console.error('[DB] upsertMetaAudienceMembership error:', e.message);
+      return null;
+    }
+  },
+
+  async getMetaAudienceMemberships(audienceId, options = {}) {
+    try {
+      const limit = options.limit || 50;
+      const offset = options.offset || 0;
+      const state = options.state;
+
+      let query = `
+        SELECT m.*, l.full_name, l.phone, l.email, l.card_bank, l.mis_status, l.created_at as lead_created_at
+        FROM meta_audience_memberships m
+        JOIN leads l ON m.lead_id = l.id
+        WHERE m.audience_id = $1
+      `;
+      const params = [audienceId];
+      let pIdx = 2;
+
+      if (state) {
+        query += ` AND m.state = $${pIdx}`;
+        params.push(state);
+        pIdx++;
+      }
+
+      query += ` ORDER BY m.updated_at DESC LIMIT $${pIdx} OFFSET $${pIdx + 1}`;
+      params.push(limit, offset);
+
+      const res = await pool.query(query, params);
+      
+      const countRes = await pool.query(
+        `SELECT COUNT(*) FROM meta_audience_memberships WHERE audience_id = $1 ${state ? 'AND state = $2' : ''}`,
+        state ? [audienceId, state] : [audienceId]
+      );
+
+      return {
+        rows: res.rows,
+        total: parseInt(countRes.rows[0].count, 10)
+      };
+    } catch (e) {
+      console.error('[DB] getMetaAudienceMemberships error:', e.message);
+      return { rows: [], total: 0 };
+    }
+  },
+
+  async createSyncJob(jobData) {
+    try {
+      const id = jobData.id || `job_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const res = await pool.query(
+        `INSERT INTO meta_audience_sync_jobs (
+           id, audience_id, job_type, status, total_records, processed_records, successful_records, failed_records, skipped_records, started_at
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+         RETURNING *`,
+        [
+          id,
+          jobData.audience_id || null,
+          jobData.job_type || 'INCREMENTAL',
+          jobData.status || 'PROCESSING',
+          jobData.total_records || 0,
+          jobData.processed_records || 0,
+          jobData.successful_records || 0,
+          jobData.failed_records || 0,
+          jobData.skipped_records || 0
+        ]
+      );
+      return res.rows[0];
+    } catch (e) {
+      console.error('[DB] createSyncJob error:', e.message);
+      return null;
+    }
+  },
+
+  async updateSyncJob(jobId, updates) {
+    try {
+      const setClauses = [];
+      const params = [jobId];
+      let pIdx = 2;
+
+      const fields = ['status', 'total_records', 'processed_records', 'successful_records', 'failed_records', 'skipped_records', 'duration_ms', 'error_message'];
+      for (const field of fields) {
+        if (updates[field] !== undefined) {
+          setClauses.push(`${field} = $${pIdx}`);
+          params.push(updates[field]);
+          pIdx++;
+        }
+      }
+
+      if (updates.status === 'COMPLETED' || updates.status === 'FAILED') {
+        setClauses.push('completed_at = NOW()');
+      }
+
+      if (setClauses.length === 0) return null;
+
+      const query = `UPDATE meta_audience_sync_jobs SET ${setClauses.join(', ')} WHERE id = $1 RETURNING *`;
+      const res = await pool.query(query, params);
+      return res.rows[0] || null;
+    } catch (e) {
+      console.error('[DB] updateSyncJob error:', e.message);
+      return null;
+    }
+  },
+
+  async getSyncJobs(audienceId = null, options = {}) {
+    try {
+      const limit = options.limit || 50;
+      const offset = options.offset || 0;
+
+      let query = `
+        SELECT j.*, a.name as audience_name
+        FROM meta_audience_sync_jobs j
+        LEFT JOIN meta_audiences a ON j.audience_id = a.id
+        WHERE 1=1
+      `;
+      const params = [];
+      let pIdx = 1;
+
+      if (audienceId) {
+        query += ` AND j.audience_id = $${pIdx}`;
+        params.push(audienceId);
+        pIdx++;
+      }
+
+      query += ` ORDER BY j.created_at DESC LIMIT $${pIdx} OFFSET $${pIdx + 1}`;
+      params.push(limit, offset);
+
+      const res = await pool.query(query, params);
+
+      let countQuery = 'SELECT COUNT(*) FROM meta_audience_sync_jobs WHERE 1=1';
+      if (audienceId) countQuery += ' AND audience_id = $1';
+      const countRes = await pool.query(countQuery, audienceId ? [audienceId] : []);
+
+      return {
+        rows: res.rows,
+        total: parseInt(countRes.rows[0].count, 10)
+      };
+    } catch (e) {
+      console.error('[DB] getSyncJobs error:', e.message);
+      return { rows: [], total: 0 };
+    }
+  },
+
+  async insertAudienceAuditLog(logData) {
+    try {
+      const id = `log_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      await pool.query(
+        `INSERT INTO meta_audience_audit_logs (
+           id, user_id, user_name, action, audience_id, audience_name, records_processed, records_failed, details
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [
+          id,
+          logData.user_id || null,
+          logData.user_name || 'System',
+          logData.action,
+          logData.audience_id || null,
+          logData.audience_name || null,
+          logData.records_processed || 0,
+          logData.records_failed || 0,
+          JSON.stringify(logData.details || {})
+        ]
+      );
+    } catch (e) {
+      console.error('[DB] insertAudienceAuditLog error:', e.message);
+    }
+  },
+
+  async getAudienceAuditLogs(audienceId = null, options = {}) {
+    try {
+      const limit = options.limit || 50;
+      const offset = options.offset || 0;
+
+      let query = 'SELECT * FROM meta_audience_audit_logs WHERE 1=1';
+      const params = [];
+      let pIdx = 1;
+
+      if (audienceId) {
+        query += ` AND audience_id = $${pIdx}`;
+        params.push(audienceId);
+        pIdx++;
+      }
+
+      query += ` ORDER BY created_at DESC LIMIT $${pIdx} OFFSET $${pIdx + 1}`;
+      params.push(limit, offset);
+
+      const res = await pool.query(query, params);
+      return res.rows;
+    } catch (e) {
+      console.error('[DB] getAudienceAuditLogs error:', e.message);
+      return [];
+    }
+  },
+
+  async getAllActiveBanksFromDB() {
+    try {
+      const res = await pool.query(`
+        SELECT DISTINCT TRIM(UPPER(card_bank)) as bank_name
+        FROM leads
+        WHERE card_bank IS NOT NULL AND card_bank != ''
+        UNION
+        SELECT DISTINCT TRIM(UPPER(bank)) as bank_name
+        FROM cards
+        WHERE bank IS NOT NULL AND bank != ''
+      `);
+
+      const banks = new Set(['SBI', 'HDFC', 'KIWI', 'SCAPIA']);
+      res.rows.forEach(r => {
+        if (r.bank_name) {
+          let b = r.bank_name;
+          if (b.includes('HDFC')) b = 'HDFC';
+          else if (b.includes('SBI')) b = 'SBI';
+          else if (b.includes('KIWI')) b = 'KIWI';
+          else if (b.includes('SCAPIA')) b = 'SCAPIA';
+          else if (b.includes('AXIS')) b = 'AXIS';
+          else if (b.includes('ICICI')) b = 'ICICI';
+          else if (b.includes('KOTAK')) b = 'KOTAK';
+          else if (b.includes('INDUSIND')) b = 'INDUSIND';
+          else if (b.includes('IDFC')) b = 'IDFC';
+          else if (b.includes('AU')) b = 'AU';
+          else if (b.includes('PNB')) b = 'PNB';
+          else if (b.includes('YES')) b = 'YES';
+          banks.add(b);
+        }
+      });
+
+      return Array.from(banks);
+    } catch (e) {
+      console.error('[DB] getAllActiveBanksFromDB error:', e.message);
+      return ['SBI', 'HDFC', 'KIWI', 'SCAPIA'];
+    }
   }
 }
 
 module.exports = db;
+

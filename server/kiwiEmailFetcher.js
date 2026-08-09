@@ -7,6 +7,7 @@ const os = require('os');
 const { execFile } = require('child_process');
 const db = require('./db');
 const metaCapi = require('./metaCapi');
+const metaAudienceService = require('./metaAudienceService');
 const sbiFetcher = require('./sbiEmailFetcher'); // To reuse config
 
 async function getEmailConfig() {
@@ -298,7 +299,7 @@ async function processKiwiMisBuffer(buffer, attachmentName, broadcastFn = null) 
             await metaCapi.sendMetaCapiEvent(lead, 'Purchase', 2000, 'KIWI');
           }
         }
-        await metaCapi.syncLeadsToMetaCustomAudiences(updatedLeads);
+        await metaAudienceService.enqueueLeadSyncForUpdatedLeads(updatedLeads, broadcast);
       }, 100);
     }
   }
