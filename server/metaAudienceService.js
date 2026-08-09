@@ -64,9 +64,30 @@ function normalizePhone(rawPhone) {
 }
 
 // Classify raw MIS status into 4 business categories
-function getNormalizedStatusCategory(rawStatus) {
+function getNormalizedStatusCategory(rawStatus, misData = null) {
+  // Check misData for KIWI card_created or card_issued positive flags first!
+  if (misData && typeof misData === 'object') {
+    const cardCreated = String(misData.card_created || misData.Card_Created || '').toUpperCase().trim();
+    if (cardCreated && cardCreated !== 'NO' && cardCreated !== 'FALSE' && cardCreated !== '0' && cardCreated !== 'NULL' && cardCreated !== 'UNDEFINED' && !cardCreated.includes('REJECT') && !cardCreated.includes('DECLINE')) {
+      return 'FINAL_APPROVE';
+    }
+  }
+
   if (!rawStatus) return null;
   const upper = String(rawStatus).toUpperCase().trim();
+
+  // Explicit CARD CREATED / CARD ISSUED check (Takes precedence for KIWI & all banks)
+  if (
+    upper.includes('CARD CREATED') ||
+    upper.includes('CARD_CREATED') ||
+    upper.includes('CARD ISSUED') ||
+    upper.includes('CARD_ISSUED') ||
+    upper.includes('AC_CREATED') ||
+    upper.includes('ACCOUNT_CREATED') ||
+    upper.includes('ACCOUNT CREATED')
+  ) {
+    return 'FINAL_APPROVE';
+  }
 
   // 1. SOFT DECLINE
   if (
@@ -109,14 +130,11 @@ function getNormalizedStatusCategory(rawStatus) {
   // 4. FINAL APPROVE
   if (
     upper.includes('APPROVE') ||
-    upper.includes('CARD CREATED') ||
-    upper.includes('CARD ISSUED') ||
     upper.includes('DISBURSED') ||
     upper.includes('ACTIVE') ||
     upper.includes('CARD ACTIVATED') ||
     upper.includes('FIRST TXN') ||
     upper.includes('FIRST_TXN') ||
-    upper.includes('ACCOUNT CREATED') ||
     upper.includes('SUCCESS')
   ) {
     return 'FINAL_APPROVE';

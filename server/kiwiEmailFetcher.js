@@ -75,8 +75,15 @@ function extractUrnFromText(text) {
 }
 
 function standardizeStatus(statusStr, rowObj) {
+  if (rowObj) {
+    const cardCreated = String(rowObj.card_created || rowObj.Card_Created || '').toUpperCase().trim();
+    if (cardCreated && cardCreated !== 'NO' && cardCreated !== 'FALSE' && cardCreated !== '0' && cardCreated !== 'NULL' && cardCreated !== 'UNDEFINED' && !cardCreated.includes('REJECT') && !cardCreated.includes('DECLINE')) {
+      return 'APPROVED';
+    }
+  }
+
   const s = String(statusStr || '').toUpperCase();
-  if (s.includes('APPROV') || s.includes('ISSUED') || s.includes('SUCCESS')) return 'APPROVED';
+  if (s.includes('CARD CREATED') || s.includes('CARD ISSUED') || s.includes('AC_CREATED') || s.includes('APPROV') || s.includes('ISSUED') || s.includes('SUCCESS')) return 'APPROVED';
   if (s.includes('REJECT') || s.includes('DECLIN') || s.includes('CANCEL')) return 'REJECTED';
   if (s.includes('VERIF') || s.includes('PROCESS') || s.includes('WIP')) return 'IN PROGRESS';
   return 'Pending';
