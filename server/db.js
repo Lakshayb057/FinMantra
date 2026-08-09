@@ -2177,7 +2177,7 @@ const db = {
       }
 
       const cat = String(misCategory || 'FINAL APPROVED').toUpperCase().trim();
-      const cleanB = String(bankName || 'ALL').toUpperCase().trim();
+      const cleanB = String(bankName || 'ALL').toUpperCase().replace(/BANK/g, '').trim();
       let statusCondition = '';
 
       if (cat.includes('DECLINED') || cat.includes('REJECTED')) {
