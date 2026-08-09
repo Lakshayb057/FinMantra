@@ -917,7 +917,7 @@ const db = {
     _utmOptionsCacheTime = 0;
   },
 
-  async getLeadsFiltered({ agentId = null, bankMisFilter = null, page = 1, limit = 50, search = '', card = '', source = '', utmSource = '', startDate = '', endDate = '', campaign = '', term = '', info = '' }) {
+  async getLeadsFiltered({ agentId = null, bankMisFilter = null, page = 1, limit = 50, search = '', card = '', source = '', utmSource = '', startDate = '', endDate = '', campaign = '', term = '', info = '', companyCategory = '', ltfEligible = '' }) {
     const LEAD_COLUMNS = `id, urn, full_name, phone, email, city, employment, income_range,
       card_id, card_name, card_bank, source, agent_id, agent_name, agent_location, consent, application_id,
       created_at, mis_status, mis_mapped_at, pan_no, pincode, has_credit_card, monthly_income,
@@ -971,7 +971,14 @@ const db = {
     }
     if (search) {
       params.push(`%${search.trim().toLowerCase()}%`);
-      clauses.push(`(LOWER(full_name) LIKE $${params.length} OR phone LIKE $${params.length} OR LOWER(urn) LIKE $${params.length} OR LOWER(pan_no) LIKE $${params.length})`);
+      clauses.push(`(
+        LOWER(full_name) LIKE $${params.length} 
+        OR phone LIKE $${params.length} 
+        OR LOWER(urn) LIKE $${params.length} 
+        OR LOWER(pan_no) LIKE $${params.length}
+        OR LOWER(company_name) LIKE $${params.length}
+        OR LOWER(mis_data->>'company_code') LIKE $${params.length}
+      )`);
     }
     if (card) {
       params.push(card);
@@ -1069,6 +1076,13 @@ const db = {
     if (info) {
       params.push(`%${info.trim().toLowerCase()}%`);
       clauses.push(`LOWER(utm_info) LIKE $${params.length}`);
+    }
+    if (companyCategory) {
+      params.push(companyCategory.trim().toUpperCase());
+      clauses.push(`UPPER(mis_data->>'company_category') = $${params.length}`);
+    }
+    if (ltfEligible === 'true' || ltfEligible === true) {
+      clauses.push(`(mis_data->>'why_ltf_pricing' IS NOT NULL AND mis_data->>'why_ltf_pricing' != '')`);
     }
     
     if (clauses.length > 0) {

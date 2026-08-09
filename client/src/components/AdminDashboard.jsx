@@ -145,6 +145,8 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   const [filterCampaign, setFilterCampaign] = useState('');
   const [filterTerm, setFilterTerm] = useState('');
   const [filterInfo, setFilterInfo] = useState('');
+  const [filterCompanyCategory, setFilterCompanyCategory] = useState('');
+  const [filterLtfEligible, setFilterLtfEligible] = useState('');
   const [utmOptions, setUtmOptions] = useState({ sources: [], utm_sources: [], campaigns: [], terms: [], infos: [] });
 
   // Pagination
@@ -882,7 +884,9 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
         endDate: filterEndDate,
         campaign: filterCampaign,
         term: filterTerm,
-        info: filterInfo
+        info: filterInfo,
+        companyCategory: filterCompanyCategory,
+        ltfEligible: filterLtfEligible
       });
       const res = await fetch(`${API_URL}/leads?${queryParams.toString()}`, { headers });
       if (res.ok) {
@@ -1301,7 +1305,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       fetchLeads(currentPage, leadsPerPage);
     }, searchTerm ? 400 : 0); // Debounce search, instant for other filters
     return () => clearTimeout(timer);
-  }, [currentPage, leadsPerPage, searchTerm, filterCard, filterSource, filterUtmSource, filterStartDate, filterEndDate, filterCampaign, filterTerm, filterInfo, isAuthenticated, token]);
+  }, [currentPage, leadsPerPage, searchTerm, filterCard, filterSource, filterUtmSource, filterStartDate, filterEndDate, filterCampaign, filterTerm, filterInfo, filterCompanyCategory, filterLtfEligible, isAuthenticated, token]);
 
   const handleSyncAllData = async () => {
     if (!token) return;
@@ -4181,11 +4185,22 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                     <option value="">UTM Source</option>
                     {(availableUtmSources || []).map((u, i) => <option key={i} value={u}>{u}</option>)}
                   </select>
+                  <select className="form-select" value={filterCompanyCategory} onChange={(e) => setFilterCompanyCategory(e.target.value)} style={{ flex: '1 1 140px', minWidth: '125px', height: '36px', fontSize: '0.8rem', textOverflow: 'ellipsis' }}>
+                    <option value="">Company Tier</option>
+                    <option value="S">Category S</option>
+                    <option value="A">Category A</option>
+                    <option value="B">Category B</option>
+                    <option value="C">Category C</option>
+                  </select>
+                  <select className="form-select" value={filterLtfEligible} onChange={(e) => setFilterLtfEligible(e.target.value)} style={{ flex: '1 1 140px', minWidth: '125px', height: '36px', fontSize: '0.8rem', textOverflow: 'ellipsis' }}>
+                    <option value="">LTF Status</option>
+                    <option value="true">LTF Eligible Only</option>
+                  </select>
                   <button 
-                    onClick={() => { setSearchTerm(''); setFilterCard(''); setFilterSource(''); setFilterUtmSource(''); setFilterStartDate(''); setFilterEndDate(''); setFilterCampaign(''); setFilterTerm(''); setFilterInfo(''); }}
+                    onClick={() => { setSearchTerm(''); setFilterCard(''); setFilterSource(''); setFilterUtmSource(''); setFilterStartDate(''); setFilterEndDate(''); setFilterCampaign(''); setFilterTerm(''); setFilterInfo(''); setFilterCompanyCategory(''); setFilterLtfEligible(''); }}
                     className="btn-secondary"
-                    style={{ height: '36px', fontSize: '0.75rem', whiteSpace: 'nowrap', padding: '0 0.85rem', opacity: (searchTerm || filterCard || filterSource || filterUtmSource || filterStartDate || filterEndDate || filterCampaign || filterTerm || filterInfo) ? 1 : 0.5 }}
-                    disabled={!(searchTerm || filterCard || filterSource || filterUtmSource || filterStartDate || filterEndDate || filterCampaign || filterTerm || filterInfo)}
+                    style={{ height: '36px', fontSize: '0.75rem', whiteSpace: 'nowrap', padding: '0 0.85rem', opacity: (searchTerm || filterCard || filterSource || filterUtmSource || filterStartDate || filterEndDate || filterCampaign || filterTerm || filterInfo || filterCompanyCategory || filterLtfEligible) ? 1 : 0.5 }}
+                    disabled={!(searchTerm || filterCard || filterSource || filterUtmSource || filterStartDate || filterEndDate || filterCampaign || filterTerm || filterInfo || filterCompanyCategory || filterLtfEligible)}
                   >✕ Clear Filters</button>
                 </div>
 
@@ -4235,7 +4250,25 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                             )}
                             <td><span className="badge badge-info" style={{ cursor: 'pointer' }} onClick={() => handleViewLead(l)}>{l.urn}</span></td>
                             <td>{formatDateTime(l.created_at)}</td>
-                            <td style={{ fontWeight: 600, cursor: 'pointer' }} onClick={() => handleViewLead(l)}>{l.full_name}</td>
+                            <td style={{ fontWeight: 600, cursor: 'pointer' }} onClick={() => handleViewLead(l)}>
+                              {l.full_name}
+                              {l.company_name && (
+                                <div style={{ fontSize: '0.72rem', fontWeight: 400, color: 'hsl(var(--text-muted))', marginTop: '2px' }}>
+                                  🏢 {l.company_name}
+                                  {l.mis_data?.company_code && <code style={{ marginLeft: '4px', fontSize: '0.68rem' }}>({l.mis_data.company_code})</code>}
+                                  {l.mis_data?.company_category && (
+                                    <span className="badge" style={{ marginLeft: '4px', fontSize: '0.62rem', padding: '0.05rem 0.2rem', textTransform: 'uppercase', background: 'rgba(0,114,188,0.1)', color: '#0072bc', border: '1px solid rgba(0,114,188,0.2)', borderRadius: '4px' }}>
+                                      Cat {l.mis_data.company_category}
+                                    </span>
+                                  )}
+                                  {l.mis_data?.why_ltf_pricing && (
+                                    <span className="badge" style={{ marginLeft: '4px', fontSize: '0.62rem', padding: '0.05rem 0.2rem', background: 'rgba(47,125,79,0.1)', color: '#2f7d4f', border: '1px solid rgba(47,125,79,0.2)', borderRadius: '4px' }}>
+                                      LTF
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                            </td>
                             <td>{l.phone}</td>
                              <td>{getLeadCardName(l)} <span style={{ color: 'hsl(var(--text-muted))', fontSize: '0.8rem' }}>({getLeadBank(l)})</span></td>
                              <td style={{ maxWidth: '130px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={l.email}>{l.email || '-'}</td>
@@ -9232,6 +9265,9 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                         {hasData(selectedLeadDetails.employment) && <div><strong>Employment Type:</strong> {selectedLeadDetails.employment}</div>}
                         {hasData(selectedLeadDetails.designation) && <div><strong>Designation:</strong> {selectedLeadDetails.designation}</div>}
                         {hasData(selectedLeadDetails.company_name) && <div><strong>Company / Employer:</strong> {selectedLeadDetails.company_name}</div>}
+                        {selectedLeadDetails.mis_data?.company_code && <div><strong>SBI Company Code:</strong> <code>{selectedLeadDetails.mis_data.company_code}</code></div>}
+                        {selectedLeadDetails.mis_data?.company_category && <div><strong>Corporate Category:</strong> <span className="badge" style={{ textTransform: 'uppercase', background: 'rgba(0,114,188,0.1)', color: '#0072bc', border: '1px solid rgba(0,114,188,0.2)', padding: '0.1rem 0.3rem', borderRadius: '4px', fontSize: '0.8rem' }}>Category {selectedLeadDetails.mis_data.company_category}</span></div>}
+                        {selectedLeadDetails.mis_data?.why_ltf_pricing && <div style={{ marginTop: '4px', padding: '6px 10px', background: 'rgba(47,125,79,0.08)', border: '1px solid rgba(47,125,79,0.18)', borderRadius: '6px', fontSize: '0.8rem', color: '#2f7d4f' }}><strong>LTF Offer Remarks:</strong> {selectedLeadDetails.mis_data.why_ltf_pricing}</div>}
                         {hasData(selectedLeadDetails.has_credit_card) && <div><strong>Already Has Credit Card?</strong> {selectedLeadDetails.has_credit_card}</div>}
                         {hasData(selectedLeadDetails.pincode) && <div><strong>Residence Pincode:</strong> <code>{selectedLeadDetails.pincode}</code></div>}
                         {hasData(selectedLeadDetails.monthly_income) && <div><strong>Net Monthly Income:</strong> ₹{selectedLeadDetails.monthly_income}</div>}

@@ -4042,9 +4042,11 @@ app.get('/api/leads', authenticateToken, async (req, res) => {
       const campaign = req.query.campaign || '';
       const term = req.query.term || '';
       const info = req.query.info || '';
+      const companyCategory = req.query.companyCategory || '';
+      const ltfEligible = req.query.ltfEligible || '';
       
       const result = await db.getLeadsFiltered({
-        agentId, bankMisFilter, page, limit, search, card, source, utmSource, startDate, endDate, campaign, term, info
+        agentId, bankMisFilter, page, limit, search, card, source, utmSource, startDate, endDate, campaign, term, info, companyCategory, ltfEligible
       });
       return res.json(result);
     } else {

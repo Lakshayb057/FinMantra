@@ -2562,6 +2562,22 @@ FM2026G2800079,APP10002,DVRPA5807A,IMTIYAZ AHMED,9785197812,SBI,DECLINE,Declined
                         </td>
                         <td style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>
                           {lead.full_name || 'N/A'}
+                          {lead.company_name && (
+                            <div style={{ fontSize: '0.74rem', fontWeight: 400, color: 'var(--muted)', marginTop: '2px' }}>
+                              🏢 {lead.company_name}
+                              {lead.mis_data?.company_code && <code style={{ marginLeft: '4px', fontSize: '0.7rem' }}>({lead.mis_data.company_code})</code>}
+                              {lead.mis_data?.company_category && (
+                                <span className="badge" style={{ marginLeft: '4px', fontSize: '0.64rem', padding: '0.1rem 0.3rem', textTransform: 'uppercase', background: 'rgba(0,114,188,0.1)', color: '#0072bc', border: '1px solid rgba(0,114,188,0.2)', borderRadius: '4px' }}>
+                                  Cat {lead.mis_data.company_category}
+                                </span>
+                              )}
+                              {lead.mis_data?.why_ltf_pricing && (
+                                <span className="badge" style={{ marginLeft: '4px', fontSize: '0.64rem', padding: '0.1rem 0.3rem', background: '#dcfce7', color: '#15803d', border: '1px solid #bbf7d0', borderRadius: '4px' }} title={lead.mis_data.why_ltf_pricing}>
+                                  LTF Offer
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </td>
                         <td style={{ padding: '0.75rem 1rem' }}>
                           <div>📱 {lead.phone || 'N/A'}</div>
