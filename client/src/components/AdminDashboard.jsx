@@ -265,7 +265,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
     let bankCond = '1=1';
     if (bank.includes('KIWI')) {
-      bankCond = `(UPPER(COALESCE(card_bank,'')) LIKE '%KIWI%' OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE '%KIWI%' OR UPPER(COALESCE(card_name,'')) LIKE '%KIWI%' OR LOWER(source) = 'kiwi' OR mis_data->>'kiwi_winning_bank' IS NOT NULL)`;
+      bankCond = `(UPPER(COALESCE(card_bank,'')) LIKE '%KIWI%' OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE '%KIWI%' OR UPPER(COALESCE(card_name,'')) LIKE '%KIWI%' OR LOWER(COALESCE(source,'')) = 'kiwi' OR mis_data->>'kiwi_winning_bank' IS NOT NULL OR mis_data->>'winning_bank' IS NOT NULL OR LOWER(COALESCE(mis_data->>'partner','')) LIKE '%kiwi%' OR LOWER(COALESCE(mis_data->>'app_type','')) LIKE '%kiwi%')`;
     } else if (bank.includes('SBI')) {
       bankCond = `(UPPER(COALESCE(card_bank,'')) LIKE '%SBI%' OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE '%SBI%' OR UPPER(COALESCE(card_name,'')) LIKE '%SBI%')`;
     } else if (bank.includes('HDFC')) {

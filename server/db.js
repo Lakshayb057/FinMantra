@@ -2246,7 +2246,7 @@ const db = {
         const cleanB = bankName.trim().toUpperCase();
         params.push(`%${cleanB}%`);
         if (cleanB.includes('KIWI')) {
-          whereClause += ` AND (UPPER(card_bank) LIKE UPPER($${params.length}) OR UPPER(mis_data->>'mis_bank_name') LIKE UPPER($${params.length}) OR UPPER(card_name) LIKE UPPER($${params.length}) OR LOWER(source) = 'kiwi' OR mis_data->>'kiwi_winning_bank' IS NOT NULL)`;
+          whereClause += ` AND (UPPER(COALESCE(card_bank,'')) LIKE UPPER($${params.length}) OR UPPER(COALESCE(mis_data->>'mis_bank_name','')) LIKE UPPER($${params.length}) OR UPPER(COALESCE(card_name,'')) LIKE UPPER($${params.length}) OR LOWER(COALESCE(source,'')) = 'kiwi' OR mis_data->>'kiwi_winning_bank' IS NOT NULL OR mis_data->>'winning_bank' IS NOT NULL OR LOWER(COALESCE(mis_data->>'partner','')) LIKE '%kiwi%' OR LOWER(COALESCE(mis_data->>'app_type','')) LIKE '%kiwi%')`;
         } else {
           whereClause += ` AND (UPPER(card_bank) LIKE UPPER($${params.length}) OR UPPER(mis_data->>'mis_bank_name') LIKE UPPER($${params.length}) OR UPPER(card_name) LIKE UPPER($${params.length}))`;
         }
