@@ -3167,3 +3167,146 @@ input:-webkit-autofill:active {
 .settings-sub-nav::-webkit-scrollbar {
   display: none; /* Chrome, Safari and Opera */
 }
+
+/* ==========================================================================
+   Meta Custom Audiences - Modern Responsive Design System
+   ========================================================================== */
+
+/* Sub-Tab Navigation Bar Scrollability */
+.meta-sub-nav {
+  display: flex !important;
+  gap: 0.5rem !important;
+  overflow-x: auto !important;
+  padding-bottom: 0.5rem !important;
+  margin-bottom: 1rem !important;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.meta-sub-nav::-webkit-scrollbar {
+  display: none;
+}
+
+.meta-sub-nav button {
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+  transition: all 0.2s ease-in-out !important;
+}
+
+/* Header Banner Responsive Adjustments */
+.meta-header-banner {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  gap: 1rem !important;
+  padding: 1.5rem 1.75rem !important;
+  border-radius: 16px !important;
+}
+
+.meta-header-actions {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  gap: 0.65rem !important;
+}
+
+/* Filter Toolbar Responsive */
+.meta-filter-toolbar {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 0.85rem !important;
+  align-items: center !important;
+}
+
+.meta-filter-group {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.5rem !important;
+  flex: 1 1 180px !important;
+}
+
+.meta-filter-group select,
+.meta-filter-group input {
+  width: 100% !important;
+}
+
+/* Table Actions Button Cluster */
+.meta-table-actions {
+  display: flex !important;
+  justify-content: flex-end !important;
+  gap: 0.35rem !important;
+  flex-wrap: wrap !important;
+}
+
+/* --------------------------------------------------------------------------
+   Breakpoints: Mobile & Tablet Enhancements
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 992px) {
+  .meta-header-banner {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    padding: 1.25rem !important;
+  }
+  
+  .meta-header-actions {
+    width: 100% !important;
+    justify-content: flex-start !important;
+  }
+
+  .meta-header-actions button {
+    flex: 1 1 auto !important;
+    justify-content: center !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .meta-filter-toolbar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  .meta-filter-group {
+    flex: 1 1 100% !important;
+    width: 100% !important;
+  }
+
+  .meta-filter-group span {
+    min-width: 60px !important;
+  }
+
+  .meta-table-actions {
+    justify-content: flex-start !important;
+  }
+
+  .meta-table-actions button {
+    flex: 1 1 calc(50% - 0.35rem) !important;
+    justify-content: center !important;
+    padding: 0.45rem 0.5rem !important;
+  }
+}
+
+@media (max-width: 576px) {
+  .meta-header-actions button {
+    flex: 1 1 100% !important;
+    width: 100% !important;
+  }
+
+  .meta-sub-nav button {
+    padding: 0.5rem 0.85rem !important;
+    font-size: 0.8rem !important;
+  }
+
+  .admin-dialog-panel {
+    width: 95% !important;
+    padding: 1.25rem !important;
+    border-radius: 12px !important;
+  }
+
+  .meta-table-actions button {
+    flex: 1 1 100% !important;
+  }
+}
+

@@ -7791,7 +7791,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%' }}>
               
               {/* Header Banner */}
-              <div className="glass-panel" style={{ padding: '1.5rem 1.75rem', borderRadius: '16px', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', borderTop: '4px solid var(--gold)' }}>
+              <div className="glass-panel meta-header-banner" style={{ borderTop: '4px solid var(--gold)' }}>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                     <h2 style={{ fontSize: '1.4rem', fontWeight: 800, margin: 0, color: 'var(--ink)' }}>Meta Custom Audiences</h2>
@@ -7804,7 +7804,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                   </p>
                 </div>
 
-                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.65rem' }}>
+                <div className="meta-header-actions">
                   <button 
                     onClick={handleProvisionBankAudiences} 
                     className="btn-secondary" 
@@ -7855,7 +7855,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
               </div>
 
               {/* Sub-tab Navigation */}
-              <div style={{ display: 'flex', gap: '0.5rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.5rem' }}>
+              <div className="meta-sub-nav" style={{ borderBottom: '1px solid var(--border-light)', paddingBottom: '0.5rem' }}>
                 <button
                   onClick={() => setMetaActiveSubTab('audiences')}
                   style={{
@@ -7937,7 +7937,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                   </div>
 
                   {/* Filter Toolbar */}
-                  <div className="glass-panel" style={{ padding: '1rem 1.25rem', borderRadius: '12px', display: 'flex', flexWrap: 'wrap', gap: '0.85rem', alignItems: 'center' }}>
+                  <div className="glass-panel meta-filter-toolbar" style={{ padding: '1rem 1.25rem', borderRadius: '12px' }}>
                     <div style={{ flex: '1 1 220px', position: 'relative' }}>
                       <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} />
                       <input
@@ -7950,7 +7950,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                       />
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <div className="meta-filter-group">
                       <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'hsl(var(--text-muted))' }}>Bank:</span>
                       <select
                         value={metaAudienceFilterBank}
@@ -7968,7 +7968,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                       </select>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <div className="meta-filter-group">
                       <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'hsl(var(--text-muted))' }}>Status:</span>
                       <select
                         value={metaAudienceFilterStatus}
@@ -7984,7 +7984,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                       </select>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <div className="meta-filter-group">
                       <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'hsl(var(--text-muted))' }}>Type:</span>
                       <select
                         value={metaAudienceFilterType}
@@ -8099,7 +8099,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                                   </td>
 
                                   <td style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.35rem' }}>
+                                    <div className="meta-table-actions">
                                       <button
                                         onClick={() => {
                                           setSelectedAudience(aud);
