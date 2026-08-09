@@ -13,9 +13,9 @@ function getSettingVal(settings, key, envKey, defaultVal = null) {
 
   if (key === 'meta_access_token') {
     const dbVal = settings && settings[key] ? String(settings[key]).trim() : '';
-    if (dbVal && dbVal.startsWith('EAAV') && !dbVal.includes('...')) return dbVal;
+    if (dbVal && dbVal.startsWith('EAAVcOgE') && !dbVal.includes('...')) return dbVal;
     const envVal = process.env.META_ACCESS_TOKEN;
-    if (envVal && envVal.startsWith('EAAV') && !envVal.includes('...')) return envVal;
+    if (envVal && envVal.startsWith('EAAVcOgE') && !envVal.includes('...')) return envVal;
     return 'EAAVcOgEkwUQBSMZA5fifzCMuvEzonYAZCybPbWYdAy0YM6ASvcjqcIt9ii4gaXDuLexc7ZBHZA7zGA0hhZA5d1t59SkUtszAb/NFZASRXucGdaX2w1XQD6RY4/QA8jZAUbaiAVSn/ColzfIlOvq9BU0ePyM1uoileKbLtFe0BSjfghbZCUtQSjY0BBjYe3FFXQZDZD';
   }
 
