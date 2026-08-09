@@ -4979,6 +4979,13 @@ app.post('/api/meta/audiences/:id/sync', authenticateToken, requireAdmin, async 
       }
     }
 
+    // If meta_audience_id is still null, we cannot sync — tell the user to paste it manually
+    if (!audience.meta_audience_id) {
+      return res.status(400).json({
+        error: 'Meta Audience ID is missing. Please edit this audience and paste the Meta Audience ID from Meta Ads Manager (e.g. 120252069748690319).'
+      });
+    }
+
     const leads = await db.getFinalApprovedLeadsForAudience(audience.bank_name, audience.sql_filter);
     
     if (leads.length === 0) {
