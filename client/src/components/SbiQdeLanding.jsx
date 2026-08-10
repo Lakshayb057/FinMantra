@@ -1663,7 +1663,10 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
                             Location: {pincodeLocationText}
                           </span>
                         )}
-                        <span className="err">{errors.pincode || pincodeError || 'Enter a valid 6-digit pincode.'}</span>
+                        <span className="err">
+                          {(errors.pincode && errors.pincode !== negativePincodeNotice) ? errors.pincode : 
+                           (pincodeError && pincodeError !== negativePincodeNotice) ? pincodeError : ''}
+                        </span>
                         
                         {negativePincodeNotice && (
                           <div style={{ marginTop: '8px', padding: '10px', background: '#FFF8E1', border: '1px solid #FFE082', borderRadius: '10px', color: '#B78103', fontSize: '12px', fontWeight: 600 }}>
