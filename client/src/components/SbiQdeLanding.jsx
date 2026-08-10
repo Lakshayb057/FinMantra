@@ -72,6 +72,23 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
     };
   }, []);
 
+  const [desSuggestions, setDesSuggestions] = useState([]);
+  const [showDesSuggestions, setShowDesSuggestions] = useState(false);
+  const desSuggestionsRef = useRef(null);
+
+  // Close designation suggestions on clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (desSuggestionsRef.current && !desSuggestionsRef.current.contains(event.target)) {
+        setShowDesSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
   // Fetch company name suggestions
   useEffect(() => {
     const fetchSuggestions = async () => {
@@ -132,6 +149,26 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
     };
     fetchDesignations();
   }, [formData.employment]);
+
+  // Filter designation suggestions locally as user types
+  useEffect(() => {
+    const query = (formData.designation || '').trim().toLowerCase();
+    if (!query) {
+      setDesSuggestions(designations.slice(0, 15));
+      return;
+    }
+    const matches = designations.filter(d => d.toLowerCase().includes(query));
+    setDesSuggestions(matches.slice(0, 15));
+  }, [formData.designation, designations]);
+
+  const handleSelectDesSuggestion = (des) => {
+    setFormData(prev => ({
+      ...prev,
+      designation: des
+    }));
+    setShowDesSuggestions(false);
+    validateField('designation', des, { ...formData, designation: des });
+  };
 
   const handleSelectSuggestion = (company) => {
     setFormData(prev => ({
@@ -1795,18 +1832,32 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
                       {/* 13. Designation */}
                       <div className={`field ${errors.designation ? 'invalid' : ''}`}>
                         <label htmlFor="designation">Designation <span className="req">*</span></label>
-                        <select
-                          id="designation"
-                          name="designation"
-                          value={formData.designation}
-                          onChange={handleInputChange}
-                          disabled={isLoadingDesignations || designations.length === 0}
-                        >
-                          <option value="">{isLoadingDesignations ? 'Loading designations...' : '-- Select Designation --'}</option>
-                          {designations.map((des, index) => (
-                            <option key={index} value={des}>{des}</option>
-                          ))}
-                        </select>
+                        <div className="company-field-container">
+                          <input
+                            id="designation"
+                            name="designation"
+                            placeholder={isLoadingDesignations ? 'Loading designations list...' : 'Search Job Designation...'}
+                            value={formData.designation}
+                            onChange={handleInputChange}
+                            onFocus={() => setShowDesSuggestions(true)}
+                            autoComplete="off"
+                            disabled={isLoadingDesignations || designations.length === 0}
+                          />
+                          {showDesSuggestions && desSuggestions.length > 0 && (
+                            <div ref={desSuggestionsRef} className="sbi-autocomplete-dropdown">
+                              {desSuggestions.map((des, index) => (
+                                <div
+                                  key={index}
+                                  className="sbi-autocomplete-item"
+                                  onClick={() => handleSelectDesSuggestion(des)}
+                                  style={{ justifyContent: 'flex-start' }}
+                                >
+                                  <span className="sbi-company-name" style={{ fontWeight: 500, color: 'var(--ink)' }}>{des}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                         <span className="err">{errors.designation || 'Designation is required.'}</span>
                       </div>
 
