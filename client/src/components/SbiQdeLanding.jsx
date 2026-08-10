@@ -620,10 +620,6 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
 
   // Send Step 1 WhatsApp OTP
   const sendStep1Otp = async () => {
-    if (negativePincodeNotice) {
-      setFormError('This PINCODE is negative for card delivery. Application cannot proceed.');
-      return;
-    }
     setIsSubmitting(true);
     setFormError('');
     try {
@@ -1719,7 +1715,7 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
                        </div>
 
                        {/* 6. Pincode */}
-                       <div className={`field ${errors.pincode ? 'invalid' : ''}`}>
+                       <div className={`field ${errors.pincode || pincodeError ? 'invalid' : ''}`}>
                          <label htmlFor="pincode">Pincode <span className="req">*</span></label>
                          <input
                            id="pincode"
