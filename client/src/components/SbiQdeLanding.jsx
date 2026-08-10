@@ -311,18 +311,12 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
         if (negRes.ok) {
           const negData = await negRes.json();
           if (negData.isNegative) {
-            const negMsg = 'Currently not servicable pincode please chose another one';
+            const negMsg = 'This pincode is not serviceable. Please try an alternate address, if available. We’ll still try to process your application.';
             setNegativePincodeNotice('');
             setPincodeError(negMsg);
-            setErrors(prev => ({ ...prev, pincode: negMsg }));
           } else {
             setNegativePincodeNotice('');
             setPincodeError('');
-            setErrors(prev => {
-              const next = { ...prev };
-              delete next.pincode;
-              return next;
-            });
           }
         }
       } catch (err) {
@@ -445,10 +439,6 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
         errorText = 'Pincode is required';
       } else if (value.length !== 6 || !/^\d+$/.test(value)) {
         errorText = 'Pincode must be exactly 6 digits.';
-      } else if (negativePincodeNotice) {
-        errorText = negativePincodeNotice;
-      } else if (pincodeError) {
-        errorText = pincodeError;
       }
     }
 
@@ -587,8 +577,6 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
       } else if (field === 'pincode') {
         if (!val) fieldError = 'Pincode is required';
         else if (val.length !== 6 || !/^\d+$/.test(val)) fieldError = 'Pincode must be exactly 6 digits.';
-        else if (negativePincodeNotice) fieldError = negativePincodeNotice;
-        else if (pincodeError) fieldError = pincodeError;
       } else if (field === 'landmark') {
         if (!val || !String(val).trim()) fieldError = 'Landmark is required';
       } else if (field === 'city') {
