@@ -89,6 +89,18 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
     };
   }, []);
 
+  // Scroll to formcard top upon successful submission
+  useEffect(() => {
+    if (isSubmitted) {
+      const applySection = document.getElementById('apply');
+      if (applySection) {
+        const yOffset = -80; // offset for sticky header
+        const y = applySection.getBoundingClientRect().top + window.scrollY + yOffset;
+        window.scrollTo({ top: y, behavior: 'smooth' });
+      }
+    }
+  }, [isSubmitted]);
+
   // Fetch company name suggestions
   useEffect(() => {
     const fetchSuggestions = async () => {
@@ -299,8 +311,8 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
         if (negRes.ok) {
           const negData = await negRes.json();
           if (negData.isNegative) {
-            const negMsg = 'This PINCODE is negative for card delivery, please share the alternative address if you have, but we will still try.';
-            setNegativePincodeNotice(negMsg);
+            const negMsg = 'Currently not servicable pincode please chose another one';
+            setNegativePincodeNotice('');
             setPincodeError(negMsg);
             setErrors(prev => ({ ...prev, pincode: negMsg }));
           } else {
@@ -1211,9 +1223,9 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
           padding: 16px 20px;
         }
         .simplyclick-wrapper .formhead h2 {
-          font-size: 21px;
+          font-size: 25px;
           font-weight: 700;
-          color: #000000;
+          color: #ffffff;
           margin: 0;
           letter-spacing: -0.3px;
         }
@@ -1376,9 +1388,13 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
           display: none;
           padding: 32px 24px;
           text-align: center;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          min-height: 400px;
         }
         .simplyclick-wrapper .success.show {
-          display: block;
+          display: flex;
         }
         .simplyclick-wrapper .success .tick {
           width: 52px;
@@ -1666,144 +1682,135 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
                         <input
                           id="name"
                           name="name"
-                          placeholder="First & Last Name"
-                          autoComplete="name"
-                          value={formData.name}
+                           placeholder="First & Last Name"
+                           autoComplete="name"
+                           value={formData.name}
+                           onChange={handleInputChange}
+                         />
+                         <span className="err">{errors.name || 'Enter your full name.'}</span>
+                       </div>
+
+                       {/* 3. Date of Birth */}
+                       <div className={`field ${errors.dob ? 'invalid' : ''}`}>
+                         <label htmlFor="dob">Date of Birth <span className="req">*</span></label>
+                         <input
+                           id="dob"
+                           name="dob"
+                           type="date"
+                           value={formData.dob}
+                           onChange={handleInputChange}
+                         />
+                         <span className="err">{errors.dob || 'Valid Date of Birth is required (Age 18+).'}</span>
+                       </div>
+
+                       {/* 4. Mother's Name */}
+                       <div className={`field ${errors.mother_name ? 'invalid' : ''}`}>
+                         <label htmlFor="mother_name">Mother's Name <span className="req">*</span></label>
+                         <input
+                           id="mother_name"
+                           name="mother_name"
+                           placeholder="Mother's Full Name"
+                           value={formData.mother_name}
+                           onChange={handleInputChange}
+                         />
+                         <span className="err">{errors.mother_name || "Mother's name is required and must not be equal to Full Name."}</span>
+                       </div>
+
+                       {/* 5. Current Residence Address */}
+                       <div className={`field full ${errors.current_address ? 'invalid' : ''}`}>
+                         <label htmlFor="current_address">Current Residence Address <span className="req">*</span></label>
+                         <textarea
+                           id="current_address"
+                           name="current_address"
+                           placeholder="House/Flat No., Building Name, Street Name, Locality"
+                           rows="2"
+                           value={formData.current_address}
+                           onChange={handleInputChange}
+                         />
+                         <span className="err">{errors.current_address || 'Address is required.'}</span>
+                       </div>
+
+                       {/* 6. Pincode */}
+                       <div className={`field ${errors.pincode ? 'invalid' : ''}`}>
+                         <label htmlFor="pincode">Pincode <span className="req">*</span></label>
+                         <input
+                           id="pincode"
+                           name="pincode"
+                           maxLength="6"
+                           placeholder="6-digit Pincode"
+                           inputMode="numeric"
+                           value={formData.pincode}
+                           onChange={handleInputChange}
+                         />
+                         {isFetchingPincode && (
+                           <span style={{ fontSize: '11px', color: 'var(--wine)', marginTop: '4px' }}>Fetching location...</span>
+                         )}
+                         {pincodeLocationText && !pincodeError && (
+                           <span style={{ fontSize: '11px', color: 'var(--ok)', marginTop: '4px', fontWeight: 600 }}>
+                             Location: {pincodeLocationText}
+                           </span>
+                         )}
+                         <span className="err">{errors.pincode || pincodeError || '6-digit pincode is required.'}</span>
+                       </div>
+
+                       {/* 7. Landmark */}
+                       <div className={`field ${errors.landmark ? 'invalid' : ''}`}>
+                         <label htmlFor="landmark">Landmark <span className="req">*</span></label>
+                         <input
+                           id="landmark"
+                           name="landmark"
+                           placeholder="e.g. Near Metro Station / Park"
+                           value={formData.landmark}
+                           onChange={handleInputChange}
+                         />
+                         <span className="err">{errors.landmark || 'Landmark is required.'}</span>
+                       </div>
+
+                       {/* 8. City */}
+                       <div className={`field ${errors.city ? 'invalid' : ''}`}>
+                         <label htmlFor="city">City <span className="req">*</span></label>
+                         <input
+                           id="city"
+                           name="city"
+                           placeholder="City Name"
+                           value={formData.city}
+                           onChange={handleInputChange}
+                         />
+                         <span className="err">{errors.city || 'City is required.'}</span>
+                       </div>
+
+                       {/* 9. State */}
+                       <div className={`field ${errors.state ? 'invalid' : ''}`}>
+                         <label htmlFor="state">State <span className="req">*</span></label>
+                         <input
+                           id="state"
+                           name="state"
+                           placeholder="State Name"
+                           value={formData.state}
+                           onChange={handleInputChange}
+                         />
+                         <span className="err">{errors.state || 'State is required.'}</span>
+                       </div>
+
+                       {/* 10. Phone / Mobile */}
+                       <div className={`field ${errors.mobile ? 'invalid' : ''}`}>
+                         <label htmlFor="mobile">WhatsApp Number <span className="req">*</span></label>
+                         <div className="mob">
+                           <span className="pre">+91</span>
+                           <input
+                          id="mobile"
+                          name="mobile"
+                          type="tel"
+                          maxLength="10"
+                          placeholder="9XXXXXXXXX"
+                          value={formData.mobile}
                           onChange={handleInputChange}
                         />
-                        <span className="err">{errors.name || 'Enter your full name.'}</span>
-                      </div>
+                         </div>
+                         <span className="err">{errors.mobile || 'Enter a valid 10-digit mobile number.'}</span>
+                       </div>
 
-                      {/* 3. Date of Birth */}
-                      <div className={`field ${errors.dob ? 'invalid' : ''}`}>
-                        <label htmlFor="dob">Date of Birth <span className="req">*</span></label>
-                        <input
-                          id="dob"
-                          name="dob"
-                          type="date"
-                          value={formData.dob}
-                          onChange={handleInputChange}
-                        />
-                        <span className="err">{errors.dob || 'Valid Date of Birth is required (Age 18+).'}</span>
-                      </div>
-
-                      {/* 4. Mother's Name */}
-                      <div className={`field ${errors.mother_name ? 'invalid' : ''}`}>
-                        <label htmlFor="mother_name">Mother's Name <span className="req">*</span></label>
-                        <input
-                          id="mother_name"
-                          name="mother_name"
-                          placeholder="Mother's Full Name"
-                          value={formData.mother_name}
-                          onChange={handleInputChange}
-                        />
-                        <span className="err">{errors.mother_name || "Mother's name is required and must not be equal to Full Name."}</span>
-                      </div>
-
-                      {/* 5. Current Residence Address */}
-                      <div className={`field full ${errors.current_address ? 'invalid' : ''}`}>
-                        <label htmlFor="current_address">Current Residence Address <span className="req">*</span></label>
-                        <textarea
-                          id="current_address"
-                          name="current_address"
-                          placeholder="House/Flat No., Building Name, Street Name, Locality"
-                          rows="2"
-                          value={formData.current_address}
-                          onChange={handleInputChange}
-                        />
-                        <span className="err">{errors.current_address || 'Current residential address is required.'}</span>
-                      </div>
-
-                      {/* 6. Pincode */}
-                      <div className={`field ${errors.pincode ? 'invalid' : ''}`}>
-                        <label htmlFor="pincode">Pincode <span className="req">*</span></label>
-                        <input
-                          id="pincode"
-                          name="pincode"
-                          maxLength="6"
-                          placeholder="6-digit Pincode"
-                          inputMode="numeric"
-                          value={formData.pincode}
-                          onChange={handleInputChange}
-                        />
-                        {isFetchingPincode && (
-                          <span style={{ fontSize: '11px', color: 'var(--wine)', marginTop: '4px' }}>Fetching location...</span>
-                        )}
-                        {pincodeLocationText && !pincodeError && (
-                          <span style={{ fontSize: '11px', color: 'var(--ok)', marginTop: '4px', fontWeight: 600 }}>
-                            Location: {pincodeLocationText}
-                          </span>
-                        )}
-                        <span className="err">
-                          {(errors.pincode && errors.pincode !== negativePincodeNotice) ? errors.pincode : 
-                           (pincodeError && pincodeError !== negativePincodeNotice) ? pincodeError : ''}
-                        </span>
-                        
-                        {negativePincodeNotice && (
-                          <div style={{ marginTop: '8px', padding: '10px', background: '#FFF8E1', border: '1px solid #FFE082', borderRadius: '10px', color: '#B78103', fontSize: '12px', fontWeight: 600 }}>
-                            ⚠️ {negativePincodeNotice}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* 7. Landmark */}
-                      <div className={`field ${errors.landmark ? 'invalid' : ''}`}>
-                        <label htmlFor="landmark">Landmark <span className="req">*</span></label>
-                        <input
-                          id="landmark"
-                          name="landmark"
-                          placeholder="e.g. Near Metro Station / Park"
-                          value={formData.landmark}
-                          onChange={handleInputChange}
-                        />
-                        <span className="err">{errors.landmark || 'Landmark is required.'}</span>
-                      </div>
-
-                      {/* 8. City */}
-                      <div className={`field ${errors.city ? 'invalid' : ''}`}>
-                        <label htmlFor="city">City <span className="req">*</span></label>
-                        <input
-                          id="city"
-                          name="city"
-                          placeholder="City Name"
-                          value={formData.city}
-                          onChange={handleInputChange}
-                        />
-                        <span className="err">{errors.city || 'City is required.'}</span>
-                      </div>
-
-                      {/* 9. State */}
-                      <div className={`field ${errors.state ? 'invalid' : ''}`}>
-                        <label htmlFor="state">State <span className="req">*</span></label>
-                        <input
-                          id="state"
-                          name="state"
-                          placeholder="State Name"
-                          value={formData.state}
-                          onChange={handleInputChange}
-                        />
-                        <span className="err">{errors.state || 'State is required.'}</span>
-                      </div>
-
-                      {/* 10. Phone / Mobile */}
-                      <div className={`field ${errors.mobile ? 'invalid' : ''}`}>
-                        <label htmlFor="mobile">WhatsApp Number <span className="req">*</span></label>
-                        <div className="mob">
-                          <span className="pre">+91</span>
-                          <input
-                            id="mobile"
-                            name="mobile"
-                            maxLength="10"
-                            placeholder="10-digit mobile"
-                            inputMode="numeric"
-                            value={formData.mobile}
-                            onChange={handleInputChange}
-                          />
-                        </div>
-                        <span className="err">{errors.mobile || 'Enter a valid 10-digit WhatsApp number.'}</span>
-                      </div>
-
-                      {/* 11. Email */}
+                      {/* 3. Email Address */}
                       <div className={`field ${errors.email ? 'invalid' : ''}`}>
                         <label htmlFor="email">Email Address <span className="req">*</span></label>
                         <input
