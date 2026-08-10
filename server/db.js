@@ -786,6 +786,85 @@ async function importSbiCompanyCodes() {
   }
 }
 
+async function importDesignations() {
+  const client = await pool.connect();
+  try {
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS designations (
+        id SERIAL PRIMARY KEY,
+        employment_type VARCHAR(100) NOT NULL,
+        designation VARCHAR(150) NOT NULL
+      )
+    `);
+    await client.query('CREATE INDEX IF NOT EXISTS idx_designations_emp_type ON designations (employment_type)');
+
+    const countRes = await client.query('SELECT COUNT(*) FROM designations');
+    const count = parseInt(countRes.rows[0].count, 10);
+    if (count >= 578) {
+      console.log(`[Designations Importer] Table already has ${count} records. Skipping import.`);
+      return;
+    }
+
+    console.log('[Designations Importer] Starting import from Excel file...');
+
+    const xlsx = require('xlsx');
+    const fs = require('fs');
+
+    let file1Path = "C:\\Users\\laksh\\Downloads\\Global_Designations_List.xlsx";
+    if (!fs.existsSync(file1Path)) {
+      file1Path = "/home/ubuntu/downloads/Global_Designations_List.xlsx";
+    }
+
+    if (fs.existsSync(file1Path)) {
+      console.log(`[Designations Importer] Reading File: ${file1Path}`);
+      const workbook = xlsx.readFile(file1Path);
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      const rows = xlsx.utils.sheet_to_json(sheet);
+      console.log(`[Designations Importer] Parsed ${rows.length} rows.`);
+
+      await client.query('TRUNCATE designations RESTART IDENTITY');
+
+      const batchSize = 100;
+      let values = [];
+      let insertedCount = 0;
+
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        const empType = row['Employment Type'] ? String(row['Employment Type']).trim() : null;
+        const designation = row['Designation'] ? String(row['Designation']).trim() : null;
+
+        if (empType && designation) {
+          values.push(empType, designation);
+          insertedCount++;
+
+          if (insertedCount % batchSize === 0 || i === rows.length - 1) {
+            const placeholders = [];
+            for (let j = 0; j < values.length / 2; j++) {
+              placeholders.push(`($${j * 2 + 1}, $${j * 2 + 2})`);
+            }
+
+            if (placeholders.length > 0) {
+              await client.query(
+                `INSERT INTO designations (employment_type, designation) VALUES ${placeholders.join(', ')}`,
+                values
+              );
+            }
+            values = [];
+          }
+        }
+      }
+      console.log(`[Designations Importer] Successfully imported ${insertedCount} designations.`);
+    } else {
+      console.log(`[Designations Importer] Excel file not found at ${file1Path}. Skipping import.`);
+    }
+  } catch (err) {
+    console.error('[Designations Importer Exception]:', err);
+  } finally {
+    client.release();
+  }
+}
+
 let _utmOptionsCache = null;
 let _utmOptionsCacheTime = 0;
 
@@ -799,6 +878,7 @@ const db = {
         await initPgSchema();
         // Run import check asynchronously in background so server startup is fast
         importSbiCompanyCodes().catch(err => console.error('[SBI Import Background Exception]:', err));
+        importDesignations().catch(err => console.error('[Designations Import Background Exception]:', err));
         return;
       } catch (err) {
         retries--;
@@ -2646,6 +2726,15 @@ const db = {
 
   async runQuery(sql) {
     return await pool.query(sql);
+  },
+
+  async getDesignations(employmentType) {
+    if (employmentType) {
+      const res = await pool.query('SELECT designation FROM designations WHERE LOWER(employment_type) = LOWER($1) ORDER BY designation ASC', [employmentType]);
+      return res.rows.map(r => r.designation);
+    }
+    const res = await pool.query('SELECT employment_type, designation FROM designations ORDER BY employment_type ASC, designation ASC');
+    return res.rows;
   }
 }
 

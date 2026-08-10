@@ -4825,6 +4825,18 @@ app.get('/api/pincodes/check-negative/:pincode', (req, res) => {
   res.json({ pincode: pin, isNegative });
 });
 
+// Get Designations (filtered by employment_type query parameter)
+app.get('/api/designations', async (req, res) => {
+  try {
+    const { employment_type } = req.query;
+    const list = await db.getDesignations(employment_type);
+    return res.json(list);
+  } catch (err) {
+    console.error('[API Error] /api/designations:', err);
+    return res.status(500).json({ error: 'Failed to retrieve designations' });
+  }
+});
+
 // Parse Pincode File (supports .xlsx, .xls, .csv, .txt)
 app.post('/api/pincodes/parse', authenticateToken, requireAdmin, upload.single('file'), (req, res) => {
   if (!req.file) {

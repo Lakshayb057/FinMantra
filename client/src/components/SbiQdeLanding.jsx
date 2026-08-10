@@ -55,6 +55,10 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
   const [selectedCompany, setSelectedCompany] = useState(null);
   const suggestionsRef = useRef(null);
 
+  // Designation lists states
+  const [designations, setDesignations] = useState([]);
+  const [isLoadingDesignations, setIsLoadingDesignations] = useState(false);
+
   // Close suggestions on clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -105,6 +109,29 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
     const timer = setTimeout(fetchSuggestions, 300);
     return () => clearTimeout(timer);
   }, [formData.company_name, selectedCompany]);
+
+  // Fetch designations when employment type changes
+  useEffect(() => {
+    const fetchDesignations = async () => {
+      if (!formData.employment) {
+        setDesignations([]);
+        return;
+      }
+      setIsLoadingDesignations(true);
+      try {
+        const res = await fetch(`${API_URL}/designations?employment_type=${encodeURIComponent(formData.employment)}`);
+        if (res.ok) {
+          const data = await res.json();
+          setDesignations(data || []);
+        }
+      } catch (err) {
+        console.error('Failed to load designations:', err);
+      } finally {
+        setIsLoadingDesignations(false);
+      }
+    };
+    fetchDesignations();
+  }, [formData.employment]);
 
   const handleSelectSuggestion = (company) => {
     setFormData(prev => ({
@@ -269,6 +296,9 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
     }
 
     const nextFormState = { ...formData, [name]: cleanVal };
+    if (name === 'employment') {
+      nextFormState.designation = '';
+    }
     setFormData(nextFormState);
     validateField(name, cleanVal, nextFormState);
 
@@ -1756,21 +1786,27 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
                           onChange={handleInputChange}
                         >
                           <option value="Salaried">Salaried</option>
-                          <option value="Self Employed Business">Self Employed Business</option>
-                          <option value="Self Employed Professional">Self Employed Professional</option>
+                          <option value="Self-Employed Business">Self-Employed Business</option>
+                          <option value="Self-Employed Professional">Self-Employed Professional</option>
+                          <option value="Not Employed">Not Employed</option>
                         </select>
                       </div>
 
                       {/* 13. Designation */}
                       <div className={`field ${errors.designation ? 'invalid' : ''}`}>
                         <label htmlFor="designation">Designation <span className="req">*</span></label>
-                        <input
+                        <select
                           id="designation"
                           name="designation"
-                          placeholder="Job Designation"
                           value={formData.designation}
                           onChange={handleInputChange}
-                        />
+                          disabled={isLoadingDesignations || designations.length === 0}
+                        >
+                          <option value="">{isLoadingDesignations ? 'Loading designations...' : '-- Select Designation --'}</option>
+                          {designations.map((des, index) => (
+                            <option key={index} value={des}>{des}</option>
+                          ))}
+                        </select>
                         <span className="err">{errors.designation || 'Designation is required.'}</span>
                       </div>
 
