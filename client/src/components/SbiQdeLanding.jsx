@@ -1790,23 +1790,9 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
                                   key={index}
                                   className="sbi-autocomplete-item"
                                   onClick={() => handleSelectSuggestion(company)}
+                                  style={{ justifyContent: 'flex-start' }}
                                 >
-                                  <div className="sbi-company-info">
-                                    <span className="sbi-company-name">{company.name}</span>
-                                    {company.code && <span className="sbi-company-code">({company.code})</span>}
-                                  </div>
-                                  <div className="sbi-company-badges">
-                                    {company.category && (
-                                      <span className={`sbi-badge cat-${company.category.toLowerCase().trim()}`}>
-                                        Category {company.category}
-                                      </span>
-                                    )}
-                                    {company.why_ltf && (
-                                      <span className="sbi-badge ltf-badge" title={company.why_ltf}>
-                                        LTF Offer
-                                      </span>
-                                    )}
-                                  </div>
+                                  <span className="sbi-company-name" style={{ fontWeight: 500, color: 'var(--ink)' }}>{company.name}</span>
                                 </div>
                               ))}
                             </div>
