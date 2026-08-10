@@ -1213,7 +1213,7 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
         .simplyclick-wrapper .formhead h2 {
           font-size: 21px;
           font-weight: 700;
-          color: var(--cream);
+          color: #000000;
           margin: 0;
           letter-spacing: -0.3px;
         }
@@ -1224,7 +1224,6 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
           margin: 6px 0 0;
           line-height: 1.4;
         }
-
 
         .simplyclick-wrapper form {
           padding: 16px 18px 20px;
