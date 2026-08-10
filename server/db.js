@@ -1231,7 +1231,7 @@ const db = {
         lead.utm_source, lead.utm_info, lead.utm_creative_format, lead.utm_medium, lead.utm_campaign, lead.utm_term, lead.utm_content, lead.utm_channel, lead.utm_category, lead.fbclid,
         lead.gclid, lead.gclsrc, lead.dclid, lead.msclkid, lead.ttclid, lead.twclid, lead.li_fat_id,
         lead.utm_id, lead.utm_creative, lead.utm_keyword, lead.utm_matchtype, lead.utm_network, lead.utm_placement,
-        lead.utm_device, lead.utm_location, lead.gbraid, wbraid, lead.landing_page, lead.first_landing_page, lead.referrer, lead.ad_id,
+        lead.utm_device, lead.utm_location, lead.gbraid, lead.wbraid, lead.landing_page, lead.first_landing_page, lead.referrer, lead.ad_id,
         JSON.stringify(lead.utm_params || {}), lead.redirect_url || '',
         lead.ip_address || null, lead.user_agent || null, lead.capi_status || null,
         lead.capi_response ? JSON.stringify(lead.capi_response) : null,

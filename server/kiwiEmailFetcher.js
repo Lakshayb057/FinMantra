@@ -306,7 +306,7 @@ async function processKiwiMisBuffer(buffer, attachmentName, broadcastFn = null) 
             await metaCapi.sendMetaCapiEvent(lead, 'Purchase', 2000, 'KIWI');
           }
         }
-        await metaAudienceService.enqueueLeadSyncForUpdatedLeads(updatedLeads, broadcast);
+        await metaAudienceService.enqueueLeadSyncForUpdatedLeads(updatedLeads, broadcastFn);
       }, 100);
     }
   }

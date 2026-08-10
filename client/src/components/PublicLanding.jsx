@@ -191,19 +191,6 @@ export default function PublicLanding({ navigateTo, utmParams }) {
 
   // API base URL
   const API_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.port === '5173') ? 'http://localhost:5000/api' : '/api';
-  // Close employment dropdown on outside click
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (empDropdownRef.current && !empDropdownRef.current.contains(e.target)) {
-        setEmploymentDropdownOpen(false);
-      }
-      if (designationDropdownRef.current && !designationDropdownRef.current.contains(e.target)) {
-        setDesignationDropdownOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
 
   // Load initial cards, locations, settings
   useEffect(() => {

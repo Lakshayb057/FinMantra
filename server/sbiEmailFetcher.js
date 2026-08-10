@@ -388,7 +388,7 @@ async function processSbiMisRows(rows, attachmentName, broadcastFn = null) {
             await metaCapi.sendMetaCapiEvent(lead, 'Purchase', 2000, 'SBI');
           }
         }
-        await metaAudienceService.enqueueLeadSyncForUpdatedLeads(updatedLeads, broadcast);
+        await metaAudienceService.enqueueLeadSyncForUpdatedLeads(updatedLeads, broadcastFn);
       }, 100);
     }
   }
