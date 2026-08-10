@@ -1910,9 +1910,10 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
                           onChange={handleInputChange}
                         />
                         <label htmlFor="consent">
-                          I authorise <b>FinMantra</b> (an authorised DSA of SBI Card) to fetch my credit report and contact me via Phone, SMS, or WhatsApp regarding this credit card application. Privacy Policy.
+                          I authorise <b>FinMantra</b> (an authorised DSA of SBI Card) to fetch my credit report and contact me via Phone, SMS, or WhatsApp regarding this credit card application. <a href="/privacy-policy" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.
                         </label>
                       </div>
+
                       <span className="err" style={{ gridColumn: '1/-1', display: errors.consent ? 'block' : 'none' }}>
                         {errors.consent || 'Please tick the box to continue.'}
                       </span>
@@ -1927,7 +1928,7 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
 
                       <div className="submitrow">
                         <button type="submit" className="btn btn-primary" id="submitbtn" disabled={isSubmitting}>
-                          {isSubmitting ? 'Submitting\u2026' : 'Submit & Verify WhatsApp OTP \u2192'}
+                          {isSubmitting ? 'Submitting…' : 'Submit'}
                         </button>
                       </div>
 
