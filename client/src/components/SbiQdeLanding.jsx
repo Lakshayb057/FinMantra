@@ -1206,23 +1206,25 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
           overflow: hidden;
         }
         .simplyclick-wrapper .formhead {
-          background: #ffffff;
-          padding: 18px 20px 10px;
-          border-bottom: 1px solid var(--line);
+          background: var(--wine);
+          color: var(--cream);
+          padding: 16px 20px;
         }
         .simplyclick-wrapper .formhead h2 {
           font-size: 21px;
           font-weight: 700;
-          color: #000000;
+          color: var(--cream);
           margin: 0;
           letter-spacing: -0.3px;
         }
         .simplyclick-wrapper .formhead p {
-          color: #555555;
+          opacity: 0.92;
+          color: var(--cream);
           font-size: 13px;
           margin: 6px 0 0;
           line-height: 1.4;
         }
+
 
         .simplyclick-wrapper form {
           padding: 16px 18px 20px;
