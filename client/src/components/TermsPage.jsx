@@ -115,7 +115,7 @@ export default function TermsPage({ navigateTo }) {
             <span style={sectionNumberStyle}>SECTION 01</span>
             <h2 style={sectionHeadingStyle}>Acceptance of Terms</h2>
             <p style={paragraphStyle}>
-              By accessing and using finmantra.org ("the Website"), you acknowledge that you have read, understood,
+              By accessing and using thefinmantra.com ("the Website"), you acknowledge that you have read, understood,
               and agree to be bound by these Terms & Conditions. If you do not agree with any part of these terms,
               you must not use our Website.
             </p>
@@ -187,7 +187,7 @@ export default function TermsPage({ navigateTo }) {
             <span style={sectionNumberStyle}>SECTION 06</span>
             <h2 style={sectionHeadingStyle}>Intellectual Property</h2>
             <p style={paragraphStyle}>
-              All content, logos, designs, text, graphics, and trademarks displayed on finmantra.org are owned by
+              All content, logos, designs, text, graphics, and trademarks displayed on thefinmantra.com are owned by
               Chaos Design Pvt. Ltd. or their respective owners. You may not reproduce, distribute, modify, or
               create derivative works from any content on this Website without prior written permission.
             </p>
@@ -265,7 +265,7 @@ export default function TermsPage({ navigateTo }) {
                 <strong style={{ color: 'var(--ink)' }}>Chaos Design Pvt. Ltd.</strong>
               </p>
               <p style={{ ...paragraphStyle, marginBottom: 0 }}>
-                Email: <strong style={{ color: 'var(--gold-deep)' }}>support@finmantra.org</strong>
+                Email: <strong style={{ color: 'var(--gold-deep)' }}>support@thefinmantra.com</strong>
               </p>
             </div>
           </div>

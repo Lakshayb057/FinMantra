@@ -723,7 +723,7 @@ FM2026G2800079,APP10002,DVRPA5807A,IMTIYAZ AHMED,9785197812,SBI,DECLINE,Declined
       'APP10099', 'Anil Sharma', '9876543210', 'anil.sharma@example.com', 'ABCDE1234F', '1995-05-15',
       'Sunita Sharma', '123 Main Street, Sector 15', '110001', 'Salaried', 'Software Engineer',
       'TCS Tech', 'No', '65000', '6-9 LPA',
-      'Kiwi Credit Card', 'Kiwi', 'Yes', 'https://finmantra.org/kiwi', 'https://finmantra.org/'
+      'Kiwi Credit Card', 'Kiwi', 'Yes', 'https://thefinmantra.com/kiwi', 'https://thefinmantra.com/'
     ];
     const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), sampleRow.join(',')].join('\n');
     const encodedUri = encodeURI(csvContent);

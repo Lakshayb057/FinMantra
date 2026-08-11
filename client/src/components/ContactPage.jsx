@@ -9,7 +9,7 @@ export default function ContactPage({ navigateTo }) {
     {
       icon: '📧',
       title: 'Email',
-      detail: 'support@finmantra.org',
+      detail: 'support@thefinmantra.com',
       sub: 'We typically respond within 24 hours',
     },
     {
@@ -224,7 +224,7 @@ export default function ContactPage({ navigateTo }) {
             fontWeight: 700,
             color: 'var(--gold-deep)',
           }}>
-            partnerships@finmantra.org
+            partnerships@thefinmantra.com
           </p>
         </div>
       </section>

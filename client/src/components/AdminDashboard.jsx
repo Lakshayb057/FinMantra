@@ -1246,7 +1246,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
     } catch (err) {
       console.error('Error fetching admin dashboard details:', err);
       if (String(err).includes('Failed to fetch')) {
-        showToast('Connection blocked by browser due to invalid SSL certificate on finmantra.org. Please renew SSL cert on EC2.', 'error');
+        showToast('Connection blocked by browser due to invalid SSL certificate on thefinmantra.com. Please renew SSL cert on EC2.', 'error');
       } else {
         showToast('Error syncing with database.', 'error');
       }
@@ -2648,9 +2648,9 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
     const md = l.mis_data || {};
     const misUrl = md['Redirect URL'] || md['Redirect URL (redirect_url)'] || md['redirect_url'] || '';
 
-    const directUrl = (l.redirect_url && !l.redirect_url.includes('finmantra.org/refer') && !l.redirect_url.includes('uat.finmantra.org/refer') && !l.redirect_url.includes('localhost'))
+    const directUrl = (l.redirect_url && !l.redirect_url.includes('thefinmantra.com/refer') && !l.redirect_url.includes('uat.thefinmantra.com/refer') && !l.redirect_url.includes('localhost'))
                       ? l.redirect_url
-                      : ((misUrl && !misUrl.includes('finmantra.org/refer') && !misUrl.includes('uat.finmantra.org/refer') && !misUrl.includes('localhost')) ? misUrl : '');
+                      : ((misUrl && !misUrl.includes('thefinmantra.com/refer') && !misUrl.includes('uat.thefinmantra.com/refer') && !misUrl.includes('localhost')) ? misUrl : '');
 
     if (directUrl) return directUrl;
 
@@ -6604,7 +6604,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                         <input 
                           type="url" 
                           className="form-input" 
-                          placeholder="https://finmantra.org"
+                          placeholder="https://thefinmantra.com"
                           value={settings.public_site_url || ''}
                           onChange={(e) => setSettings({ ...settings, public_site_url: e.target.value })}
                         />
@@ -9591,7 +9591,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                         {(() => {
                           const agentCode = selectedLeadDetails.agent_id || 'public';
                           const dateCode = selectedLeadDetails.created_at ? new Date(selectedLeadDetails.created_at).toISOString().slice(0, 10).replace(/-/g, '') : '';
-                          const domain = window.location.hostname.includes('uat') ? 'https://uat.finmantra.org' : 'https://finmantra.org';
+                          const domain = window.location.hostname.includes('uat') ? 'https://uat.thefinmantra.com' : 'https://thefinmantra.com';
                           const rUrl = selectedLeadDetails.redirect_url || `${domain}/refer/${agentCode}/${dateCode}/${selectedLeadDetails.urn || ''}`;
                           return (
                             <div style={{ marginTop: '0.4rem', gridColumn: '1 / -1' }}>
@@ -10656,7 +10656,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
                   <div>
                     <label style={{ fontSize: '0.75rem', color: 'var(--muted)', fontWeight: 600 }}>Landing Page URL</label>
-                    <input type="text" className="form-input" placeholder="e.g. https://finmantra.org/apply" value={createLeadForm.landing_page} onChange={e => setCreateLeadForm({ ...createLeadForm, landing_page: e.target.value })} />
+                    <input type="text" className="form-input" placeholder="e.g. https://thefinmantra.com/apply" value={createLeadForm.landing_page} onChange={e => setCreateLeadForm({ ...createLeadForm, landing_page: e.target.value })} />
                   </div>
                   <div>
                     <label style={{ fontSize: '0.75rem', color: 'var(--muted)', fontWeight: 600 }}>Redirect URL</label>

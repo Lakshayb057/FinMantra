@@ -117,7 +117,7 @@ export default function PrivacyPolicyPage({ navigateTo }) {
             <p style={paragraphStyle}>
               FinMantra ("we", "us", "our"), a brand of <strong style={{ color: 'var(--ink)' }}>Chaos Design Pvt. Ltd.</strong>,
               is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and
-              safeguard your information when you visit our website finmantra.org.
+              safeguard your information when you visit our website thefinmantra.com.
             </p>
           </div>
 
@@ -216,7 +216,7 @@ export default function PrivacyPolicyPage({ navigateTo }) {
             <h2 style={sectionHeadingStyle}>Your Rights</h2>
             <p style={paragraphStyle}>
               You may request access to, correction of, or deletion of your personal data by contacting us at{' '}
-              <strong style={{ color: 'var(--gold-deep)' }}>support@finmantra.org</strong>.
+              <strong style={{ color: 'var(--gold-deep)' }}>support@thefinmantra.com</strong>.
             </p>
           </div>
 
@@ -257,7 +257,7 @@ export default function PrivacyPolicyPage({ navigateTo }) {
                 <strong style={{ color: 'var(--ink)' }}>Chaos Design Pvt. Ltd.</strong>
               </p>
               <p style={{ ...paragraphStyle, marginBottom: 0 }}>
-                Email: <strong style={{ color: 'var(--gold-deep)' }}>support@finmantra.org</strong>
+                Email: <strong style={{ color: 'var(--gold-deep)' }}>support@thefinmantra.com</strong>
               </p>
             </div>
           </div>
