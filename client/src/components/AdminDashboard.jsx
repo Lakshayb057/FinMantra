@@ -7062,10 +7062,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       "full_name": "\${form.name_input}",
       "phone": "\${form.phone_input}",
       "email": "\${form.email_input}",
-      "pan": "\${form.pan_input}",
-      "dob": "\${form.dob_input}",
-      "mother_name": "\${form.mother_input}",
-      "pincode": "\${form.pincode_input}"
+      "pan": "\${form.pan_input}"
     }
   }
 }`}
