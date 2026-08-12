@@ -4240,6 +4240,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', flex: '1 1 140px', minWidth: '130px' }}>
                     <span style={{ fontSize: '0.72rem', color: 'hsl(var(--text-muted))', whiteSpace: 'nowrap' }}>From:</span>
                     <input 
+                      type="date"
                       className="form-input" 
                       value={filterStartDate}
                       onChange={(e) => setFilterStartDate(e.target.value)}
