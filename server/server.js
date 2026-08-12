@@ -5570,7 +5570,10 @@ app.post('/api/whatsapp/flow-endpoint', async (req, res) => {
     const flowApiKey = settings.whatsapp_flow_api_key;
     const privateKeyPEM = settings.whatsapp_flow_private_key;
 
-    const providedApiKey = req.headers['x-api-key'] || req.headers['X-API-Key'] || req.query.api_key;
+    let providedApiKey = req.headers['x-api-key'] || req.headers['X-API-Key'] || req.query.api_key;
+    if (!providedApiKey && req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+      providedApiKey = req.headers.authorization.substring(7).trim();
+    }
     const isEncryptedPayload = req.body && req.body.encrypted_flow_data;
 
     let authorized = false;
