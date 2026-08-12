@@ -2482,8 +2482,10 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
             wa_template_language: settings.wa_template_language ? settings.wa_template_language.trim() : undefined,
             wa_api_version: settings.wa_api_version ? settings.wa_api_version.trim() : undefined,
             wa_otp_is_auth_template: settings.wa_otp_is_auth_template !== undefined ? settings.wa_otp_is_auth_template : undefined,
-            whatsapp_gateway: settings.whatsapp_gateway || undefined
-          }).filter(([_, v]) => v !== undefined && v !== null && String(v).trim() !== '')
+            whatsapp_gateway: settings.whatsapp_gateway || undefined,
+            whatsapp_flow_api_key: settings.whatsapp_flow_api_key ? settings.whatsapp_flow_api_key.trim() : undefined,
+            whatsapp_flow_private_key: settings.whatsapp_flow_private_key !== undefined ? settings.whatsapp_flow_private_key : undefined
+          }).filter(([k, v]) => v !== undefined && v !== null && (k === 'whatsapp_flow_private_key' || String(v).trim() !== ''))
         ))
       });
       showToast('System settings updated successfully.');
@@ -3833,6 +3835,28 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                     }}
                   >
                     <MessageSquare size={13} /> Meta Cloud API
+                  </button>
+
+                  <button 
+                    onClick={() => { setActiveTab('settings'); setActiveSettingsSubTab('whatsapp_flows'); setShowSettingsFlyout(false); }}
+                    className="sidebar-flyout-item"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.55rem',
+                      padding: '0.4rem 0.55rem',
+                      borderRadius: '4px',
+                      border: 'none',
+                      background: activeTab === 'settings' && activeSettingsSubTab === 'whatsapp_flows' ? 'rgba(224, 168, 46, 0.15)' : 'transparent',
+                      color: activeTab === 'settings' && activeSettingsSubTab === 'whatsapp_flows' ? 'var(--gold-deep)' : 'var(--ink)',
+                      fontSize: '0.78rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      transition: 'background 0.15s'
+                    }}
+                  >
+                    <Layers size={13} /> WA Flows Webhook
                   </button>
 
                   <button 
@@ -6486,6 +6510,23 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                   Meta Cloud API
                 </button>
                 <button 
+                  onClick={() => setActiveSettingsSubTab('whatsapp_flows')} 
+                  style={{
+                    padding: '0.5rem 1rem',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    borderRadius: '6px',
+                    border: '1px solid var(--line)',
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                    transition: 'all 0.2s',
+                    background: activeSettingsSubTab === 'whatsapp_flows' ? 'var(--gold-deep)' : 'var(--paper-2)',
+                    color: activeSettingsSubTab === 'whatsapp_flows' ? '#fff' : 'var(--ink)'
+                  }}
+                >
+                  WA Flows Webhook
+                </button>
+                <button 
                   onClick={() => setActiveSettingsSubTab('baileys')} 
                   style={{
                     padding: '0.5rem 1rem',
@@ -6927,6 +6968,113 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                       </div>
                       <button type="submit" className="btn-primary" style={{ padding: '0.75rem 2rem' }} disabled={isSubmitting}>
                         {isSubmitting ? 'Saving API Credentials...' : 'Save Meta Credentials'}
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {activeSettingsSubTab === 'whatsapp_flows' && (
+                  <form onSubmit={handleUpdateSettings}>
+                    <h3 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.75rem', color: 'var(--gold-deep)' }}>
+                      <Layers size={20} />
+                      <span>WhatsApp Flows Webhook & Decryption Settings</span>
+                    </h3>
+                    <p style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', marginBottom: '1.5rem', lineHeight: '1.4' }}>
+                      Configure the webhook endpoint and decryption keys to capture and ingest credit card leads directly from WhatsApp Flow submissions.
+                    </p>
+
+                    <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+                      <label className="form-label">Flow Webhook Endpoint URL (Read Only)</label>
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          readOnly 
+                          value={window.location.origin + '/api/whatsapp/flow-endpoint'}
+                          style={{ fontFamily: 'var(--font-mono)', fontSize: '0.85rem', background: 'rgba(255,255,255,0.03)', color: 'hsl(var(--text-secondary))' }}
+                        />
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          onClick={() => {
+                            navigator.clipboard.writeText(window.location.origin + '/api/whatsapp/flow-endpoint');
+                            showToast('Endpoint URL copied to clipboard!');
+                          }}
+                          style={{ padding: '0 1rem', fontSize: '0.8rem', height: '38px', whiteSpace: 'nowrap' }}
+                        >
+                          Copy URL
+                        </button>
+                      </div>
+                      <span className="hint">Paste this URL as your Webhook / Endpoint URL inside your Meta Developer Dashboard or your BSP custom integration.</span>
+                    </div>
+
+                    <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+                      <label className="form-label">Flow API Authorization Key (X-API-Key)</label>
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          placeholder="wa_flow_..."
+                          value={settings.whatsapp_flow_api_key || ''}
+                          onChange={(e) => setSettings({ ...settings, whatsapp_flow_api_key: e.target.value })}
+                          style={{ fontFamily: 'var(--font-mono)', fontSize: '0.85rem' }}
+                        />
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          onClick={() => {
+                            navigator.clipboard.writeText(settings.whatsapp_flow_api_key || '');
+                            showToast('API Key copied to clipboard!');
+                          }}
+                          style={{ padding: '0 1rem', fontSize: '0.8rem', height: '38px', whiteSpace: 'nowrap' }}
+                        >
+                          Copy Key
+                        </button>
+                      </div>
+                      <span className="hint">Authentication header key. For BSP integrations (Wati, AiSensy, etc.), configure custom headers to include `X-API-Key: {settings.whatsapp_flow_api_key || 'key'}`.</span>
+                    </div>
+
+                    <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+                      <label className="form-label">Asymmetric Decryption Private Key (RSA PEM format)</label>
+                      <textarea
+                        className="form-input"
+                        rows="6"
+                        placeholder="-----BEGIN RSA PRIVATE KEY-----&#10;...&#10;-----END RSA PRIVATE KEY-----"
+                        value={settings.whatsapp_flow_private_key || ''}
+                        onChange={(e) => setSettings({ ...settings, whatsapp_flow_private_key: e.target.value })}
+                        style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', lineHeight: '1.4', height: 'auto' }}
+                      />
+                      <span className="hint">If using direct Meta flows with data encryption enabled, paste your private key here to decrypt incoming lead payloads (e.g. decrypted PAN card / email inputs).</span>
+                    </div>
+
+                    <div style={{ background: 'rgba(224, 168, 46, 0.05)', padding: '1rem', borderRadius: '6px', border: '1px dashed rgba(224, 168, 46, 0.2)', marginBottom: '2rem' }}>
+                      <h4 style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--gold-deep)', marginBottom: '0.5rem' }}>💡 Integration Steps & Flow JSON Spec</h4>
+                      <p style={{ fontSize: '0.78rem', color: 'hsl(var(--text-secondary))', lineHeight: '1.5', margin: 0 }}>
+                        Configure the final screen in your Meta WhatsApp Flow builder to trigger a data exchange back to the server:
+                      </p>
+                      <pre style={{ margin: '0.75rem 0 0 0', padding: '0.75rem', background: 'rgba(0,0,0,0.2)', borderRadius: '4px', overflowX: 'auto', fontSize: '0.72rem', color: '#c5c5c5', fontFamily: 'var(--font-mono)' }}>
+{`{
+  "type": "Button",
+  "label": "Submit Lead Info",
+  "on-click-action": {
+    "name": "data_exchange",
+    "payload": {
+      "full_name": "\${form.name_input}",
+      "phone": "\${form.phone_input}",
+      "email": "\${form.email_input}",
+      "pan": "\${form.pan_input}",
+      "dob": "\${form.dob_input}",
+      "mother_name": "\${form.mother_input}",
+      "pincode": "\${form.pincode_input}"
+    }
+  }
+}`}
+                      </pre>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '2rem', paddingTop: '1rem', borderTop: '1px solid var(--border-light)' }}>
+                      <button type="submit" className="btn-primary" style={{ padding: '0.75rem 2rem' }} disabled={isSubmitting}>
+                        {isSubmitting ? 'Saving Integration Settings...' : 'Save Flow Settings'}
                       </button>
                     </div>
                   </form>

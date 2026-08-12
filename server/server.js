@@ -5492,6 +5492,234 @@ app.post('/api/meta/test-connection', authenticateToken, requireAdmin, async (re
   }
 });
 
+// Helper to decrypt WhatsApp Flow encrypted payload (Asymmetric Private/Public key format)
+function decryptWhatsAppFlowPayload(body, privateKeyPEM) {
+  if (!body || !body.encrypted_flow_data || !body.encrypted_aes_key || !body.initial_vector) {
+    return body;
+  }
+  
+  if (!privateKeyPEM) {
+    throw new Error('Asymmetric decryption requested but private key is not configured in settings.');
+  }
+
+  try {
+    const encryptedAesKeyBuf = Buffer.from(body.encrypted_aes_key, 'base64');
+    const encryptedFlowDataBuf = Buffer.from(body.encrypted_flow_data, 'base64');
+    const ivBuf = Buffer.from(body.initial_vector, 'base64');
+
+    // 1. Decrypt the AES Key with RSA Private Key
+    const decryptedAesKey = crypto.privateDecrypt(
+      {
+        key: privateKeyPEM,
+        padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+        oaepHash: 'sha256'
+      },
+      encryptedAesKeyBuf
+    );
+
+    // 2. Decrypt the Flow Data with AES-GCM
+    const tagLen = 16;
+    const ciphertext = encryptedFlowDataBuf.subarray(0, encryptedFlowDataBuf.length - tagLen);
+    const tag = encryptedFlowDataBuf.subarray(encryptedFlowDataBuf.length - tagLen);
+
+    const decipher = crypto.createDecipheriv('aes-128-gcm', decryptedAesKey, ivBuf);
+    decipher.setAuthTag(tag);
+
+    let decrypted = decipher.update(ciphertext, 'binary', 'utf8');
+    decrypted += decipher.final('utf8');
+
+    return JSON.parse(decrypted);
+  } catch (err) {
+    console.error('[WhatsApp Flow Decryption] SHA-256 decryption failed, trying SHA-1 fallback:', err.message);
+    try {
+      const encryptedAesKeyBuf = Buffer.from(body.encrypted_aes_key, 'base64');
+      const encryptedFlowDataBuf = Buffer.from(body.encrypted_flow_data, 'base64');
+      const ivBuf = Buffer.from(body.initial_vector, 'base64');
+
+      const decryptedAesKey = crypto.privateDecrypt(
+        {
+          key: privateKeyPEM,
+          padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+          oaepHash: 'sha1'
+        },
+        encryptedAesKeyBuf
+      );
+
+      const tagLen = 16;
+      const ciphertext = encryptedFlowDataBuf.subarray(0, encryptedFlowDataBuf.length - tagLen);
+      const tag = encryptedFlowDataBuf.subarray(encryptedFlowDataBuf.length - tagLen);
+
+      const decipher = crypto.createDecipheriv('aes-128-gcm', decryptedAesKey, ivBuf);
+      decipher.setAuthTag(tag);
+
+      let decrypted = decipher.update(ciphertext, 'binary', 'utf8');
+      decrypted += decipher.final('utf8');
+
+      return JSON.parse(decrypted);
+    } catch (fallbackErr) {
+      console.error('[WhatsApp Flow Decryption] Both SHA-256 and SHA-1 decryptions failed:', fallbackErr.message);
+      throw new Error('Failed to decrypt WhatsApp Flow payload: ' + fallbackErr.message);
+    }
+  }
+}
+
+// WhatsApp Flow API Decryption & Lead Ingestion Webhook
+app.post('/api/whatsapp/flow-endpoint', async (req, res) => {
+  try {
+    const settings = await db.getSettings();
+    const flowApiKey = settings.whatsapp_flow_api_key;
+    const privateKeyPEM = settings.whatsapp_flow_private_key;
+
+    const providedApiKey = req.headers['x-api-key'] || req.headers['X-API-Key'] || req.query.api_key;
+    const isEncryptedPayload = req.body && req.body.encrypted_flow_data;
+
+    let authorized = false;
+    let decryptedBody = null;
+
+    // 1. Check API Key
+    if (flowApiKey && providedApiKey === flowApiKey) {
+      authorized = true;
+    }
+
+    // 2. Decrypt with Private Key if encrypted
+    if (!authorized && isEncryptedPayload) {
+      if (!privateKeyPEM) {
+        return res.status(401).json({ error: 'Unauthorized: Missing encryption credentials or API Key.' });
+      }
+      try {
+        decryptedBody = decryptWhatsAppFlowPayload(req.body, privateKeyPEM);
+        authorized = true;
+      } catch (decryptionErr) {
+        console.error('[WhatsApp Flow Webhook] Decryption failure:', decryptionErr.message);
+        return res.status(401).json({ error: 'Unauthorized: Decryption of Flow payload failed.' });
+      }
+    }
+
+    // 3. Fallback unauthorized
+    if (!authorized) {
+      return res.status(401).json({ error: 'Unauthorized: Invalid API Key or signature validation failed.' });
+    }
+
+    const body = decryptedBody || req.body;
+    console.log('[WhatsApp Flow Endpoint] Received payload:', JSON.stringify(body));
+
+    const rawName = body.full_name || body.user_name || body.name || body.userName || '';
+    const rawPhone = body.phone || body.user_phone || body.mobile || body.phone_number || '';
+    const rawEmail = body.email || body.user_email || body.email_address || '';
+    
+    const pan_no = body.pan || body.pan_no || body.user_pan || body.panNo || null;
+    const dob = body.dob || body.date_of_birth || body.user_dob || null;
+    const mother_name = body.mother_name || body.motherName || body.user_mother || null;
+    const current_address = body.current_address || body.address || body.user_address || null;
+    const pincode = body.pincode || body.pin || body.user_pincode || null;
+    const landmark = body.landmark || null;
+    const city = body.city || null;
+    const state = body.state || null;
+    const employment = body.employment || body.employment_type || null;
+    const designation = body.designation || null;
+    const company_name = body.company_name || body.company || body.employer || null;
+    
+    const trimmedName = rawName ? String(rawName).trim() : '';
+    const trimmedEmail = rawEmail ? String(rawEmail).trim() : '';
+
+    let cleanedPhone = rawPhone ? String(rawPhone).replace(/[^\d]/g, '') : '';
+    if (cleanedPhone.length > 10) {
+      if (cleanedPhone.startsWith('91')) {
+        cleanedPhone = cleanedPhone.substring(2);
+      } else if (cleanedPhone.startsWith('0')) {
+        cleanedPhone = cleanedPhone.substring(1);
+      }
+    }
+    const trimmedPhone = cleanedPhone.slice(-10);
+
+    if (!trimmedName || !trimmedPhone || !trimmedEmail) {
+      return res.status(400).json({ error: 'Missing required lead details (name, phone, or email).' });
+    }
+
+    if (trimmedPhone.length !== 10 || !/^\d+$/.test(trimmedPhone)) {
+      return res.status(400).json({ error: 'Mobile number must be exactly 10 digits.' });
+    }
+
+    if (!/\S+@\S+\.\S+/.test(trimmedEmail)) {
+      return res.status(400).json({ error: 'Please enter a valid email address.' });
+    }
+
+    const leadData = {
+      full_name: trimmedName,
+      phone: trimmedPhone,
+      email: trimmedEmail,
+      city: city || null,
+      employment: employment || null,
+      card_name: 'WhatsApp Flow Lead',
+      card_bank: 'META',
+      source: 'WhatsApp Flow',
+      consent: true,
+      pincode: pincode || null,
+      pan_no: pan_no ? String(pan_no).trim().toUpperCase() : null,
+      dob: dob || null,
+      mother_name: mother_name || null,
+      current_address: current_address || null,
+      state: state || null,
+      landmark: landmark || null,
+      designation: designation || null,
+      company_name: company_name || null,
+      ip_address: req.headers['x-forwarded-for'] || req.socket.remoteAddress || null,
+      user_agent: req.headers['user-agent'] || null,
+      utm_source: body.utm_source || 'whatsapp',
+      utm_medium: body.utm_medium || 'flow',
+      utm_campaign: body.utm_campaign || null
+    };
+
+    const newLead = await db.addLead(leadData);
+
+    try {
+      const qdeMsg = `Your WhatsApp Flow lead application (URN: ${newLead.urn}) has been recorded successfully.`;
+      const gateway = settings.whatsapp_gateway || 'meta';
+      if (gateway === 'baileys') {
+        await baileys.sendMessage(trimmedPhone, `Thank you ${trimmedName}! ${qdeMsg}`).catch(() => {});
+      } else {
+        await sendWhatsAppTemplate(trimmedPhone, 'finmantra_welcome', [trimmedName, qdeMsg]).catch(() => {});
+      }
+    } catch (waErr) {
+      console.error('[WhatsApp Flow Endpoint WA Trigger Error]', waErr.message);
+    }
+
+    try {
+      if (settings.meta_pixel_id && settings.meta_access_token) {
+        const eventData = {
+          event_name: 'Lead',
+          event_time: Math.floor(Date.now() / 1000),
+          user_data: {
+            ph: [crypto.createHash('sha256').update(trimmedPhone).digest('hex')],
+            em: [crypto.createHash('sha256').update(trimmedEmail.toLowerCase()).digest('hex')],
+            fn: [crypto.createHash('sha256').update(trimmedName.split(' ')[0].toLowerCase()).digest('hex')]
+          },
+          custom_data: {
+            currency: 'INR',
+            value: 0.00
+          },
+          event_source_url: `https://${req.hostname}/api/whatsapp/flow-endpoint`,
+          action_source: 'system_generated'
+        };
+        metaAudienceService.sendMetaCapiEvent(eventData).catch(() => {});
+      }
+    } catch (capiErr) {
+      console.error('[WhatsApp Flow Endpoint CAPI Error]', capiErr.message);
+    }
+
+    return res.status(200).json({
+      status: 'success',
+      message: 'Lead received and processed successfully',
+      urn: newLead.urn,
+      id: newLead.id
+    });
+
+  } catch (err) {
+    console.error('[WhatsApp Flow Endpoint Error]:', err);
+    return res.status(500).json({ error: 'Internal Server Error: ' + err.message });
+  }
+});
+
 // Global exception and error handling middleware
 app.use((err, req, res, next) => {
   console.error('[Express Async Error Handler Exception]:', err);

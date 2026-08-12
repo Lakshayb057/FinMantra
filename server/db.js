@@ -648,9 +648,14 @@ async function initPgSchema() {
         await client.query("UPDATE settings SET value = $1 WHERE key = 'card_manager_banks'", [cleanedStr]);
       }
     }
-    const linkedinCheck = await client.query("SELECT COUNT(*) FROM settings WHERE key = 'linkedin_partner_id'");
-    if (parseInt(linkedinCheck.rows[0].count, 10) === 0) {
-      await client.query("INSERT INTO settings (key, value) VALUES ('linkedin_partner_id', '9660484')");
+    const waFlowApiKeyCheck = await client.query("SELECT COUNT(*) FROM settings WHERE key = 'whatsapp_flow_api_key'");
+    if (parseInt(waFlowApiKeyCheck.rows[0].count, 10) === 0) {
+      const generatedKey = 'wa_flow_' + Math.random().toString(36).substring(2, 11) + Math.random().toString(36).substring(2, 11);
+      await client.query("INSERT INTO settings (key, value) VALUES ('whatsapp_flow_api_key', $1)", [generatedKey]);
+    }
+    const waFlowPrivateKeyCheck = await client.query("SELECT COUNT(*) FROM settings WHERE key = 'whatsapp_flow_private_key'");
+    if (parseInt(waFlowPrivateKeyCheck.rows[0].count, 10) === 0) {
+      await client.query("INSERT INTO settings (key, value) VALUES ('whatsapp_flow_private_key', '')");
     }
 
     await client.query('COMMIT');
