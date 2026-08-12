@@ -4628,6 +4628,112 @@ app.post('/api/whatsapp/disconnect', authenticateToken, requireAdmin, async (req
   }
 });
 
+// Helper for Meta Graph API calls
+function getMetaGraph(path, token) {
+  return new Promise((resolve, reject) => {
+    const https = require('https');
+    const options = {
+      hostname: 'graph.facebook.com',
+      port: 443,
+      path: path.startsWith('/') ? path : `/${path}`,
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    };
+
+    const req = https.request(options, (res) => {
+      let body = '';
+      res.on('data', (chunk) => {
+        body += chunk;
+      });
+      res.on('end', () => {
+        try {
+          const parsed = JSON.parse(body);
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            resolve(parsed);
+          } else {
+            const msg = parsed.error?.message || `Meta API error (status ${res.statusCode})`;
+            reject(new Error(msg));
+          }
+        } catch (e) {
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            resolve(body);
+          } else {
+            reject(new Error(`Meta API error (status ${res.statusCode}): ${body}`));
+          }
+        }
+      });
+    });
+
+    req.on('error', (err) => {
+      reject(err);
+    });
+    req.end();
+  });
+}
+
+// Fetch Meta Phone Numbers associated with the access token
+app.get('/api/whatsapp/meta-phone-numbers', authenticateToken, requireAdmin, async (req, res) => {
+  let { token, business_account_id, version } = req.query;
+
+  try {
+    const settings = await db.getSettings();
+    const apiKey = token ? token.trim() : getSettingVal(settings, 'wa_api_key', 'WA_API_KEY');
+    const apiVersion = version ? version.trim() : getSettingVal(settings, 'wa_api_version', 'WA_API_VERSION', 'v25.0');
+    const wabaId = business_account_id ? business_account_id.trim() : getSettingVal(settings, 'wa_business_account_id', 'WA_BUSINESS_ACCOUNT_ID');
+
+    if (!apiKey) {
+      return res.status(400).json({ error: 'Meta WhatsApp API System User Access Token (WA_API_KEY) is missing.' });
+    }
+
+    let phoneNumbers = [];
+
+    const fetchPhoneNumbersForWaba = async (wabaIdVal, wabaNameVal) => {
+      try {
+        const path = `/${apiVersion}/${wabaIdVal}/phone_numbers?fields=display_phone_number,quality_rating,verified_name,code_verification_status,id`;
+        const result = await getMetaGraph(path, apiKey);
+        if (result && Array.isArray(result.data)) {
+          return result.data.map(phone => ({
+            id: phone.id,
+            display_phone_number: phone.display_phone_number,
+            quality_rating: phone.quality_rating,
+            verified_name: phone.verified_name,
+            code_verification_status: phone.code_verification_status,
+            waba_id: wabaIdVal,
+            waba_name: wabaNameVal || `WABA (${wabaIdVal})`
+          }));
+        }
+      } catch (err) {
+        console.error(`[Meta API Error] Failed to fetch phone numbers for WABA ${wabaIdVal}:`, err.message);
+      }
+      return [];
+    };
+
+    if (wabaId && wabaId !== 'undefined' && wabaId !== 'null') {
+      const wabaPhones = await fetchPhoneNumbersForWaba(wabaId, `WABA (${wabaId})`);
+      phoneNumbers = phoneNumbers.concat(wabaPhones);
+    } else {
+      const wabaPath = `/${apiVersion}/me/whatsapp_business_accounts`;
+      const wabaResult = await getMetaGraph(wabaPath, apiKey);
+      if (wabaResult && Array.isArray(wabaResult.data)) {
+        for (const waba of wabaResult.data) {
+          if (waba.id) {
+            const wabaPhones = await fetchPhoneNumbersForWaba(waba.id, waba.name);
+            phoneNumbers = phoneNumbers.concat(wabaPhones);
+          }
+        }
+      }
+    }
+
+    res.json({ success: true, phoneNumbers });
+  } catch (err) {
+    console.error('[API Error] Fetching Meta Phone Numbers failed:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Test Live WhatsApp Meta API Message Delivery (OTP or Referral URL)
 app.post('/api/whatsapp/test', async (req, res) => {
   const { phone = '8295886832', type = 'otp' } = req.body;

@@ -133,6 +133,8 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   const [agents, setAgents] = useState([]);
   const [locations, setLocations] = useState([]);
   const [settings, setSettings] = useState({});
+  const [metaPhoneNumbers, setMetaPhoneNumbers] = useState([]);
+  const [isLoadingPhoneNumbers, setIsLoadingPhoneNumbers] = useState(false);
   const [csvColumns, setCsvColumns] = useState([]);
   const [baileysStatus, setBaileysStatus] = useState({ status: 'DISCONNECTED', qrCodeDataUrl: '', phone: '' });
   const [loadingBaileys, setLoadingBaileys] = useState(false);
@@ -1281,6 +1283,40 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       fetchDbStatus();
     }
   }, [activeSettingsSubTab, activeTab]);
+
+  const fetchMetaPhoneNumbers = async (tokenVal, wabaIdVal) => {
+    if (!token) return;
+    setIsLoadingPhoneNumbers(true);
+    try {
+      let url = `${API_URL}/whatsapp/meta-phone-numbers`;
+      const params = new URLSearchParams();
+      if (tokenVal) params.append('token', tokenVal);
+      if (wabaIdVal) params.append('business_account_id', wabaIdVal);
+      if (settings.wa_api_version) params.append('version', settings.wa_api_version);
+      if (params.toString()) {
+        url += `?${params.toString()}`;
+      }
+
+      const headers = { 'Authorization': `Bearer ${token}` };
+      const res = await fetch(url, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.success) {
+          setMetaPhoneNumbers(data.phoneNumbers || []);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching Meta phone numbers:', err);
+    } finally {
+      setIsLoadingPhoneNumbers(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeSettingsSubTab === 'meta_api' && activeTab === 'settings' && settings.wa_api_key) {
+      fetchMetaPhoneNumbers(settings.wa_api_key, settings.wa_business_account_id);
+    }
+  }, [activeSettingsSubTab, activeTab, settings.wa_api_key, settings.wa_business_account_id]);
 
   const [sqlQuery, setSqlQuery] = useState('SELECT id, urn, full_name, company_name FROM leads ORDER BY created_at DESC LIMIT 5;');
   const [sqlResult, setSqlResult] = useState(null);
@@ -6856,13 +6892,51 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                     <div className="settings-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
                       <div className="form-group" style={{ marginBottom: 0 }}>
                         <label className="form-label">Phone Number ID</label>
-                        <input 
-                          type="text" 
-                          className="form-input" 
-                          placeholder="e.g. 102938475610293"
-                          value={settings.wa_phone_number_id || ''}
-                          onChange={(e) => setSettings({ ...settings, wa_phone_number_id: e.target.value })}
-                        />
+                        {metaPhoneNumbers.length > 0 ? (
+                          <div style={{ display: 'flex', gap: '0.5rem' }}>
+                            <select
+                              className="form-input"
+                              value={settings.wa_phone_number_id || ''}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                const matched = metaPhoneNumbers.find(p => p.id === val);
+                                if (matched) {
+                                  setSettings({
+                                    ...settings,
+                                    wa_phone_number_id: val,
+                                    wa_business_account_id: matched.waba_id
+                                  });
+                                } else {
+                                  setSettings({ ...settings, wa_phone_number_id: val });
+                                }
+                              }}
+                              style={{ flex: 1, height: 'auto', padding: '0.6rem 0.8rem' }}
+                            >
+                              <option value="">-- Select Phone Number --</option>
+                              {metaPhoneNumbers.map(phone => (
+                                <option key={phone.id} value={phone.id}>
+                                  {phone.display_phone_number} ({phone.verified_name}) - Quality: {phone.quality_rating || 'Unknown'}
+                                </option>
+                              ))}
+                            </select>
+                            <input 
+                              type="text" 
+                              className="form-input" 
+                              placeholder="Or manual ID"
+                              value={settings.wa_phone_number_id || ''}
+                              onChange={(e) => setSettings({ ...settings, wa_phone_number_id: e.target.value })}
+                              style={{ width: '130px', flexShrink: 0 }}
+                            />
+                          </div>
+                        ) : (
+                          <input 
+                            type="text" 
+                            className="form-input" 
+                            placeholder="e.g. 102938475610293"
+                            value={settings.wa_phone_number_id || ''}
+                            onChange={(e) => setSettings({ ...settings, wa_phone_number_id: e.target.value })}
+                          />
+                        )}
                       </div>
                       <div className="form-group" style={{ marginBottom: 0 }}>
                         <label className="form-label">Business Account ID (Optional)</label>
@@ -6875,6 +6949,129 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                         />
                       </div>
                     </div>
+
+                    {/* Fetched Phone Numbers List */}
+                    {settings.wa_api_key && (
+                      <div style={{ marginTop: '1.5rem', marginBottom: '1.5rem', background: 'rgba(255,255,255,0.02)', padding: '1.25rem', borderRadius: '8px', border: '1px solid var(--border-light)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                          <div>
+                            <span style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--gold-deep)', display: 'block' }}>
+                              Available Phone Numbers (from Meta API)
+                            </span>
+                            <span style={{ fontSize: '0.75rem', color: 'hsl(var(--text-secondary))' }}>
+                              Syncs numbers using your current access token. Select an account to automatically fill config fields.
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            onClick={() => fetchMetaPhoneNumbers(settings.wa_api_key, settings.wa_business_account_id)}
+                            disabled={isLoadingPhoneNumbers}
+                            style={{ padding: '0.4rem 0.8rem', fontSize: '0.75rem', height: 'auto' }}
+                          >
+                            {isLoadingPhoneNumbers ? 'Syncing...' : 'Fetch / Sync Phone Numbers'}
+                          </button>
+                        </div>
+                        
+                        {isLoadingPhoneNumbers ? (
+                          <div style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', textAlign: 'center', padding: '1.5rem' }}>
+                            Loading phone numbers from Meta...
+                          </div>
+                        ) : metaPhoneNumbers.length > 0 ? (
+                          <div style={{ display: 'grid', gap: '0.75rem' }}>
+                            {metaPhoneNumbers.map(phone => {
+                              const isSelected = settings.wa_phone_number_id === phone.id;
+                              
+                              // Quality Rating Styling
+                              let qualityColor = '#888888';
+                              let qualityBg = 'rgba(136, 136, 136, 0.1)';
+                              const qr = String(phone.quality_rating || '').toLowerCase();
+                              if (qr === 'high' || qr === 'green') {
+                                qualityColor = '#22c55e'; // Green
+                                qualityBg = 'rgba(34, 197, 94, 0.15)';
+                              } else if (qr === 'medium' || qr === 'yellow') {
+                                qualityColor = '#eab308'; // Yellow
+                                qualityBg = 'rgba(234, 179, 8, 0.15)';
+                              } else if (qr === 'low' || qr === 'red') {
+                                qualityColor = '#ef4444'; // Red
+                                qualityBg = 'rgba(239, 68, 68, 0.15)';
+                              }
+                              
+                              return (
+                                <div key={phone.id} style={{
+                                  display: 'flex', 
+                                  justifyContent: 'space-between', 
+                                  alignItems: 'center', 
+                                  padding: '0.75rem 1rem', 
+                                  borderRadius: '6px', 
+                                  background: isSelected ? 'rgba(224, 168, 46, 0.08)' : 'rgba(255,255,255,0.01)',
+                                  border: isSelected ? '1px solid var(--gold-deep)' : '1px solid var(--border-light)',
+                                  transition: 'all 0.2s ease'
+                                }}>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                      <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-light)' }}>
+                                        {phone.display_phone_number}
+                                      </span>
+                                      <span style={{ fontSize: '0.75rem', color: '#fff', background: 'rgba(255,255,255,0.08)', padding: '0.1rem 0.5rem', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                                        {phone.verified_name}
+                                      </span>
+                                      {phone.code_verification_status && (
+                                        <span style={{ fontSize: '0.7rem', color: '#60a5fa', background: 'rgba(96, 165, 250, 0.1)', padding: '0.05rem 0.35rem', borderRadius: '4px', textTransform: 'uppercase' }}>
+                                          {phone.code_verification_status}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div style={{ fontSize: '0.72rem', color: 'hsl(var(--text-secondary))' }}>
+                                      Phone Number ID: <strong style={{ color: 'var(--text-light)', fontFamily: 'monospace' }}>{phone.id}</strong>
+                                      <span style={{ margin: '0 0.5rem', color: 'rgba(255,255,255,0.15)' }}>|</span>
+                                      Business Account ID: <strong style={{ color: 'var(--text-light)', fontFamily: 'monospace' }}>{phone.waba_id}</strong> ({phone.waba_name})
+                                    </div>
+                                  </div>
+                                  
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                    <div style={{ 
+                                      display: 'inline-flex', 
+                                      alignItems: 'center', 
+                                      gap: '0.35rem',
+                                      padding: '0.25rem 0.6rem',
+                                      borderRadius: '20px',
+                                      backgroundColor: qualityBg,
+                                      border: `1px solid ${qualityColor}33`
+                                    }}>
+                                      <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', backgroundColor: qualityColor }}></span>
+                                      <span style={{ fontSize: '0.72rem', fontWeight: 600, color: qualityColor, textTransform: 'uppercase', letterSpacing: '0.02em' }}>
+                                        Quality: {phone.quality_rating || 'Unknown'}
+                                      </span>
+                                    </div>
+                                    
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSettings({
+                                          ...settings,
+                                          wa_phone_number_id: phone.id,
+                                          wa_business_account_id: phone.waba_id
+                                        });
+                                        showToast(`Switched account to ${phone.display_phone_number} (${phone.verified_name})`);
+                                      }}
+                                      className={isSelected ? "btn-primary" : "btn-secondary"}
+                                      style={{ padding: '0.35rem 0.75rem', fontSize: '0.75rem', height: 'auto', borderRadius: '4px' }}
+                                    >
+                                      {isSelected ? 'Active Account' : 'Use Account'}
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', textAlign: 'center', padding: '1.5rem', background: 'rgba(255,255,255,0.01)', borderRadius: '6px', border: '1px dashed var(--border-light)' }}>
+                            No phone numbers found for this token. Make sure it has access to a WhatsApp Business Account and click <strong>Fetch / Sync Phone Numbers</strong>.
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     <div className="settings-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
                       <div className="form-group" style={{ marginBottom: 0 }}>
