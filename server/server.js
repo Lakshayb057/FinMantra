@@ -5675,6 +5675,9 @@ app.post('/api/whatsapp/flow-endpoint', async (req, res) => {
 
     const newLead = await db.addLead(leadData);
 
+    // Real-time broadcast notification of a new lead!
+    broadcast({ type: 'LEAD_ADDED', data: newLead });
+
     try {
       const qdeMsg = `Your WhatsApp Flow lead application (URN: ${newLead.urn}) has been recorded successfully.`;
       const gateway = settings.whatsapp_gateway || 'meta';
