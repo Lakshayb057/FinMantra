@@ -135,6 +135,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   const [settings, setSettings] = useState({});
   const [metaPhoneNumbers, setMetaPhoneNumbers] = useState([]);
   const [isLoadingPhoneNumbers, setIsLoadingPhoneNumbers] = useState(false);
+  const [showManualPhoneId, setShowManualPhoneId] = useState(false);
   const [csvColumns, setCsvColumns] = useState([]);
   const [baileysStatus, setBaileysStatus] = useState({ status: 'DISCONNECTED', qrCodeDataUrl: '', phone: '' });
   const [loadingBaileys, setLoadingBaileys] = useState(false);
@@ -6893,24 +6894,47 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                       <div className="form-group" style={{ marginBottom: 0 }}>
                         <label className="form-label">Phone Number ID</label>
                         {metaPhoneNumbers.length > 0 ? (
-                          <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          (showManualPhoneId || (settings.wa_phone_number_id && !metaPhoneNumbers.some(p => p.id === settings.wa_phone_number_id))) ? (
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                              <input 
+                                type="text" 
+                                className="form-input" 
+                                placeholder="e.g. 102938475610293"
+                                value={settings.wa_phone_number_id || ''}
+                                onChange={(e) => setSettings({ ...settings, wa_phone_number_id: e.target.value })}
+                                style={{ flex: 1 }}
+                              />
+                              <button 
+                                type="button" 
+                                className="btn-secondary" 
+                                onClick={() => setShowManualPhoneId(false)}
+                                style={{ padding: '0.6rem 1rem', fontSize: '0.8rem', height: 'auto', whiteSpace: 'nowrap' }}
+                              >
+                                Select from List
+                              </button>
+                            </div>
+                          ) : (
                             <select
                               className="form-input"
                               value={settings.wa_phone_number_id || ''}
                               onChange={(e) => {
                                 const val = e.target.value;
-                                const matched = metaPhoneNumbers.find(p => p.id === val);
-                                if (matched) {
-                                  setSettings({
-                                    ...settings,
-                                    wa_phone_number_id: val,
-                                    wa_business_account_id: matched.waba_id
-                                  });
+                                if (val === '__manual__') {
+                                  setShowManualPhoneId(true);
                                 } else {
-                                  setSettings({ ...settings, wa_phone_number_id: val });
+                                  const matched = metaPhoneNumbers.find(p => p.id === val);
+                                  if (matched) {
+                                    setSettings({
+                                      ...settings,
+                                      wa_phone_number_id: val,
+                                      wa_business_account_id: matched.waba_id
+                                    });
+                                  } else {
+                                    setSettings({ ...settings, wa_phone_number_id: val });
+                                  }
                                 }
                               }}
-                              style={{ flex: 1, height: 'auto', padding: '0.6rem 0.8rem' }}
+                              style={{ height: 'auto', padding: '0.6rem 0.8rem' }}
                             >
                               <option value="">-- Select Phone Number --</option>
                               {metaPhoneNumbers.map(phone => (
@@ -6918,16 +6942,9 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                                   {phone.display_phone_number} ({phone.verified_name}) - Quality: {phone.quality_rating || 'Unknown'}
                                 </option>
                               ))}
+                              <option value="__manual__">✏️ Enter ID Manually...</option>
                             </select>
-                            <input 
-                              type="text" 
-                              className="form-input" 
-                              placeholder="Or manual ID"
-                              value={settings.wa_phone_number_id || ''}
-                              onChange={(e) => setSettings({ ...settings, wa_phone_number_id: e.target.value })}
-                              style={{ width: '130px', flexShrink: 0 }}
-                            />
-                          </div>
+                          )
                         ) : (
                           <input 
                             type="text" 
