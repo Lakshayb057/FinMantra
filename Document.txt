@@ -245,3 +245,8 @@ Open Meta Events Manager -> Test Events tab.
 Enter your TEST_EVENT_CODE (e.g. TEST12345).
 Upload a sample MIS Excel sheet via FinMantra Admin Dashboard.
 Verify in Meta Test Events console that Soft Decline, Soft Approved, Final Approved, and Final Decline events arrive in real-time with correct INR values and hashed user data (ph, em).
+
+
+all finmantra audiences
+bank wise audiences for leads
+bank multiple stages audiences - soft and final->approved and declined + 1 master audiences!
