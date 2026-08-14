@@ -3079,6 +3079,12 @@ const db = {
     } finally {
       client.release();
     }
+  },
+
+  async deleteMasterLeadsBulk(leadIds) {
+    if (leadIds.length === 0) return 0;
+    const res = await pool.query('DELETE FROM campaign_master_leads WHERE id = ANY($1)', [leadIds]);
+    return res.rowCount;
   }
 }
 

@@ -27,6 +27,14 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
   const [filterAddress, setFilterAddress] = useState('');
   const [filterFromDate, setFilterFromDate] = useState('');
   const [filterToDate, setFilterToDate] = useState('');
+
+  // Master Data Center bulk delete states & filters
+  const [selectedMasterDeleteIds, setSelectedMasterDeleteIds] = useState(new Set());
+  const [masterFilterPhone, setMasterFilterPhone] = useState('');
+  const [masterFilterEmail, setMasterFilterEmail] = useState('');
+  const [masterFilterAddress, setMasterFilterAddress] = useState('');
+  const [masterFilterFromDate, setMasterFilterFromDate] = useState('');
+  const [masterFilterToDate, setMasterFilterToDate] = useState('');
   
   // Campaigns list state
   const [campaigns, setCampaigns] = useState([]);
@@ -351,6 +359,30 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
     }
   };
 
+  const handleDeleteMasterContactsBulk = async () => {
+    const leadIds = Array.from(selectedMasterDeleteIds);
+    if (leadIds.length === 0) return;
+    if (!window.confirm(`Are you sure you want to delete these ${leadIds.length} contact(s) from the Master Data Center?`)) return;
+
+    try {
+      const res = await fetch(`${API_URL}/campaigns/master/leads/delete-bulk`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ leadIds })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast(`Successfully deleted ${data.deletedCount} contacts from Master Data Center.`, 'info');
+        setSelectedMasterDeleteIds(new Set());
+        fetchMasterLeads();
+      } else {
+        showToast(data.error || 'Failed to delete contacts.', 'error');
+      }
+    } catch (err) {
+      showToast('Error deleting contacts: ' + err.message, 'error');
+    }
+  };
+
   const handleCreateBroadcast = async (e) => {
     e.preventDefault();
     if (!newBroadcastForm.name.trim()) {
@@ -476,13 +508,50 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
   });
 
   const filteredMasterContacts = masterContacts.filter(c => {
-    const search = masterContactsSearch.toLowerCase();
-    return (
-      (c.name || '').toLowerCase().includes(search) ||
-      (c.contact || '').toLowerCase().includes(search) ||
-      (c.mail || '').toLowerCase().includes(search) ||
-      (c.address || '').toLowerCase().includes(search)
-    );
+    // 1. General search
+    const gen = masterContactsSearch.toLowerCase().trim();
+    if (gen) {
+      const matchGen = (c.name || '').toLowerCase().includes(gen) ||
+                       (c.contact || '').toLowerCase().includes(gen) ||
+                       (c.mail || '').toLowerCase().includes(gen) ||
+                       (c.address || '').toLowerCase().includes(gen);
+      if (!matchGen) return false;
+    }
+
+    // 2. Phone filter
+    const phoneFilterClean = masterFilterPhone.replace(/\D/g, '');
+    if (phoneFilterClean) {
+      if (!(c.contact || '').includes(phoneFilterClean)) return false;
+    }
+
+    // 3. Email filter
+    const emailFilterClean = masterFilterEmail.toLowerCase().trim();
+    if (emailFilterClean) {
+      if (!(c.mail || '').toLowerCase().includes(emailFilterClean)) return false;
+    }
+
+    // 4. Address filter
+    const addrFilterClean = masterFilterAddress.toLowerCase().trim();
+    if (addrFilterClean) {
+      if (!(c.address || '').toLowerCase().includes(addrFilterClean)) return false;
+    }
+
+    // 5. Date filters
+    if (c.created_at) {
+      const createdTime = new Date(c.created_at).getTime();
+      if (masterFilterFromDate) {
+        const fromTime = new Date(masterFilterFromDate + 'T00:00:00').getTime();
+        if (createdTime < fromTime) return false;
+      }
+      if (masterFilterToDate) {
+        const toTime = new Date(masterFilterToDate + 'T23:59:59').getTime();
+        if (createdTime > toTime) return false;
+      }
+    } else {
+      if (masterFilterFromDate || masterFilterToDate) return false;
+    }
+
+    return true;
   });
 
   const filteredImportContacts = masterContacts.filter(c => {
@@ -739,6 +808,15 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                 </div>
 
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  {selectedMasterDeleteIds.size > 0 && (
+                    <button
+                      onClick={handleDeleteMasterContactsBulk}
+                      className="btn-secondary"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 1rem', fontSize: '0.85rem', background: 'rgba(209, 67, 67, 0.1)', color: 'var(--err)', borderColor: 'rgba(209, 67, 67, 0.2)', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
+                    >
+                      <Trash2 size={14} /> Delete Selected ({selectedMasterDeleteIds.size})
+                    </button>
+                  )}
                   <button
                     onClick={handleDownloadTemplate}
                     className="btn-secondary"
@@ -747,11 +825,84 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                     <Download size={14} /> Download Template
                   </button>
                   <button
-                    onClick={() => setShowMasterUploadModal(true)}
+                    onClick={() => {
+                      setSelectedMasterDeleteIds(new Set());
+                      setShowMasterUploadModal(true);
+                    }}
                     className="btn-primary"
                     style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 1rem', fontSize: '0.85rem', background: 'var(--gold-deep)', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
                   >
                     <Upload size={14} /> Upload Master Data
+                  </button>
+                </div>
+              </div>
+
+              {/* Advanced Filters Grid for Master Tab */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.5rem', background: 'var(--paper-2)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--line)', marginBottom: '1rem', flexShrink: 0 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                  <label style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--muted)' }}>Phone Filter</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 91987..."
+                    value={masterFilterPhone}
+                    onChange={(e) => setMasterFilterPhone(e.target.value)}
+                    style={{ padding: '0.35rem 0.5rem', fontSize: '0.78rem', borderRadius: '4px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                  <label style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--muted)' }}>Email/Domain</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. @gmail.com"
+                    value={masterFilterEmail}
+                    onChange={(e) => setMasterFilterEmail(e.target.value)}
+                    style={{ padding: '0.35rem 0.5rem', fontSize: '0.78rem', borderRadius: '4px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                  <label style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--muted)' }}>Address Keyword</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Delhi"
+                    value={masterFilterAddress}
+                    onChange={(e) => setMasterFilterAddress(e.target.value)}
+                    style={{ padding: '0.35rem 0.5rem', fontSize: '0.78rem', borderRadius: '4px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                  <label style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--muted)' }}>Uploaded From</label>
+                  <input
+                    type="date"
+                    value={masterFilterFromDate}
+                    onChange={(e) => setMasterFilterFromDate(e.target.value)}
+                    style={{ padding: '0.3rem 0.5rem', fontSize: '0.78rem', borderRadius: '4px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                  <label style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--muted)' }}>Uploaded To</label>
+                  <input
+                    type="date"
+                    value={masterFilterToDate}
+                    onChange={(e) => setMasterFilterToDate(e.target.value)}
+                    style={{ padding: '0.3rem 0.5rem', fontSize: '0.78rem', borderRadius: '4px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMasterFilterPhone('');
+                      setMasterFilterEmail('');
+                      setMasterFilterAddress('');
+                      setMasterFilterFromDate('');
+                      setMasterFilterToDate('');
+                      setMasterContactsSearch('');
+                      setSelectedMasterDeleteIds(new Set());
+                    }}
+                    className="btn-secondary"
+                    style={{ padding: '0.35rem', fontSize: '0.78rem', width: '100%', height: '28px', borderRadius: '4px', cursor: 'pointer' }}
+                  >
+                    Reset Filters
                   </button>
                 </div>
               </div>
@@ -768,31 +919,81 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'left' }}>
                     <thead style={{ position: 'sticky', top: 0, background: 'var(--paper-2)', zIndex: 10 }}>
                       <tr style={{ borderBottom: '1px solid var(--line)' }}>
+                        <th style={{ padding: '0.75rem 1rem', width: '40px', textAlign: 'center' }}>
+                          <input
+                            type="checkbox"
+                            checked={filteredMasterContacts.length > 0 && filteredMasterContacts.every(c => selectedMasterDeleteIds.has(c.id))}
+                            onChange={(e) => {
+                              const newSet = new Set(selectedMasterDeleteIds);
+                              if (e.target.checked) {
+                                filteredMasterContacts.forEach(c => newSet.add(c.id));
+                              } else {
+                                filteredMasterContacts.forEach(c => newSet.delete(c.id));
+                              }
+                              setSelectedMasterDeleteIds(newSet);
+                            }}
+                            style={{ cursor: 'pointer' }}
+                          />
+                        </th>
                         <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--ink)' }}>Name</th>
                         <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--ink)' }}>Contact (WhatsApp)</th>
                         <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--ink)' }}>Email Address</th>
                         <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--ink)' }}>Address</th>
+                        <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--ink)' }}>Uploaded At</th>
                         <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--ink)', width: '60px', textAlign: 'right' }}>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredMasterContacts.map(c => (
-                        <tr key={c.id} style={{ borderBottom: '1px solid var(--line)', transition: 'background 0.15s ease' }} className="table-row-hover">
-                          <td style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>{c.name}</td>
-                          <td style={{ padding: '0.75rem 1rem', fontFamily: 'var(--font-mono)' }}>{c.contact}</td>
-                          <td style={{ padding: '0.75rem 1rem' }}>{c.mail}</td>
-                          <td style={{ padding: '0.75rem 1rem', color: 'var(--muted)' }}>{c.address || '—'}</td>
-                          <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
-                            <button
-                              onClick={() => handleDeleteMasterContact(c.id)}
-                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--err)', padding: '0.2rem' }}
-                              title="Delete Contact"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
+                      {filteredMasterContacts.map(c => {
+                        const isChecked = selectedMasterDeleteIds.has(c.id);
+                        return (
+                          <tr
+                            key={c.id}
+                            onClick={() => {
+                              const newSet = new Set(selectedMasterDeleteIds);
+                              if (isChecked) {
+                                newSet.delete(c.id);
+                              } else {
+                                newSet.add(c.id);
+                              }
+                              setSelectedMasterDeleteIds(newSet);
+                            }}
+                            style={{ borderBottom: '1px solid var(--line)', transition: 'background 0.15s ease', cursor: 'pointer', background: isChecked ? 'rgba(224, 168, 46, 0.05)' : 'transparent' }}
+                            className="table-row-hover"
+                          >
+                            <td style={{ padding: '0.75rem 1rem', textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={(e) => {
+                                  const newSet = new Set(selectedMasterDeleteIds);
+                                  if (e.target.checked) {
+                                    newSet.add(c.id);
+                                  } else {
+                                    newSet.delete(c.id);
+                                  }
+                                  setSelectedMasterDeleteIds(newSet);
+                                }}
+                                style={{ cursor: 'pointer' }}
+                              />
+                            </td>
+                            <td style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>{c.name}</td>
+                            <td style={{ padding: '0.75rem 1rem', fontFamily: 'var(--font-mono)' }}>{c.contact}</td>
+                            <td style={{ padding: '0.75rem 1rem' }}>{c.mail}</td>
+                            <td style={{ padding: '0.75rem 1rem', color: 'var(--muted)' }}>{c.address || '—'}</td>
+                            <td style={{ padding: '0.75rem 1rem', color: 'var(--muted)', fontSize: '0.78rem' }}>{c.created_at ? new Date(c.created_at).toLocaleString() : '—'}</td>
+                            <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
+                              <button
+                                onClick={() => handleDeleteMasterContact(c.id)}
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--err)', padding: '0.2rem' }}
+                                title="Delete Contact"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 )}

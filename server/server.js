@@ -6158,6 +6158,20 @@ app.delete('/api/campaigns/master/leads/:leadId', authenticateToken, async (req,
   }
 });
 
+// Bulk delete master leads
+app.post('/api/campaigns/master/leads/delete-bulk', authenticateToken, async (req, res) => {
+  try {
+    const { leadIds } = req.body;
+    if (!leadIds || !Array.isArray(leadIds) || leadIds.length === 0) {
+      return res.status(400).json({ success: false, error: 'No contact IDs selected for deletion.' });
+    }
+    const count = await db.deleteMasterLeadsBulk(leadIds);
+    res.json({ success: true, deletedCount: count });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Import master leads to a specific campaign
 app.post('/api/campaigns/:id/leads/import-master', authenticateToken, async (req, res) => {
   try {
