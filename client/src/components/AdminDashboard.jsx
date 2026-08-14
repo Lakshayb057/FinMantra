@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { INDIA_STATES_SVG, aggregateLeadsByState, getHeatColor, pincodeToState } from '../utils/indiaMap.js';
+import CampaignsManager from './CampaignsManager';
 import { 
   Users, CreditCard, MapPin, Settings as SettingsIcon, ShieldAlert, BarChart3, 
   Trash2, Download, Search, Plus, Edit, Check, X, RefreshCw, AlertCircle,
   QrCode, Smartphone, CheckCircle, Wifi, WifiOff, Eye, EyeOff, MessageSquare, Layers,
   ArrowUp, ArrowDown, MoreVertical, LogOut, Activity, Sun, Moon, LogIn,
   TrendingUp, Upload, CheckCircle2, Filter, Database, UserPlus, FileSpreadsheet, FolderArchive, FolderDown, FileText,
-  Bell, Mail, Key, AlertTriangle, Info, Target, Zap, Share2
+  Bell, Mail, Key, AlertTriangle, Info, Target, Zap, Share2, Megaphone
 } from 'lucide-react';
 
 const formatDateTime = (dateStr) => {
@@ -3352,7 +3353,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   };
 
   return (
-    <div className={`admin-layout ${['leads', 'cards', 'agents', 'locations', 'settings'].includes(activeTab) ? 'desktop-no-scroll-layout' : ''}`} style={{ display: 'flex', width: '100%', background: 'var(--paper)', color: 'var(--ink)', minHeight: '100vh' }}>
+    <div className={`admin-layout ${['leads', 'cards', 'agents', 'locations', 'settings', 'campaigns'].includes(activeTab) ? 'desktop-no-scroll-layout' : ''}`} style={{ display: 'flex', width: '100%', background: 'var(--paper)', color: 'var(--ink)', minHeight: '100vh' }}>
       
       {/* Toast Notifications */}
       {message.text && (
@@ -3528,6 +3529,13 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
               style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.6rem 0.85rem', width: '100%', fontSize: '0.9rem', border: 'none', background: activeTab === 'locations' ? 'var(--paper-2)' : 'transparent', color: activeTab === 'locations' ? 'var(--gold-deep)' : 'var(--ink)', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}
             >
               <MapPin size={16} /> Kiosks & Cities
+            </button>
+            <button 
+              className={`nav-link ${activeTab === 'campaigns' ? 'active' : ''}`} 
+              onClick={() => { setActiveTab('campaigns'); setShowMobileMenu(false); }}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.6rem 0.85rem', width: '100%', fontSize: '0.9rem', border: 'none', background: activeTab === 'campaigns' ? 'var(--paper-2)' : 'transparent', color: activeTab === 'campaigns' ? 'var(--gold-deep)' : 'var(--ink)', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}
+            >
+              <Megaphone size={16} /> Campaigns & Broadcasts
             </button>
 
             <button 
@@ -3717,6 +3725,28 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
               }}
             >
               <Target size={20} />
+            </button>
+
+            <button
+              onClick={() => setActiveTab('campaigns')}
+              title="Campaigns & Broadcasts"
+              className={`sidebar-icon-btn ${activeTab === 'campaigns' ? 'active' : ''}`}
+              style={{
+                width: '44px',
+                height: '44px',
+                borderRadius: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: activeTab === 'campaigns' ? '1px solid var(--gold)' : '1px solid transparent',
+                background: activeTab === 'campaigns' ? 'var(--paper)' : 'transparent',
+                color: activeTab === 'campaigns' ? 'var(--gold-deep)' : 'var(--muted)',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                boxShadow: activeTab === 'campaigns' ? '0 4px 12px rgba(224, 168, 46, 0.15)' : 'none'
+              }}
+            >
+              <Megaphone size={20} />
             </button>
 
 
@@ -4086,7 +4116,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       </aside>
 
       {/* MAIN CONTENT AREA */}
-      <main className={`admin-main-content ${['leads', 'cards', 'agents', 'locations', 'settings'].includes(activeTab) ? 'desktop-no-scroll-content' : ''}`} style={{ flex: 1, padding: '1rem 1.5rem', minWidth: 0, display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }}>
+      <main className={`admin-main-content ${['leads', 'cards', 'agents', 'locations', 'settings', 'campaigns'].includes(activeTab) ? 'desktop-no-scroll-content' : ''}`} style={{ flex: 1, padding: '1rem 1.5rem', minWidth: 0, display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }}>
         {/* Top Header Strip inside Main Content */}
         <div className="admin-header-bar" style={{ 
           display: 'flex', 
@@ -4106,6 +4136,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                 {activeTab === 'agents' && 'Agents Controller'}
                 {activeTab === 'locations' && 'Kiosks & City Locations'}
                 {activeTab === 'settings' && 'System Settings & API'}
+                {activeTab === 'campaigns' && 'Campaigns & Broadcasts'}
               </span>
               <span style={{ 
                 fontSize: '0.7rem', 
@@ -4128,6 +4159,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
               {activeTab === 'agents' && 'Manage field sales agents, login credentials, assigned banks, and kiosk permissions.'}
               {activeTab === 'locations' && 'Manage operational cities, kiosk centers, and serviceability locations.'}
               {activeTab === 'settings' && 'Configure WhatsApp API gateways, export templates, security access rules, and system settings.'}
+              {activeTab === 'campaigns' && 'Create campaigns, import operational contacts, and schedule outbound broadcasts via WhatsApp & Email.'}
             </p>
           </div>
 
@@ -9068,6 +9100,16 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
               )}
 
             </div>
+          )}
+
+          {/* CAMPAIGNS & BROADCASTS MANAGEMENT DASHBOARD */}
+          {activeTab === 'campaigns' && (
+            <CampaignsManager
+              theme={theme}
+              API_URL={API_URL}
+              token={token}
+              showToast={showToast}
+            />
           )}
 
       {/* Create Custom Audience Modal */}

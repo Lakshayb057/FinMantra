@@ -5891,6 +5891,370 @@ app.post('/api/whatsapp/flow-endpoint', async (req, res) => {
   }
 });
 
+// --- CAMPAIGNS & BROADCASTS API ENDPOINTS & SCHEDULER ---
+
+const nodemailer = require('nodemailer');
+
+// Dynamically create nodemailer transporter using SMTP settings in DB
+async function getEmailTransporter() {
+  const settings = await db.getSettings();
+  const host = settings.campaign_smtp_host;
+  const port = parseInt(settings.campaign_smtp_port, 10);
+  const user = settings.campaign_smtp_user;
+  const pass = settings.campaign_smtp_pass;
+  const secure = settings.campaign_smtp_secure === 'true';
+
+  if (!host || !port || !user || !pass) {
+    console.log('[Email Campaigns] SMTP settings not configured. Running in mock/simulation mode.');
+    return null; // Fallback to mock mode
+  }
+
+  return nodemailer.createTransport({
+    host,
+    port,
+    secure,
+    auth: {
+      user,
+      pass
+    }
+  });
+}
+
+// Background scheduler function
+async function checkAndRunScheduledBroadcasts() {
+  try {
+    const scheduled = await db.getScheduledBroadcastsToRun();
+    if (scheduled.length === 0) return;
+
+    console.log(`[Campaign Scheduler] Found ${scheduled.length} scheduled broadcasts to run.`);
+    const settings = await db.getSettings();
+    const fromEmail = settings.campaign_smtp_from_email || 'no-reply@finmantra.com';
+    const fromName = settings.campaign_smtp_from_name || 'FinMantra';
+
+    for (const b of scheduled) {
+      // 1. Mark as processing
+      await db.updateCampaignBroadcastStatus(b.id, 'processing');
+      console.log(`[Campaign Scheduler] Started processing broadcast: "${b.name}" (ID: ${b.id})`);
+
+      // 2. Fetch leads
+      const leads = await db.getCampaignLeads(b.campaign_id);
+      let sentCount = 0;
+      let failedCount = 0;
+
+      const transporter = await getEmailTransporter();
+
+      for (const lead of leads) {
+        let emailSuccess = true;
+        let waSuccess = true;
+        let emailError = null;
+        let waError = null;
+
+        // Perform dynamic replacements for {name}, {contact}, {mail}, {address}
+        const replacePlaceholders = (text) => {
+          if (!text) return '';
+          return text
+            .replace(/{name}/gi, lead.name || '')
+            .replace(/{contact}/gi, lead.contact || '')
+            .replace(/{mail}/gi, lead.mail || '')
+            .replace(/{address}/gi, lead.address || '');
+        };
+
+        // --- EMAIL CHANNEL ---
+        if (b.channel === 'email' || b.channel === 'both') {
+          const subject = replacePlaceholders(b.email_subject || 'FinMantra Campaign');
+          const body = replacePlaceholders(b.email_body || '');
+          
+          if (transporter) {
+            try {
+              await transporter.sendMail({
+                from: `"${fromName}" <${fromEmail}>`,
+                to: lead.mail,
+                subject,
+                html: body.replace(/\n/g, '<br/>')
+              });
+            } catch (err) {
+              emailSuccess = false;
+              emailError = err.message;
+            }
+          } else {
+            console.log(`[Simulated Email] Sent to ${lead.mail} with subject "${subject}"`);
+          }
+
+          const logId = 'log_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
+          await db.logCampaignBroadcastDelivery(
+            logId,
+            b.id,
+            lead.id,
+            'email',
+            emailSuccess ? 'sent' : 'failed',
+            emailError
+          );
+        }
+
+        // --- WHATSAPP CHANNEL ---
+        if (b.channel === 'whatsapp' || b.channel === 'both') {
+          const waMessage = replacePlaceholders(b.whatsapp_message || '');
+          
+          try {
+            if (b.whatsapp_template) {
+              const params = [lead.name, waMessage];
+              await sendWhatsAppTemplate(lead.contact, b.whatsapp_template, params);
+            } else {
+              const gateway = settings.whatsapp_gateway || 'baileys';
+              if (gateway === 'baileys') {
+                const status = baileys.getBaileysStatus();
+                if (status.status === 'CONNECTED') {
+                  await baileys.sendBaileysMessage(lead.contact, waMessage);
+                } else {
+                  throw new Error('Baileys WhatsApp device is not connected.');
+                }
+              } else {
+                throw new Error('Meta Graph API requires template. Free-text WhatsApp is only supported via Baileys linked device.');
+              }
+            }
+          } catch (err) {
+            waSuccess = false;
+            waError = err.message;
+          }
+
+          const logId = 'log_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
+          await db.logCampaignBroadcastDelivery(
+            logId,
+            b.id,
+            lead.id,
+            'whatsapp',
+            waSuccess ? 'sent' : 'failed',
+            waError
+          );
+        }
+
+        if (emailSuccess && waSuccess) {
+          sentCount++;
+        } else {
+          failedCount++;
+        }
+      }
+
+      const finalStatus = failedCount === leads.length ? 'failed' : 'sent';
+      await db.updateCampaignBroadcastStatus(b.id, finalStatus, sentCount, failedCount);
+      console.log(`[Campaign Scheduler] Completed broadcast: "${b.name}". Sent: ${sentCount}, Failed: ${failedCount}`);
+    }
+  } catch (err) {
+    console.error('[Campaign Scheduler Exception]:', err);
+  }
+}
+
+// List campaigns
+app.get('/api/campaigns', authenticateToken, async (req, res) => {
+  try {
+    const list = await db.getCampaigns();
+    res.json({ success: true, campaigns: list });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Create campaign
+app.post('/api/campaigns', authenticateToken, async (req, res) => {
+  try {
+    const { name, description } = req.body;
+    if (!name) {
+      return res.status(400).json({ success: false, error: 'Campaign name is required.' });
+    }
+    const id = 'camp_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
+    const newCamp = await db.createCampaign(id, name, description);
+    res.json({ success: true, campaign: newCamp });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Delete campaign
+app.delete('/api/campaigns/:id', authenticateToken, async (req, res) => {
+  try {
+    const deleted = await db.deleteCampaign(req.params.id);
+    res.json({ success: true, campaign: deleted });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// List campaign leads/contacts
+app.get('/api/campaigns/:id/leads', authenticateToken, async (req, res) => {
+  try {
+    const list = await db.getCampaignLeads(req.params.id);
+    res.json({ success: true, leads: list });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Upload campaign leads via Excel/CSV
+app.post('/api/campaigns/:id/leads/upload', authenticateToken, upload.single('file'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ success: false, error: 'No Excel/CSV file uploaded.' });
+  }
+
+  try {
+    const campaignId = req.params.id;
+    const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
+    const sheetName = workbook.SheetNames[0];
+    const rows = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
+
+    if (!rows || rows.length === 0) {
+      return res.status(400).json({ success: false, error: 'Spreadsheet has no rows.' });
+    }
+
+    const leads = [];
+    let rejectedCount = 0;
+    const errors = [];
+
+    rows.forEach((r, idx) => {
+      const rowNum = idx + 2;
+      const name = (r['Name'] || r['name'] || r['Full Name'] || r['full_name'] || '').toString().trim();
+      const rawContact = (r['Contact'] || r['contact'] || r['Phone'] || r['phone'] || r['Mobile'] || r['mobile'] || '').toString().trim();
+      const contact = rawContact.replace(/\D/g, '');
+      const mail = (r['Mail'] || r['mail'] || r['Email'] || r['email'] || '').toString().trim();
+      const address = (r['Address'] || r['address'] || '').toString().trim();
+
+      if (!name) {
+        rejectedCount++;
+        errors.push(`Row ${rowNum}: Name is missing.`);
+        return;
+      }
+      if (!contact || contact.length < 10) {
+        rejectedCount++;
+        errors.push(`Row ${rowNum} (${name}): Contact number is missing or invalid.`);
+        return;
+      }
+      if (!mail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) {
+        rejectedCount++;
+        errors.push(`Row ${rowNum} (${name}): Email address is missing or invalid format.`);
+        return;
+      }
+
+      leads.push({
+        id: 'cl_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6) + '_' + idx,
+        campaign_id: campaignId,
+        name,
+        contact,
+        mail,
+        address
+      });
+    });
+
+    if (leads.length > 0) {
+      await db.addCampaignLeads(leads);
+    }
+
+    res.json({
+      success: true,
+      created: leads.length,
+      failed: rejectedCount,
+      errors
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Delete lead
+app.delete('/api/campaigns/:id/leads/:leadId', authenticateToken, async (req, res) => {
+  try {
+    const deleted = await db.deleteCampaignLead(req.params.leadId);
+    res.json({ success: true, lead: deleted });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// List broadcasts under a campaign
+app.get('/api/campaigns/:id/broadcasts', authenticateToken, async (req, res) => {
+  try {
+    const list = await db.getCampaignBroadcasts(req.params.id);
+    res.json({ success: true, broadcasts: list });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Create campaign broadcast (draft or scheduled)
+app.post('/api/campaigns/:id/broadcasts', authenticateToken, async (req, res) => {
+  try {
+    const campaignId = req.params.id;
+    const { name, channel, whatsappTemplate, whatsappMessage, emailSubject, emailBody, scheduledAt } = req.body;
+    
+    if (!name || !channel) {
+      return res.status(400).json({ success: false, error: 'Broadcast Name and Channel are required.' });
+    }
+
+    const leads = await db.getCampaignLeads(campaignId);
+    const targetedCount = leads.length;
+
+    const id = 'bc_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
+    const newBroadcast = await db.createCampaignBroadcast(
+      id,
+      campaignId,
+      name,
+      channel,
+      whatsappTemplate || null,
+      whatsappMessage || null,
+      emailSubject || null,
+      emailBody || null,
+      targetedCount,
+      scheduledAt ? new Date(scheduledAt) : null
+    );
+
+    res.json({ success: true, broadcast: newBroadcast });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Trigger broadcast immediately (manually)
+app.post('/api/campaigns/:id/broadcasts/:broadcastId/trigger', authenticateToken, async (req, res) => {
+  try {
+    const { broadcastId } = req.params;
+    const b = await db.getCampaignBroadcastById(broadcastId);
+    if (!b) {
+      return res.status(404).json({ success: false, error: 'Broadcast not found.' });
+    }
+
+    await db.runQuery(
+      `UPDATE campaign_broadcasts 
+       SET status = 'scheduled', scheduled_at = CURRENT_TIMESTAMP 
+       WHERE id = $1`,
+      [broadcastId]
+    );
+
+    checkAndRunScheduledBroadcasts().catch(err => console.error('[Manual trigger background run error]', err));
+
+    res.json({ success: true, message: 'Broadcast triggered successfully! Processing started in the background.' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Delete broadcast
+app.delete('/api/campaigns/:id/broadcasts/:broadcastId', authenticateToken, async (req, res) => {
+  try {
+    const deleted = await db.deleteCampaignBroadcast(req.params.broadcastId);
+    res.json({ success: true, broadcast: deleted });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Get detailed delivery logs for a broadcast
+app.get('/api/campaigns/:id/broadcasts/:broadcastId/logs', authenticateToken, async (req, res) => {
+  try {
+    const list = await db.getCampaignLogs(req.params.broadcastId);
+    res.json({ success: true, logs: list });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Global exception and error handling middleware
 app.use((err, req, res, next) => {
   console.error('[Express Async Error Handler Exception]:', err);
@@ -5912,6 +6276,10 @@ server.listen(PORT, async () => {
     // Ensure database is fully connected and initialized before serving requests
     await db.init();
     console.log('[Startup] Database initialization completed successfully.');
+
+    // Initialize campaign cron worker checking every 30 seconds
+    setInterval(checkAndRunScheduledBroadcasts, 30000);
+    console.log('[Startup] Campaigns Scheduled Broadcast daemon started.');
 
     const settings = await db.getSettings();
     const gateway = settings.whatsapp_gateway || 'baileys';

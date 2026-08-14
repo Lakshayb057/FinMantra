@@ -392,6 +392,58 @@ async function initPgSchema() {
       )
     `);
 
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS campaigns (
+        id VARCHAR(50) PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        description TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS campaign_leads (
+        id VARCHAR(50) PRIMARY KEY,
+        campaign_id VARCHAR(50) REFERENCES campaigns(id) ON DELETE CASCADE,
+        name VARCHAR(255) NOT NULL,
+        contact VARCHAR(50) NOT NULL,
+        mail VARCHAR(255) NOT NULL,
+        address TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS campaign_broadcasts (
+        id VARCHAR(50) PRIMARY KEY,
+        campaign_id VARCHAR(50) REFERENCES campaigns(id) ON DELETE CASCADE,
+        name VARCHAR(255) NOT NULL,
+        channel VARCHAR(50) NOT NULL,
+        status VARCHAR(50) NOT NULL DEFAULT 'draft',
+        whatsapp_template VARCHAR(255),
+        whatsapp_message TEXT,
+        email_subject VARCHAR(255),
+        email_body TEXT,
+        targeted_count INTEGER DEFAULT 0,
+        sent_count INTEGER DEFAULT 0,
+        failed_count INTEGER DEFAULT 0,
+        scheduled_at TIMESTAMP WITH TIME ZONE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS campaign_logs (
+        id VARCHAR(50) PRIMARY KEY,
+        broadcast_id VARCHAR(50) REFERENCES campaign_broadcasts(id) ON DELETE CASCADE,
+        campaign_lead_id VARCHAR(50) REFERENCES campaign_leads(id) ON DELETE CASCADE,
+        channel VARCHAR(50) NOT NULL,
+        status VARCHAR(50) NOT NULL,
+        error_message TEXT,
+        sent_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     const safeQuery = async (qStr, params = []) => {
       try {
         await client.query('SAVEPOINT mig_sp');
@@ -2822,6 +2874,123 @@ const db = {
       return res.rows.map(r => r.designation);
     }
     const res = await pool.query('SELECT employment_type, designation FROM designations ORDER BY employment_type ASC, designation ASC');
+    return res.rows;
+  },
+
+  // --- Campaigns Database Helper Operations ---
+  async getCampaigns() {
+    const res = await pool.query('SELECT * FROM campaigns ORDER BY created_at DESC');
+    return res.rows;
+  },
+
+  async createCampaign(id, name, description) {
+    const res = await pool.query(
+      'INSERT INTO campaigns (id, name, description) VALUES ($1, $2, $3) RETURNING *',
+      [id, name, description]
+    );
+    return res.rows[0];
+  },
+
+  async deleteCampaign(id) {
+    const res = await pool.query('DELETE FROM campaigns WHERE id = $1 RETURNING *', [id]);
+    return res.rows[0];
+  },
+
+  async getCampaignLeads(campaignId) {
+    const res = await pool.query('SELECT * FROM campaign_leads WHERE campaign_id = $1 ORDER BY created_at DESC', [campaignId]);
+    return res.rows;
+  },
+
+  async addCampaignLeads(leads) {
+    if (leads.length === 0) return 0;
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      for (const lead of leads) {
+        await client.query(
+          `INSERT INTO campaign_leads (id, campaign_id, name, contact, mail, address) 
+           VALUES ($1, $2, $3, $4, $5, $6) 
+           ON CONFLICT (id) DO UPDATE SET name = $3, contact = $4, mail = $5, address = $6`,
+          [lead.id, lead.campaign_id, lead.name, lead.contact, lead.mail, lead.address]
+        );
+      }
+      await client.query('COMMIT');
+      return leads.length;
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  },
+
+  async deleteCampaignLead(leadId) {
+    const res = await pool.query('DELETE FROM campaign_leads WHERE id = $1 RETURNING *', [leadId]);
+    return res.rows[0];
+  },
+
+  async createCampaignBroadcast(id, campaignId, name, channel, whatsappTemplate, whatsappMessage, emailSubject, emailBody, targetedCount, scheduledAt) {
+    const res = await pool.query(
+      `INSERT INTO campaign_broadcasts 
+       (id, campaign_id, name, channel, whatsapp_template, whatsapp_message, email_subject, email_body, targeted_count, scheduled_at, status) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) 
+       RETURNING *`,
+      [id, campaignId, name, channel, whatsappTemplate, whatsappMessage, emailSubject, emailBody, targetedCount, scheduledAt, scheduledAt ? 'scheduled' : 'draft']
+    );
+    return res.rows[0];
+  },
+
+  async getCampaignBroadcasts(campaignId) {
+    let res;
+    if (campaignId) {
+      res = await pool.query('SELECT * FROM campaign_broadcasts WHERE campaign_id = $1 ORDER BY created_at DESC', [campaignId]);
+    } else {
+      res = await pool.query('SELECT * FROM campaign_broadcasts ORDER BY created_at DESC');
+    }
+    return res.rows;
+  },
+
+  async getCampaignBroadcastById(id) {
+    const res = await pool.query('SELECT * FROM campaign_broadcasts WHERE id = $1 LIMIT 1', [id]);
+    return res.rows[0] || null;
+  },
+
+  async deleteCampaignBroadcast(id) {
+    const res = await pool.query('DELETE FROM campaign_broadcasts WHERE id = $1 RETURNING *', [id]);
+    return res.rows[0];
+  },
+
+  async updateCampaignBroadcastStatus(id, status, sentCount = 0, failedCount = 0) {
+    const res = await pool.query(
+      `UPDATE campaign_broadcasts 
+       SET status = $2, sent_count = $3, failed_count = $4 
+       WHERE id = $1 
+       RETURNING *`,
+      [id, status, sentCount, failedCount]
+    );
+    return res.rows[0];
+  },
+
+  async getScheduledBroadcastsToRun() {
+    const res = await pool.query(
+      `SELECT * FROM campaign_broadcasts 
+       WHERE status = 'scheduled' AND scheduled_at <= CURRENT_TIMESTAMP`
+    );
+    return res.rows;
+  },
+
+  async logCampaignBroadcastDelivery(id, broadcastId, campaignLeadId, channel, status, errorMessage) {
+    const res = await pool.query(
+      `INSERT INTO campaign_logs (id, broadcast_id, campaign_lead_id, channel, status, error_message) 
+       VALUES ($1, $2, $3, $4, $5, $6) 
+       RETURNING *`,
+      [id, broadcastId, campaignLeadId, channel, status, errorMessage]
+    );
+    return res.rows[0];
+  },
+
+  async getCampaignLogs(broadcastId) {
+    const res = await pool.query('SELECT * FROM campaign_logs WHERE broadcast_id = $1 ORDER BY sent_at ASC', [broadcastId]);
     return res.rows;
   }
 }
