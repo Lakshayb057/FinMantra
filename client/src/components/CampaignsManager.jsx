@@ -20,6 +20,13 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
   const [showImportModal, setShowImportModal] = useState(false);
   const [importSearch, setImportSearch] = useState('');
   const [isImporting, setIsImporting] = useState(false);
+
+  // Master Import filters
+  const [filterPhone, setFilterPhone] = useState('');
+  const [filterEmail, setFilterEmail] = useState('');
+  const [filterAddress, setFilterAddress] = useState('');
+  const [filterFromDate, setFilterFromDate] = useState('');
+  const [filterToDate, setFilterToDate] = useState('');
   
   // Campaigns list state
   const [campaigns, setCampaigns] = useState([]);
@@ -479,13 +486,50 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
   });
 
   const filteredImportContacts = masterContacts.filter(c => {
-    const search = importSearch.toLowerCase();
-    return (
-      (c.name || '').toLowerCase().includes(search) ||
-      (c.contact || '').toLowerCase().includes(search) ||
-      (c.mail || '').toLowerCase().includes(search) ||
-      (c.address || '').toLowerCase().includes(search)
-    );
+    // 1. General search
+    const gen = importSearch.toLowerCase().trim();
+    if (gen) {
+      const matchGen = (c.name || '').toLowerCase().includes(gen) ||
+                       (c.contact || '').toLowerCase().includes(gen) ||
+                       (c.mail || '').toLowerCase().includes(gen) ||
+                       (c.address || '').toLowerCase().includes(gen);
+      if (!matchGen) return false;
+    }
+
+    // 2. Phone filter
+    const phoneFilterClean = filterPhone.replace(/\D/g, '');
+    if (phoneFilterClean) {
+      if (!(c.contact || '').includes(phoneFilterClean)) return false;
+    }
+
+    // 3. Email filter
+    const emailFilterClean = filterEmail.toLowerCase().trim();
+    if (emailFilterClean) {
+      if (!(c.mail || '').toLowerCase().includes(emailFilterClean)) return false;
+    }
+
+    // 4. Address filter
+    const addrFilterClean = filterAddress.toLowerCase().trim();
+    if (addrFilterClean) {
+      if (!(c.address || '').toLowerCase().includes(addrFilterClean)) return false;
+    }
+
+    // 5. Date filters
+    if (c.created_at) {
+      const createdTime = new Date(c.created_at).getTime();
+      if (filterFromDate) {
+        const fromTime = new Date(filterFromDate + 'T00:00:00').getTime();
+        if (createdTime < fromTime) return false;
+      }
+      if (filterToDate) {
+        const toTime = new Date(filterToDate + 'T23:59:59').getTime();
+        if (createdTime > toTime) return false;
+      }
+    } else {
+      if (filterFromDate || filterToDate) return false;
+    }
+
+    return true;
   });
 
   return (
@@ -798,26 +842,22 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                     />
                   </div>
 
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <button
-                      onClick={() => {
-                        setSelectedMasterIds(new Set());
-                        setImportSearch('');
-                        setShowImportModal(true);
-                      }}
-                      className="btn-secondary"
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 1rem', fontSize: '0.85rem', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
-                    >
-                      <Plus size={14} /> Add from Master Data
-                    </button>
-                    <button
-                      onClick={() => setShowUploadModal(true)}
-                      className="btn-primary"
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 1rem', fontSize: '0.85rem', background: 'var(--gold-deep)', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
-                    >
-                      <Upload size={14} /> Upload Data Sheet
-                    </button>
-                  </div>
+                  <button
+                    onClick={() => {
+                      setSelectedMasterIds(new Set());
+                      setFilterPhone('');
+                      setFilterEmail('');
+                      setFilterAddress('');
+                      setFilterFromDate('');
+                      setFilterToDate('');
+                      setImportSearch('');
+                      setShowImportModal(true);
+                    }}
+                    className="btn-primary"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 1.1rem', fontSize: '0.85rem', background: 'var(--gold-deep)', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
+                  >
+                    <Plus size={14} /> Align from Master Data
+                  </button>
                 </div>
 
                 {/* Contacts grid list */}
@@ -1528,25 +1568,97 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
             </div>
 
             {/* Search filter in modal */}
-            <div style={{ marginBottom: '1rem', position: 'relative', flexShrink: 0 }}>
-              <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} />
-              <input
-                type="text"
-                placeholder="Search master list by name, phone, email, address..."
-                value={importSearch}
-                onChange={(e) => setImportSearch(e.target.value)}
-                style={{
-                  width: '100%',
-                  background: 'var(--paper-2)',
-                  border: '1px solid var(--line)',
-                  borderRadius: '8px',
-                  padding: '0.45rem 0.75rem 0.45rem 2.25rem',
-                  fontSize: '0.85rem',
-                  color: 'var(--ink)',
-                  outline: 'none',
-                  boxSizing: 'border-box'
-                }}
-              />
+            <div style={{ marginBottom: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', flexShrink: 0 }}>
+              <div style={{ position: 'relative' }}>
+                <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} />
+                <input
+                  type="text"
+                  placeholder="General search by name, phone, email, address..."
+                  value={importSearch}
+                  onChange={(e) => setImportSearch(e.target.value)}
+                  style={{
+                    width: '100%',
+                    background: 'var(--paper-2)',
+                    border: '1px solid var(--line)',
+                    borderRadius: '8px',
+                    padding: '0.45rem 0.75rem 0.45rem 2.25rem',
+                    fontSize: '0.85rem',
+                    color: 'var(--ink)',
+                    outline: 'none',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              {/* Advanced Filters Grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.5rem', background: 'var(--paper-2)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--line)' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                  <label style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--muted)' }}>Phone Filter</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 91987..."
+                    value={filterPhone}
+                    onChange={(e) => setFilterPhone(e.target.value)}
+                    style={{ padding: '0.35rem 0.5rem', fontSize: '0.78rem', borderRadius: '4px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                  <label style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--muted)' }}>Email/Domain</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. @gmail.com"
+                    value={filterEmail}
+                    onChange={(e) => setFilterEmail(e.target.value)}
+                    style={{ padding: '0.35rem 0.5rem', fontSize: '0.78rem', borderRadius: '4px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                  <label style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--muted)' }}>Address Keyword</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Delhi"
+                    value={filterAddress}
+                    onChange={(e) => setFilterAddress(e.target.value)}
+                    style={{ padding: '0.35rem 0.5rem', fontSize: '0.78rem', borderRadius: '4px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                  <label style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--muted)' }}>Uploaded From</label>
+                  <input
+                    type="date"
+                    value={filterFromDate}
+                    onChange={(e) => setFilterFromDate(e.target.value)}
+                    style={{ padding: '0.3rem 0.5rem', fontSize: '0.78rem', borderRadius: '4px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                  <label style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--muted)' }}>Uploaded To</label>
+                  <input
+                    type="date"
+                    value={filterToDate}
+                    onChange={(e) => setFilterToDate(e.target.value)}
+                    style={{ padding: '0.3rem 0.5rem', fontSize: '0.78rem', borderRadius: '4px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFilterPhone('');
+                      setFilterEmail('');
+                      setFilterAddress('');
+                      setFilterFromDate('');
+                      setFilterToDate('');
+                      setImportSearch('');
+                      setSelectedMasterIds(new Set());
+                    }}
+                    className="btn-secondary"
+                    style={{ padding: '0.35rem', fontSize: '0.78rem', width: '100%', height: '28px', borderRadius: '4px', cursor: 'pointer' }}
+                  >
+                    Reset Filters
+                  </button>
+                </div>
+              </div>
             </div>
 
             {/* List with Checkboxes */}
@@ -1579,6 +1691,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                       <th style={{ padding: '0.65rem 0.85rem', fontWeight: 700, color: 'var(--ink)' }}>Contact (WhatsApp)</th>
                       <th style={{ padding: '0.65rem 0.85rem', fontWeight: 700, color: 'var(--ink)' }}>Email Address</th>
                       <th style={{ padding: '0.65rem 0.85rem', fontWeight: 700, color: 'var(--ink)' }}>Address</th>
+                      <th style={{ padding: '0.65rem 0.85rem', fontWeight: 700, color: 'var(--ink)' }}>Uploaded At</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1619,6 +1732,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                           <td style={{ padding: '0.65rem 0.85rem', fontFamily: 'var(--font-mono)' }}>{c.contact}</td>
                           <td style={{ padding: '0.65rem 0.85rem' }}>{c.mail}</td>
                           <td style={{ padding: '0.65rem 0.85rem', color: 'var(--muted)' }}>{c.address || '—'}</td>
+                          <td style={{ padding: '0.65rem 0.85rem', color: 'var(--muted)', fontSize: '0.78rem' }}>{c.created_at ? new Date(c.created_at).toLocaleString() : '—'}</td>
                         </tr>
                       );
                     })}
