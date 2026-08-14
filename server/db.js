@@ -468,6 +468,10 @@ async function initPgSchema() {
     await safeQuery("CREATE INDEX IF NOT EXISTS idx_meta_audiences_type_bank ON meta_audiences (audience_type, bank_name)");
     await safeQuery("CREATE INDEX IF NOT EXISTS idx_meta_audiences_meta_id ON meta_audiences (meta_audience_id) WHERE meta_audience_id IS NOT NULL");
     await safeQuery("CREATE UNIQUE INDEX IF NOT EXISTS uq_meta_audiences_name ON meta_audiences (LOWER(TRIM(name)))");
+    await safeQuery("CREATE UNIQUE INDEX IF NOT EXISTS uq_idx_master_contact ON campaign_master_leads (contact)");
+    await safeQuery("CREATE UNIQUE INDEX IF NOT EXISTS uq_idx_master_mail ON campaign_master_leads (LOWER(TRIM(mail)))");
+    await safeQuery("CREATE UNIQUE INDEX IF NOT EXISTS uq_idx_campaign_contact ON campaign_leads (campaign_id, contact)");
+    await safeQuery("CREATE UNIQUE INDEX IF NOT EXISTS uq_idx_campaign_mail ON campaign_leads (campaign_id, LOWER(TRIM(mail)))");
     await safeQuery("CREATE INDEX IF NOT EXISTS idx_meta_memberships_aud_lead ON meta_audience_memberships (audience_id, lead_id)");
     await safeQuery("CREATE INDEX IF NOT EXISTS idx_meta_memberships_state ON meta_audience_memberships (state)");
     await safeQuery("CREATE INDEX IF NOT EXISTS idx_meta_sync_jobs_aud ON meta_audience_sync_jobs (audience_id)");
@@ -3049,14 +3053,22 @@ const db = {
         const masterRes = await client.query('SELECT * FROM campaign_master_leads WHERE id = $1 LIMIT 1', [leadId]);
         if (masterRes.rows.length > 0) {
           const lead = masterRes.rows[0];
-          const targetId = 'cl_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6) + '_' + count;
-          await client.query(
-            `INSERT INTO campaign_leads (id, campaign_id, name, contact, mail, address) 
-             VALUES ($1, $2, $3, $4, $5, $6) 
-             ON CONFLICT DO NOTHING`,
-            [targetId, campaignId, lead.name, lead.contact, lead.mail, lead.address]
+          
+          // Check if contact or email already exists in target campaign
+          const dupRes = await client.query(
+            'SELECT 1 FROM campaign_leads WHERE campaign_id = $1 AND (contact = $2 OR LOWER(TRIM(mail)) = LOWER(TRIM($3))) LIMIT 1',
+            [campaignId, lead.contact, lead.mail]
           );
-          count++;
+          if (dupRes.rows.length === 0) {
+            const targetId = 'cl_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6) + '_' + count;
+            await client.query(
+              `INSERT INTO campaign_leads (id, campaign_id, name, contact, mail, address) 
+               VALUES ($1, $2, $3, $4, $5, $6) 
+               ON CONFLICT DO NOTHING`,
+              [targetId, campaignId, lead.name, lead.contact, lead.mail, lead.address]
+            );
+            count++;
+          }
         }
       }
       await client.query('COMMIT');

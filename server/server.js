@@ -6071,6 +6071,15 @@ app.post('/api/campaigns/master/leads/upload', authenticateToken, upload.single(
       return res.status(400).json({ success: false, error: 'Spreadsheet has no rows.' });
     }
 
+    // Fetch existing master contacts to check for duplicates
+    const existingLeads = await db.getMasterLeads();
+    const existingPhones = new Set(existingLeads.map(l => l.contact));
+    const existingEmails = new Set(existingLeads.map(l => l.mail.toLowerCase().trim()));
+
+    // Track duplicates within the uploaded file itself
+    const sheetPhones = new Set();
+    const sheetEmails = new Set();
+
     const leads = [];
     let rejectedCount = 0;
     const errors = [];
@@ -6098,6 +6107,22 @@ app.post('/api/campaigns/master/leads/upload', authenticateToken, upload.single(
         errors.push(`Row ${rowNum} (${name}): Email address is missing or invalid format.`);
         return;
       }
+
+      // Check duplicates
+      const mailKey = mail.toLowerCase().trim();
+      if (existingPhones.has(contact) || sheetPhones.has(contact)) {
+        rejectedCount++;
+        errors.push(`Row ${rowNum} (${name}): Contact phone number already exists in Master Data Center.`);
+        return;
+      }
+      if (existingEmails.has(mailKey) || sheetEmails.has(mailKey)) {
+        rejectedCount++;
+        errors.push(`Row ${rowNum} (${name}): Email address already exists in Master Data Center.`);
+        return;
+      }
+
+      sheetPhones.add(contact);
+      sheetEmails.add(mailKey);
 
       leads.push({
         id: 'ml_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6) + '_' + idx,
@@ -6209,6 +6234,15 @@ app.post('/api/campaigns/:id/leads/upload', authenticateToken, upload.single('fi
       return res.status(400).json({ success: false, error: 'Spreadsheet has no rows.' });
     }
 
+    // Fetch existing contacts in the campaign to prevent duplicates
+    const existingLeads = await db.getCampaignLeads(campaignId);
+    const existingPhones = new Set(existingLeads.map(l => l.contact));
+    const existingEmails = new Set(existingLeads.map(l => l.mail.toLowerCase().trim()));
+
+    // Track duplicates within the uploaded file itself
+    const sheetPhones = new Set();
+    const sheetEmails = new Set();
+
     const leads = [];
     let rejectedCount = 0;
     const errors = [];
@@ -6236,6 +6270,22 @@ app.post('/api/campaigns/:id/leads/upload', authenticateToken, upload.single('fi
         errors.push(`Row ${rowNum} (${name}): Email address is missing or invalid format.`);
         return;
       }
+
+      // Check duplicates
+      const mailKey = mail.toLowerCase().trim();
+      if (existingPhones.has(contact) || sheetPhones.has(contact)) {
+        rejectedCount++;
+        errors.push(`Row ${rowNum} (${name}): Contact phone number already exists in this campaign.`);
+        return;
+      }
+      if (existingEmails.has(mailKey) || sheetEmails.has(mailKey)) {
+        rejectedCount++;
+        errors.push(`Row ${rowNum} (${name}): Email address already exists in this campaign.`);
+        return;
+      }
+
+      sheetPhones.add(contact);
+      sheetEmails.add(mailKey);
 
       leads.push({
         id: 'cl_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6) + '_' + idx,
