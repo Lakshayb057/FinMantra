@@ -4206,8 +4206,8 @@ app.put('/api/leads/:id', authenticateToken, requireAdmin, async (req, res) => {
 
 // Export Leads to CSV (Admin Only)
 app.get('/api/leads/export', authenticateToken, requireAdmin, async (req, res) => {
-  const { search, card, source, startDate, endDate, campaign, term, info } = req.query;
-  const leads = await db.getLeadsForExport({ search, card, source, startDate, endDate, campaign, term, info });
+  const { search, card, source, utmSource, startDate, endDate, campaign, term, info, companyCategory, ltfEligible } = req.query;
+  const leads = await db.getLeadsForExport({ search, card, source, utmSource, startDate, endDate, campaign, term, info, companyCategory, ltfEligible });
   
   const settings = await db.getSettings();
   let columns = [];

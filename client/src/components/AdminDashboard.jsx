@@ -1623,6 +1623,11 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
     if (filterCard) queryParams.push(`card=${encodeURIComponent(filterCard)}`);
     if (filterSource) queryParams.push(`source=${encodeURIComponent(filterSource)}`);
     if (filterUtmSource) queryParams.push(`utmSource=${encodeURIComponent(filterUtmSource)}`);
+    if (filterCampaign) queryParams.push(`campaign=${encodeURIComponent(filterCampaign)}`);
+    if (filterTerm) queryParams.push(`term=${encodeURIComponent(filterTerm)}`);
+    if (filterInfo) queryParams.push(`info=${encodeURIComponent(filterInfo)}`);
+    if (filterCompanyCategory) queryParams.push(`companyCategory=${encodeURIComponent(filterCompanyCategory)}`);
+    if (filterLtfEligible) queryParams.push(`ltfEligible=${encodeURIComponent(filterLtfEligible)}`);
     const queryString = queryParams.length > 0 ? `?${queryParams.join('&')}` : '';
 
     // Fetch filtered leads, create Blob, and trigger browser download:

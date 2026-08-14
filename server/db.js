@@ -1220,22 +1220,98 @@ const db = {
     };
   },
 
-  async getLeadsForExport({ search = '', card = '', source = '', startDate = '', endDate = '', campaign = '', term = '', info = '' }) {
+  async getLeadsForExport({ search = '', card = '', source = '', utmSource = '', startDate = '', endDate = '', campaign = '', term = '', info = '', companyCategory = '', ltfEligible = '' }) {
     let query = 'SELECT * FROM leads';
     const params = [];
     const clauses = [];
     
     if (search) {
       params.push(`%${search.trim().toLowerCase()}%`);
-      clauses.push(`(LOWER(full_name) LIKE $${params.length} OR phone LIKE $${params.length} OR LOWER(urn) LIKE $${params.length} OR LOWER(pan_no) LIKE $${params.length})`);
+      clauses.push(`(
+        LOWER(full_name) LIKE $${params.length} 
+        OR phone LIKE $${params.length} 
+        OR LOWER(urn) LIKE $${params.length} 
+        OR LOWER(pan_no) LIKE $${params.length}
+        OR LOWER(company_name) LIKE $${params.length}
+        OR LOWER(mis_data->>'company_code') LIKE $${params.length}
+      )`);
     }
     if (card) {
       params.push(card);
       clauses.push(`card_id = $${params.length}`);
     }
     if (source) {
-      params.push(source);
-      clauses.push(`source = $${params.length}`);
+      const trimmedSource = source.trim();
+      const matchParen = trimmedSource.match(/^([^(]+)\s*\(([^)]+)\)$/);
+      if (matchParen) {
+        const bankPart = matchParen[1].trim().toLowerCase();
+        const srcPart = matchParen[2].trim().toLowerCase();
+        params.push(`%${bankPart}%`);
+        const pBank = params.length;
+        params.push(srcPart);
+        const pSrc = params.length;
+        params.push(`%${srcPart}%`);
+        const pSrcLike = params.length;
+
+        clauses.push(`(
+          (LOWER(card_bank) LIKE $${pBank} OR LOWER(card_name) LIKE $${pBank} OR LOWER(redirect_url) LIKE $${pBank})
+          AND (
+            LOWER(utm_source) = $${pSrc}
+            OR LOWER(source) = $${pSrc}
+            OR LOWER(agent_name) LIKE $${pSrcLike}
+            OR ($${pSrc} = 'public' AND (utm_source IS NULL OR utm_source = '' OR utm_source = 'public'))
+          )
+        )`);
+      } else {
+        params.push(`%${trimmedSource.toLowerCase()}%`);
+        const pIdx = params.length;
+        clauses.push(`(
+          LOWER(source) LIKE $${pIdx}
+          OR LOWER(utm_source) LIKE $${pIdx}
+          OR LOWER(agent_name) LIKE $${pIdx}
+          OR LOWER(card_bank) LIKE $${pIdx}
+          OR LOWER(card_name) LIKE $${pIdx}
+        )`);
+      }
+    }
+    if (utmSource) {
+      const trimmedUtm = utmSource.trim();
+      const matchParen = trimmedUtm.match(/^([^(]+)\s*\(([^)]+)\)$/);
+      if (matchParen) {
+        const cardOrBankPart = matchParen[1].trim().toLowerCase();
+        const srcPart = matchParen[2].trim().toLowerCase();
+        params.push(`%${cardOrBankPart}%`);
+        const pCardBank = params.length;
+        params.push(srcPart);
+        const pSrc = params.length;
+        params.push(`%${srcPart}%`);
+        const pSrcLike = params.length;
+
+        clauses.push(`(
+          (LOWER(card_bank) LIKE $${pCardBank} OR LOWER(card_name) LIKE $${pCardBank} OR LOWER(redirect_url) LIKE $${pCardBank})
+          AND (
+            LOWER(utm_source) = $${pSrc}
+            OR LOWER(source) = $${pSrc}
+            OR LOWER(agent_name) LIKE $${pSrcLike}
+            OR ($${pSrc} = 'public' AND (utm_source IS NULL OR utm_source = '' OR utm_source = 'public'))
+          )
+        )`);
+      } else {
+        const cleanUtm = trimmedUtm.toLowerCase();
+        params.push(cleanUtm);
+        const pExact = params.length;
+        params.push(`%${cleanUtm}%`);
+        const pLike = params.length;
+        clauses.push(`(
+          LOWER(utm_source) = $${pExact}
+          OR LOWER(utm_source) LIKE $${pLike}
+          OR LOWER(source) LIKE $${pLike}
+          OR LOWER(card_name) LIKE $${pLike}
+          OR LOWER(card_bank) LIKE $${pLike}
+          OR ($${pExact} = 'public' AND (utm_source IS NULL OR utm_source = '' OR utm_source = 'public'))
+          OR ($${pExact} = 'agent' AND source = 'agent')
+        )`);
+      }
     }
     if (startDate) {
       params.push(startDate + ' 00:00:00+05:30');
@@ -1256,6 +1332,13 @@ const db = {
     if (info) {
       params.push(`%${info.trim().toLowerCase()}%`);
       clauses.push(`LOWER(utm_info) LIKE $${params.length}`);
+    }
+    if (companyCategory) {
+      params.push(companyCategory.trim().toUpperCase());
+      clauses.push(`UPPER(mis_data->>'company_category') = $${params.length}`);
+    }
+    if (ltfEligible === 'true' || ltfEligible === true) {
+      clauses.push(`(mis_data->>'why_ltf_pricing' IS NOT NULL AND mis_data->>'why_ltf_pricing' != '')`);
     }
     
     if (clauses.length > 0) {
