@@ -6044,6 +6044,110 @@ async function checkAndRunScheduledBroadcasts() {
   }
 }
 
+// --- MASTER DATA CENTER ROUTES ---
+
+// List master leads
+app.get('/api/campaigns/master/leads', authenticateToken, async (req, res) => {
+  try {
+    const list = await db.getMasterLeads();
+    res.json({ success: true, leads: list });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Upload master leads via Excel/CSV
+app.post('/api/campaigns/master/leads/upload', authenticateToken, upload.single('file'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ success: false, error: 'No Excel/CSV file uploaded.' });
+  }
+
+  try {
+    const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
+    const sheetName = workbook.SheetNames[0];
+    const rows = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
+
+    if (!rows || rows.length === 0) {
+      return res.status(400).json({ success: false, error: 'Spreadsheet has no rows.' });
+    }
+
+    const leads = [];
+    let rejectedCount = 0;
+    const errors = [];
+
+    rows.forEach((r, idx) => {
+      const rowNum = idx + 2;
+      const name = (r['Name'] || r['name'] || r['Full Name'] || r['full_name'] || '').toString().trim();
+      const rawContact = (r['Contact'] || r['contact'] || r['Phone'] || r['phone'] || r['Mobile'] || r['mobile'] || '').toString().trim();
+      const contact = rawContact.replace(/\D/g, '');
+      const mail = (r['Mail'] || r['mail'] || r['Email'] || r['email'] || '').toString().trim();
+      const address = (r['Address'] || r['address'] || '').toString().trim();
+
+      if (!name) {
+        rejectedCount++;
+        errors.push(`Row ${rowNum}: Name is missing.`);
+        return;
+      }
+      if (!contact || contact.length < 10) {
+        rejectedCount++;
+        errors.push(`Row ${rowNum} (${name}): Contact number is missing or invalid.`);
+        return;
+      }
+      if (!mail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) {
+        rejectedCount++;
+        errors.push(`Row ${rowNum} (${name}): Email address is missing or invalid format.`);
+        return;
+      }
+
+      leads.push({
+        id: 'ml_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6) + '_' + idx,
+        name,
+        contact,
+        mail,
+        address
+      });
+    });
+
+    if (leads.length > 0) {
+      await db.addMasterLeads(leads);
+    }
+
+    res.json({
+      success: true,
+      insertedCount: leads.length,
+      rejectedCount,
+      errors
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Delete master lead
+app.delete('/api/campaigns/master/leads/:leadId', authenticateToken, async (req, res) => {
+  try {
+    const deleted = await db.deleteMasterLead(req.params.leadId);
+    res.json({ success: true, lead: deleted });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Import master leads to a specific campaign
+app.post('/api/campaigns/:id/leads/import-master', authenticateToken, async (req, res) => {
+  try {
+    const campaignId = req.params.id;
+    const { leadIds } = req.body;
+    if (!leadIds || !Array.isArray(leadIds) || leadIds.length === 0) {
+      return res.status(400).json({ success: false, error: 'No contact IDs selected for import.' });
+    }
+    const count = await db.importMasterLeadsToCampaign(campaignId, leadIds);
+    res.json({ success: true, importedCount: count });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // List campaigns
 app.get('/api/campaigns', authenticateToken, async (req, res) => {
   try {

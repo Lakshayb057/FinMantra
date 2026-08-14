@@ -444,6 +444,17 @@ async function initPgSchema() {
       )
     `);
 
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS campaign_master_leads (
+        id VARCHAR(50) PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        contact VARCHAR(50) NOT NULL,
+        mail VARCHAR(255) NOT NULL,
+        address TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     const safeQuery = async (qStr, params = []) => {
       try {
         await client.query('SAVEPOINT mig_sp');
@@ -2992,6 +3003,70 @@ const db = {
   async getCampaignLogs(broadcastId) {
     const res = await pool.query('SELECT * FROM campaign_logs WHERE broadcast_id = $1 ORDER BY sent_at ASC', [broadcastId]);
     return res.rows;
+  },
+
+  // --- Master Data Center Helper Operations ---
+  async getMasterLeads() {
+    const res = await pool.query('SELECT * FROM campaign_master_leads ORDER BY created_at DESC');
+    return res.rows;
+  },
+
+  async addMasterLeads(leads) {
+    if (leads.length === 0) return 0;
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      for (const lead of leads) {
+        await client.query(
+          `INSERT INTO campaign_master_leads (id, name, contact, mail, address) 
+           VALUES ($1, $2, $3, $4, $5) 
+           ON CONFLICT (id) DO UPDATE SET name = $2, contact = $3, mail = $4, address = $5`,
+          [lead.id, lead.name, lead.contact, lead.mail, lead.address]
+        );
+      }
+      await client.query('COMMIT');
+      return leads.length;
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  },
+
+  async deleteMasterLead(leadId) {
+    const res = await pool.query('DELETE FROM campaign_master_leads WHERE id = $1 RETURNING *', [leadId]);
+    return res.rows[0];
+  },
+
+  async importMasterLeadsToCampaign(campaignId, leadIds) {
+    if (leadIds.length === 0) return 0;
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      let count = 0;
+      for (const leadId of leadIds) {
+        const masterRes = await client.query('SELECT * FROM campaign_master_leads WHERE id = $1 LIMIT 1', [leadId]);
+        if (masterRes.rows.length > 0) {
+          const lead = masterRes.rows[0];
+          const targetId = 'cl_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6) + '_' + count;
+          await client.query(
+            `INSERT INTO campaign_leads (id, campaign_id, name, contact, mail, address) 
+             VALUES ($1, $2, $3, $4, $5, $6) 
+             ON CONFLICT DO NOTHING`,
+            [targetId, campaignId, lead.name, lead.contact, lead.mail, lead.address]
+          );
+          count++;
+        }
+      }
+      await client.query('COMMIT');
+      return count;
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   }
 }
 

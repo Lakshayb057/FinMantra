@@ -1,11 +1,24 @@
-import React, { useState, useEffect } from 'react';
 import { 
   Users, Mail, MessageSquare, Plus, Trash2, Search, Upload, RefreshCw, X, Check,
-  AlertCircle, Download, FileSpreadsheet, Play, Settings as SettingsIcon, HelpCircle, Info, Zap
+  AlertCircle, Download, FileSpreadsheet, Play, Settings as SettingsIcon, HelpCircle, Info, Zap, Database
 } from 'lucide-react';
 
 export default function CampaignsManager({ theme, API_URL, token, showToast }) {
-  const [activeSubTab, setActiveSubTab] = useState('data_storage'); // 'data_storage' | 'broadcast' | 'automated' | 'settings' | 'guide'
+  const [activeSubTab, setActiveSubTab] = useState('master_data'); // 'master_data' | 'data_storage' | 'broadcast' | 'automated' | 'settings' | 'guide'
+  
+  // Master Data Center state
+  const [masterContacts, setMasterContacts] = useState([]);
+  const [masterContactsSearch, setMasterContactsSearch] = useState('');
+  const [showMasterUploadModal, setShowMasterUploadModal] = useState(false);
+  const [masterUploadFile, setMasterUploadFile] = useState(null);
+  const [isMasterUploading, setIsMasterUploading] = useState(false);
+  const [masterUploadResult, setMasterUploadResult] = useState(null);
+  
+  // Selection/Importing state
+  const [selectedMasterIds, setSelectedMasterIds] = useState(new Set());
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importSearch, setImportSearch] = useState('');
+  const [isImporting, setIsImporting] = useState(false);
   
   // Campaigns list state
   const [campaigns, setCampaigns] = useState([]);
@@ -53,6 +66,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
   useEffect(() => {
     fetchCampaigns();
     fetchGlobalSettings();
+    fetchMasterLeads();
   }, []);
 
   // Load campaign specific data when selected campaign changes
@@ -232,6 +246,103 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
     }
   };
 
+  const fetchMasterLeads = async () => {
+    try {
+      const res = await fetch(`${API_URL}/campaigns/master/leads`, { headers });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setMasterContacts(data.leads || []);
+      }
+    } catch (err) {
+      showToast('Error fetching master contacts.', 'error');
+    }
+  };
+
+  const handleUploadMasterContacts = async (e) => {
+    e.preventDefault();
+    if (!masterUploadFile) {
+      showToast('Please select a file to upload.', 'error');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', masterUploadFile);
+
+    setIsMasterUploading(true);
+    try {
+      const res = await fetch(`${API_URL}/campaigns/master/leads/upload`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setMasterUploadResult(data);
+        showToast(`Bulk master upload complete! Parsed ${data.insertedCount} contacts.`, 'success');
+        setMasterUploadFile(null);
+        fetchMasterLeads();
+      } else {
+        showToast(data.error || 'Failed to process spreadsheet file.', 'error');
+      }
+    } catch (err) {
+      showToast('Error uploading file: ' + err.message, 'error');
+    } finally {
+      setIsMasterUploading(false);
+    }
+  };
+
+  const handleDeleteMasterContact = async (leadId) => {
+    if (!window.confirm('Delete this contact from the Master Data Center?')) return;
+    try {
+      const res = await fetch(`${API_URL}/campaigns/master/leads/${leadId}`, {
+        method: 'DELETE',
+        headers
+      });
+      if (res.ok) {
+        setMasterContacts(prev => prev.filter(c => c.id !== leadId));
+        showToast('Contact removed from Master Data Center.', 'info');
+      }
+    } catch (err) {
+      showToast('Error removing contact.', 'error');
+    }
+  };
+
+  const handleImportMasterLeads = async () => {
+    if (!selectedCampaignId) {
+      showToast('Please select a campaign first.', 'error');
+      return;
+    }
+    const leadIds = Array.from(selectedMasterIds);
+    if (leadIds.length === 0) {
+      showToast('Please select at least one contact to import.', 'error');
+      return;
+    }
+
+    setIsImporting(true);
+    try {
+      const res = await fetch(`${API_URL}/campaigns/${selectedCampaignId}/leads/import-master`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ leadIds })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast(`Successfully imported ${data.importedCount} contacts to campaign!`, 'success');
+        setSelectedMasterIds(new Set());
+        setShowImportModal(false);
+        fetchCampaignLeads(selectedCampaignId);
+      } else {
+        showToast(data.error || 'Failed to import contacts.', 'error');
+      }
+    } catch (err) {
+      showToast('Error importing contacts: ' + err.message, 'error');
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   const handleCreateBroadcast = async (e) => {
     e.preventDefault();
     if (!newBroadcastForm.name.trim()) {
@@ -356,10 +467,48 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
     );
   });
 
+  const filteredMasterContacts = masterContacts.filter(c => {
+    const search = masterContactsSearch.toLowerCase();
+    return (
+      (c.name || '').toLowerCase().includes(search) ||
+      (c.contact || '').toLowerCase().includes(search) ||
+      (c.mail || '').toLowerCase().includes(search) ||
+      (c.address || '').toLowerCase().includes(search)
+    );
+  });
+
+  const filteredImportContacts = masterContacts.filter(c => {
+    const search = importSearch.toLowerCase();
+    return (
+      (c.name || '').toLowerCase().includes(search) ||
+      (c.contact || '').toLowerCase().includes(search) ||
+      (c.mail || '').toLowerCase().includes(search) ||
+      (c.address || '').toLowerCase().includes(search)
+    );
+  });
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, height: '100%' }}>
       {/* Tab Navigation Menu */}
       <div style={{ display: 'flex', gap: '0.5rem', borderBottom: '1px solid var(--line)', paddingBottom: '0.85rem', marginBottom: '1.25rem', overflowX: 'auto', flexShrink: 0 }}>
+        <button
+          onClick={() => setActiveSubTab('master_data')}
+          style={{
+            padding: '0.55rem 1.1rem',
+            borderRadius: '8px',
+            border: 'none',
+            fontSize: '0.88rem',
+            fontWeight: 600,
+            cursor: 'pointer',
+            background: activeSubTab === 'master_data' ? 'var(--gold-deep)' : 'transparent',
+            color: activeSubTab === 'master_data' ? '#fff' : 'var(--muted)',
+            transition: 'all 0.2s ease',
+            whiteSpace: 'nowrap'
+          }}
+        >
+          <Database size={16} style={{ marginRight: '0.45rem', verticalAlign: 'middle' }} />
+          Master Data Center
+        </button>
         <button
           onClick={() => setActiveSubTab('data_storage')}
           style={{
@@ -453,7 +602,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
       </div>
 
       {/* Campaigns Selector Header Bar */}
-      {activeSubTab !== 'settings' && activeSubTab !== 'guide' && (
+      {activeSubTab !== 'settings' && activeSubTab !== 'guide' && activeSubTab !== 'master_data' && (
         <div className="glass-panel" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.85rem 1.25rem', borderRadius: '12px', border: '1px solid var(--line)', marginBottom: '1.25rem', gap: '1rem', flexWrap: 'wrap', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
             <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--muted)' }}>Select Campaign:</span>
@@ -517,6 +666,102 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
       {/* Main Sub-Tab Viewport */}
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         
+        {/* TAB 0: MASTER DATA CENTER */}
+        {activeSubTab === 'master_data' && (
+          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+            <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)', padding: '1.25rem' }}>
+              {/* Search and Action Strip */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', gap: '0.75rem', flexWrap: 'wrap', flexShrink: 0 }}>
+                <div style={{ position: 'relative', maxWidth: '320px', width: '100%' }}>
+                  <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} />
+                  <input
+                    type="text"
+                    placeholder="Search master data..."
+                    value={masterContactsSearch}
+                    onChange={(e) => setMasterContactsSearch(e.target.value)}
+                    style={{
+                      width: '100%',
+                      background: 'var(--paper-2)',
+                      border: '1px solid var(--line)',
+                      borderRadius: '8px',
+                      padding: '0.45rem 0.75rem 0.45rem 2.25rem',
+                      fontSize: '0.85rem',
+                      color: 'var(--ink)',
+                      outline: 'none',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button
+                    onClick={handleDownloadTemplate}
+                    className="btn-secondary"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 1rem', fontSize: '0.85rem', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
+                  >
+                    <Download size={14} /> Download Template
+                  </button>
+                  <button
+                    onClick={() => setShowMasterUploadModal(true)}
+                    className="btn-primary"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 1rem', fontSize: '0.85rem', background: 'var(--gold-deep)', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
+                  >
+                    <Upload size={14} /> Upload Master Data
+                  </button>
+                </div>
+              </div>
+
+              {/* Master Contacts grid list */}
+              <div style={{ flex: 1, overflowY: 'auto', border: '1px solid var(--line)', borderRadius: '8px', minHeight: 0 }}>
+                {filteredMasterContacts.length === 0 ? (
+                  <div style={{ padding: '4rem 2rem', textAlign: 'center', color: 'var(--muted)' }}>
+                    <FileSpreadsheet size={36} style={{ color: 'var(--line)', marginBottom: '0.75rem' }} />
+                    <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>No contacts found in Master Data Center.</div>
+                    <div style={{ fontSize: '0.78rem', marginTop: '0.25rem' }}>Upload an Excel or CSV file containing customer rows to populate the master repository.</div>
+                  </div>
+                ) : (
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'left' }}>
+                    <thead style={{ position: 'sticky', top: 0, background: 'var(--paper-2)', zIndex: 10 }}>
+                      <tr style={{ borderBottom: '1px solid var(--line)' }}>
+                        <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--ink)' }}>Name</th>
+                        <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--ink)' }}>Contact (WhatsApp)</th>
+                        <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--ink)' }}>Email Address</th>
+                        <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--ink)' }}>Address</th>
+                        <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--ink)', width: '60px', textAlign: 'right' }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredMasterContacts.map(c => (
+                        <tr key={c.id} style={{ borderBottom: '1px solid var(--line)', transition: 'background 0.15s ease' }} className="table-row-hover">
+                          <td style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>{c.name}</td>
+                          <td style={{ padding: '0.75rem 1rem', fontFamily: 'var(--font-mono)' }}>{c.contact}</td>
+                          <td style={{ padding: '0.75rem 1rem' }}>{c.mail}</td>
+                          <td style={{ padding: '0.75rem 1rem', color: 'var(--muted)' }}>{c.address || '—'}</td>
+                          <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
+                            <button
+                              onClick={() => handleDeleteMasterContact(c.id)}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--err)', padding: '0.2rem' }}
+                              title="Delete Contact"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+              
+              {/* Counter Footer */}
+              <div style={{ marginTop: '0.85rem', fontSize: '0.8rem', color: 'var(--muted)', display: 'flex', justifyContent: 'space-between', flexShrink: 0 }}>
+                <span>Showing {filteredMasterContacts.length} of {masterContacts.length} master entries</span>
+                <span>Centralized Pool</span>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* TAB 1: DATA STORAGE (CONTACTS REPO) */}
         {activeSubTab === 'data_storage' && (
           <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
@@ -552,13 +797,26 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                     />
                   </div>
 
-                  <button
-                    onClick={() => setShowUploadModal(true)}
-                    className="btn-primary"
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 1rem', fontSize: '0.85rem', background: 'var(--gold-deep)', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
-                  >
-                    <Upload size={14} /> Upload Data Sheet
-                  </button>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button
+                      onClick={() => {
+                        setSelectedMasterIds(new Set());
+                        setImportSearch('');
+                        setShowImportModal(true);
+                      }}
+                      className="btn-secondary"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 1rem', fontSize: '0.85rem', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
+                    >
+                      <Plus size={14} /> Add from Master Data
+                    </button>
+                    <button
+                      onClick={() => setShowUploadModal(true)}
+                      className="btn-primary"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 1rem', fontSize: '0.85rem', background: 'var(--gold-deep)', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
+                    >
+                      <Upload size={14} /> Upload Data Sheet
+                    </button>
+                  </div>
                 </div>
 
                 {/* Contacts grid list */}
@@ -1159,6 +1417,232 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* UPLOAD MASTER CONTACTS MODAL */}
+      {showMasterUploadModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: '1rem' }}>
+          <div className="glass-panel" style={{ width: '100%', maxWidth: '480px', borderRadius: '16px', background: 'var(--paper)', border: '1px solid var(--line)', padding: '1.5rem', borderTop: '4px solid var(--gold-deep)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', paddingBottom: '0.5rem', borderBottom: '1px solid var(--line)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <FileSpreadsheet size={20} style={{ color: 'var(--gold-deep)' }} />
+                <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700 }}>Upload Master Contacts</h3>
+              </div>
+              <button onClick={() => { setShowMasterUploadModal(false); setMasterUploadFile(null); setMasterUploadResult(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={18} /></button>
+            </div>
+
+            {!masterUploadResult ? (
+              <form onSubmit={handleUploadMasterContacts}>
+                <div style={{ background: 'rgba(224, 168, 46, 0.08)', border: '1px solid rgba(224, 168, 46, 0.2)', padding: '0.75rem', borderRadius: '8px', marginBottom: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.8rem' }}>
+                  <div>
+                    <span style={{ fontWeight: 700, color: 'var(--gold-deep)' }}>Need the CSV template?</span><br/>
+                    <span style={{ color: 'var(--muted)' }}>Includes all columns: Name, Contact, Mail, Address</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleDownloadTemplate}
+                    className="btn-primary"
+                    style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem', background: 'var(--gold-deep)', color: '#fff' }}
+                  >
+                    <Download size={12} /> Template
+                  </button>
+                </div>
+
+                <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+                  <label className="form-label" style={{ fontWeight: 600 }}>Select CSV or Excel (.xlsx, .xls) File</label>
+                  <input
+                    type="file"
+                    accept=".csv, .xlsx, .xls"
+                    onChange={(e) => setMasterUploadFile(e.target.files[0])}
+                    className="form-input"
+                    required
+                  />
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', borderTop: '1px solid var(--line)', paddingTop: '1rem' }}>
+                  <button type="button" onClick={() => { setShowMasterUploadModal(false); setMasterUploadFile(null); }} className="btn-secondary">Cancel</button>
+                  <button type="submit" className="btn-primary" disabled={isMasterUploading} style={{ background: 'var(--gold-deep)', color: '#fff' }}>
+                    {isMasterUploading ? 'Processing File...' : 'Upload Master Pool'}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div>
+                <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
+                  <Check size={36} style={{ color: '#22c55e', background: 'rgba(34, 197, 94, 0.15)', padding: '0.55rem', borderRadius: '50%', marginBottom: '0.5rem' }} />
+                  <h4 style={{ margin: 0, fontWeight: 700 }}>Upload Processed Successfully</h4>
+                </div>
+
+                <div style={{ background: 'var(--paper-2)', padding: '0.85rem', borderRadius: '8px', border: '1px solid var(--line)', fontSize: '0.82rem', marginBottom: '1.25rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+                    <span>Uploaded Master Contacts:</span>
+                    <span style={{ fontWeight: 700, color: '#22c55e' }}>{masterUploadResult.insertedCount}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+                    <span>Rejected Rows:</span>
+                    <span style={{ fontWeight: 700, color: masterUploadResult.rejectedCount > 0 ? 'var(--err)' : 'var(--muted)' }}>{masterUploadResult.rejectedCount}</span>
+                  </div>
+                </div>
+
+                {masterUploadResult.errors && masterUploadResult.errors.length > 0 && (
+                  <div style={{ maxHeight: '120px', overflowY: 'auto', background: 'var(--paper-2)', border: '1px solid var(--line)', borderRadius: '6px', padding: '0.5rem', fontSize: '0.75rem', color: 'var(--err)', marginBottom: '1.25rem' }}>
+                    <div style={{ fontWeight: 700, marginBottom: '0.25rem' }}>Rejection Warnings:</div>
+                    {masterUploadResult.errors.map((err, i) => (
+                      <div key={i} style={{ marginBottom: '0.15rem' }}>• {err}</div>
+                    ))}
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid var(--line)', paddingTop: '1rem' }}>
+                  <button
+                    onClick={() => {
+                      setShowMasterUploadModal(false);
+                      setMasterUploadFile(null);
+                      setMasterUploadResult(null);
+                    }}
+                    className="btn-primary"
+                    style={{ background: 'var(--gold-deep)', color: '#fff' }}
+                  >
+                    Close Summary
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* IMPORT FROM MASTER DATA MODAL */}
+      {showImportModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: '1rem' }}>
+          <div className="glass-panel" style={{ width: '100%', maxWidth: '780px', maxHeight: '90vh', overflowY: 'auto', borderRadius: '16px', background: 'var(--paper)', border: '1px solid var(--line)', padding: '1.5rem', display: 'flex', flexDirection: 'column', borderTop: '4px solid var(--gold-deep)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', paddingBottom: '0.5rem', borderBottom: '1px solid var(--line)', flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Database size={20} style={{ color: 'var(--gold-deep)' }} />
+                <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700 }}>Add Contacts from Master Data Center</h3>
+              </div>
+              <button onClick={() => { setShowImportModal(false); setSelectedMasterIds(new Set()); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={18} /></button>
+            </div>
+
+            {/* Search filter in modal */}
+            <div style={{ marginBottom: '1rem', position: 'relative', flexShrink: 0 }}>
+              <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} />
+              <input
+                type="text"
+                placeholder="Search master list by name, phone, email, address..."
+                value={importSearch}
+                onChange={(e) => setImportSearch(e.target.value)}
+                style={{
+                  width: '100%',
+                  background: 'var(--paper-2)',
+                  border: '1px solid var(--line)',
+                  borderRadius: '8px',
+                  padding: '0.45rem 0.75rem 0.45rem 2.25rem',
+                  fontSize: '0.85rem',
+                  color: 'var(--ink)',
+                  outline: 'none',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+
+            {/* List with Checkboxes */}
+            <div style={{ flex: 1, overflowY: 'auto', border: '1px solid var(--line)', borderRadius: '8px', minHeight: '200px', marginBottom: '1rem' }}>
+              {filteredImportContacts.length === 0 ? (
+                <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--muted)' }}>
+                  No contacts found matching search in Master Data Center.
+                </div>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.83rem', textAlign: 'left' }}>
+                  <thead style={{ position: 'sticky', top: 0, background: 'var(--paper-2)', zIndex: 10 }}>
+                    <tr style={{ borderBottom: '1px solid var(--line)' }}>
+                      <th style={{ padding: '0.65rem 0.85rem', width: '40px', textAlign: 'center' }}>
+                        <input
+                          type="checkbox"
+                          checked={filteredImportContacts.length > 0 && filteredImportContacts.every(c => selectedMasterIds.has(c.id))}
+                          onChange={(e) => {
+                            const newSet = new Set(selectedMasterIds);
+                            if (e.target.checked) {
+                              filteredImportContacts.forEach(c => newSet.add(c.id));
+                            } else {
+                              filteredImportContacts.forEach(c => newSet.delete(c.id));
+                            }
+                            setSelectedMasterIds(newSet);
+                          }}
+                          style={{ cursor: 'pointer' }}
+                        />
+                      </th>
+                      <th style={{ padding: '0.65rem 0.85rem', fontWeight: 700, color: 'var(--ink)' }}>Name</th>
+                      <th style={{ padding: '0.65rem 0.85rem', fontWeight: 700, color: 'var(--ink)' }}>Contact (WhatsApp)</th>
+                      <th style={{ padding: '0.65rem 0.85rem', fontWeight: 700, color: 'var(--ink)' }}>Email Address</th>
+                      <th style={{ padding: '0.65rem 0.85rem', fontWeight: 700, color: 'var(--ink)' }}>Address</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredImportContacts.map(c => {
+                      const isChecked = selectedMasterIds.has(c.id);
+                      return (
+                        <tr
+                          key={c.id}
+                          onClick={() => {
+                            const newSet = new Set(selectedMasterIds);
+                            if (isChecked) {
+                              newSet.delete(c.id);
+                            } else {
+                              newSet.add(c.id);
+                            }
+                            setSelectedMasterIds(newSet);
+                          }}
+                          style={{ borderBottom: '1px solid var(--line)', cursor: 'pointer', background: isChecked ? 'rgba(224, 168, 46, 0.05)' : 'transparent', transition: 'background 0.1s' }}
+                          className="table-row-hover"
+                        >
+                          <td style={{ padding: '0.65rem 0.85rem', textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(e) => {
+                                const newSet = new Set(selectedMasterIds);
+                                if (e.target.checked) {
+                                  newSet.add(c.id);
+                                } else {
+                                  newSet.delete(c.id);
+                                }
+                                setSelectedMasterIds(newSet);
+                              }}
+                              style={{ cursor: 'pointer' }}
+                            />
+                          </td>
+                          <td style={{ padding: '0.65rem 0.85rem', fontWeight: 600 }}>{c.name}</td>
+                          <td style={{ padding: '0.65rem 0.85rem', fontFamily: 'var(--font-mono)' }}>{c.contact}</td>
+                          <td style={{ padding: '0.65rem 0.85rem' }}>{c.mail}</td>
+                          <td style={{ padding: '0.65rem 0.85rem', color: 'var(--muted)' }}>{c.address || '—'}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--line)', paddingTop: '1rem', flexShrink: 0 }}>
+              <span style={{ fontSize: '0.82rem', color: 'var(--muted)', fontWeight: 600 }}>
+                {selectedMasterIds.size} contact(s) selected
+              </span>
+              <div style={{ display: 'flex', gap: '0.75rem' }}>
+                <button type="button" onClick={() => { setShowImportModal(false); setSelectedMasterIds(new Set()); }} className="btn-secondary">Cancel</button>
+                <button
+                  type="button"
+                  onClick={handleImportMasterLeads}
+                  disabled={isImporting || selectedMasterIds.size === 0}
+                  className="btn-primary"
+                  style={{ background: 'var(--gold-deep)', color: '#fff', opacity: selectedMasterIds.size === 0 ? 0.65 : 1, cursor: selectedMasterIds.size === 0 ? 'not-allowed' : 'pointer' }}
+                >
+                  {isImporting ? 'Importing...' : `Import selected (${selectedMasterIds.size})`}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
