@@ -526,7 +526,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
           }}
         >
           <Users size={16} style={{ marginRight: '0.45rem', verticalAlign: 'middle' }} />
-          Contacts (Data Storage)
+          Campaign Data (Data Storage)
         </button>
         <button
           onClick={() => setActiveSubTab('broadcast')}
