@@ -538,6 +538,11 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
         });
       });
 
+      req.setTimeout(12000, () => {
+        req.destroy();
+        reject({ statusCode: 504, message: 'Meta API request timed out after 12 seconds' });
+      });
+
       req.on('error', (err) => reject({ statusCode: 500, message: err.message }));
       req.write(postData);
       req.end();
