@@ -2879,8 +2879,8 @@ const db = {
     return status;
   },
 
-  async runQuery(sql) {
-    return await pool.query(sql);
+  async runQuery(sql, params = []) {
+    return await pool.query(sql, params);
   },
 
   async getDesignations(employmentType) {
