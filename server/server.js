@@ -6870,10 +6870,20 @@ const registerMetaTemplate = async ({ apiKey, wabaId, phoneId, name, category, l
             buttonsArray.push(btn);
           }
           if (btnObj.ctaPhoneText && btnObj.ctaPhoneValue) {
+            let cleanPhone = String(btnObj.ctaPhoneValue).trim().replace(/[^\d+]/g, '');
+            if (!cleanPhone.startsWith('+')) {
+              if (cleanPhone.length === 10) {
+                cleanPhone = '+91' + cleanPhone;
+              } else if (cleanPhone.startsWith('91') && cleanPhone.length === 12) {
+                cleanPhone = '+' + cleanPhone;
+              } else {
+                cleanPhone = '+91' + cleanPhone;
+              }
+            }
             buttonsArray.push({
               type: 'PHONE_NUMBER',
               text: btnObj.ctaPhoneText.trim().substring(0, 25),
-              phone_number: btnObj.ctaPhoneValue.trim().replace(/\s+/g, '')
+              phone_number: cleanPhone
             });
           }
           if (buttonsArray.length > 0) {
