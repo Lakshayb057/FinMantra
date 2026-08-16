@@ -4118,131 +4118,131 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       {/* MAIN CONTENT AREA */}
       <main className={`admin-main-content ${['leads', 'cards', 'agents', 'locations', 'settings', 'campaigns'].includes(activeTab) ? 'desktop-no-scroll-content' : ''}`} style={{ flex: 1, padding: '1rem 1.5rem', minWidth: 0, display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }}>
         {/* Top Header Strip inside Main Content */}
-        <div className="admin-header-bar" style={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
-          alignItems: 'center', 
-          marginBottom: '0.85rem',
-          paddingBottom: '0.65rem',
-          borderBottom: '1px solid var(--line)',
-          flexShrink: 0
-        }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.25rem' }}>
-              <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: '1.45rem', color: 'var(--ink)' }}>
-                {activeTab === 'leads' && 'Leads Repository'}
-                {activeTab === 'leads_dashboard' && 'Leads Mapping & Analytics'}
-                {activeTab === 'cards' && 'Cards Catalog Manager'}
-                {activeTab === 'agents' && 'Agents Controller'}
-                {activeTab === 'locations' && 'Kiosks & City Locations'}
-                {activeTab === 'settings' && 'System Settings & API'}
-                {activeTab === 'campaigns' && 'Campaigns & Broadcasts'}
-              </span>
-              <span style={{ 
-                fontSize: '0.7rem', 
-                fontWeight: 700, 
-                color: 'var(--gold-deep)', 
-                background: 'rgba(224, 168, 46, 0.12)', 
-                border: '1px solid rgba(224, 168, 46, 0.25)', 
-                padding: '0.2rem 0.6rem', 
-                borderRadius: '20px',
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px'
-              }}>
-                FinMantra Admin
-              </span>
+        {activeTab !== 'campaigns' && (
+          <div className="admin-header-bar" style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center', 
+            marginBottom: '0.85rem',
+            paddingBottom: '0.65rem',
+            borderBottom: '1px solid var(--line)',
+            flexShrink: 0
+          }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.25rem' }}>
+                <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: '1.45rem', color: 'var(--ink)' }}>
+                  {activeTab === 'leads' && 'Leads Repository'}
+                  {activeTab === 'leads_dashboard' && 'Leads Mapping & Analytics'}
+                  {activeTab === 'cards' && 'Cards Catalog Manager'}
+                  {activeTab === 'agents' && 'Agents Controller'}
+                  {activeTab === 'locations' && 'Kiosks & City Locations'}
+                  {activeTab === 'settings' && 'System Settings & API'}
+                </span>
+                <span style={{ 
+                  fontSize: '0.7rem', 
+                  fontWeight: 700, 
+                  color: 'var(--gold-deep)', 
+                  background: 'rgba(224, 168, 46, 0.12)', 
+                  border: '1px solid rgba(224, 168, 46, 0.25)', 
+                  padding: '0.2rem 0.6rem', 
+                  borderRadius: '20px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px'
+                }}>
+                  FinMantra Admin
+                </span>
+              </div>
+              <p style={{ color: 'var(--muted)', fontSize: '0.85rem', margin: 0 }}>
+                {activeTab === 'leads' && 'View, search, filter, and export all customer leads registered in the database.'}
+                {activeTab === 'leads_dashboard' && 'Visual analytics, conversion funnel, and geographical mapping from bank MIS uploads.'}
+                {activeTab === 'cards' && 'Configure credit card offers, ad tracking parameters, and dynamic partner redirect templates.'}
+                {activeTab === 'agents' && 'Manage field sales agents, login credentials, assigned banks, and kiosk permissions.'}
+                {activeTab === 'locations' && 'Manage operational cities, kiosk centers, and serviceability locations.'}
+                {activeTab === 'settings' && 'Configure WhatsApp API gateways, export templates, security access rules, and system settings.'}
+              </p>
             </div>
-            <p style={{ color: 'var(--muted)', fontSize: '0.85rem', margin: 0 }}>
-              {activeTab === 'leads' && 'View, search, filter, and export all customer leads registered in the database.'}
-              {activeTab === 'leads_dashboard' && 'Visual analytics, conversion funnel, and geographical mapping from bank MIS uploads.'}
-              {activeTab === 'cards' && 'Configure credit card offers, ad tracking parameters, and dynamic partner redirect templates.'}
-              {activeTab === 'agents' && 'Manage field sales agents, login credentials, assigned banks, and kiosk permissions.'}
-              {activeTab === 'locations' && 'Manage operational cities, kiosk centers, and serviceability locations.'}
-              {activeTab === 'settings' && 'Configure WhatsApp API gateways, export templates, security access rules, and system settings.'}
-              {activeTab === 'campaigns' && 'Create campaigns, import operational contacts, and schedule outbound broadcasts via WhatsApp & Email.'}
-            </p>
-          </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', marginLeft: 'auto', flexShrink: 0 }}>
-            {activeTab === 'leads' && (
-              <>
-                <button 
-                  onClick={() => setShowCreateLeadModal(true)} 
-                  className="btn-primary" 
-                  style={{ padding: '0.4rem 0.85rem', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', height: '34px', borderRadius: '4px', cursor: 'pointer', whiteSpace: 'nowrap', background: 'var(--gold-deep)', color: '#fff' }}
-                >
-                  <UserPlus size={14} /> Create Lead
-                </button>
-                <button 
-                  onClick={() => setShowUploadLeadsModal(true)} 
-                  className="btn-secondary" 
-                  style={{ padding: '0.4rem 0.85rem', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', height: '34px', borderRadius: '4px', cursor: 'pointer', whiteSpace: 'nowrap' }}
-                >
-                  <FileSpreadsheet size={14} /> Upload Leads
-                </button>
-                <button 
-                  onClick={() => { setShowUploadedFilesModal(true); fetchUploadedFilesList(); }} 
-                  className="btn-secondary" 
-                  style={{ padding: '0.4rem 0.85rem', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', height: '34px', borderRadius: '4px', cursor: 'pointer', whiteSpace: 'nowrap' }}
-                >
-                  <FolderArchive size={14} /> Uploaded Files
-                </button>
-                {canDelete && selectedLeads.length > 0 && (
-                  <button onClick={handleBulkDeleteLeads} className="btn-secondary" style={{ background: 'rgba(209, 67, 67, 0.15)', color: 'var(--err)', border: '1px solid rgba(209, 67, 67, 0.2)', padding: '0.4rem 0.85rem', fontSize: '0.82rem', height: '34px', borderRadius: '2px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                    <Trash2 size={14} /> Delete ({selectedLeads.length})
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', marginLeft: 'auto', flexShrink: 0 }}>
+              {activeTab === 'leads' && (
+                <>
+                  <button 
+                    onClick={() => setShowCreateLeadModal(true)} 
+                    className="btn-primary" 
+                    style={{ padding: '0.4rem 0.85rem', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', height: '34px', borderRadius: '4px', cursor: 'pointer', whiteSpace: 'nowrap', background: 'var(--gold-deep)', color: '#fff' }}
+                  >
+                    <UserPlus size={14} /> Create Lead
                   </button>
-                )}
-                <button onClick={handleCsvExport} className="btn-secondary" style={{ padding: '0.4rem 0.85rem', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', height: '34px', borderRadius: '2px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                  <Download size={14} /> Export to CSV
-                </button>
-                <button onClick={() => setShowUploadMISModal(true)} className="btn-secondary" style={{ padding: '0.4rem 0.85rem', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', height: '34px', borderRadius: '2px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                  <Upload size={14} /> Upload MIS
-                </button>
-              </>
-            )}
+                  <button 
+                    onClick={() => setShowUploadLeadsModal(true)} 
+                    className="btn-secondary" 
+                    style={{ padding: '0.4rem 0.85rem', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', height: '34px', borderRadius: '4px', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                  >
+                    <FileSpreadsheet size={14} /> Upload Leads
+                  </button>
+                  <button 
+                    onClick={() => { setShowUploadedFilesModal(true); fetchUploadedFilesList(); }} 
+                    className="btn-secondary" 
+                    style={{ padding: '0.4rem 0.85rem', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', height: '34px', borderRadius: '4px', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                  >
+                    <FolderArchive size={14} /> Uploaded Files
+                  </button>
+                  {canDelete && selectedLeads.length > 0 && (
+                    <button onClick={handleBulkDeleteLeads} className="btn-secondary" style={{ background: 'rgba(209, 67, 67, 0.15)', color: 'var(--err)', border: '1px solid rgba(209, 67, 67, 0.2)', padding: '0.4rem 0.85rem', fontSize: '0.82rem', height: '34px', borderRadius: '2px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                      <Trash2 size={14} /> Delete ({selectedLeads.length})
+                    </button>
+                  )}
+                  <button onClick={handleCsvExport} className="btn-secondary" style={{ padding: '0.4rem 0.85rem', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', height: '34px', borderRadius: '2px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                    <Download size={14} /> Export to CSV
+                  </button>
+                  <button onClick={() => setShowUploadMISModal(true)} className="btn-secondary" style={{ padding: '0.4rem 0.85rem', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', height: '34px', borderRadius: '2px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                    <Upload size={14} /> Upload MIS
+                  </button>
+                </>
+              )}
 
-            {activeTab === 'leads_dashboard' && (
-              <>
-                <button 
-                  onClick={() => handleExportMISLeads(filteredMappedLeads)} 
-                  className="btn-secondary"
-                  style={{ 
-                    display: 'inline-flex', 
-                    alignItems: 'center', 
-                    gap: '0.4rem', 
-                    padding: '0.4rem 0.9rem', 
-                    fontSize: '0.82rem',
-                    height: '34px',
-                    borderRadius: '2px',
-                    cursor: 'pointer',
-                    whiteSpace: 'nowrap'
-                  }}
-                  title="Export all currently filtered mapped leads with Redirect URLs to Excel"
-                >
-                  <Download size={14} /> Export to Excel
-                </button>
-                <button 
-                  onClick={fetchMISStats} 
-                  className="btn-secondary"
-                  disabled={loadingMISStats}
-                  style={{ 
-                    display: 'inline-flex', 
-                    alignItems: 'center', 
-                    gap: '0.4rem', 
-                    padding: '0.4rem 0.9rem', 
-                    fontSize: '0.82rem',
-                    height: '34px',
-                    borderRadius: '2px',
-                    cursor: 'pointer',
-                    whiteSpace: 'nowrap'
-                  }}
-                >
-                  <RefreshCw size={14} className={loadingMISStats ? 'spin' : ''} /> Sync Dashboard
-                </button>
-              </>
-            )}
+              {activeTab === 'leads_dashboard' && (
+                <>
+                  <button 
+                    onClick={() => handleExportMISLeads(filteredMappedLeads)} 
+                    className="btn-secondary"
+                    style={{ 
+                      display: 'inline-flex', 
+                      alignItems: 'center', 
+                      gap: '0.4rem', 
+                      padding: '0.4rem 0.9rem', 
+                      fontSize: '0.82rem',
+                      height: '34px',
+                      borderRadius: '2px',
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap'
+                    }}
+                    title="Export all currently filtered mapped leads with Redirect URLs to Excel"
+                  >
+                    <Download size={14} /> Export to Excel
+                  </button>
+                  <button 
+                    onClick={fetchMISStats} 
+                    className="btn-secondary"
+                    disabled={loadingMISStats}
+                    style={{ 
+                      display: 'inline-flex', 
+                      alignItems: 'center', 
+                      gap: '0.4rem', 
+                      padding: '0.4rem 0.9rem', 
+                      fontSize: '0.82rem',
+                      height: '34px',
+                      borderRadius: '2px',
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    <RefreshCw size={14} className={loadingMISStats ? 'spin' : ''} /> Sync Dashboard
+                  </button>
+                </>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
       {/* TAB CONTENT */}
       {loading ? (

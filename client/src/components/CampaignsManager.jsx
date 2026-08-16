@@ -623,31 +623,6 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
             Direct Meta WhatsApp &amp; SMTP broadcast dispatch, unified master repository, and real-time delivery analytics.
           </p>
         </div>
-
-        <div style={{ display: 'flex', gap: '0.65rem' }}>
-          <button
-            onClick={() => {
-              setBroadcastWizardStep(1);
-              setShowNewBroadcastModal(true);
-            }}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '0.45rem',
-              padding: '0.55rem 1.15rem',
-              borderRadius: '8px',
-              background: 'var(--gold-deep)',
-              color: '#fff',
-              border: 'none',
-              fontWeight: 700,
-              fontSize: '0.88rem',
-              cursor: 'pointer',
-              boxShadow: '0 4px 12px rgba(224, 168, 46, 0.25)'
-            }}
-          >
-            <Plus size={16} /> + Broadcast Campaign
-          </button>
-        </div>
       </div>
 
       {/* Subtab Navigation Bar */}
