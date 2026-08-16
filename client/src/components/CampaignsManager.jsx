@@ -93,6 +93,11 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
   const [broadcastUploadStats, setBroadcastUploadStats] = useState(null);
   const [broadcastUploadError, setBroadcastUploadError] = useState('');
 
+  // Delivery Logs Modal state
+  const [viewingLogsBroadcast, setViewingLogsBroadcast] = useState(null);
+  const [broadcastLogs, setBroadcastLogs] = useState([]);
+  const [isLoadingLogs, setIsLoadingLogs] = useState(false);
+
   // SMTP Settings state
   const [smtpSettings, setSmtpSettings] = useState({
     host: '',
@@ -632,6 +637,26 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
     }
   };
 
+  // View detailed broadcast delivery logs
+  const handleOpenBroadcastLogs = async (b) => {
+    setViewingLogsBroadcast(b);
+    setIsLoadingLogs(true);
+    setBroadcastLogs([]);
+    try {
+      const res = await fetch(`${API_URL}/campaigns/broadcasts/${b.id}/logs`, { headers });
+      const data = await res.json();
+      if (data.success) {
+        setBroadcastLogs(data.logs || []);
+      } else {
+        showToast(data.error || 'Failed to load delivery logs.', 'error');
+      }
+    } catch (err) {
+      showToast('Network error fetching logs.', 'error');
+    } finally {
+      setIsLoadingLogs(false);
+    }
+  };
+
   // Helper for Quality Rating badge colors
   const getQualityRatingBadge = (rating) => {
     const r = String(rating || '').toUpperCase();
@@ -1088,14 +1113,19 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                           {b.meta_phone_number || b.sender_email || 'Default'}
                         </td>
                         <td style={{ padding: '0.65rem 0.75rem' }}>
-                          <span style={{
-                            padding: '0.2rem 0.55rem',
-                            borderRadius: '999px',
-                            fontSize: '0.72rem',
-                            fontWeight: 700,
-                            background: b.status === 'sent' ? 'rgba(22, 163, 123, 0.12)' : b.status === 'processing' ? 'rgba(59, 130, 246, 0.12)' : 'rgba(224, 168, 46, 0.12)',
-                            color: b.status === 'sent' ? '#16a37b' : b.status === 'processing' ? '#3b82f6' : 'var(--gold-deep)'
-                          }}>
+                          <span 
+                            onClick={() => handleOpenBroadcastLogs(b)}
+                            style={{
+                              padding: '0.2rem 0.55rem',
+                              borderRadius: '999px',
+                              fontSize: '0.72rem',
+                              fontWeight: 700,
+                              background: b.status === 'sent' ? 'rgba(22, 163, 123, 0.12)' : b.status === 'processing' ? 'rgba(59, 130, 246, 0.12)' : b.status === 'failed' ? 'rgba(239, 68, 68, 0.12)' : 'rgba(224, 168, 46, 0.12)',
+                              color: b.status === 'sent' ? '#16a37b' : b.status === 'processing' ? '#3b82f6' : b.status === 'failed' ? '#ef4444' : 'var(--gold-deep)',
+                              cursor: 'pointer'
+                            }}
+                            title="Click to view detailed delivery logs"
+                          >
                             {b.status}
                           </span>
                         </td>
@@ -1106,6 +1136,13 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                           {b.created_at ? new Date(b.created_at).toLocaleDateString() : '—'}
                         </td>
                         <td style={{ padding: '0.65rem 0.75rem', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                          <button
+                            onClick={() => handleOpenBroadcastLogs(b)}
+                            style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '0.2rem', marginRight: '0.4rem' }}
+                            title="View Delivery Logs"
+                          >
+                            <FileText size={15} />
+                          </button>
                           <button
                             onClick={() => handleEditBroadcast(b)}
                             style={{ background: 'none', border: 'none', color: 'var(--gold-deep)', cursor: 'pointer', padding: '0.2rem', marginRight: '0.4rem' }}
@@ -1517,14 +1554,19 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                             {b.meta_phone_number || b.sender_email || 'Default Sender'}
                           </td>
                           <td style={{ padding: '0.75rem 0.85rem' }}>
-                            <span style={{
-                              padding: '0.2rem 0.55rem',
-                              borderRadius: '999px',
-                              fontSize: '0.72rem',
-                              fontWeight: 700,
-                              background: b.status === 'sent' ? 'rgba(22, 163, 123, 0.12)' : b.status === 'processing' ? 'rgba(59, 130, 246, 0.12)' : 'rgba(224, 168, 46, 0.12)',
-                              color: b.status === 'sent' ? '#16a37b' : b.status === 'processing' ? '#3b82f6' : 'var(--gold-deep)'
-                            }}>
+                            <span 
+                              onClick={() => handleOpenBroadcastLogs(b)}
+                              style={{
+                                padding: '0.2rem 0.55rem',
+                                borderRadius: '999px',
+                                fontSize: '0.72rem',
+                                fontWeight: 700,
+                                background: b.status === 'sent' ? 'rgba(22, 163, 123, 0.12)' : b.status === 'processing' ? 'rgba(59, 130, 246, 0.12)' : b.status === 'failed' ? 'rgba(239, 68, 68, 0.12)' : 'rgba(224, 168, 46, 0.12)',
+                                color: b.status === 'sent' ? '#16a37b' : b.status === 'processing' ? '#3b82f6' : b.status === 'failed' ? '#ef4444' : 'var(--gold-deep)',
+                                cursor: 'pointer'
+                              }}
+                              title="Click to view detailed delivery logs"
+                            >
                               {b.status}
                             </span>
                           </td>
@@ -1554,6 +1596,26 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                                 <Send size={12} style={{ marginRight: '0.25rem', verticalAlign: 'middle' }} /> Send Now
                               </button>
                             )}
+                            <button
+                              onClick={() => handleOpenBroadcastLogs(b)}
+                              style={{
+                                padding: '0.3rem 0.55rem',
+                                borderRadius: '4px',
+                                background: 'rgba(59, 130, 246, 0.1)',
+                                color: '#3b82f6',
+                                border: '1px solid rgba(59, 130, 246, 0.2)',
+                                fontSize: '0.75rem',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.25rem',
+                                marginRight: '0.4rem'
+                              }}
+                              title="View Delivery Logs"
+                            >
+                              <FileText size={13} /> Logs
+                            </button>
                             <button
                               onClick={() => handleEditBroadcast(b)}
                               style={{
@@ -2428,6 +2490,101 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                 }}
               >
                 {isCreatingTemplate ? 'Creating & Syncing...' : 'Create Template'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 3: VIEW BROADCAST DELIVERY LOGS */}
+      {/* ========================================================================= */}
+      {viewingLogsBroadcast && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '1rem' }}>
+          <div style={{ background: 'var(--paper)', border: '1px solid var(--line)', borderRadius: '16px', maxWidth: '820px', width: '100%', maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 50px rgba(0,0,0,0.3)', overflow: 'hidden' }}>
+            <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800 }}>
+                  Delivery Logs: {viewingLogsBroadcast.name}
+                </h3>
+                <div style={{ fontSize: '0.78rem', color: 'var(--muted)', marginTop: '0.2rem' }}>
+                  Channel: <strong style={{ textTransform: 'capitalize' }}>{viewingLogsBroadcast.channel}</strong> • Targeted: <strong>{viewingLogsBroadcast.targeted_count || 0}</strong> • Delivered: <strong style={{ color: '#16a37b' }}>{viewingLogsBroadcast.delivered_count || 0}</strong> • Failed: <strong style={{ color: '#ef4444' }}>{viewingLogsBroadcast.failed_count || 0}</strong>
+                </div>
+              </div>
+              <button onClick={() => setViewingLogsBroadcast(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{ padding: '1.25rem', overflowY: 'auto', flex: 1 }}>
+              {isLoadingLogs ? (
+                <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--muted)' }}>
+                  <RefreshCw size={24} className="spin-slow" style={{ color: 'var(--gold-deep)', marginBottom: '0.5rem' }} />
+                  <div>Fetching delivery logs...</div>
+                </div>
+              ) : broadcastLogs.length === 0 ? (
+                <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--muted)' }}>
+                  <Info size={32} style={{ color: 'var(--line)', marginBottom: '0.5rem' }} />
+                  <div style={{ fontWeight: 600 }}>No delivery log records found for this broadcast yet.</div>
+                  <div style={{ fontSize: '0.8rem', marginTop: '0.25rem' }}>Logs are recorded in real-time as each recipient contact is contacted.</div>
+                </div>
+              ) : (
+                <div className="campaigns-table-wrapper">
+                  <table className="campaigns-table">
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid var(--line)', color: 'var(--muted)', fontSize: '0.75rem', textTransform: 'uppercase' }}>
+                        <th style={{ padding: '0.5rem 0.75rem' }}>Recipient</th>
+                        <th style={{ padding: '0.5rem 0.75rem' }}>Channel</th>
+                        <th style={{ padding: '0.5rem 0.75rem' }}>Status</th>
+                        <th style={{ padding: '0.5rem 0.75rem' }}>Details / Error Reason</th>
+                        <th style={{ padding: '0.5rem 0.75rem' }}>Timestamp</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {broadcastLogs.map(log => (
+                        <tr key={log.id} style={{ borderBottom: '1px solid var(--line)' }} className="table-row-hover">
+                          <td style={{ padding: '0.6rem 0.75rem' }}>
+                            <div style={{ fontWeight: 700, fontSize: '0.84rem' }}>{log.lead_name || 'Recipient'}</div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>
+                              {log.lead_contact || ''} {log.lead_mail ? `• ${log.lead_mail}` : ''}
+                            </div>
+                          </td>
+                          <td style={{ padding: '0.6rem 0.75rem', textTransform: 'capitalize', fontSize: '0.8rem' }}>
+                            {log.channel}
+                          </td>
+                          <td style={{ padding: '0.6rem 0.75rem' }}>
+                            <span style={{
+                              padding: '0.15rem 0.5rem',
+                              borderRadius: '999px',
+                              fontSize: '0.72rem',
+                              fontWeight: 700,
+                              background: log.status === 'sent' || log.status === 'delivered' ? 'rgba(22, 163, 123, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                              color: log.status === 'sent' || log.status === 'delivered' ? '#16a37b' : '#ef4444'
+                            }}>
+                              {log.status === 'sent' || log.status === 'delivered' ? 'Delivered' : 'Failed'}
+                            </span>
+                          </td>
+                          <td style={{ padding: '0.6rem 0.75rem', fontSize: '0.78rem', color: log.error_message ? '#ef4444' : '#16a37b', maxWidth: '300px', wordBreak: 'break-word' }}>
+                            {log.error_message || 'Sent & delivered successfully.'}
+                          </td>
+                          <td style={{ padding: '0.6rem 0.75rem', fontSize: '0.75rem', color: 'var(--muted)', whiteSpace: 'nowrap' }}>
+                            {log.sent_at ? new Date(log.sent_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div style={{ padding: '0.85rem 1.5rem', borderTop: '1px solid var(--line)', display: 'flex', justifyContent: 'flex-end', background: 'var(--paper-2)' }}>
+              <button
+                type="button"
+                onClick={() => setViewingLogsBroadcast(null)}
+                style={{ padding: '0.45rem 1.1rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper)', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }}
+              >
+                Close
               </button>
             </div>
           </div>

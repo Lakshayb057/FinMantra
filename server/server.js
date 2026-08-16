@@ -6040,8 +6040,10 @@ async function checkAndRunScheduledBroadcasts() {
       const transporter = await getEmailTransporter();
 
       for (const lead of leads) {
-        let emailSuccess = true;
-        let waSuccess = true;
+        let emailAttempted = false;
+        let waAttempted = false;
+        let emailSuccess = false;
+        let waSuccess = false;
         let emailError = null;
         let waError = null;
 
@@ -6059,6 +6061,7 @@ async function checkAndRunScheduledBroadcasts() {
 
         // --- EMAIL CHANNEL ---
         if ((b.channel === 'email' || b.channel === 'both') && lead.mail) {
+          emailAttempted = true;
           if (lead.email_optin === false) {
             emailSuccess = false;
             emailError = 'User opted out of email communications.';
@@ -6080,6 +6083,7 @@ async function checkAndRunScheduledBroadcasts() {
                   subject,
                   html: body.replace(/\n/g, '<br/>')
                 });
+                emailSuccess = true;
                 await db.incrementMasterLeadMetric(lead.id, 'email', 'sent');
                 await db.incrementMasterLeadMetric(lead.id, 'email', 'delivered');
                 deliveredCount++;
@@ -6088,7 +6092,8 @@ async function checkAndRunScheduledBroadcasts() {
                 emailError = err.message;
               }
             } else {
-              console.log(`[Simulated Email] Sent to ${lead.mail} with subject "${subject}"`);
+              console.log(`[Email Dispatch Simulation] Sent to ${lead.mail} with subject "${subject}"`);
+              emailSuccess = true;
               await db.incrementMasterLeadMetric(lead.id, 'email', 'sent');
               await db.incrementMasterLeadMetric(lead.id, 'email', 'delivered');
               deliveredCount++;
@@ -6108,6 +6113,7 @@ async function checkAndRunScheduledBroadcasts() {
 
         // --- WHATSAPP CHANNEL ---
         if ((b.channel === 'whatsapp' || b.channel === 'both') && lead.contact) {
+          waAttempted = true;
           if (lead.whatsapp_optin === false) {
             waSuccess = false;
             waError = 'User opted out of WhatsApp communications.';
@@ -6181,12 +6187,13 @@ async function checkAndRunScheduledBroadcasts() {
                 }
               }
 
+              waSuccess = true;
               await db.incrementMasterLeadMetric(lead.id, 'whatsapp', 'sent');
               await db.incrementMasterLeadMetric(lead.id, 'whatsapp', 'delivered');
               deliveredCount++;
             } catch (err) {
               waSuccess = false;
-              waError = err.message;
+              waError = err.message || JSON.stringify(err);
             }
           }
 
@@ -6201,10 +6208,20 @@ async function checkAndRunScheduledBroadcasts() {
           ).catch(err => console.error('[WhatsApp Log Warn]:', err.message));
         }
 
-        if (emailSuccess && waSuccess) {
+        let isLeadSuccess = false;
+        if (b.channel === 'both') {
+          isLeadSuccess = (emailAttempted && emailSuccess) || (waAttempted && waSuccess);
+        } else if (b.channel === 'email') {
+          isLeadSuccess = emailAttempted && emailSuccess;
+        } else if (b.channel === 'whatsapp') {
+          isLeadSuccess = waAttempted && waSuccess;
+        }
+
+        if (isLeadSuccess) {
           sentCount++;
         } else {
           failedCount++;
+          console.error(`[Campaign Dispatch Lead Error] Lead: ${lead.name || 'Anonymous'} (Phone: ${lead.contact}, Email: ${lead.mail}) - WA Error: "${waError || (waAttempted ? 'unknown error' : 'no contact')}" | Email Error: "${emailError || (emailAttempted ? 'unknown error' : 'no email')}"`);
         }
       }
 
@@ -7544,7 +7561,7 @@ app.delete(['/api/campaigns/:id/broadcasts/:broadcastId', '/api/campaigns/broadc
 });
 
 // Get detailed delivery logs for a broadcast
-app.get('/api/campaigns/:id/broadcasts/:broadcastId/logs', authenticateToken, async (req, res) => {
+app.get(['/api/campaigns/:id/broadcasts/:broadcastId/logs', '/api/campaigns/broadcasts/:broadcastId/logs'], authenticateToken, async (req, res) => {
   try {
     const list = await db.getCampaignLogs(req.params.broadcastId);
     res.json({ success: true, logs: list });
