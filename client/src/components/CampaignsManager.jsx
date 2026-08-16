@@ -1684,7 +1684,11 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                   </ul>
                 </div>
               </div>
-                   {/* TAB: TEMPLATES MANAGER */}
+            </div>
+          </div>
+        )}
+
+        {/* TAB: TEMPLATES MANAGER */}
         {activeSubTab === 'templates' && (
           <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexShrink: 0 }}>
@@ -1852,10 +1856,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
               )}
             </div>
           </div>
-        )}     </div>
-          </div>
         )}
-
       </div>
 
       {/* CREATE CAMPAIGN MODAL */}
