@@ -6543,11 +6543,109 @@ app.post('/api/campaigns/templates', authenticateToken, async (req, res) => {
   }
 });
 
+// Helper to delete message template from Meta Graph API
+const deleteMetaTemplate = async ({ apiKey, wabaId, name, apiVersion = 'v25.0' }) => {
+  return new Promise((resolve, reject) => {
+    const cleanName = name.toLowerCase().replace(/[^a-z0-9_]/g, '_');
+    const options = {
+      hostname: 'graph.facebook.com',
+      port: 443,
+      path: `/${apiVersion}/${wabaId}/message_templates?name=${encodeURIComponent(cleanName)}`,
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`
+      }
+    };
+
+    const req = https.request(options, (res) => {
+      let body = '';
+      res.on('data', chunk => body += chunk);
+      res.on('end', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          try {
+            resolve(JSON.parse(body));
+          } catch (e) {
+            resolve({ success: true });
+          }
+        } else {
+          resolve({ success: false, error: `Meta API returned ${res.statusCode}: ${body}` });
+        }
+      });
+    });
+
+    req.setTimeout(10000, () => {
+      req.destroy(new Error('Meta template deletion request timed out.'));
+    });
+
+    req.on('error', (err) => {
+      resolve({ success: false, error: err.message });
+    });
+
+    req.end();
+  });
+};
+
 // Delete a template
 app.delete('/api/campaigns/templates/:templateId', authenticateToken, async (req, res) => {
   try {
-    const deleted = await db.deleteCampaignTemplate(req.params.templateId);
-    res.json({ success: true, template: deleted });
+    const templateId = req.params.templateId;
+    const t = await db.runQuery('SELECT * FROM campaign_templates WHERE id = $1', [templateId]);
+    const templateRecord = t.rows[0];
+
+    let metaDeleteResult = null;
+    if (templateRecord && templateRecord.type === 'whatsapp') {
+      const cleanName = templateRecord.meta_template_name || templateRecord.name;
+      const settings = await db.getSettings();
+      const apiKey = getSettingVal(settings, 'wa_api_key', 'WA_API_KEY');
+      let wabaId = getSettingVal(settings, 'wa_business_account_id', 'WA_BUSINESS_ACCOUNT_ID');
+      const apiVersion = getSettingVal(settings, 'wa_api_version', 'WA_API_VERSION', 'v25.0');
+
+      if (apiKey) {
+        if (!wabaId || wabaId === 'undefined' || wabaId === 'null') {
+          const fetchWabas = async () => {
+            return new Promise((resolveWaba, rejectWaba) => {
+              const options = {
+                hostname: 'graph.facebook.com',
+                port: 443,
+                path: `/${apiVersion}/me/whatsapp_business_accounts`,
+                method: 'GET',
+                headers: { 'Authorization': `Bearer ${apiKey}` }
+              };
+              const req = https.request(options, (res) => {
+                let responseBody = '';
+                res.on('data', chunk => responseBody += chunk);
+                res.on('end', () => {
+                  if (res.statusCode >= 200 && res.statusCode < 300) {
+                    try {
+                      const parsed = JSON.parse(responseBody);
+                      if (parsed.data && parsed.data.length > 0) {
+                        resolveWaba(parsed.data[0].id);
+                      } else { resolveWaba(null); }
+                    } catch (e) { resolveWaba(null); }
+                  } else { resolveWaba(null); }
+                });
+              });
+              req.setTimeout(5000);
+              req.on('error', () => resolveWaba(null));
+              req.end();
+            });
+          };
+          wabaId = await fetchWabas().catch(() => null);
+        }
+
+        if (wabaId && cleanName) {
+          metaDeleteResult = await deleteMetaTemplate({
+            apiKey,
+            wabaId,
+            name: cleanName,
+            apiVersion
+          }).catch(err => ({ success: false, error: err.message }));
+        }
+      }
+    }
+
+    const deleted = await db.deleteCampaignTemplate(templateId);
+    res.json({ success: true, template: deleted, metaDeleteResult });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
