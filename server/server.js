@@ -6103,10 +6103,27 @@ const registerMetaTemplate = async ({ apiKey, wabaId, name, category, language, 
       components.push(headerComp);
     }
     
-    components.push({
+    const bodyComp = {
       type: 'BODY',
       text: bodyText
-    });
+    };
+
+    // Auto-detect and generate example parameter placeholders if variables exist
+    const regex = /\{\{(\d+)\}\}/g;
+    const matches = [...bodyText.matchAll(regex)];
+    if (matches.length > 0) {
+      const paramNumbers = matches.map(m => parseInt(m[1], 10));
+      const maxParam = Math.max(...paramNumbers);
+      const sampleValues = [];
+      for (let i = 1; i <= maxParam; i++) {
+        sampleValues.push(`Placeholder ${i}`);
+      }
+      bodyComp.example = {
+        body_text: [sampleValues]
+      };
+    }
+
+    components.push(bodyComp);
     
     const payload = {
       name: cleanName,
