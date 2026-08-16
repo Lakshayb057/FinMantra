@@ -499,6 +499,9 @@ async function initPgSchema() {
     await safeQuery("ALTER TABLE campaign_templates ADD COLUMN IF NOT EXISTS buttons TEXT");
     await safeQuery("ALTER TABLE campaign_templates ADD COLUMN IF NOT EXISTS meta_phone_number_id VARCHAR(100)");
     await safeQuery("ALTER TABLE campaign_templates ADD COLUMN IF NOT EXISTS waba_id VARCHAR(100)");
+    await safeQuery("ALTER TABLE campaign_templates ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'APPROVED'");
+    await safeQuery("ALTER TABLE campaign_templates ADD COLUMN IF NOT EXISTS language VARCHAR(50) DEFAULT 'en_US'");
+    await safeQuery("ALTER TABLE campaign_templates ADD COLUMN IF NOT EXISTS category VARCHAR(50) DEFAULT 'MARKETING'");
     await safeQuery("ALTER TABLE campaign_logs DROP CONSTRAINT IF EXISTS campaign_logs_campaign_lead_id_fkey");
 
     await safeQuery("ALTER TABLE campaign_master_leads ADD COLUMN IF NOT EXISTS finmantra_id VARCHAR(50)");

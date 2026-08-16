@@ -97,6 +97,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
   const [viewingLogsBroadcast, setViewingLogsBroadcast] = useState(null);
   const [broadcastLogs, setBroadcastLogs] = useState([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
+  const [isSyncingMetaTemplates, setIsSyncingMetaTemplates] = useState(false);
 
   // SMTP Settings state
   const [smtpSettings, setSmtpSettings] = useState({
@@ -1730,38 +1731,79 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                 <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700 }}>Meta WhatsApp &amp; Email Template Manager</h3>
                 <div style={{ color: 'var(--muted)', fontSize: '0.82rem' }}>Templates registered with Meta Cloud API and verified under business accounts.</div>
               </div>
-              <button
-                onClick={() => {
-                  setNewTemplateForm({
-                    name: '',
-                    type: 'whatsapp',
-                    subject: '',
-                    body: '',
-                    metaTemplateName: '',
-                    mediaUrl: '',
-                    category: 'MARKETING',
-                    language: 'en_US',
-                    headerFormat: 'NONE',
-                    buttons: { buttonType: 'NONE', ctaUrlText: '', ctaUrlValue: '', ctaPhoneText: '', ctaPhoneValue: '', quickReplies: ['', '', ''] }
-                  });
-                  setShowCreateTemplateModal(true);
-                }}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.4rem',
-                  padding: '0.5rem 1.1rem',
-                  borderRadius: '6px',
-                  background: 'var(--gold-deep)',
-                  color: '#fff',
-                  border: 'none',
-                  fontWeight: 700,
-                  fontSize: '0.86rem',
-                  cursor: 'pointer'
-                }}
-              >
-                <Plus size={15} /> + Create Template
-              </button>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <button
+                  onClick={async () => {
+                    setIsSyncingMetaTemplates(true);
+                    try {
+                      const res = await fetch(`${API_URL}/campaigns/templates/sync-from-meta`, {
+                        method: 'POST',
+                        headers
+                      });
+                      const data = await res.json();
+                      if (res.ok && data.success) {
+                        showToast(data.message || 'Synced templates from Meta successfully!', 'success');
+                        fetchTemplates();
+                      } else {
+                        showToast(data.error || 'Failed to sync templates from Meta.', 'error');
+                      }
+                    } catch (err) {
+                      showToast('Network error syncing templates from Meta.', 'error');
+                    } finally {
+                      setIsSyncingMetaTemplates(false);
+                    }
+                  }}
+                  disabled={isSyncingMetaTemplates}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    padding: '0.5rem 1.1rem',
+                    borderRadius: '6px',
+                    background: 'var(--paper-2)',
+                    color: 'var(--ink)',
+                    border: '1px solid var(--line)',
+                    fontWeight: 700,
+                    fontSize: '0.86rem',
+                    cursor: isSyncingMetaTemplates ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  <RefreshCw size={14} className={isSyncingMetaTemplates ? 'spin-slow' : ''} />
+                  {isSyncingMetaTemplates ? 'Syncing with Meta...' : 'Sync Meta Templates'}
+                </button>
+                <button
+                  onClick={() => {
+                    setNewTemplateForm({
+                      name: '',
+                      type: 'whatsapp',
+                      subject: '',
+                      body: '',
+                      metaTemplateName: '',
+                      mediaUrl: '',
+                      category: 'MARKETING',
+                      language: 'en_US',
+                      headerFormat: 'NONE',
+                      buttons: { buttonType: 'NONE', ctaUrlText: '', ctaUrlValue: '', ctaPhoneText: '', ctaPhoneValue: '', quickReplies: ['', '', ''] }
+                    });
+                    setShowCreateTemplateModal(true);
+                  }}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    padding: '0.5rem 1.1rem',
+                    borderRadius: '6px',
+                    background: 'var(--gold-deep)',
+                    color: '#fff',
+                    border: 'none',
+                    fontWeight: 700,
+                    fontSize: '0.86rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <Plus size={15} /> + Create Template
+                </button>
+              </div>
             </div>
 
             {/* Templates Grid */}
@@ -1769,15 +1811,30 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
               {templates.map(t => (
                 <div key={t.id} style={{ border: '1px solid var(--line)', borderRadius: '10px', background: 'var(--paper-2)', padding: '1.1rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                   <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.35rem' }}>
                       <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>{t.name}</span>
-                      <span style={{ padding: '0.15rem 0.5rem', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 700, background: t.type === 'whatsapp' ? 'rgba(37, 211, 102, 0.15)' : 'rgba(59, 130, 246, 0.15)', color: t.type === 'whatsapp' ? '#25D366' : '#3b82f6' }}>
-                        {t.type}
-                      </span>
+                      <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'center' }}>
+                        {t.status && (
+                          <span style={{
+                            padding: '0.12rem 0.45rem',
+                            borderRadius: '999px',
+                            fontSize: '0.7rem',
+                            fontWeight: 700,
+                            background: t.status === 'APPROVED' ? 'rgba(22, 163, 123, 0.15)' : t.status === 'PENDING' ? 'rgba(224, 168, 46, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                            color: t.status === 'APPROVED' ? '#16a37b' : t.status === 'PENDING' ? 'var(--gold-deep)' : '#ef4444'
+                          }}>
+                            {t.status}
+                          </span>
+                        )}
+                        <span style={{ padding: '0.12rem 0.45rem', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 700, background: t.type === 'whatsapp' ? 'rgba(37, 211, 102, 0.15)' : 'rgba(59, 130, 246, 0.15)', color: t.type === 'whatsapp' ? '#25D366' : '#3b82f6' }}>
+                          {t.type}
+                        </span>
+                      </div>
                     </div>
                     {t.meta_template_name && (
-                      <div style={{ fontSize: '0.75rem', color: 'var(--muted)', fontFamily: 'var(--font-mono)', marginBottom: '0.5rem' }}>
-                        Meta Name: {t.meta_template_name}
+                      <div style={{ fontSize: '0.75rem', color: 'var(--muted)', fontFamily: 'var(--font-mono)', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between' }}>
+                        <span>Meta: {t.meta_template_name}</span>
+                        {t.language && <span>Lang: {t.language}</span>}
                       </div>
                     )}
                     <div style={{ fontSize: '0.82rem', background: 'var(--paper)', padding: '0.65rem', borderRadius: '6px', border: '1px solid var(--line)', maxHeight: '110px', overflowY: 'auto', whiteSpace: 'pre-wrap', color: 'var(--ink)' }}>

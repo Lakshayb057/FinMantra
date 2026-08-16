@@ -6865,6 +6865,124 @@ app.get('/api/campaigns/templates/debug-errors', async (req, res) => {
   }
 });
 
+// Sync and import approved templates directly from Meta Cloud API
+app.post('/api/campaigns/templates/sync-from-meta', authenticateToken, async (req, res) => {
+  try {
+    const settings = await db.getSettings();
+    const apiKey = getSettingVal(settings, 'wa_api_key', 'WA_API_KEY');
+    let wabaId = getSettingVal(settings, 'wa_business_account_id', 'WA_BUSINESS_ACCOUNT_ID');
+    const apiVersion = getSettingVal(settings, 'wa_api_version', 'WA_API_VERSION', 'v25.0');
+    
+    if (!apiKey) {
+      return res.status(400).json({ success: false, error: 'Meta WA_API_KEY is not configured.' });
+    }
+
+    if (!wabaId || wabaId === 'undefined' || wabaId === 'null') {
+      const fetchWabas = async () => {
+        return new Promise((resolveWaba, rejectWaba) => {
+          const options = {
+            hostname: 'graph.facebook.com',
+            port: 443,
+            path: `/${apiVersion}/me/whatsapp_business_accounts`,
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${apiKey}` }
+          };
+          const req = https.request(options, (resp) => {
+            let body = '';
+            resp.on('data', chunk => body += chunk);
+            resp.on('end', () => {
+              try {
+                const parsed = JSON.parse(body);
+                if (parsed.data && parsed.data.length > 0) resolveWaba(parsed.data[0].id);
+                else rejectWaba(new Error('No WABA found'));
+              } catch (e) { rejectWaba(e); }
+            });
+          });
+          req.setTimeout(8000, () => req.destroy());
+          req.on('error', err => rejectWaba(err));
+          req.end();
+        });
+      };
+      try {
+        wabaId = await fetchWabas();
+      } catch (e) {
+        return res.status(400).json({ success: false, error: 'Failed to find Meta WABA ID.' });
+      }
+    }
+
+    const fetchMetaTemplates = () => {
+      return new Promise((resolveMeta, rejectMeta) => {
+        const options = {
+          hostname: 'graph.facebook.com',
+          port: 443,
+          path: `/${apiVersion}/${wabaId}/message_templates?limit=100&fields=name,status,category,language,components,rejected_reason`,
+          method: 'GET',
+          headers: { 'Authorization': `Bearer ${apiKey}` }
+        };
+        const req = https.request(options, (resp) => {
+          let body = '';
+          resp.on('data', chunk => body += chunk);
+          resp.on('end', () => {
+            try {
+              const parsed = JSON.parse(body);
+              if (resp.statusCode >= 200 && resp.statusCode < 300) {
+                resolveMeta(parsed.data || []);
+              } else {
+                rejectMeta(new Error(parsed.error?.message || `Meta status ${resp.statusCode}`));
+              }
+            } catch (e) { rejectMeta(e); }
+          });
+        });
+        req.setTimeout(12000, () => req.destroy());
+        req.on('error', err => rejectMeta(err));
+        req.end();
+      });
+    };
+
+    const metaList = await fetchMetaTemplates();
+    let syncedCount = 0;
+
+    for (const mt of metaList) {
+      const bodyComp = (mt.components || []).find(c => c.type === 'BODY');
+      const bodyText = bodyComp?.text || `Template: ${mt.name}`;
+      const buttonsComp = (mt.components || []).find(c => c.type === 'BUTTONS');
+
+      // Check if exists
+      const existing = await db.runQuery('SELECT id FROM campaign_templates WHERE meta_template_name = $1 OR name = $1 LIMIT 1', [mt.name]);
+      const templateId = existing.rows[0]?.id || ('tpl_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6));
+
+      await db.runQuery(`
+        INSERT INTO campaign_templates 
+        (id, name, type, body, meta_template_name, language, category, status, buttons, waba_id)
+        VALUES ($1, $2, 'whatsapp', $3, $4, $5, $6, $7, $8, $9)
+        ON CONFLICT (id) DO UPDATE 
+        SET body = EXCLUDED.body, 
+            meta_template_name = EXCLUDED.meta_template_name,
+            language = EXCLUDED.language,
+            category = EXCLUDED.category,
+            status = EXCLUDED.status,
+            buttons = EXCLUDED.buttons,
+            waba_id = EXCLUDED.waba_id
+      `, [
+        templateId,
+        mt.name,
+        bodyText,
+        mt.name,
+        mt.language || 'en_US',
+        mt.category || 'MARKETING',
+        mt.status || 'APPROVED',
+        buttonsComp ? JSON.stringify(buttonsComp) : null,
+        wabaId
+      ]);
+      syncedCount++;
+    }
+
+    res.json({ success: true, message: `Successfully synced ${syncedCount} templates from Meta Cloud API!`, templatesCount: syncedCount });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // List all campaign templates
 app.get('/api/campaigns/templates', authenticateToken, async (req, res) => {
   try {
