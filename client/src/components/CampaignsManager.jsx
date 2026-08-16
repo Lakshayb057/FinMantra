@@ -12,6 +12,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
   const [metaStatuses, setMetaStatuses] = useState({});
   const [isSyncingMeta, setIsSyncingMeta] = useState(false);
   const [showCreateTemplateModal, setShowCreateTemplateModal] = useState(false);
+  const [editingTemplateId, setEditingTemplateId] = useState(null);
   const [newTemplateForm, setNewTemplateForm] = useState({
     name: '',
     type: 'whatsapp',
@@ -256,6 +257,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
             quickReplies: ['', '', '']
           }
         });
+        setEditingTemplateId(null);
         setShowCreateTemplateModal(false);
         fetchTemplates();
       } else {
@@ -1742,6 +1744,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                         quickReplies: ['', '', '']
                       }
                     });
+                    setEditingTemplateId(null);
                     setShowCreateTemplateModal(true);
                   }}
                   className="btn btn-primary"
@@ -1825,6 +1828,44 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                                   Meta: {statusText}
                                 </span>
                               )}
+                              <button
+                                onClick={() => {
+                                  let parsedButtons = {
+                                    buttonType: 'NONE',
+                                    ctaUrlText: '',
+                                    ctaUrlValue: '',
+                                    ctaPhoneText: '',
+                                    ctaPhoneValue: '',
+                                    quickReplies: ['', '', '']
+                                  };
+                                  if (tpl.buttons) {
+                                    try {
+                                      const parsed = typeof tpl.buttons === 'string' ? JSON.parse(tpl.buttons) : tpl.buttons;
+                                      parsedButtons = { ...parsedButtons, ...parsed };
+                                    } catch (e) {}
+                                  }
+
+                                  setNewTemplateForm({
+                                    id: tpl.id,
+                                    name: tpl.name,
+                                    type: tpl.type,
+                                    subject: tpl.subject || '',
+                                    body: tpl.body || '',
+                                    metaTemplateName: tpl.meta_template_name || '',
+                                    mediaUrl: tpl.media_url || '',
+                                    category: tpl.category || 'MARKETING',
+                                    language: tpl.language || 'en_US',
+                                    headerFormat: tpl.header_format || 'NONE',
+                                    buttons: parsedButtons
+                                  });
+                                  setEditingTemplateId(tpl.id);
+                                  setShowCreateTemplateModal(true);
+                                }}
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: 0 }}
+                                title="Edit Template"
+                              >
+                                <FileText size={16} />
+                              </button>
                               <button
                                 onClick={() => handleDeleteTemplate(tpl.id)}
                                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: 0 }}
@@ -1933,8 +1974,8 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: '1rem' }}>
           <div className="glass-panel" style={{ width: '100%', maxWidth: '560px', maxHeight: '90vh', overflowY: 'auto', borderRadius: '16px', background: 'var(--paper)', border: '1px solid var(--line)', padding: '1.5rem', borderTop: '4px solid var(--gold-deep)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', paddingBottom: '0.5rem', borderBottom: '1px solid var(--line)' }}>
-              <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700 }}>Save & Register New Template</h3>
-              <button onClick={() => setShowCreateTemplateModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={18} /></button>
+              <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700 }}>{editingTemplateId ? 'Edit Message Template' : 'Save & Register New Template'}</h3>
+              <button onClick={() => { setShowCreateTemplateModal(false); setEditingTemplateId(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={18} /></button>
             </div>
 
             <form onSubmit={handleCreateTemplate}>
@@ -2197,7 +2238,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
               <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '1.25rem', borderTop: '1px solid var(--line)', paddingTop: '1rem' }}>
                 <button type="button" onClick={() => setShowCreateTemplateModal(false)} className="btn-secondary">Cancel</button>
                 <button type="submit" disabled={isCreatingTemplate} className="btn-primary" style={{ background: 'var(--gold-deep)', color: '#fff' }}>
-                  {isCreatingTemplate ? 'Submitting to Meta...' : 'Register & Save Template'}
+                  {isCreatingTemplate ? 'Submitting to Meta...' : (editingTemplateId ? 'Update & Save Template' : 'Register & Save Template')}
                 </button>
               </div>
             </form>

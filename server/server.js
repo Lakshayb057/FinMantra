@@ -6455,6 +6455,18 @@ app.post('/api/campaigns/templates', authenticateToken, async (req, res) => {
       return res.status(400).json({ success: false, error: 'Name, Type and Body are required fields.' });
     }
 
+    let oldMetaName = null;
+    if (id) {
+      try {
+        const existing = await db.runQuery('SELECT * FROM campaign_templates WHERE id = $1', [id]);
+        if (existing.rows && existing.rows.length > 0) {
+          oldMetaName = existing.rows[0].meta_template_name || existing.rows[0].name;
+        }
+      } catch (e) {
+        console.warn('[Db template lookups failed]', e.message);
+      }
+    }
+
     // Register template directly to Meta WhatsApp Business Account if type is whatsapp
     if (type === 'whatsapp') {
       const cleanName = metaTemplateName ? metaTemplateName.toLowerCase().replace(/[^a-z0-9_]/g, '_') : name.toLowerCase().replace(/[^a-z0-9_]/g, '_');
@@ -6505,6 +6517,16 @@ app.post('/api/campaigns/templates', authenticateToken, async (req, res) => {
         } catch (wabaErr) {
           return res.status(400).json({ success: false, error: `WABA Account lookup failed: ${wabaErr.message}` });
         }
+      }
+
+      if (oldMetaName) {
+        // Delete old template from Meta first so we can register the edit cleanly!
+        await deleteMetaTemplate({
+          apiKey,
+          wabaId,
+          name: oldMetaName,
+          apiVersion
+        }).catch(err => console.warn('[Meta edit deletion failed, proceeding]', err.message));
       }
 
       try {
