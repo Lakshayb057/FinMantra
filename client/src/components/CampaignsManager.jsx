@@ -1099,11 +1099,90 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
         {activeSubTab === 'data_storage' && (
           <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
             {!selectedCampaignId ? (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, color: 'var(--muted)', background: 'var(--paper-2)', borderRadius: '12px', padding: '3rem', textAlign: 'center' }}>
-                <Users size={48} style={{ strokeWidth: 1.25, color: 'var(--muted)', marginBottom: '1rem' }} />
-                <h3 style={{ margin: '0 0 0.5rem 0' }}>No Campaign Selected</h3>
-                <p style={{ fontSize: '0.85rem', maxWidth: '400px', margin: '0 0 1.25rem 0' }}>Select an operational campaign from the selector above, or create a new campaign to begin uploading contacts.</p>
-                <button onClick={() => setShowCreateCampaignModal(true)} className="btn-primary" style={{ background: 'var(--gold-deep)', color: '#fff' }}>Create a New Campaign</button>
+              <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)', padding: '1.25rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexShrink: 0 }}>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700 }}>Operational Campaigns</h3>
+                    <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.8rem', color: 'var(--muted)' }}>Select a campaign to manage its contacts, or create a new campaign pool.</p>
+                  </div>
+                  <button
+                    onClick={() => setShowCreateCampaignModal(true)}
+                    className="btn-primary"
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.55rem 1rem', background: 'var(--gold-deep)', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }}
+                  >
+                    <Plus size={16} /> Create Campaign
+                  </button>
+                </div>
+
+                <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+                  {campaigns.length === 0 ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '3.5rem 1rem', background: 'var(--paper-2)', borderRadius: '12px', border: '1px dashed var(--line)' }}>
+                      <Users size={36} style={{ color: 'var(--muted)', marginBottom: '0.75rem' }} />
+                      <div style={{ fontWeight: 600, color: 'var(--ink)', fontSize: '0.95rem' }}>No Campaigns Found</div>
+                      <p style={{ color: 'var(--muted)', fontSize: '0.8rem', textAlign: 'center', maxWidth: '360px', margin: '0.25rem 0 1rem 0' }}>Get started by creating your first credit card lead or referral campaign group.</p>
+                    </div>
+                  ) : (
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem', textAlign: 'left' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '2px solid var(--line)', color: 'var(--muted)', fontWeight: 700 }}>
+                          <th style={{ padding: '0.75rem 1rem' }}>Campaign Name</th>
+                          <th style={{ padding: '0.75rem 1rem' }}>Description</th>
+                          <th style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>No. of Data (Contacts)</th>
+                          <th style={{ padding: '0.75rem 1rem' }}>Created At</th>
+                          <th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {campaigns.map(c => (
+                          <tr
+                            key={c.id}
+                            style={{ borderBottom: '1px solid var(--line)', transition: 'background 0.2s ease', cursor: 'pointer' }}
+                            className="table-row-hover"
+                          >
+                            <td
+                              onClick={() => setSelectedCampaignId(c.id)}
+                              style={{ padding: '0.75rem 1rem', fontWeight: 600, color: 'var(--gold-deep)' }}
+                            >
+                              {c.name}
+                            </td>
+                            <td
+                              onClick={() => setSelectedCampaignId(c.id)}
+                              style={{ padding: '0.75rem 1rem', color: 'var(--muted)', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                            >
+                              {c.description || <em style={{ opacity: 0.6 }}>No description</em>}
+                            </td>
+                            <td
+                              onClick={() => setSelectedCampaignId(c.id)}
+                              style={{ padding: '0.75rem 1rem', textAlign: 'center', fontWeight: 600 }}
+                            >
+                              <span style={{ background: 'rgba(224, 168, 46, 0.1)', color: 'var(--gold-deep)', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.8rem' }}>
+                                {c.leads_count || 0} Contacts
+                              </span>
+                            </td>
+                            <td
+                              onClick={() => setSelectedCampaignId(c.id)}
+                              style={{ padding: '0.75rem 1rem', color: 'var(--muted)', fontSize: '0.8rem' }}
+                            >
+                              {c.created_at ? new Date(c.created_at).toLocaleDateString() : 'N/A'}
+                            </td>
+                            <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteCampaign(c.id);
+                                }}
+                                style={{ background: 'rgba(209, 67, 67, 0.1)', color: 'var(--err)', border: 'none', borderRadius: '4px', cursor: 'pointer', padding: '0.35rem 0.6rem' }}
+                                title="Delete Campaign"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
               </div>
             ) : (
               <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)', padding: '1.25rem' }}>

@@ -2910,7 +2910,13 @@ const db = {
 
   // --- Campaigns Database Helper Operations ---
   async getCampaigns() {
-    const res = await pool.query('SELECT * FROM campaigns ORDER BY created_at DESC');
+    const res = await pool.query(
+      `SELECT c.*, COUNT(l.id)::int as leads_count 
+       FROM campaigns c 
+       LEFT JOIN campaign_leads l ON c.id = l.campaign_id 
+       GROUP BY c.id 
+       ORDER BY c.created_at DESC`
+    );
     return res.rows;
   },
 
