@@ -6085,7 +6085,156 @@ async function checkAndRunScheduledBroadcasts() {
   }
 }
 
+// Helper to register message template with Meta API
+const registerMetaTemplate = async ({ apiKey, wabaId, name, category, language, headerFormat, bodyText }) => {
+  return new Promise((resolve, reject) => {
+    const cleanName = name.toLowerCase().replace(/[^a-z0-9_]/g, '_');
+    const components = [];
+    
+    if (headerFormat && headerFormat !== 'NONE') {
+      const headerComp = {
+        type: 'HEADER',
+        format: headerFormat.toUpperCase()
+      };
+      if (headerFormat === 'TEXT') {
+        headerComp.text = 'Notification';
+      }
+      components.push(headerComp);
+    }
+    
+    components.push({
+      type: 'BODY',
+      text: bodyText
+    });
+    
+    const payload = {
+      name: cleanName,
+      language: language || 'en_US',
+      category: category || 'MARKETING',
+      components
+    };
+    
+    const postData = JSON.stringify(payload);
+    const options = {
+      hostname: 'graph.facebook.com',
+      port: 443,
+      path: `/v25.0/${wabaId}/message_templates`,
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(postData)
+      }
+    };
+    
+    const req = https.request(options, (res) => {
+      let responseBody = '';
+      res.on('data', (chunk) => responseBody += chunk);
+      res.on('end', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          try { resolve(JSON.parse(responseBody)); } catch (e) { resolve({ success: true }); }
+        } else {
+          reject(new Error(`Meta Template API rejected request (status ${res.statusCode}): ${responseBody}`));
+        }
+      });
+    });
+    
+    req.on('error', (err) => reject(err));
+    req.write(postData);
+    req.end();
+  });
+};
+
 // --- CAMPAIGN REUSABLE TEMPLATES ROUTES ---
+
+// Sync and fetch template approval status from Meta
+app.get('/api/campaigns/templates/meta-sync', authenticateToken, async (req, res) => {
+  try {
+    const settings = await db.getSettings();
+    const apiKey = getSettingVal(settings, 'wa_api_key', 'WA_API_KEY');
+    let wabaId = getSettingVal(settings, 'wa_business_account_id', 'WA_BUSINESS_ACCOUNT_ID');
+    const apiVersion = getSettingVal(settings, 'wa_api_version', 'WA_API_VERSION', 'v25.0');
+    
+    if (!apiKey) {
+      return res.json({ success: true, metaStatuses: {} });
+    }
+
+    if (!wabaId || wabaId === 'undefined' || wabaId === 'null') {
+      const fetchWabas = async () => {
+        return new Promise((resolveWaba, rejectWaba) => {
+          const options = {
+            hostname: 'graph.facebook.com',
+            port: 443,
+            path: `/${apiVersion}/me/whatsapp_business_accounts`,
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${apiKey}` }
+          };
+          const req = https.request(options, (res) => {
+            let body = '';
+            res.on('data', chunk => body += chunk);
+            res.on('end', () => {
+              if (res.statusCode >= 200 && res.statusCode < 300) {
+                try {
+                  const parsed = JSON.parse(body);
+                  if (parsed.data && parsed.data.length > 0) {
+                    resolveWaba(parsed.data[0].id);
+                  } else {
+                    resolveWaba(null);
+                  }
+                } catch (e) { resolveWaba(null); }
+              } else { resolveWaba(null); }
+            });
+          });
+          req.on('error', () => resolveWaba(null));
+          req.end();
+        });
+      };
+      wabaId = await fetchWabas();
+    }
+
+    if (!wabaId) {
+      return res.json({ success: true, metaStatuses: {} });
+    }
+
+    const fetchMetaTemplates = () => {
+      return new Promise((resolve, reject) => {
+        const options = {
+          hostname: 'graph.facebook.com',
+          port: 443,
+          path: `/${apiVersion}/${wabaId}/message_templates?limit=100`,
+          method: 'GET',
+          headers: { 'Authorization': `Bearer ${apiKey}` }
+        };
+        const req = https.request(options, (res) => {
+          let body = '';
+          res.on('data', chunk => body += chunk);
+          res.on('end', () => {
+            if (res.statusCode >= 200 && res.statusCode < 300) {
+              try { resolve(JSON.parse(body)); } catch (e) { reject(new Error('Invalid JSON.')); }
+            } else { reject(new Error(`Meta API error ${res.statusCode}: ${body}`)); }
+          });
+        });
+        req.on('error', err => reject(err));
+        req.end();
+      });
+    };
+
+    const result = await fetchMetaTemplates();
+    const metaStatuses = {};
+    if (result && Array.isArray(result.data)) {
+      for (const t of result.data) {
+        metaStatuses[t.name.toLowerCase()] = {
+          status: t.status,
+          category: t.category,
+          language: t.language
+        };
+      }
+    }
+    res.json({ success: true, metaStatuses });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 // List all campaign templates
 app.get('/api/campaigns/templates', authenticateToken, async (req, res) => {
@@ -6100,10 +6249,78 @@ app.get('/api/campaigns/templates', authenticateToken, async (req, res) => {
 // Create/Update a template
 app.post('/api/campaigns/templates', authenticateToken, async (req, res) => {
   try {
-    const { id, name, type, subject, body, metaTemplateName, mediaUrl } = req.body;
+    const { id, name, type, subject, body, metaTemplateName, mediaUrl, category, language, headerFormat } = req.body;
     if (!name || !type || !body) {
       return res.status(400).json({ success: false, error: 'Name, Type and Body are required fields.' });
     }
+
+    // Register template directly to Meta WhatsApp Business Account if type is whatsapp
+    if (type === 'whatsapp') {
+      const cleanName = metaTemplateName ? metaTemplateName.toLowerCase().replace(/[^a-z0-9_]/g, '_') : name.toLowerCase().replace(/[^a-z0-9_]/g, '_');
+      const settings = await db.getSettings();
+      const apiKey = getSettingVal(settings, 'wa_api_key', 'WA_API_KEY');
+      let wabaId = getSettingVal(settings, 'wa_business_account_id', 'WA_BUSINESS_ACCOUNT_ID');
+      const apiVersion = getSettingVal(settings, 'wa_api_version', 'WA_API_VERSION', 'v25.0');
+      
+      if (!apiKey) {
+        return res.status(400).json({ success: false, error: 'Meta WhatsApp API Credentials are not configured. Please setup WA_API_KEY first.' });
+      }
+
+      if (!wabaId || wabaId === 'undefined' || wabaId === 'null') {
+        const fetchWabas = async () => {
+          return new Promise((resolveWaba, rejectWaba) => {
+            const options = {
+              hostname: 'graph.facebook.com',
+              port: 443,
+              path: `/${apiVersion}/me/whatsapp_business_accounts`,
+              method: 'GET',
+              headers: { 'Authorization': `Bearer ${apiKey}` }
+            };
+            const req = https.request(options, (res) => {
+              let responseBody = '';
+              res.on('data', chunk => responseBody += chunk);
+              res.on('end', () => {
+                if (res.statusCode >= 200 && res.statusCode < 300) {
+                  try {
+                    const parsed = JSON.parse(responseBody);
+                    if (parsed.data && parsed.data.length > 0) {
+                      resolveWaba(parsed.data[0].id);
+                    } else {
+                      rejectWaba(new Error('No WhatsApp Business Accounts found.'));
+                    }
+                  } catch (e) { rejectWaba(new Error('WABA JSON parsing failed.')); }
+                } else { rejectWaba(new Error(`Failed to fetch WABA (status ${res.statusCode})`)); }
+              });
+            });
+            req.on('error', err => rejectWaba(err));
+            req.end();
+          });
+        };
+        try {
+          wabaId = await fetchWabas();
+        } catch (wabaErr) {
+          return res.status(400).json({ success: false, error: `WABA Account lookup failed: ${wabaErr.message}` });
+        }
+      }
+
+      try {
+        await registerMetaTemplate({
+          apiKey,
+          wabaId,
+          name: cleanName,
+          category: category || 'MARKETING',
+          language: language || 'en_US',
+          headerFormat: headerFormat || 'NONE',
+          bodyText: body
+        });
+      } catch (metaErr) {
+        return res.status(400).json({
+          success: false,
+          error: `Meta rejected template registration: ${metaErr.message}. Make sure template name is unique, contains only lowercase letters and underscores, and body variables are formatted properly (e.g. {{1}}).`
+        });
+      }
+    }
+
     const templateId = id || 'tpl_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
     const saved = await db.createCampaignTemplate({
       id: templateId,
@@ -6111,7 +6328,7 @@ app.post('/api/campaigns/templates', authenticateToken, async (req, res) => {
       type,
       subject: subject || null,
       body,
-      metaTemplateName: metaTemplateName || null,
+      metaTemplateName: metaTemplateName ? metaTemplateName.toLowerCase().replace(/[^a-z0-9_]/g, '_') : null,
       mediaUrl: mediaUrl || null
     });
     res.json({ success: true, template: saved });
@@ -6290,6 +6507,13 @@ app.post('/api/campaigns', authenticateToken, async (req, res) => {
     if (!name) {
       return res.status(400).json({ success: false, error: 'Campaign name is required.' });
     }
+
+    // Enforce unique campaign names constraint
+    const existing = await db.runQuery("SELECT * FROM campaigns WHERE LOWER(TRIM(name)) = LOWER(TRIM($1))", [name]);
+    if (existing.rows && existing.rows.length > 0) {
+      return res.status(400).json({ success: false, error: 'A campaign with this name already exists. Please choose a unique name.' });
+    }
+
     const id = 'camp_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
     const newCamp = await db.createCampaign(id, name, description);
     res.json({ success: true, campaign: newCamp });

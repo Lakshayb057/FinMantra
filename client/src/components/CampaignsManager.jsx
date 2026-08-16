@@ -9,8 +9,20 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
   
   // Templates Manager state
   const [templates, setTemplates] = useState([]);
+  const [metaStatuses, setMetaStatuses] = useState({});
+  const [isSyncingMeta, setIsSyncingMeta] = useState(false);
   const [showCreateTemplateModal, setShowCreateTemplateModal] = useState(false);
-  const [newTemplateForm, setNewTemplateForm] = useState({ name: '', type: 'whatsapp', subject: '', body: '', metaTemplateName: '', mediaUrl: '' });
+  const [newTemplateForm, setNewTemplateForm] = useState({
+    name: '',
+    type: 'whatsapp',
+    subject: '',
+    body: '',
+    metaTemplateName: '',
+    mediaUrl: '',
+    category: 'MARKETING',
+    language: 'en_US',
+    headerFormat: 'NONE'
+  });
   const [isCreatingTemplate, setIsCreatingTemplate] = useState(false);
 
   // Master Data Center state
@@ -177,9 +189,26 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
       const data = await res.json();
       if (res.ok && data.success) {
         setTemplates(data.templates || []);
+        // Trigger status sync in the background
+        syncMetaStatuses();
       }
     } catch (err) {
       showToast('Error fetching campaign templates.', 'error');
+    }
+  };
+
+  const syncMetaStatuses = async () => {
+    setIsSyncingMeta(true);
+    try {
+      const res = await fetch(`${API_URL}/campaigns/templates/meta-sync`, { headers });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setMetaStatuses(data.metaStatuses || {});
+      }
+    } catch (err) {
+      console.error('Failed to sync Meta template statuses:', err);
+    } finally {
+      setIsSyncingMeta(false);
     }
   };
 
@@ -199,8 +228,18 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
       });
       const data = await res.json();
       if (res.ok && data.success) {
-        showToast('Template saved successfully!', 'success');
-        setNewTemplateForm({ name: '', type: 'whatsapp', subject: '', body: '', metaTemplateName: '', mediaUrl: '' });
+        showToast('Template saved and registered with Meta successfully!', 'success');
+        setNewTemplateForm({
+          name: '',
+          type: 'whatsapp',
+          subject: '',
+          body: '',
+          metaTemplateName: '',
+          mediaUrl: '',
+          category: 'MARKETING',
+          language: 'en_US',
+          headerFormat: 'NONE'
+        });
         setShowCreateTemplateModal(false);
         fetchTemplates();
       } else {
@@ -728,24 +767,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
           <MessageSquare size={16} style={{ marginRight: '0.45rem', verticalAlign: 'middle' }} />
           Broadcast Campaigns
         </button>
-        <button
-          onClick={() => setActiveSubTab('automated')}
-          style={{
-            padding: '0.55rem 1.1rem',
-            borderRadius: '8px',
-            border: 'none',
-            fontSize: '0.88rem',
-            fontWeight: 600,
-            cursor: 'pointer',
-            background: activeSubTab === 'automated' ? 'var(--gold-deep)' : 'transparent',
-            color: activeSubTab === 'automated' ? '#fff' : 'var(--muted)',
-            transition: 'all 0.2s ease',
-            whiteSpace: 'nowrap'
-          }}
-        >
-          <Zap size={16} style={{ marginRight: '0.45rem', verticalAlign: 'middle' }} />
-          Automated <span style={{ fontSize: '0.68rem', opacity: 0.85, background: 'rgba(255,255,255,0.2)', padding: '0.1rem 0.35rem', borderRadius: '4px', marginLeft: '0.25rem' }}>Beta</span>
-        </button>
+
         <button
           onClick={() => setActiveSubTab('settings')}
           style={{
@@ -1477,64 +1499,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
           </div>
         )}
 
-        {/* TAB 3: AUTOMATED (RULE-BASED TRIGGERS - BETA) */}
-        {activeSubTab === 'automated' && (
-          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-            <div className="glass-panel" style={{ borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)', padding: '1.75rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', marginBottom: '1rem' }}>
-                <Zap size={24} style={{ color: 'var(--gold-deep)' }} />
-                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700 }}>Automated Campaigns (Beta)</h3>
-              </div>
-              <p style={{ color: 'var(--muted)', fontSize: '0.88rem', marginBottom: '1.5rem' }}>
-                Design rule-based event triggers that fire notification sequences to contacts automatically without manual administration. Tweak the scenarios below to set auto-responders.
-              </p>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.25rem' }}>
-                {/* Rule 1 */}
-                <div style={{ border: '1px solid var(--line)', padding: '1.25rem', borderRadius: '8px', background: 'var(--paper-2)', position: 'relative' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
-                    <h4 style={{ margin: 0, fontWeight: 700 }}>New Lead Welcome Auto-Responder</h4>
-                    <span style={{ fontSize: '0.65rem', fontWeight: 800, padding: '0.15rem 0.4rem', borderRadius: '4px', background: 'rgba(34, 197, 94, 0.15)', color: '#22c55e' }}>ACTIVE</span>
-                  </div>
-                  <p style={{ fontSize: '0.78rem', color: 'var(--muted)', margin: '0 0 1rem 0' }}>Trigger a personalized WhatsApp greeting immediately after a contact is successfully imported or mapped.</p>
-                  <div style={{ fontSize: '0.75rem', background: 'var(--paper)', padding: '0.6rem', borderRadius: '6px', border: '1px solid var(--line)' }}>
-                    <code>Trigger: On Import</code><br/>
-                    <code>Channel: WhatsApp</code><br/>
-                    <code>Template: <code>finmantra_welcome</code></code>
-                  </div>
-                </div>
-
-                {/* Rule 2 */}
-                <div style={{ border: '1px solid var(--line)', padding: '1.25rem', borderRadius: '8px', background: 'var(--paper-2)', position: 'relative' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
-                    <h4 style={{ margin: 0, fontWeight: 700 }}>24-Hour Follow-Up Reminder</h4>
-                    <span style={{ fontSize: '0.65rem', fontWeight: 800, padding: '0.15rem 0.4rem', borderRadius: '4px', background: 'var(--line)', color: 'var(--muted)' }}>DISABLED</span>
-                  </div>
-                  <p style={{ fontSize: '0.78rem', color: 'var(--muted)', margin: '0 0 1rem 0' }}>Send an automated follow-up email 24 hours after registration to prompt users who have not completed verification.</p>
-                  <div style={{ fontSize: '0.75rem', background: 'var(--paper)', padding: '0.6rem', borderRadius: '6px', border: '1px solid var(--line)' }}>
-                    <code>Trigger: 24h After Lead Creation</code><br/>
-                    <code>Channel: Email</code><br/>
-                    <code>Subject: Finish your application!</code>
-                  </div>
-                </div>
-
-                {/* Rule 3 */}
-                <div style={{ border: '1px solid var(--line)', padding: '1.25rem', borderRadius: '8px', background: 'var(--paper-2)', position: 'relative', opacity: 0.7 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
-                    <h4 style={{ margin: 0, fontWeight: 700 }}>Periodic Offer Digests</h4>
-                    <span style={{ fontSize: '0.65rem', fontWeight: 800, padding: '0.15rem 0.4rem', borderRadius: '4px', background: 'var(--line)', color: 'var(--muted)' }}>COMING SOON</span>
-                  </div>
-                  <p style={{ fontSize: '0.78rem', color: 'var(--muted)', margin: '0 0 1rem 0' }}>Trigger weekly SMS & WhatsApp credit card recommendations matching user state and salary ranges.</p>
-                  <div style={{ fontSize: '0.75rem', background: 'var(--paper)', padding: '0.6rem', borderRadius: '6px', border: '1px solid var(--line)' }}>
-                    <code>Interval: Weekly</code><br/>
-                    <code>Channel: Multi-channel</code><br/>
-                    <code>Trigger: Smart Segment Match</code>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* TAB 4: SMTP GATEWAY SETTINGS */}
         {activeSubTab === 'settings' && (
@@ -1719,11 +1684,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                   </ul>
                 </div>
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* TAB: TEMPLATES MANAGER */}
+                   {/* TAB: TEMPLATES MANAGER */}
         {activeSubTab === 'templates' && (
           <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexShrink: 0 }}>
@@ -1731,16 +1692,36 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                 <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700 }}>Custom Message Templates</h3>
                 <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.8rem', color: 'var(--muted)' }}>Manage reusable layouts and attachments for Emails and Meta WhatsApp broadcasts.</p>
               </div>
-              <button
-                onClick={() => {
-                  setNewTemplateForm({ name: '', type: 'whatsapp', subject: '', body: '', metaTemplateName: '', mediaUrl: '' });
-                  setShowCreateTemplateModal(true);
-                }}
-                className="btn btn-primary"
-                style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.55rem 1rem', background: 'var(--gold-deep)', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }}
-              >
-                <Plus size={16} /> Create Template
-              </button>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button
+                  onClick={syncMetaStatuses}
+                  disabled={isSyncingMeta}
+                  className="btn btn-secondary"
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.55rem 1rem', background: 'var(--paper-2)', color: 'var(--ink)', border: '1px solid var(--line)', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }}
+                >
+                  <RefreshCw size={14} className={isSyncingMeta ? 'spin' : ''} /> Sync Meta Status
+                </button>
+                <button
+                  onClick={() => {
+                    setNewTemplateForm({
+                      name: '',
+                      type: 'whatsapp',
+                      subject: '',
+                      body: '',
+                      metaTemplateName: '',
+                      mediaUrl: '',
+                      category: 'MARKETING',
+                      language: 'en_US',
+                      headerFormat: 'NONE'
+                    });
+                    setShowCreateTemplateModal(true);
+                  }}
+                  className="btn btn-primary"
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.55rem 1rem', background: 'var(--gold-deep)', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }}
+                >
+                  <Plus size={16} /> Create Template
+                </button>
+              </div>
             </div>
 
             <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
@@ -1751,88 +1732,127 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                   <p style={{ color: 'var(--muted)', fontSize: '0.8rem', textAlign: 'center', maxWidth: '360px', margin: '0.25rem 0 1rem 0' }}>Get started by creating your first reusable WhatsApp template or Email layout.</p>
                 </div>
               ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem' }}>
-                  {templates.map(tpl => (
-                    <div
-                      key={tpl.id}
-                      className="glass-panel"
-                      style={{
-                        padding: '1.25rem',
-                        borderRadius: '12px',
-                        border: '1px solid var(--line)',
-                        background: 'var(--paper)',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        justifyContent: 'space-between',
-                        minHeight: '200px',
-                        transition: 'transform 0.2s ease, box-shadow 0.2s ease'
-                      }}
-                    >
-                      <div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
-                          <span style={{
-                            fontSize: '0.68rem',
-                            fontWeight: 700,
-                            padding: '0.2rem 0.5rem',
-                            borderRadius: '4px',
-                            textTransform: 'uppercase',
-                            background: tpl.type === 'email' ? 'rgba(59, 130, 246, 0.15)' : 'rgba(16, 185, 129, 0.15)',
-                            color: tpl.type === 'email' ? '#3b82f6' : '#10b981'
-                          }}>
-                            {tpl.type}
-                          </span>
-                          <button
-                            onClick={() => handleDeleteTemplate(tpl.id)}
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: 0 }}
-                            title="Delete Template"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                        <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '1rem', fontWeight: 700, color: 'var(--ink)' }}>{tpl.name}</h4>
-                        
-                        {tpl.type === 'email' && (
-                          <div style={{ marginBottom: '0.5rem', fontSize: '0.8rem' }}>
-                            <span style={{ fontWeight: 600, color: 'var(--muted)' }}>Subject: </span>
-                            <span style={{ color: 'var(--ink)' }}>{tpl.subject}</span>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1rem' }}>
+                  {templates.map(tpl => {
+                    const lookupKey = tpl.meta_template_name?.toLowerCase() || tpl.name?.toLowerCase();
+                    const metaInfo = metaStatuses[lookupKey];
+                    let statusText = 'Not Registered';
+                    let statusBg = 'rgba(107, 114, 128, 0.15)';
+                    let statusColor = '#6b7280';
+                    
+                    if (metaInfo) {
+                      statusText = metaInfo.status;
+                      if (statusText === 'APPROVED') {
+                        statusBg = 'rgba(16, 185, 129, 0.15)';
+                        statusColor = '#10b981';
+                      } else if (statusText?.includes('PENDING')) {
+                        statusBg = 'rgba(245, 158, 11, 0.15)';
+                        statusColor = '#f59e0b';
+                      } else if (statusText?.includes('REJECTED') || statusText?.includes('LIMIT')) {
+                        statusBg = 'rgba(239, 68, 68, 0.15)';
+                        statusColor = '#ef4444';
+                      }
+                    }
+
+                    return (
+                      <div
+                        key={tpl.id}
+                        className="glass-panel"
+                        style={{
+                          padding: '1.25rem',
+                          borderRadius: '12px',
+                          border: '1px solid var(--line)',
+                          background: 'var(--paper)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          justifyContent: 'space-between',
+                          minHeight: '220px',
+                          transition: 'transform 0.2s ease, box-shadow 0.2s ease'
+                        }}
+                      >
+                        <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
+                            <span style={{
+                              fontSize: '0.68rem',
+                              fontWeight: 700,
+                              padding: '0.2rem 0.5rem',
+                              borderRadius: '4px',
+                              textTransform: 'uppercase',
+                              background: tpl.type === 'email' ? 'rgba(59, 130, 246, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                              color: tpl.type === 'email' ? '#3b82f6' : '#10b981'
+                            }}>
+                              {tpl.type}
+                            </span>
+                            <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                              {tpl.type === 'whatsapp' && (
+                                <span style={{
+                                  fontSize: '0.62rem',
+                                  fontWeight: 800,
+                                  padding: '0.15rem 0.4rem',
+                                  borderRadius: '4px',
+                                  background: statusBg,
+                                  color: statusColor,
+                                  textTransform: 'uppercase'
+                                }}>
+                                  Meta: {statusText}
+                                </span>
+                              )}
+                              <button
+                                onClick={() => handleDeleteTemplate(tpl.id)}
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: 0 }}
+                                title="Delete Template"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
                           </div>
-                        )}
-                        {tpl.type === 'whatsapp' && tpl.meta_template_name && (
-                          <div style={{ marginBottom: '0.5rem', fontSize: '0.8rem' }}>
-                            <span style={{ fontWeight: 600, color: 'var(--muted)' }}>Meta Approved Name: </span>
-                            <code style={{ background: 'var(--paper-2)', padding: '0.1rem 0.3rem', borderRadius: '4px' }}>{tpl.meta_template_name}</code>
-                          </div>
-                        )}
-                        {tpl.media_url && (
-                          <div style={{ marginBottom: '0.5rem', fontSize: '0.8rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            <span style={{ fontWeight: 600, color: 'var(--muted)' }}>Attachment: </span>
-                            <a href={tpl.media_url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--gold-deep)', textDecoration: 'underline' }}>View Media Link</a>
-                          </div>
-                        )}
-                        
-                        <div style={{ marginTop: '0.5rem' }}>
-                          <span style={{ fontWeight: 600, color: 'var(--muted)', fontSize: '0.8rem' }}>Content Body:</span>
-                          <div style={{
-                            marginTop: '0.25rem',
-                            padding: '0.5rem',
-                            borderRadius: '6px',
-                            background: 'var(--paper-2)',
-                            fontSize: '0.78rem',
-                            color: 'var(--ink)',
-                            maxHeight: '100px',
-                            overflowY: 'auto',
-                            whiteSpace: 'pre-wrap',
-                            border: '1px solid var(--line)'
-                          }}>
-                            {tpl.body}
+                          <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '1rem', fontWeight: 700, color: 'var(--ink)' }}>{tpl.name}</h4>
+                          
+                          {tpl.type === 'email' && (
+                            <div style={{ marginBottom: '0.5rem', fontSize: '0.8rem' }}>
+                              <span style={{ fontWeight: 600, color: 'var(--muted)' }}>Subject: </span>
+                              <span style={{ color: 'var(--ink)' }}>{tpl.subject}</span>
+                            </div>
+                          )}
+                          {tpl.type === 'whatsapp' && tpl.meta_template_name && (
+                            <div style={{ marginBottom: '0.5rem', fontSize: '0.8rem' }}>
+                              <span style={{ fontWeight: 600, color: 'var(--muted)' }}>Approved Code: </span>
+                              <code style={{ background: 'var(--paper-2)', padding: '0.1rem 0.3rem', borderRadius: '4px', fontSize: '0.75rem' }}>{tpl.meta_template_name}</code>
+                            </div>
+                          )}
+                          {tpl.media_url && (
+                            <div style={{ marginBottom: '0.5rem', fontSize: '0.8rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              <span style={{ fontWeight: 600, color: 'var(--muted)' }}>Attachment: </span>
+                              <a href={tpl.media_url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--gold-deep)', textDecoration: 'underline' }}>View Media Link</a>
+                            </div>
+                          )}
+                          
+                          <div style={{ marginTop: '0.5rem' }}>
+                            <span style={{ fontWeight: 600, color: 'var(--muted)', fontSize: '0.8rem' }}>Content Body:</span>
+                            <div style={{
+                              marginTop: '0.25rem',
+                              padding: '0.5rem',
+                              borderRadius: '6px',
+                              background: 'var(--paper-2)',
+                              fontSize: '0.78rem',
+                              color: 'var(--ink)',
+                              maxHeight: '100px',
+                              overflowY: 'auto',
+                              whiteSpace: 'pre-wrap',
+                              border: '1px solid var(--line)'
+                            }}>
+                              {tpl.body}
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
+          </div>
+        )}     </div>
           </div>
         )}
 
@@ -1886,21 +1906,25 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
       {/* CREATE TEMPLATE MODAL */}
       {showCreateTemplateModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: '1rem' }}>
-          <div className="glass-panel" style={{ width: '100%', maxWidth: '520px', borderRadius: '16px', background: 'var(--paper)', border: '1px solid var(--line)', padding: '1.5rem', borderTop: '4px solid var(--gold-deep)' }}>
+          <div className="glass-panel" style={{ width: '100%', maxWidth: '560px', maxHeight: '90vh', overflowY: 'auto', borderRadius: '16px', background: 'var(--paper)', border: '1px solid var(--line)', padding: '1.5rem', borderTop: '4px solid var(--gold-deep)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', paddingBottom: '0.5rem', borderBottom: '1px solid var(--line)' }}>
-              <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700 }}>Save New Template</h3>
+              <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700 }}>Save & Register New Template</h3>
               <button onClick={() => setShowCreateTemplateModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={18} /></button>
             </div>
 
             <form onSubmit={handleCreateTemplate}>
               <div className="form-group" style={{ marginBottom: '1rem' }}>
-                <label className="form-label" style={{ fontWeight: 600 }}>Template Name (For reference)</label>
+                <label className="form-label" style={{ fontWeight: 600 }}>Template Reference Name</label>
                 <input
                   type="text"
                   className="form-input"
-                  placeholder="e.g. Festival Season Offer"
+                  placeholder="e.g. welcome_offer_v2"
                   value={newTemplateForm.name}
-                  onChange={(e) => setNewTemplateForm({ ...newTemplateForm, name: e.target.value })}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const cleanName = val.toLowerCase().replace(/[^a-z0-9_]/g, '_');
+                    setNewTemplateForm({ ...newTemplateForm, name: val, metaTemplateName: cleanName });
+                  }}
                   required
                 />
               </div>
@@ -1913,8 +1937,8 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                   className="form-input"
                   style={{ background: 'var(--paper-2)', color: 'var(--ink)' }}
                 >
-                  <option value="whatsapp">WhatsApp Template</option>
-                  <option value="email">Email Template</option>
+                  <option value="whatsapp">WhatsApp Template (Registers with Meta)</option>
+                  <option value="email">Email Template (Local Layout)</option>
                 </select>
               </div>
 
@@ -1926,7 +1950,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                       type="text"
                       className="form-input"
                       placeholder="e.g. Hello {name}, your special offer is here!"
-                      value={newTemplateForm.subject}
+                      value={newTemplateForm.subject || ''}
                       onChange={(e) => setNewTemplateForm({ ...newTemplateForm, subject: e.target.value })}
                       required
                     />
@@ -1945,37 +1969,95 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                 </div>
               ) : (
                 <div style={{ background: 'var(--paper-2)', border: '1px solid var(--line)', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--gold-deep)', marginBottom: '0.75rem' }}>Meta WABA API Parameters</div>
+                  
                   <div className="form-group" style={{ marginBottom: '0.75rem' }}>
-                    <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Meta Approved Template Name</label>
+                    <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Approved Template Name</label>
                     <input
                       type="text"
                       className="form-input"
                       placeholder="e.g. welcome_offer_v2"
-                      value={newTemplateForm.metaTemplateName}
-                      onChange={(e) => setNewTemplateForm({ ...newTemplateForm, metaTemplateName: e.target.value })}
+                      value={newTemplateForm.metaTemplateName || ''}
+                      onChange={(e) => setNewTemplateForm({ ...newTemplateForm, metaTemplateName: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_') })}
                       required
                     />
+                    <span style={{ fontSize: '0.7rem', color: 'var(--muted)', marginTop: '0.15rem', display: 'block' }}>
+                      Must be unique, lowercase, alphanumeric, and contain underscores only.
+                    </span>
                   </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                    <div className="form-group">
+                      <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Template Category</label>
+                      <select
+                        value={newTemplateForm.category || 'MARKETING'}
+                        onChange={(e) => setNewTemplateForm({ ...newTemplateForm, category: e.target.value })}
+                        className="form-input"
+                        style={{ background: 'var(--paper)', color: 'var(--ink)' }}
+                      >
+                        <option value="MARKETING">MARKETING</option>
+                        <option value="UTILITY">UTILITY</option>
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Language Code</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        value={newTemplateForm.language || 'en_US'}
+                        onChange={(e) => setNewTemplateForm({ ...newTemplateForm, language: e.target.value })}
+                        placeholder="e.g. en_US"
+                        required
+                      />
+                    </div>
+                  </div>
+
                   <div className="form-group" style={{ marginBottom: '0.75rem' }}>
-                    <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Header Image/Media URL (Optional)</label>
-                    <input
-                      type="url"
+                    <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Header Component format</label>
+                    <select
+                      value={newTemplateForm.headerFormat || 'NONE'}
+                      onChange={(e) => setNewTemplateForm({ ...newTemplateForm, headerFormat: e.target.value })}
                       className="form-input"
-                      placeholder="e.g. https://domain.com/image.jpg (JPEG/PNG/PDF/MP4)"
-                      value={newTemplateForm.mediaUrl}
-                      onChange={(e) => setNewTemplateForm({ ...newTemplateForm, mediaUrl: e.target.value })}
-                    />
+                      style={{ background: 'var(--paper)', color: 'var(--ink)' }}
+                    >
+                      <option value="NONE">NONE (No header component)</option>
+                      <option value="TEXT">TEXT header</option>
+                      <option value="IMAGE">IMAGE header (JPG/PNG)</option>
+                      <option value="VIDEO">VIDEO header (MP4)</option>
+                      <option value="DOCUMENT">DOCUMENT header (PDF)</option>
+                    </select>
                   </div>
+
+                  {newTemplateForm.headerFormat && newTemplateForm.headerFormat !== 'NONE' && newTemplateForm.headerFormat !== 'TEXT' && (
+                    <div className="form-group" style={{ marginBottom: '0.75rem' }}>
+                      <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Default Send Media URL (Image/Video/PDF Link)</label>
+                      <input
+                        type="url"
+                        className="form-input"
+                        placeholder="e.g. https://domain.com/banner.jpg"
+                        value={newTemplateForm.mediaUrl || ''}
+                        onChange={(e) => setNewTemplateForm({ ...newTemplateForm, mediaUrl: e.target.value })}
+                      />
+                    </div>
+                  )}
+
                   <div className="form-group">
-                    <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Body Text / Parameter Content</label>
+                    <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Template Body Text</label>
                     <textarea
                       className="form-input"
-                      placeholder="Enter WhatsApp template parameter text mapping parameter 2"
+                      placeholder="e.g. Welcome {{1}}, finish your application on: {{2}}"
                       value={newTemplateForm.body}
                       onChange={(e) => setNewTemplateForm({ ...newTemplateForm, body: e.target.value })}
                       rows={4}
                       required
                     />
+                    <div style={{ marginTop: '0.45rem', padding: '0.5rem', background: 'rgba(224, 168, 46, 0.08)', border: '1px solid rgba(224, 168, 46, 0.25)', borderRadius: '6px', fontSize: '0.7rem', color: 'var(--gold-deep)' }}>
+                      <strong>Template Guidelines:</strong>
+                      <ul style={{ margin: '0.2rem 0 0 0', paddingLeft: '1rem', lineHeight: 1.4 }}>
+                        <li>Use parameters `{"{{1}}"}` for Name replacement, and `{"{{2}}"}` for dynamic link/message variables.</li>
+                        <li>Creating this template will register it <strong>live on your Facebook WhatsApp account</strong>. It will be ready to dispatch immediately once approved by Meta (typically 1-2 minutes).</li>
+                      </ul>
+                    </div>
                   </div>
                 </div>
               )}
@@ -1983,7 +2065,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
               <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '1.25rem', borderTop: '1px solid var(--line)', paddingTop: '1rem' }}>
                 <button type="button" onClick={() => setShowCreateTemplateModal(false)} className="btn-secondary">Cancel</button>
                 <button type="submit" disabled={isCreatingTemplate} className="btn-primary" style={{ background: 'var(--gold-deep)', color: '#fff' }}>
-                  {isCreatingTemplate ? 'Saving...' : 'Save Template'}
+                  {isCreatingTemplate ? 'Submitting to Meta...' : 'Register & Save Template'}
                 </button>
               </div>
             </form>
