@@ -471,12 +471,23 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
     };
   };
 
+  // Sanitize parameters to guarantee no empty strings (Meta rejects empty text parameters)
+  const cleanParams = (parameters || []).map((p, idx) => {
+    let s = String(p === null || p === undefined ? '' : p).trim();
+    if (!s) {
+      if (idx === 0) return 'Valued Customer';
+      if (idx === 1) return 'RuPay Platinum Credit Card';
+      return `Special Offer ${idx + 1}`;
+    }
+    return s;
+  });
+
   // Build list of candidate component payloads to guarantee delivery across all template variations
   const componentStrategies = [];
   const defaultHeaderImg = effectiveMediaUrl || 'https://uat.thefinmantra.com/logo.png';
 
-  if (isOtpAuth && parameters.length === 1) {
-    const otpCode = String(parameters[0] || '');
+  if (isOtpAuth && cleanParams.length === 1) {
+    const otpCode = String(cleanParams[0] || '123456');
 
     // Strategy 1: Body param + URL button (matches finmantra_otp dynamic button format)
     componentStrategies.push([
@@ -506,10 +517,10 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
     ]);
   } else {
     // Standard / Referral / Multi-parameter templates
-    const urlParamIdx = parameters.findIndex(p => typeof p === 'string' && (p.startsWith('http://') || p.startsWith('https://')));
+    const urlParamIdx = cleanParams.findIndex(p => typeof p === 'string' && (p.startsWith('http://') || p.startsWith('https://')));
 
     if (urlParamIdx !== -1) {
-      const fullUrl = parameters[urlParamIdx];
+      const fullUrl = cleanParams[urlParamIdx];
       let noProtocol = fullUrl.replace(/^https?:\/\//i, '');
       let pathOnly = '';
       try {
@@ -529,8 +540,8 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
       const parts = fullUrl.split('/');
       let urnOnly = parts[parts.length - 1] || referSuffix;
 
-      const bodyParams = parameters.filter((_, idx) => idx !== urlParamIdx);
-      const urlCandidates = [referSuffix, pathOnly, urnOnly, noProtocol, fullUrl].filter((v, i, a) => v && a.indexOf(v) === i);
+      const bodyParams = cleanParams.filter((_, idx) => idx !== urlParamIdx);
+      const urlCandidates = [referSuffix, pathOnly, urnOnly, noProtocol, fullUrl].filter((v, i, a) => v && v.trim() && a.indexOf(v) === i);
 
       for (const urlVal of urlCandidates) {
         // Variant with header image
@@ -547,48 +558,51 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
       }
     }
 
-    if (parameters.length > 0) {
-      const firstParam = String(parameters[0] || '');
+    if (cleanParams.length > 0) {
+      const firstParam = String(cleanParams[0] || 'Valued Customer');
 
-      // Strategy 1: Header image + Body parameter
+      // Strategy 1: Header image + All Body parameters (NO button params)
       componentStrategies.push([
         createHeaderComp(defaultHeaderImg),
         {
           type: 'body',
-          parameters: parameters.map(p => ({ type: 'text', text: String(p) }))
+          parameters: cleanParams.map(p => ({ type: 'text', text: String(p) }))
         }
       ]);
 
-      // Strategy 2: Body parameter only (no header)
+      // Strategy 2: Body parameters only (no header, NO button params)
       componentStrategies.push([
         {
           type: 'body',
-          parameters: parameters.map(p => ({ type: 'text', text: String(p) }))
+          parameters: cleanParams.map(p => ({ type: 'text', text: String(p) }))
         }
       ]);
 
-      // Strategy 3: Header image + Body with 1st param + dynamic URL button
+      // Strategy 3: Header image + Body with 1st param
       componentStrategies.push([
         createHeaderComp(defaultHeaderImg),
-        { type: 'body', parameters: [{ type: 'text', text: firstParam }] },
-        { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: firstParam }] }
+        { type: 'body', parameters: [{ type: 'text', text: firstParam }] }
       ]);
 
-      // Strategy 4: Body with 1st param + dynamic URL button (no header)
+      // Strategy 4: Body with 1st param
       componentStrategies.push([
-        { type: 'body', parameters: [{ type: 'text', text: firstParam }] },
-        { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: firstParam }] }
+        { type: 'body', parameters: [{ type: 'text', text: firstParam }] }
       ]);
 
-      if (parameters.length > 1) {
+      // Strategy 5: Header image + Body with 1st param + dynamic URL button (only if firstParam non-empty)
+      if (firstParam.trim()) {
         componentStrategies.push([
           createHeaderComp(defaultHeaderImg),
           { type: 'body', parameters: [{ type: 'text', text: firstParam }] },
-          { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: String(parameters[1]) }] }
+          { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: firstParam }] }
         ]);
+      }
+
+      if (cleanParams.length > 1 && String(cleanParams[1]).trim()) {
         componentStrategies.push([
+          createHeaderComp(defaultHeaderImg),
           { type: 'body', parameters: [{ type: 'text', text: firstParam }] },
-          { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: String(parameters[1]) }] }
+          { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: String(cleanParams[1]) }] }
         ]);
       }
     }
@@ -6496,19 +6510,22 @@ async function checkAndRunScheduledBroadcasts() {
                     } catch (e) {}
                   }
 
-                  if (hasDynamicButton) {
-                    params = [lead.name, ctaBaseUrl];
-                  } else {
-                    if (maxBodyParam === 1) {
-                      params = [lead.name];
-                    } else if (maxBodyParam === 2) {
-                      params = [lead.name, waMessage];
-                    } else {
-                      params = [lead.name, waMessage].slice(0, maxBodyParam);
-                    }
+                  const fallbackDefaults = [
+                    lead.name || 'Valued Customer',
+                    waMessage || lead.extra_data?.card_name || 'RuPay Platinum Credit Card',
+                    lead.extra_data?.offer_name || 'FinMantra Exclusive Offer',
+                    'FinMantra Advisory Services'
+                  ];
+
+                  params = [];
+                  for (let pIdx = 0; pIdx < maxBodyParam; pIdx++) {
+                    params.push(fallbackDefaults[pIdx] || `Detail ${pIdx + 1}`);
+                  }
+                  if (hasDynamicButton && ctaBaseUrl) {
+                    params.push(ctaBaseUrl);
                   }
                 } else {
-                  params = [lead.name, waMessage];
+                  params = [lead.name || 'Valued Customer', waMessage || 'RuPay Platinum Credit Card'];
                 }
 
                 const actualTemplateName = templateObj?.meta_template_name || templateObj?.name || b.whatsapp_template;
