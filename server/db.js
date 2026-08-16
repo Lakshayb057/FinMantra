@@ -3015,33 +3015,33 @@ const db = {
     const scheduledDate = scheduledAt ? new Date(scheduledAt) : null;
     const res = await pool.query(
       `UPDATE campaign_broadcasts 
-       SET name = COALESCE($2, name), 
-           channel = COALESCE($3, channel), 
-           whatsapp_template = COALESCE($4, whatsapp_template), 
-           whatsapp_message = COALESCE($5, whatsapp_message), 
-           email_subject = COALESCE($6, email_subject), 
-           email_body = COALESCE($7, email_body), 
-           scheduled_at = $8, 
-           media_url = COALESCE($9, media_url),
-           meta_phone_number_id = COALESCE($10, meta_phone_number_id),
-           meta_phone_number = COALESCE($11, meta_phone_number),
-           sender_email = COALESCE($12, sender_email),
-           status = CASE WHEN $8 IS NOT NULL AND status != 'sent' THEN 'scheduled' ELSE status END
-       WHERE id = $1 
+       SET name = COALESCE($2::text, name), 
+           channel = COALESCE($3::text, channel), 
+           whatsapp_template = COALESCE($4::text, whatsapp_template), 
+           whatsapp_message = COALESCE($5::text, whatsapp_message), 
+           email_subject = COALESCE($6::text, email_subject), 
+           email_body = COALESCE($7::text, email_body), 
+           scheduled_at = $8::timestamptz, 
+           media_url = COALESCE($9::text, media_url),
+           meta_phone_number_id = COALESCE($10::text, meta_phone_number_id),
+           meta_phone_number = COALESCE($11::text, meta_phone_number),
+           sender_email = COALESCE($12::text, sender_email),
+           status = CASE WHEN $8::timestamptz IS NOT NULL AND status != 'sent' THEN 'scheduled' ELSE status END
+       WHERE id = $1::text 
        RETURNING *`,
       [
         id, 
         name || null, 
         channel || null, 
-        whatsappTemplate !== undefined ? whatsappTemplate : null, 
-        whatsappMessage !== undefined ? whatsappMessage : null, 
-        emailSubject !== undefined ? emailSubject : null, 
-        emailBody !== undefined ? emailBody : null, 
+        whatsappTemplate !== undefined ? (whatsappTemplate || null) : null, 
+        whatsappMessage !== undefined ? (whatsappMessage || null) : null, 
+        emailSubject !== undefined ? (emailSubject || null) : null, 
+        emailBody !== undefined ? (emailBody || null) : null, 
         scheduledDate, 
-        mediaUrl !== undefined ? mediaUrl : null,
-        metaPhoneNumberId !== undefined ? metaPhoneNumberId : null,
-        metaPhoneNumber !== undefined ? metaPhoneNumber : null,
-        senderEmail !== undefined ? senderEmail : null
+        mediaUrl !== undefined ? (mediaUrl || null) : null,
+        metaPhoneNumberId !== undefined ? (metaPhoneNumberId || null) : null,
+        metaPhoneNumber !== undefined ? (metaPhoneNumber || null) : null,
+        senderEmail !== undefined ? (senderEmail || null) : null
       ]
     );
     return res.rows[0];
