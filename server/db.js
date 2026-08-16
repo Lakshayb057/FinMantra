@@ -2979,6 +2979,8 @@ const db = {
   },
 
   async updateCampaignBroadcast(id, { name, channel, whatsappTemplate, whatsappMessage, emailSubject, emailBody, scheduledAt, mediaUrl }) {
+    const scheduledDate = scheduledAt ? new Date(scheduledAt) : null;
+    const status = scheduledDate ? 'scheduled' : 'draft';
     const res = await pool.query(
       `UPDATE campaign_broadcasts 
        SET name = COALESCE($2, name), 
@@ -2989,10 +2991,10 @@ const db = {
            email_body = $7, 
            scheduled_at = $8, 
            media_url = $9,
-           status = CASE WHEN $8 IS NOT NULL THEN 'scheduled' ELSE status END
+           status = $10
        WHERE id = $1 
        RETURNING *`,
-      [id, name, channel, whatsappTemplate || null, whatsappMessage || null, emailSubject || null, emailBody || null, scheduledAt ? new Date(scheduledAt) : null, mediaUrl || null]
+      [id, name, channel, whatsappTemplate || null, whatsappMessage || null, emailSubject || null, emailBody || null, scheduledDate, mediaUrl || null, status]
     );
     return res.rows[0];
   },
