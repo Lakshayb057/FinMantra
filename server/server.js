@@ -6138,7 +6138,61 @@ async function getEmailTransporter(smtpAccountId = null) {
 // SMTP Accounts Management Endpoints
 app.get('/api/settings/smtp-accounts', authenticateToken, async (req, res) => {
   try {
-    const list = await db.getSmtpAccounts();
+    let list = await db.getSmtpAccounts();
+    const settings = await db.getSettings().catch(() => ({}));
+
+    // Auto-discover and import past/legacy SMTP accounts from settings and environment
+    const existingUsers = new Set(list.map(a => (a.username || '').toLowerCase().trim()));
+
+    // Candidate 1: Campaign SMTP Settings
+    const cHost = (settings.campaign_smtp_host || '').trim();
+    const cUser = (settings.campaign_smtp_user || '').trim();
+    const cPass = (settings.campaign_smtp_pass || '').trim();
+    if (cHost && cUser && cPass && !existingUsers.has(cUser.toLowerCase())) {
+      try {
+        await db.createSmtpAccount({
+          name: settings.campaign_smtp_from_name ? `${settings.campaign_smtp_from_name} (Campaigns)` : 'Primary Campaign SMTP',
+          host: cHost.replace(/\s+/g, '.'),
+          port: parseInt(settings.campaign_smtp_port, 10) || 465,
+          username: cUser,
+          password: cPass,
+          secure: settings.campaign_smtp_secure === 'true' || parseInt(settings.campaign_smtp_port, 10) === 465,
+          fromName: settings.campaign_smtp_from_name || 'FinMantra',
+          fromEmail: settings.campaign_smtp_from_email || cUser,
+          isDefault: list.length === 0
+        });
+        existingUsers.add(cUser.toLowerCase());
+      } catch (e) {
+        console.warn('[SMTP Import Warn]:', e.message);
+      }
+    }
+
+    // Candidate 2: General System SMTP Settings
+    const gHost = (settings.smtp_host || settings.email_host || process.env.SMTP_HOST || '').trim();
+    const gUser = (settings.smtp_user || settings.smtp_username || settings.email_user || process.env.SMTP_USER || process.env.EMAIL_USER || '').trim();
+    const gPass = (settings.smtp_pass || settings.smtp_password || settings.email_pass || process.env.SMTP_PASS || process.env.EMAIL_PASS || '').trim();
+    if (gHost && gUser && gPass && !existingUsers.has(gUser.toLowerCase())) {
+      try {
+        await db.createSmtpAccount({
+          name: 'General System SMTP',
+          host: gHost.replace(/\s+/g, '.'),
+          port: parseInt(settings.smtp_port || settings.email_port || process.env.SMTP_PORT || '465', 10) || 465,
+          username: gUser,
+          password: gPass,
+          secure: (settings.smtp_secure === 'true' || settings.smtp_secure === true || (parseInt(settings.smtp_port, 10) === 465)),
+          fromName: settings.smtp_from_name || settings.email_sender || 'FinMantra System',
+          fromEmail: settings.smtp_from || settings.email_sender || gUser,
+          isDefault: list.length === 0
+        });
+        existingUsers.add(gUser.toLowerCase());
+      } catch (e) {
+        console.warn('[SMTP Import Warn]:', e.message);
+      }
+    }
+
+    // Re-fetch all accounts from DB after auto-migration
+    list = await db.getSmtpAccounts();
+
     const sanitized = list.map(acc => ({
       ...acc,
       password: acc.password ? '••••••••••••' : ''
