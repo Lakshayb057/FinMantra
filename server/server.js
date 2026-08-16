@@ -20,6 +20,7 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const http = require('http');
+const https = require('https');
 const WebSocket = require('ws');
 const db = require('./db');
 const metaAudienceService = require('./metaAudienceService');
