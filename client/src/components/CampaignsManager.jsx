@@ -297,18 +297,27 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
     }
   };
 
+  const [isTestingSmtp, setIsTestingSmtp] = useState(false);
+
   const handleSaveSmtpSettings = async (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     setIsSavingSettings(true);
+    const sanitizedHost = (smtpSettings.host || '').trim().replace(/\s+/g, '.');
+    const sanitizedUser = (smtpSettings.user || '').trim();
+    let sanitizedPass = (smtpSettings.pass || '').trim();
+    if (sanitizedHost.includes('gmail')) {
+      sanitizedPass = sanitizedPass.replace(/\s+/g, '');
+    }
+
     try {
       const res = await fetch(`${API_URL}/settings`, {
         method: 'PUT',
         headers,
         body: JSON.stringify({
-          campaign_smtp_host: smtpSettings.host,
+          campaign_smtp_host: sanitizedHost,
           campaign_smtp_port: smtpSettings.port,
-          campaign_smtp_user: smtpSettings.user,
-          campaign_smtp_pass: smtpSettings.pass,
+          campaign_smtp_user: sanitizedUser,
+          campaign_smtp_pass: sanitizedPass,
           campaign_smtp_secure: smtpSettings.secure,
           campaign_smtp_from_name: smtpSettings.fromName,
           campaign_smtp_from_email: smtpSettings.fromEmail
@@ -316,7 +325,13 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
       });
       const data = await res.json();
       if (res.ok) {
-        showToast('SMTP Gateway configuration updated successfully.', 'success');
+        showToast('SMTP Gateway configuration saved successfully.', 'success');
+        setSmtpSettings(prev => ({
+          ...prev,
+          host: sanitizedHost,
+          user: sanitizedUser,
+          pass: sanitizedPass
+        }));
       } else {
         showToast(data.error || 'Failed to save SMTP settings.', 'error');
       }
@@ -324,6 +339,43 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
       showToast('Network error saving settings.', 'error');
     } finally {
       setIsSavingSettings(false);
+    }
+  };
+
+  const handleTestSmtpConnection = async () => {
+    setIsTestingSmtp(true);
+    const sanitizedHost = (smtpSettings.host || '').trim().replace(/\s+/g, '.');
+    const sanitizedUser = (smtpSettings.user || '').trim();
+    let sanitizedPass = (smtpSettings.pass || '').trim();
+    if (sanitizedHost.includes('gmail')) {
+      sanitizedPass = sanitizedPass.replace(/\s+/g, '');
+    }
+
+    try {
+      const res = await fetch(`${API_URL}/settings/test-smtp`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          host: sanitizedHost,
+          port: smtpSettings.port,
+          user: sanitizedUser,
+          pass: sanitizedPass,
+          secure: smtpSettings.secure,
+          fromName: smtpSettings.fromName,
+          fromEmail: smtpSettings.fromEmail,
+          testRecipient: sanitizedUser || smtpSettings.fromEmail
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast(data.message || 'SMTP Connection verified successfully!', 'success');
+      } else {
+        showToast(data.error || 'SMTP Connection failed. Please check credentials.', 'error');
+      }
+    } catch (err) {
+      showToast('Network error testing SMTP connection.', 'error');
+    } finally {
+      setIsTestingSmtp(false);
     }
   };
 
@@ -1847,23 +1899,46 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                 </div>
               </div>
 
-              <button
-                type="submit"
-                disabled={isSavingSettings}
-                style={{
-                  marginTop: '0.75rem',
-                  padding: '0.7rem',
-                  borderRadius: '8px',
-                  background: 'var(--gold-deep)',
-                  color: '#fff',
-                  border: 'none',
-                  fontWeight: 700,
-                  fontSize: '0.9rem',
-                  cursor: isSavingSettings ? 'not-allowed' : 'pointer'
-                }}
-              >
-                {isSavingSettings ? 'Saving Settings...' : 'Save SMTP Settings'}
-              </button>
+              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.75rem', flexWrap: 'wrap' }}>
+                <button
+                  type="submit"
+                  disabled={isSavingSettings}
+                  style={{
+                    flex: 1,
+                    padding: '0.7rem',
+                    borderRadius: '8px',
+                    background: 'var(--gold-deep)',
+                    color: '#fff',
+                    border: 'none',
+                    fontWeight: 700,
+                    fontSize: '0.9rem',
+                    cursor: isSavingSettings ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  {isSavingSettings ? 'Saving Settings...' : 'Save SMTP Settings'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleTestSmtpConnection}
+                  disabled={isTestingSmtp}
+                  style={{
+                    padding: '0.7rem 1.25rem',
+                    borderRadius: '8px',
+                    background: 'var(--paper-2)',
+                    color: 'var(--ink)',
+                    border: '1px solid var(--line)',
+                    fontWeight: 700,
+                    fontSize: '0.9rem',
+                    cursor: isTestingSmtp ? 'not-allowed' : 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.4rem'
+                  }}
+                >
+                  {isTestingSmtp ? <RefreshCw size={15} className="spin-slow" /> : <Send size={15} />}
+                  {isTestingSmtp ? 'Testing Connection...' : 'Test SMTP Connection'}
+                </button>
+              </div>
             </form>
           </div>
         </div>

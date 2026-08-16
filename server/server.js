@@ -5979,13 +5979,16 @@ const nodemailer = require('nodemailer');
 // Dynamically create nodemailer transporter using SMTP settings in DB
 async function getEmailTransporter() {
   const settings = await db.getSettings();
-  const host = settings.campaign_smtp_host;
-  const port = parseInt(settings.campaign_smtp_port, 10);
-  const user = settings.campaign_smtp_user;
-  const pass = settings.campaign_smtp_pass;
-  const secure = settings.campaign_smtp_secure === 'true';
+  let host = String(settings.campaign_smtp_host || '').trim().replace(/\s+/g, '.');
+  const port = parseInt(settings.campaign_smtp_port, 10) || 465;
+  let user = String(settings.campaign_smtp_user || '').trim();
+  let pass = String(settings.campaign_smtp_pass || '').trim();
+  if (host.includes('gmail')) {
+    pass = pass.replace(/\s+/g, '');
+  }
+  const secure = settings.campaign_smtp_secure === 'true' || port === 465;
 
-  if (!host || !port || !user || !pass) {
+  if (!host || !user || !pass) {
     console.log('[Email Campaigns] SMTP settings not configured. Running in mock/simulation mode.');
     return null; // Fallback to mock mode
   }
@@ -6000,6 +6003,54 @@ async function getEmailTransporter() {
     }
   });
 }
+
+// Test SMTP Configuration Endpoint
+app.post('/api/settings/test-smtp', authenticateToken, async (req, res) => {
+  try {
+    const { host, port, user, pass, secure, fromName, fromEmail, testRecipient } = req.body;
+    let cleanHost = String(host || '').trim().replace(/\s+/g, '.');
+    let cleanUser = String(user || '').trim();
+    let cleanPass = String(pass || '').trim();
+    if (cleanHost.includes('gmail')) {
+      cleanPass = cleanPass.replace(/\s+/g, '');
+    }
+    const cleanPort = parseInt(port, 10) || 465;
+    const isSecure = secure === 'true' || cleanPort === 465;
+
+    if (!cleanHost || !cleanUser || !cleanPass) {
+      return res.status(400).json({ success: false, error: 'Host, Username and Password are required.' });
+    }
+
+    const testTransporter = nodemailer.createTransport({
+      host: cleanHost,
+      port: cleanPort,
+      secure: isSecure,
+      auth: {
+        user: cleanUser,
+        pass: cleanPass
+      }
+    });
+
+    await testTransporter.verify();
+
+    const targetTo = testRecipient || cleanUser;
+    await testTransporter.sendMail({
+      from: `"${fromName || 'FinMantra'}" <${fromEmail || cleanUser}>`,
+      to: targetTo,
+      subject: 'FinMantra SMTP Test Email - Connection Successful',
+      html: `<div style="font-family:sans-serif;padding:20px;background:#f9f9f9;border-radius:8px;">
+        <h2 style="color:#e0a82e;">FinMantra SMTP Gateway Test</h2>
+        <p>Your SMTP mail configuration is verified and working perfectly!</p>
+        <p><strong>Host:</strong> ${cleanHost}<br/><strong>Port:</strong> ${cleanPort}<br/><strong>User:</strong> ${cleanUser}</p>
+        <p style="font-size:12px;color:#888;">Sent from FinMantra Campaign Broadcast Engine.</p>
+      </div>`
+    });
+
+    res.json({ success: true, message: `SMTP connection verified and test email delivered to ${targetTo}!` });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
 
 // Background scheduler function
 async function checkAndRunScheduledBroadcasts() {
