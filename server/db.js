@@ -499,6 +499,7 @@ async function initPgSchema() {
     await safeQuery("ALTER TABLE campaign_templates ADD COLUMN IF NOT EXISTS buttons TEXT");
     await safeQuery("ALTER TABLE campaign_templates ADD COLUMN IF NOT EXISTS meta_phone_number_id VARCHAR(100)");
     await safeQuery("ALTER TABLE campaign_templates ADD COLUMN IF NOT EXISTS waba_id VARCHAR(100)");
+    await safeQuery("ALTER TABLE campaign_logs DROP CONSTRAINT IF EXISTS campaign_logs_campaign_lead_id_fkey");
 
     await safeQuery("ALTER TABLE campaign_master_leads ADD COLUMN IF NOT EXISTS finmantra_id VARCHAR(50)");
     await safeQuery("ALTER TABLE campaign_master_leads ADD COLUMN IF NOT EXISTS campaign_data_id VARCHAR(50)");
@@ -3106,13 +3107,28 @@ const db = {
   },
 
   async logCampaignBroadcastDelivery(id, broadcastId, campaignLeadId, channel, status, errorMessage) {
-    const res = await pool.query(
-      `INSERT INTO campaign_logs (id, broadcast_id, campaign_lead_id, channel, status, error_message) 
-       VALUES ($1, $2, $3, $4, $5, $6) 
-       RETURNING *`,
-      [id, broadcastId, campaignLeadId, channel, status, errorMessage]
-    );
-    return res.rows[0];
+    try {
+      const res = await pool.query(
+        `INSERT INTO campaign_logs (id, broadcast_id, campaign_lead_id, channel, status, error_message) 
+         VALUES ($1, $2, $3, $4, $5, $6) 
+         RETURNING *`,
+        [id, broadcastId, campaignLeadId, channel, status, errorMessage]
+      );
+      return res.rows[0];
+    } catch (err) {
+      console.error('[logCampaignBroadcastDelivery] Warning on insert:', err.message);
+      try {
+        const fallback = await pool.query(
+          `INSERT INTO campaign_logs (id, broadcast_id, channel, status, error_message) 
+           VALUES ($1, $2, $3, $4, $5) 
+           RETURNING *`,
+          [id, broadcastId, channel, status, (errorMessage || '') + (campaignLeadId ? ` (Lead: ${campaignLeadId})` : '')]
+        );
+        return fallback.rows[0];
+      } catch (e) {
+        return null;
+      }
+    }
   },
 
   async getCampaignLogs(broadcastId) {

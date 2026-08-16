@@ -6103,7 +6103,7 @@ async function checkAndRunScheduledBroadcasts() {
             'email',
             emailSuccess ? 'sent' : 'failed',
             emailError
-          );
+          ).catch(err => console.error('[Email Log Warn]:', err.message));
         }
 
         // --- WHATSAPP CHANNEL ---
@@ -6198,7 +6198,7 @@ async function checkAndRunScheduledBroadcasts() {
             'whatsapp',
             waSuccess ? 'sent' : 'failed',
             waError
-          );
+          ).catch(err => console.error('[WhatsApp Log Warn]:', err.message));
         }
 
         if (emailSuccess && waSuccess) {
