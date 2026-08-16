@@ -6437,6 +6437,25 @@ app.get('/api/campaigns/templates/meta-inspect', async (req, res) => {
   }
 });
 
+// Debug endpoint to check latest failed campaign delivery logs
+app.get('/api/campaigns/templates/debug-errors', async (req, res) => {
+  try {
+    const query = `
+      SELECT l.id, l.broadcast_id, l.status, l.error_message, l.created_at,
+             b.name as broadcast_name, b.whatsapp_template
+      FROM campaign_delivery_logs l
+      JOIN campaign_broadcasts b ON l.broadcast_id = b.id
+      WHERE l.status = 'failed'
+      ORDER BY l.created_at DESC
+      LIMIT 10
+    `;
+    const result = await db.runQuery(query);
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // List all campaign templates
 app.get('/api/campaigns/templates', authenticateToken, async (req, res) => {
   try {
