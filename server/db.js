@@ -488,6 +488,7 @@ async function initPgSchema() {
     await safeQuery("ALTER TABLE campaign_broadcasts ADD COLUMN IF NOT EXISTS media_url VARCHAR(255)");
     await safeQuery("ALTER TABLE campaign_broadcasts ADD COLUMN IF NOT EXISTS last_triggered_at TIMESTAMP WITH TIME ZONE");
     await safeQuery("ALTER TABLE campaign_broadcasts ADD COLUMN IF NOT EXISTS last_trigger_status VARCHAR(50)");
+    await safeQuery("ALTER TABLE campaign_templates ADD COLUMN IF NOT EXISTS buttons TEXT");
     await safeQuery("CREATE INDEX IF NOT EXISTS idx_meta_memberships_aud_lead ON meta_audience_memberships (audience_id, lead_id)");
     await safeQuery("CREATE INDEX IF NOT EXISTS idx_meta_memberships_state ON meta_audience_memberships (state)");
     await safeQuery("CREATE INDEX IF NOT EXISTS idx_meta_sync_jobs_aud ON meta_audience_sync_jobs (audience_id)");
@@ -3132,14 +3133,14 @@ const db = {
     return res.rows;
   },
 
-  async createCampaignTemplate({ id, name, type, subject, body, metaTemplateName, mediaUrl }) {
+  async createCampaignTemplate({ id, name, type, subject, body, metaTemplateName, mediaUrl, buttons }) {
     const res = await pool.query(
-      `INSERT INTO campaign_templates (id, name, type, subject, body, meta_template_name, media_url)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO campaign_templates (id, name, type, subject, body, meta_template_name, media_url, buttons)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        ON CONFLICT (id) DO UPDATE SET 
-         name = $2, type = $3, subject = $4, body = $5, meta_template_name = $6, media_url = $7
+         name = $2, type = $3, subject = $4, body = $5, meta_template_name = $6, media_url = $7, buttons = $8
        RETURNING *`,
-      [id, name, type, subject, body, metaTemplateName, mediaUrl]
+      [id, name, type, subject, body, metaTemplateName, mediaUrl, buttons || null]
     );
     return res.rows[0];
   },

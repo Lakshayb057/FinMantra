@@ -21,7 +21,15 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
     mediaUrl: '',
     category: 'MARKETING',
     language: 'en_US',
-    headerFormat: 'NONE'
+    headerFormat: 'NONE',
+    buttons: {
+      buttonType: 'NONE',
+      ctaUrlText: '',
+      ctaUrlValue: '',
+      ctaPhoneText: '',
+      ctaPhoneValue: '',
+      quickReplies: ['', '', '']
+    }
   });
   const [isCreatingTemplate, setIsCreatingTemplate] = useState(false);
 
@@ -238,7 +246,15 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
           mediaUrl: '',
           category: 'MARKETING',
           language: 'en_US',
-          headerFormat: 'NONE'
+          headerFormat: 'NONE',
+          buttons: {
+            buttonType: 'NONE',
+            ctaUrlText: '',
+            ctaUrlValue: '',
+            ctaPhoneText: '',
+            ctaPhoneValue: '',
+            quickReplies: ['', '', '']
+          }
         });
         setShowCreateTemplateModal(false);
         fetchTemplates();
@@ -1716,7 +1732,15 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                       mediaUrl: '',
                       category: 'MARKETING',
                       language: 'en_US',
-                      headerFormat: 'NONE'
+                      headerFormat: 'NONE',
+                      buttons: {
+                        buttonType: 'NONE',
+                        ctaUrlText: '',
+                        ctaUrlValue: '',
+                        ctaPhoneText: '',
+                        ctaPhoneValue: '',
+                        quickReplies: ['', '', '']
+                      }
                     });
                     setShowCreateTemplateModal(true);
                   }}
@@ -2059,6 +2083,113 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                         <li>Creating this template will register it <strong>live on your Facebook WhatsApp account</strong>. It will be ready to dispatch immediately once approved by Meta (typically 1-2 minutes).</li>
                       </ul>
                     </div>
+                  </div>
+
+                  {/* WhatsApp Buttons Config Section */}
+                  <div style={{ marginTop: '1rem', borderTop: '1px dashed var(--line)', paddingTop: '1rem' }}>
+                    <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Interactive Buttons (Optional)</label>
+                    <select
+                      value={newTemplateForm.buttons?.buttonType || 'NONE'}
+                      onChange={(e) => {
+                        const type = e.target.value;
+                        setNewTemplateForm({
+                          ...newTemplateForm,
+                          buttons: {
+                            ...newTemplateForm.buttons,
+                            buttonType: type
+                          }
+                        });
+                      }}
+                      className="form-input"
+                      style={{ background: 'var(--paper)', color: 'var(--ink)', marginBottom: '0.75rem' }}
+                    >
+                      <option value="NONE">No Buttons</option>
+                      <option value="CTA">Call-To-Action (URL & Phone)</option>
+                      <option value="QUICK_REPLIES">Quick Replies</option>
+                    </select>
+
+                    {newTemplateForm.buttons?.buttonType === 'CTA' && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', padding: '0.75rem', background: 'var(--paper)', borderRadius: '6px', border: '1px solid var(--line)' }}>
+                        <div style={{ fontWeight: 600, fontSize: '0.75rem', color: 'var(--gold-deep)' }}>Button 1: Call to Action (URL Website)</div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                          <input
+                            type="text"
+                            placeholder="Button Label (e.g. Visit Website)"
+                            maxLength={25}
+                            value={newTemplateForm.buttons?.ctaUrlText || ''}
+                            onChange={(e) => setNewTemplateForm({
+                              ...newTemplateForm,
+                              buttons: { ...newTemplateForm.buttons, ctaUrlText: e.target.value }
+                            })}
+                            className="form-input"
+                            style={{ fontSize: '0.8rem' }}
+                          />
+                          <input
+                            type="text"
+                            placeholder="URL (e.g. https://domain.com/refer/{{1}})"
+                            value={newTemplateForm.buttons?.ctaUrlValue || ''}
+                            onChange={(e) => setNewTemplateForm({
+                              ...newTemplateForm,
+                              buttons: { ...newTemplateForm.buttons, ctaUrlValue: e.target.value }
+                            })}
+                            className="form-input"
+                            style={{ fontSize: '0.8rem' }}
+                          />
+                        </div>
+
+                        <div style={{ fontWeight: 600, fontSize: '0.75rem', color: 'var(--gold-deep)', marginTop: '0.35rem' }}>Button 2: Call Support (Phone Call - Optional)</div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                          <input
+                            type="text"
+                            placeholder="Button Label (e.g. Call Us)"
+                            maxLength={25}
+                            value={newTemplateForm.buttons?.ctaPhoneText || ''}
+                            onChange={(e) => setNewTemplateForm({
+                              ...newTemplateForm,
+                              buttons: { ...newTemplateForm.buttons, ctaPhoneText: e.target.value }
+                            })}
+                            className="form-input"
+                            style={{ fontSize: '0.8rem' }}
+                          />
+                          <input
+                            type="text"
+                            placeholder="Phone Number (e.g. +919876543210)"
+                            value={newTemplateForm.buttons?.ctaPhoneValue || ''}
+                            onChange={(e) => setNewTemplateForm({
+                              ...newTemplateForm,
+                              buttons: { ...newTemplateForm.buttons, ctaPhoneValue: e.target.value }
+                            })}
+                            className="form-input"
+                            style={{ fontSize: '0.8rem' }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {newTemplateForm.buttons?.buttonType === 'QUICK_REPLIES' && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', padding: '0.75rem', background: 'var(--paper)', borderRadius: '6px', border: '1px solid var(--line)' }}>
+                        <div style={{ fontWeight: 600, fontSize: '0.75rem', color: 'var(--gold-deep)' }}>Quick Reply Options (Up to 3, max 25 chars each)</div>
+                        {[0, 1, 2].map((idx) => (
+                          <input
+                            key={idx}
+                            type="text"
+                            placeholder={`Quick Reply Button ${idx + 1} Text`}
+                            maxLength={25}
+                            value={newTemplateForm.buttons?.quickReplies?.[idx] || ''}
+                            onChange={(e) => {
+                              const newReplies = [...(newTemplateForm.buttons?.quickReplies || ['', '', ''])];
+                              newReplies[idx] = e.target.value;
+                              setNewTemplateForm({
+                                ...newTemplateForm,
+                                buttons: { ...newTemplateForm.buttons, quickReplies: newReplies }
+                              });
+                            }}
+                            className="form-input"
+                            style={{ fontSize: '0.8rem' }}
+                          />
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

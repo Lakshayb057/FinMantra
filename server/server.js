@@ -6087,7 +6087,7 @@ async function checkAndRunScheduledBroadcasts() {
 }
 
 // Helper to register message template with Meta API
-const registerMetaTemplate = async ({ apiKey, wabaId, name, category, language, headerFormat, bodyText }) => {
+const registerMetaTemplate = async ({ apiKey, wabaId, name, category, language, headerFormat, bodyText, buttons }) => {
   return new Promise((resolve, reject) => {
     const cleanName = name.toLowerCase().replace(/[^a-z0-9_]/g, '_');
     const components = [];
@@ -6131,7 +6131,56 @@ const registerMetaTemplate = async ({ apiKey, wabaId, name, category, language, 
     }
 
     components.push(bodyComp);
-    
+
+    // Append Buttons if configured
+    if (buttons) {
+      try {
+        let btnObj = typeof buttons === 'string' ? JSON.parse(buttons) : buttons;
+        if (btnObj.buttonType === 'CTA') {
+          const buttonsArray = [];
+          if (btnObj.ctaUrlText && btnObj.ctaUrlValue) {
+            const btn = {
+              type: 'URL',
+              text: btnObj.ctaUrlText.substring(0, 25),
+              url: btnObj.ctaUrlValue
+            };
+            if (btnObj.ctaUrlValue.includes('{{1}}') || btnObj.ctaUrlValue.includes('{{2}}')) {
+              btn.example = ["https://uat.thefinmantra.com/refer/example"];
+            }
+            buttonsArray.push(btn);
+          }
+          if (btnObj.ctaPhoneText && btnObj.ctaPhoneValue) {
+            buttonsArray.push({
+              type: 'PHONE_NUMBER',
+              text: btnObj.ctaPhoneText.substring(0, 25),
+              phone_number: btnObj.ctaPhoneValue
+            });
+          }
+          if (buttonsArray.length > 0) {
+            components.push({
+              type: 'BUTTONS',
+              buttons: buttonsArray
+            });
+          }
+        } else if (btnObj.buttonType === 'QUICK_REPLIES' && Array.isArray(btnObj.quickReplies)) {
+          const buttonsArray = btnObj.quickReplies
+            .filter(text => text && text.trim())
+            .map(text => ({
+              type: 'QUICK_REPLY',
+              text: text.trim().substring(0, 25)
+            }));
+          if (buttonsArray.length > 0) {
+            components.push({
+              type: 'BUTTONS',
+              buttons: buttonsArray
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Failed to parse template buttons config:', err);
+      }
+    }
+
     const payload = {
       name: cleanName,
       language: language || 'en_US',
@@ -6363,7 +6412,7 @@ app.get('/api/campaigns/templates', authenticateToken, async (req, res) => {
 // Create/Update a template
 app.post('/api/campaigns/templates', authenticateToken, async (req, res) => {
   try {
-    const { id, name, type, subject, body, metaTemplateName, mediaUrl, category, language, headerFormat } = req.body;
+    const { id, name, type, subject, body, metaTemplateName, mediaUrl, category, language, headerFormat, buttons } = req.body;
     if (!name || !type || !body) {
       return res.status(400).json({ success: false, error: 'Name, Type and Body are required fields.' });
     }
@@ -6428,7 +6477,8 @@ app.post('/api/campaigns/templates', authenticateToken, async (req, res) => {
           category: category || 'MARKETING',
           language: language || 'en_US',
           headerFormat: headerFormat || 'NONE',
-          bodyText: body
+          bodyText: body,
+          buttons
         });
       } catch (metaErr) {
         return res.status(400).json({
@@ -6446,7 +6496,8 @@ app.post('/api/campaigns/templates', authenticateToken, async (req, res) => {
       subject: subject || null,
       body,
       metaTemplateName: metaTemplateName ? metaTemplateName.toLowerCase().replace(/[^a-z0-9_]/g, '_') : null,
-      mediaUrl: mediaUrl || null
+      mediaUrl: mediaUrl || null,
+      buttons: buttons ? (typeof buttons === 'string' ? buttons : JSON.stringify(buttons)) : null
     });
     res.json({ success: true, template: saved });
   } catch (err) {
