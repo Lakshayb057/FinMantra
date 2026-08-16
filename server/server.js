@@ -6300,7 +6300,7 @@ app.get('/api/campaigns/templates/meta-inspect', async (req, res) => {
         const options = {
           hostname: 'graph.facebook.com',
           port: 443,
-          path: `/${apiVersion}/${wabaId}/message_templates?limit=100`,
+          path: `/${apiVersion}/${wabaId}/message_templates?limit=100&fields=name,status,category,components,rejected_reason,reason`,
           method: 'GET',
           headers: { 'Authorization': `Bearer ${apiKey}` }
         };
