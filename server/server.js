@@ -401,8 +401,16 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
   }
 
   const apiKey = getSettingVal(settings, 'wa_api_key', 'WA_API_KEY');
-  const phoneId = senderPhoneId || getSettingVal(settings, 'wa_phone_number_id', 'WA_PHONE_NUMBER_ID');
+  let phoneId = senderPhoneId || getSettingVal(settings, 'wa_phone_number_id', 'WA_PHONE_NUMBER_ID');
   const apiVersion = getSettingVal(settings, 'wa_api_version', 'WA_API_VERSION', 'v25.0');
+
+  if (phoneId && (String(phoneId).startsWith('+') || String(phoneId).includes(' ') || (String(phoneId).length <= 12 && !isNaN(phoneId)))) {
+    const defaultPhoneId = getSettingVal(settings, 'wa_phone_number_id', 'WA_PHONE_NUMBER_ID');
+    if (defaultPhoneId && defaultPhoneId !== phoneId) {
+      console.log(`[WhatsApp Dispatch] Re-mapped display phone "${phoneId}" to Meta Phone ID "${defaultPhoneId}"`);
+      phoneId = defaultPhoneId;
+    }
+  }
 
   if (!apiKey || !phoneId) {
     throw new Error('Meta WhatsApp API credentials missing. Please configure WA_API_KEY and WA_PHONE_NUMBER_ID in settings or .env file.');
@@ -536,13 +544,17 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
         }
       };
 
+      console.log(`[Meta API Call] Endpoint: /${apiVersion}/${phoneId}/messages | Payload: ${postData}`);
+
       const req = https.request(options, (res) => {
         let responseBody = '';
         res.on('data', (chunk) => responseBody += chunk);
         res.on('end', () => {
           if (res.statusCode >= 200 && res.statusCode < 300) {
+            console.log(`[Meta API Success] Status: ${res.statusCode} | Body: ${responseBody}`);
             try { resolve(JSON.parse(responseBody)); } catch (e) { resolve(responseBody); }
           } else {
+            console.warn(`[Meta API Attempt Failed] Status: ${res.statusCode} | Response: ${responseBody}`);
             let errMsg = `Meta API error (status ${res.statusCode}): ${responseBody}`;
             let isAuthError = (res.statusCode === 401);
             let errorCode = null;
