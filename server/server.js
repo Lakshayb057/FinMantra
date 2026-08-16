@@ -6620,21 +6620,30 @@ const getResumableUploadHandle = async (apiKey, appId, mediaUrl, apiVersion = 'v
 };
 
 // Helper to register message template with Meta API
-const registerMetaTemplate = async ({ apiKey, wabaId, phoneId, name, category, language, headerFormat, bodyText, buttons, mediaUrl }) => {
+const registerMetaTemplate = async ({ apiKey, wabaId, phoneId, name, category, language, headerFormat, headerText, headerSample, bodyText, bodySampleValues, footerText, buttons, mediaUrl }) => {
   return new Promise(async (resolve, reject) => {
     const cleanName = name.toLowerCase().replace(/[^a-z0-9_]/g, '_');
     const components = [];
     const settings = await db.getSettings().catch(() => ({}));
     const apiVersion = getSettingVal(settings, 'wa_api_version', 'WA_API_VERSION', 'v25.0');
     
+    // 1. HEADER COMPONENT
     if (headerFormat && headerFormat !== 'NONE') {
+      const formatUpper = headerFormat.toUpperCase();
       const headerComp = {
         type: 'HEADER',
-        format: headerFormat.toUpperCase()
+        format: formatUpper
       };
-      if (headerFormat === 'TEXT') {
-        headerComp.text = 'Notification';
-      } else {
+
+      if (formatUpper === 'TEXT') {
+        const textVal = headerText && headerText.trim() ? headerText.trim() : 'Notification';
+        headerComp.text = textVal;
+        if (textVal.includes('{{1}}')) {
+          headerComp.example = {
+            header_text: [headerSample && headerSample.trim() ? headerSample.trim() : 'Valued Customer']
+          };
+        }
+      } else if (['IMAGE', 'VIDEO', 'DOCUMENT'].includes(formatUpper)) {
         const sampleUrl = mediaUrl && mediaUrl.trim() ? mediaUrl.trim() : 'https://uat.thefinmantra.com/logo.png';
         let finalHandle = "4:c2FtcGxlX2hhbmRsZQ=="; // Fallback handle
         try {
@@ -6653,6 +6662,7 @@ const registerMetaTemplate = async ({ apiKey, wabaId, phoneId, name, category, l
       components.push(headerComp);
     }
     
+    // 2. BODY COMPONENT
     const bodyComp = {
       type: 'BODY',
       text: bodyText
@@ -6670,19 +6680,41 @@ const registerMetaTemplate = async ({ apiKey, wabaId, phoneId, name, category, l
         "https://uat.thefinmantra.com",  // Parameter 2 (URL/Link)
         "FinMantra Services",           // Parameter 3 (Company)
         "24 hours",                     // Parameter 4 (Duration/Time)
-        "123456"                        // Parameter 5 (Number/OTP)
+        "123456",                       // Parameter 5 (Number/OTP)
+        "₹50,000",                      // Parameter 6 (Amount)
+        "Special Offer"                 // Parameter 7
       ];
+      
       for (let i = 1; i <= maxParam; i++) {
-        sampleValues.push(realisticDefaults[i - 1] || `Value ${i}`);
+        if (Array.isArray(bodySampleValues) && bodySampleValues[i - 1] && String(bodySampleValues[i - 1]).trim()) {
+          sampleValues.push(String(bodySampleValues[i - 1]).trim());
+        } else if (bodySampleValues && typeof bodySampleValues === 'object' && bodySampleValues[String(i)]) {
+          sampleValues.push(String(bodySampleValues[String(i)]).trim());
+        } else {
+          sampleValues.push(realisticDefaults[i - 1] || `Sample_${i}`);
+        }
       }
       bodyComp.example = {
         body_text: [sampleValues]
       };
     }
 
+    // Security recommendation for authentication templates if applicable
+    if (category === 'AUTHENTICATION') {
+      bodyComp.add_security_recommendation = true;
+    }
+
     components.push(bodyComp);
 
-    // Append Buttons if configured
+    // 3. FOOTER COMPONENT (Optional)
+    if (footerText && footerText.trim()) {
+      components.push({
+        type: 'FOOTER',
+        text: footerText.trim().substring(0, 60)
+      });
+    }
+
+    // 4. BUTTONS COMPONENT (Optional)
     if (buttons) {
       try {
         let btnObj = typeof buttons === 'string' ? JSON.parse(buttons) : buttons;
@@ -6691,19 +6723,19 @@ const registerMetaTemplate = async ({ apiKey, wabaId, phoneId, name, category, l
           if (btnObj.ctaUrlText && btnObj.ctaUrlValue) {
             const btn = {
               type: 'URL',
-              text: btnObj.ctaUrlText.substring(0, 25),
-              url: btnObj.ctaUrlValue
+              text: btnObj.ctaUrlText.trim().substring(0, 25),
+              url: btnObj.ctaUrlValue.trim()
             };
             if (btnObj.ctaUrlValue.includes('{{1}}') || btnObj.ctaUrlValue.includes('{{2}}')) {
-              btn.example = ["https://uat.thefinmantra.com/refer/example"];
+              btn.example = [btnObj.ctaUrlSample && btnObj.ctaUrlSample.trim() ? btnObj.ctaUrlSample.trim() : "https://uat.thefinmantra.com/track/sample"];
             }
             buttonsArray.push(btn);
           }
           if (btnObj.ctaPhoneText && btnObj.ctaPhoneValue) {
             buttonsArray.push({
               type: 'PHONE_NUMBER',
-              text: btnObj.ctaPhoneText.substring(0, 25),
-              phone_number: btnObj.ctaPhoneValue
+              text: btnObj.ctaPhoneText.trim().substring(0, 25),
+              phone_number: btnObj.ctaPhoneValue.trim().replace(/\s+/g, '')
             });
           }
           if (buttonsArray.length > 0) {
@@ -6725,6 +6757,17 @@ const registerMetaTemplate = async ({ apiKey, wabaId, phoneId, name, category, l
               buttons: buttonsArray
             });
           }
+        } else if (btnObj.buttonType === 'OTP' || category === 'AUTHENTICATION') {
+          components.push({
+            type: 'BUTTONS',
+            buttons: [
+              {
+                type: 'OTP',
+                otp_type: btnObj.otpType || 'COPY_CODE',
+                text: btnObj.otpText || 'Copy Code'
+              }
+            ]
+          });
         }
       } catch (err) {
         console.error('Failed to parse template buttons config:', err);
@@ -6737,12 +6780,30 @@ const registerMetaTemplate = async ({ apiKey, wabaId, phoneId, name, category, l
       category: category || 'MARKETING',
       components
     };
+
+    if (category === 'AUTHENTICATION' && (!buttons || buttons.buttonType !== 'OTP')) {
+      // Ensure authentication template has an OTP button per Meta requirements
+      const hasButtons = components.some(c => c.type === 'BUTTONS');
+      if (!hasButtons) {
+        components.push({
+          type: 'BUTTONS',
+          buttons: [
+            {
+              type: 'OTP',
+              otp_type: 'COPY_CODE',
+              text: 'Copy Code'
+            }
+          ]
+        });
+      }
+    }
     
     const postData = JSON.stringify(payload);
+    console.log('[Meta Template Registration Payload]:', postData);
     const options = {
       hostname: 'graph.facebook.com',
       port: 443,
-      path: `/v25.0/${wabaId}/message_templates`,
+      path: `/${apiVersion}/${wabaId}/message_templates`,
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
@@ -7171,7 +7232,7 @@ app.get('/api/campaigns/templates', authenticateToken, async (req, res) => {
 // Create/Update a template
 app.post('/api/campaigns/templates', authenticateToken, async (req, res) => {
   try {
-    const { id, name, type, subject, body, metaTemplateName, mediaUrl, category, language, headerFormat, buttons, meta_phone_number_id, metaPhoneNumberId, waba_id, wabaId: customWabaId } = req.body;
+    const { id, name, type, subject, body, metaTemplateName, mediaUrl, category, language, headerFormat, headerText, headerSample, bodySampleValues, footerText, buttons, meta_phone_number_id, metaPhoneNumberId, waba_id, wabaId: customWabaId } = req.body;
     if (!name || !type || !body) {
       return res.status(400).json({ success: false, error: 'Name, Type and Body are required fields.' });
     }
@@ -7263,14 +7324,18 @@ app.post('/api/campaigns/templates', authenticateToken, async (req, res) => {
           category: category || 'MARKETING',
           language: language || 'en_US',
           headerFormat: headerFormat || 'NONE',
+          headerText,
+          headerSample,
           bodyText: body,
+          bodySampleValues,
+          footerText,
           buttons,
           mediaUrl
         });
       } catch (metaErr) {
         return res.status(400).json({
           success: false,
-          error: `Meta rejected template registration: ${metaErr.message}. Make sure template name is unique, contains only lowercase letters and underscores, and body variables are formatted properly (e.g. {{1}}).`
+          error: `Meta rejected template registration: ${metaErr.message}. Make sure template name is unique, contains only lowercase letters and underscores, and all required sample values are provided.`
         });
       }
     }
