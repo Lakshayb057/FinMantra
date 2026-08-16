@@ -422,17 +422,58 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
     formattedPhone = '91' + formattedPhone; // Default to India country code if 10 digits
   }
 
+  // Resolve template metadata from DB if mediaUrl or preferredLang not provided
+  let effectiveMediaUrl = mediaUrl;
+  let resolvedLang = preferredLang;
+  try {
+    const tplDb = await db.runQuery(
+      'SELECT * FROM campaign_templates WHERE LOWER(name) = LOWER($1) OR LOWER(meta_template_name) = LOWER($1) LIMIT 1',
+      [templateName]
+    );
+    if (tplDb.rows && tplDb.rows.length > 0) {
+      if (!effectiveMediaUrl && tplDb.rows[0].media_url) {
+        effectiveMediaUrl = tplDb.rows[0].media_url;
+      }
+      if (!resolvedLang && tplDb.rows[0].language) {
+        resolvedLang = tplDb.rows[0].language;
+      }
+    }
+  } catch (e) {}
+
   const configuredLang = getSettingVal(settings, 'wa_template_language', 'WA_TEMPLATE_LANGUAGE', 'en_US');
   
-  // Prioritize en_US and preferredLang first to eliminate #132001 translation errors
+  // Prioritize en_US and resolvedLang first to eliminate #132001 translation errors
   let langCandidates = [];
-  if (preferredLang) langCandidates.push(preferredLang);
+  if (resolvedLang) langCandidates.push(resolvedLang);
   if (configuredLang && configuredLang !== 'en') langCandidates.push(configuredLang);
   langCandidates.push('en_US', 'en', 'en_GB', 'hi');
   langCandidates = langCandidates.filter((v, i, a) => v && a.indexOf(v) === i);
 
+  // Helper to generate a header component given media link
+  const createHeaderComp = (linkUrl, forceType = 'image') => {
+    let mediaType = forceType;
+    const lower = (linkUrl || '').toLowerCase().trim();
+    if (lower.endsWith('.pdf') || lower.endsWith('.doc') || lower.endsWith('.docx')) {
+      mediaType = 'document';
+    } else if (lower.endsWith('.mp4') || lower.endsWith('.mov') || lower.endsWith('.avi')) {
+      mediaType = 'video';
+    }
+    return {
+      type: 'header',
+      parameters: [
+        {
+          type: mediaType,
+          [mediaType]: {
+            link: linkUrl
+          }
+        }
+      ]
+    };
+  };
+
   // Build list of candidate component payloads to guarantee delivery across all template variations
   const componentStrategies = [];
+  const defaultHeaderImg = effectiveMediaUrl || 'https://uat.thefinmantra.com/logo.png';
 
   if (isOtpAuth && parameters.length === 1) {
     const otpCode = String(parameters[0] || '');
@@ -492,6 +533,13 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
       const urlCandidates = [referSuffix, pathOnly, urnOnly, noProtocol, fullUrl].filter((v, i, a) => v && a.indexOf(v) === i);
 
       for (const urlVal of urlCandidates) {
+        // Variant with header image
+        componentStrategies.push([
+          createHeaderComp(defaultHeaderImg),
+          { type: 'body', parameters: bodyParams.map(p => ({ type: 'text', text: String(p) })) },
+          { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: urlVal }] }
+        ]);
+        // Variant without header image
         componentStrategies.push([
           { type: 'body', parameters: bodyParams.map(p => ({ type: 'text', text: String(p) })) },
           { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: urlVal }] }
@@ -499,8 +547,19 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
       }
     }
 
-    // Strategy 1: All parameters in body
     if (parameters.length > 0) {
+      const firstParam = String(parameters[0] || '');
+
+      // Strategy 1: Header image + Body parameter
+      componentStrategies.push([
+        createHeaderComp(defaultHeaderImg),
+        {
+          type: 'body',
+          parameters: parameters.map(p => ({ type: 'text', text: String(p) }))
+        }
+      ]);
+
+      // Strategy 2: Body parameter only (no header)
       componentStrategies.push([
         {
           type: 'body',
@@ -508,8 +567,14 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
         }
       ]);
 
-      // Strategy 2: Body with 1st param + dynamic URL button with 1st param
-      const firstParam = String(parameters[0] || '');
+      // Strategy 3: Header image + Body with 1st param + dynamic URL button
+      componentStrategies.push([
+        createHeaderComp(defaultHeaderImg),
+        { type: 'body', parameters: [{ type: 'text', text: firstParam }] },
+        { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: firstParam }] }
+      ]);
+
+      // Strategy 4: Body with 1st param + dynamic URL button (no header)
       componentStrategies.push([
         { type: 'body', parameters: [{ type: 'text', text: firstParam }] },
         { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: firstParam }] }
@@ -517,13 +582,19 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
 
       if (parameters.length > 1) {
         componentStrategies.push([
+          createHeaderComp(defaultHeaderImg),
+          { type: 'body', parameters: [{ type: 'text', text: firstParam }] },
+          { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: String(parameters[1]) }] }
+        ]);
+        componentStrategies.push([
           { type: 'body', parameters: [{ type: 'text', text: firstParam }] },
           { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: String(parameters[1]) }] }
         ]);
       }
     }
 
-    // Strategy Fallback: Static template or empty components
+    // Strategy Fallback: Header image only + empty body / Static template
+    componentStrategies.push([createHeaderComp(defaultHeaderImg)]);
     componentStrategies.push([]);
   }
 
@@ -558,6 +629,7 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
             let errMsg = `Meta API error (status ${res.statusCode}): ${responseBody}`;
             let isAuthError = (res.statusCode === 401);
             let errorCode = null;
+            let expectedHeaderType = null;
             try {
               const parsed = JSON.parse(responseBody);
               if (parsed && parsed.error) {
@@ -568,9 +640,15 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
                 if (errorCode === 190 || errorCode === 195 || errorCode === 102 || errorCode === 200) {
                   isAuthError = true;
                 }
+                // Check if Meta specifies a missing header format
+                const errDetails = parsed.error.error_data?.details || '';
+                if (errDetails.includes('expected IMAGE')) expectedHeaderType = 'image';
+                else if (errDetails.includes('expected DOCUMENT')) expectedHeaderType = 'document';
+                else if (errDetails.includes('expected VIDEO')) expectedHeaderType = 'video';
+                else if (errDetails.includes('expected TEXT')) expectedHeaderType = 'text';
               }
             } catch (e) {}
-            reject({ statusCode: res.statusCode, body: responseBody, message: errMsg, isAuthError, errorCode });
+            reject({ statusCode: res.statusCode, body: responseBody, message: errMsg, isAuthError, errorCode, expectedHeaderType });
           }
         });
       });
@@ -586,21 +664,12 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
     });
   };
 
-  const cacheKey = `${templateName}|${isOtpAuth ? 'otp' : 'std'}|${mediaUrl ? 'media' : 'nomedia'}`;
+  const cacheKey = `${templateName}|${isOtpAuth ? 'otp' : 'std'}|${effectiveMediaUrl ? 'media' : 'nomedia'}`;
   const cached = templateStrategyCache.get(cacheKey);
 
   // Quick path: If we already know the working lang & strategy, test it first
   if (cached && componentStrategies[cached.strategyIdx]) {
     try {
-      let currentComponents = [...componentStrategies[cached.strategyIdx]];
-      if (mediaUrl) {
-        let mediaType = 'image';
-        const lower = mediaUrl.toLowerCase().trim();
-        if (lower.endsWith('.pdf') || lower.endsWith('.doc') || lower.endsWith('.docx')) mediaType = 'document';
-        else if (lower.endsWith('.mp4') || lower.endsWith('.mov') || lower.endsWith('.avi')) mediaType = 'video';
-        currentComponents.unshift({ type: 'header', parameters: [{ type: mediaType, [mediaType]: { link: mediaUrl } }] });
-      }
-
       const payloadObj = {
         messaging_product: 'whatsapp',
         to: formattedPhone,
@@ -610,13 +679,14 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
           language: { code: cached.lang }
         }
       };
-      if (currentComponents.length > 0) payloadObj.template.components = currentComponents;
+      if (componentStrategies[cached.strategyIdx].length > 0) {
+        payloadObj.template.components = componentStrategies[cached.strategyIdx];
+      }
 
       const result = await executeMetaRequest(payloadObj);
       console.log(`[WhatsApp API] Fast delivery to ${formattedPhone} using "${templateName}" (${cached.lang}, strategy ${cached.strategyIdx + 1}).`);
       return result;
     } catch (cacheErr) {
-      // Invalidate stale cache and fall through to full candidate loop
       templateStrategyCache.delete(cacheKey);
     }
   }
@@ -628,27 +698,6 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
   for (const lang of langCandidates) {
     for (let sIdx = 0; sIdx < componentStrategies.length; sIdx++) {
       let currentComponents = [...componentStrategies[sIdx]];
-      if (mediaUrl) {
-        let mediaType = 'image';
-        const lower = mediaUrl.toLowerCase().trim();
-        if (lower.endsWith('.pdf') || lower.endsWith('.doc') || lower.endsWith('.docx')) {
-          mediaType = 'document';
-        } else if (lower.endsWith('.mp4') || lower.endsWith('.mov') || lower.endsWith('.avi')) {
-          mediaType = 'video';
-        }
-        
-        currentComponents.unshift({
-          type: 'header',
-          parameters: [
-            {
-              type: mediaType,
-              [mediaType]: {
-                link: mediaUrl
-              }
-            }
-          ]
-        });
-      }
 
       const payloadObj = {
         messaging_product: 'whatsapp',
@@ -666,15 +715,33 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
       try {
         const result = await executeMetaRequest(payloadObj);
         console.log(`[WhatsApp API] Message sent successfully to ${formattedPhone} using template "${templateName}" (lang: ${lang}, strategy: ${sIdx + 1}).`);
-        // Cache winning strategy for subsequent requests
         templateStrategyCache.set(cacheKey, { lang, strategyIdx: sIdx });
         return result;
       } catch (err) {
         lastError = err.message || `Meta API Error (status ${err.statusCode})`;
         if (err.isAuthError) {
           isAuthFailure = true;
-          console.error(`[WhatsApp API CRITICAL] Authentication Failed for Meta API (Code: ${err.errorCode || 190}). Token is invalid or expired! Stopping further payload/language attempts for "${templateName}".`);
+          console.error(`[WhatsApp API CRITICAL] Authentication Failed for Meta API (Code: ${err.errorCode || 190}). Token is invalid or expired! Stopping further attempts for "${templateName}".`);
           break;
+        }
+
+        // Real-time automatic adaptation if Meta requests a specific header type
+        if (err.expectedHeaderType) {
+          try {
+            const adaptedComponents = [...currentComponents.filter(c => c.type !== 'header')];
+            if (err.expectedHeaderType === 'text') {
+              adaptedComponents.unshift({ type: 'header', parameters: [{ type: 'text', text: parameters[0] || 'Notification' }] });
+            } else {
+              adaptedComponents.unshift(createHeaderComp(defaultHeaderImg, err.expectedHeaderType));
+            }
+            payloadObj.template.components = adaptedComponents;
+            const adaptedResult = await executeMetaRequest(payloadObj);
+            console.log(`[WhatsApp API] Auto-adapted header (${err.expectedHeaderType}) and sent successfully to ${formattedPhone}!`);
+            templateStrategyCache.set(cacheKey, { lang, strategyIdx: sIdx });
+            return adaptedResult;
+          } catch (adaptErr) {
+            lastError = adaptErr.message || lastError;
+          }
         }
       }
     }
@@ -6399,7 +6466,7 @@ async function checkAndRunScheduledBroadcasts() {
                   actualTemplateName,
                   params,
                   false,
-                  b.media_url,
+                  b.media_url || templateObj?.media_url || null,
                   templateLanguage,
                   phoneIdToUse
                 );
