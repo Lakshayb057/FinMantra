@@ -7508,6 +7508,31 @@ app.get('/api/c/t/:broadcastId/:masterLeadId', async (req, res) => {
   }
 });
 
+// Update / Edit a broadcast
+app.put(['/api/campaigns/:id/broadcasts/:broadcastId', '/api/campaigns/broadcasts/:broadcastId'], authenticateToken, async (req, res) => {
+  try {
+    const { name, channel, whatsappTemplate, whatsapp_template, whatsappMessage, whatsapp_message, emailSubject, email_subject, emailBody, email_body, scheduledAt, scheduled_at, mediaUrl, media_url, metaPhoneNumberId, meta_phone_number_id, metaPhoneNumber, meta_phone_number, senderEmail, sender_email } = req.body;
+    
+    const updated = await db.updateCampaignBroadcast(req.params.broadcastId, {
+      name,
+      channel,
+      whatsappTemplate: whatsappTemplate || whatsapp_template,
+      whatsappMessage: whatsappMessage || whatsapp_message,
+      emailSubject: emailSubject || email_subject,
+      emailBody: emailBody || email_body,
+      scheduledAt: scheduledAt || scheduled_at,
+      mediaUrl: mediaUrl || media_url,
+      metaPhoneNumberId: metaPhoneNumberId || meta_phone_number_id,
+      metaPhoneNumber: metaPhoneNumber || meta_phone_number,
+      senderEmail: senderEmail || sender_email
+    });
+    
+    res.json({ success: true, broadcast: updated });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Delete broadcast
 app.delete(['/api/campaigns/:id/broadcasts/:broadcastId', '/api/campaigns/broadcasts/:broadcastId'], authenticateToken, async (req, res) => {
   try {

@@ -69,6 +69,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
   const [broadcasts, setBroadcasts] = useState([]);
   const [isLoadingBroadcasts, setIsLoadingBroadcasts] = useState(false);
   const [showNewBroadcastModal, setShowNewBroadcastModal] = useState(false);
+  const [editingBroadcastId, setEditingBroadcastId] = useState(null);
   const [broadcastWizardStep, setBroadcastWizardStep] = useState(1); // 1: Info, 2: Channel, 3: Template, 4: Data Upload, 5: Preview, 6: Send/Schedule
   const [isSubmittingBroadcast, setIsSubmittingBroadcast] = useState(false);
 
@@ -475,13 +476,64 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
     reader.readAsText(file);
   };
 
-  // Submit Broadcast Dispatch / Schedule
+  // Open Edit Broadcast Modal
+  const handleEditBroadcast = (b) => {
+    setEditingBroadcastId(b.id);
+    setBroadcastForm({
+      name: b.name || '',
+      channel: b.channel || 'whatsapp',
+      meta_phone_number_id: b.meta_phone_number_id || '',
+      meta_phone_number: b.meta_phone_number || '',
+      sender_email: b.sender_email || '',
+      whatsapp_template: b.whatsapp_template || '',
+      whatsapp_message: b.whatsapp_message || '',
+      email_subject: b.email_subject || '',
+      email_body: b.email_body || '',
+      scheduled_at: b.scheduled_at ? new Date(b.scheduled_at).toISOString().slice(0, 16) : '',
+      media_url: b.media_url || ''
+    });
+    setBroadcastUploadFile(null);
+    setBroadcastParsedLeads([]);
+    setBroadcastWizardStep(1);
+    setShowNewBroadcastModal(true);
+  };
+
+  // Submit Broadcast Dispatch / Edit / Schedule
   const handleSubmitDirectBroadcast = async () => {
     if (!broadcastForm.name.trim()) {
       showToast('Please enter a Broadcast Name.', 'error');
       setBroadcastWizardStep(1);
       return;
     }
+
+    if (editingBroadcastId) {
+      // Handle Edit Update
+      setIsSubmittingBroadcast(true);
+      try {
+        const res = await fetch(`${API_URL}/campaigns/broadcasts/${editingBroadcastId}`, {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify(broadcastForm)
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast(`Broadcast "${broadcastForm.name}" updated successfully!`, 'success');
+          setShowNewBroadcastModal(false);
+          setEditingBroadcastId(null);
+          setBroadcastWizardStep(1);
+          fetchBroadcasts();
+          fetchCommunicationAnalytics();
+        } else {
+          showToast(data.error || 'Failed to update broadcast.', 'error');
+        }
+      } catch (err) {
+        showToast('Network error while updating broadcast.', 'error');
+      } finally {
+        setIsSubmittingBroadcast(false);
+      }
+      return;
+    }
+
     if (!broadcastUploadFile && broadcastParsedLeads.length === 0) {
       showToast('Please upload customer contacts data.', 'error');
       setBroadcastWizardStep(4);
@@ -1063,7 +1115,14 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                         <td style={{ padding: '0.65rem 0.75rem', color: 'var(--muted)', fontSize: '0.78rem' }}>
                           {b.created_at ? new Date(b.created_at).toLocaleDateString() : '—'}
                         </td>
-                        <td style={{ padding: '0.65rem 0.75rem', textAlign: 'right' }}>
+                        <td style={{ padding: '0.65rem 0.75rem', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                          <button
+                            onClick={() => handleEditBroadcast(b)}
+                            style={{ background: 'none', border: 'none', color: 'var(--gold-deep)', cursor: 'pointer', padding: '0.2rem', marginRight: '0.4rem' }}
+                            title="Edit Broadcast"
+                          >
+                            <Edit2 size={15} />
+                          </button>
                           <button
                             onClick={() => handleDeleteBroadcast(b.id, b.name)}
                             style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.2rem' }}
@@ -1516,6 +1575,26 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                               </button>
                             )}
                             <button
+                              onClick={() => handleEditBroadcast(b)}
+                              style={{
+                                padding: '0.3rem 0.55rem',
+                                borderRadius: '4px',
+                                background: 'var(--paper-2)',
+                                color: 'var(--ink)',
+                                border: '1px solid var(--line)',
+                                fontSize: '0.75rem',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.25rem',
+                                marginRight: '0.4rem'
+                              }}
+                              title="Edit Broadcast"
+                            >
+                              <Edit2 size={13} /> Edit
+                            </button>
+                            <button
                               onClick={() => handleDeleteBroadcast(b.id, b.name)}
                               style={{
                                 padding: '0.3rem 0.55rem',
@@ -1788,16 +1867,18 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
             {/* Modal Header */}
             <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800 }}>Create &amp; Launch Broadcast Campaign</h3>
+                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800 }}>
+                  {editingBroadcastId ? `Edit Broadcast: ${broadcastForm.name || 'Campaign'}` : 'Create & Launch Broadcast Campaign'}
+                </h3>
                 <div style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>Step {broadcastWizardStep} of 6: {
                   broadcastWizardStep === 1 ? 'Broadcast Information' :
                   broadcastWizardStep === 2 ? 'Target Channel & Sender' :
                   broadcastWizardStep === 3 ? 'Template & Content' :
-                  broadcastWizardStep === 4 ? 'Download Template & Upload Contacts' :
-                  broadcastWizardStep === 5 ? 'Interactive Live Preview' : 'Dispatch / Schedule'
+                  broadcastWizardStep === 4 ? (editingBroadcastId ? 'Recipient Data / Optional Upload' : 'Download Template & Upload Contacts') :
+                  broadcastWizardStep === 5 ? 'Interactive Live Preview' : (editingBroadcastId ? 'Save / Update Schedule' : 'Dispatch / Schedule')
                 }</div>
               </div>
-              <button onClick={() => setShowNewBroadcastModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}>
+              <button onClick={() => { setShowNewBroadcastModal(false); setEditingBroadcastId(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}>
                 <X size={20} />
               </button>
             </div>
@@ -2210,7 +2291,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                         showToast('Please enter a broadcast name.', 'error');
                         return;
                       }
-                      if (broadcastWizardStep === 4 && !broadcastUploadFile && broadcastParsedLeads.length === 0) {
+                      if (broadcastWizardStep === 4 && !editingBroadcastId && !broadcastUploadFile && broadcastParsedLeads.length === 0) {
                         showToast('Please upload contact data.', 'error');
                         return;
                       }
@@ -2249,8 +2330,8 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                       boxShadow: '0 4px 12px rgba(224, 168, 46, 0.3)'
                     }}
                   >
-                    {isSubmittingBroadcast ? <RefreshCw size={15} className="spin-slow" /> : <Send size={15} />}
-                    Launch Broadcast Campaign
+                    {isSubmittingBroadcast ? <RefreshCw size={15} className="spin-slow" /> : (editingBroadcastId ? <Check size={16} /> : <Send size={15} />)}
+                    {editingBroadcastId ? 'Save & Update Broadcast' : 'Launch Broadcast Campaign'}
                   </button>
                 )}
               </div>

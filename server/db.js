@@ -3011,23 +3011,38 @@ const db = {
     return res.rows[0];
   },
 
-  async updateCampaignBroadcast(id, { name, channel, whatsappTemplate, whatsappMessage, emailSubject, emailBody, scheduledAt, mediaUrl }) {
+  async updateCampaignBroadcast(id, { name, channel, whatsappTemplate, whatsappMessage, emailSubject, emailBody, scheduledAt, mediaUrl, metaPhoneNumberId, metaPhoneNumber, senderEmail }) {
     const scheduledDate = scheduledAt ? new Date(scheduledAt) : null;
-    const status = scheduledDate ? 'scheduled' : 'draft';
     const res = await pool.query(
       `UPDATE campaign_broadcasts 
        SET name = COALESCE($2, name), 
            channel = COALESCE($3, channel), 
-           whatsapp_template = $4, 
-           whatsapp_message = $5, 
-           email_subject = $6, 
-           email_body = $7, 
+           whatsapp_template = COALESCE($4, whatsapp_template), 
+           whatsapp_message = COALESCE($5, whatsapp_message), 
+           email_subject = COALESCE($6, email_subject), 
+           email_body = COALESCE($7, email_body), 
            scheduled_at = $8, 
-           media_url = $9,
-           status = $10
+           media_url = COALESCE($9, media_url),
+           meta_phone_number_id = COALESCE($10, meta_phone_number_id),
+           meta_phone_number = COALESCE($11, meta_phone_number),
+           sender_email = COALESCE($12, sender_email),
+           status = CASE WHEN $8 IS NOT NULL AND status != 'sent' THEN 'scheduled' ELSE status END
        WHERE id = $1 
        RETURNING *`,
-      [id, name, channel, whatsappTemplate || null, whatsappMessage || null, emailSubject || null, emailBody || null, scheduledDate, mediaUrl || null, status]
+      [
+        id, 
+        name || null, 
+        channel || null, 
+        whatsappTemplate !== undefined ? whatsappTemplate : null, 
+        whatsappMessage !== undefined ? whatsappMessage : null, 
+        emailSubject !== undefined ? emailSubject : null, 
+        emailBody !== undefined ? emailBody : null, 
+        scheduledDate, 
+        mediaUrl !== undefined ? mediaUrl : null,
+        metaPhoneNumberId !== undefined ? metaPhoneNumberId : null,
+        metaPhoneNumber !== undefined ? metaPhoneNumber : null,
+        senderEmail !== undefined ? senderEmail : null
+      ]
     );
     return res.rows[0];
   },
