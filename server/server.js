@@ -6597,12 +6597,12 @@ app.get('/api/campaigns/templates/meta-inspect', async (req, res) => {
 app.get('/api/campaigns/templates/debug-errors', async (req, res) => {
   try {
     const query = `
-      SELECT l.id, l.broadcast_id, l.status, l.error_message, l.created_at,
+      SELECT l.id, l.broadcast_id, l.status, l.error_message, l.sent_at as created_at,
              b.name as broadcast_name, b.whatsapp_template
-      FROM campaign_delivery_logs l
+      FROM campaign_logs l
       JOIN campaign_broadcasts b ON l.broadcast_id = b.id
       WHERE l.status = 'failed'
-      ORDER BY l.created_at DESC
+      ORDER BY l.sent_at DESC
       LIMIT 10
     `;
     const result = await db.runQuery(query);
