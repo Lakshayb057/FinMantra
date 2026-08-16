@@ -491,15 +491,31 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
       }
     }
 
-    // Strategy Fallback: All parameters in body (for templates with link variable in body text)
-    componentStrategies.push([
-      {
-        type: 'body',
-        parameters: parameters.map(p => ({ type: 'text', text: String(p) }))
-      }
-    ]);
+    // Strategy 1: All parameters in body
+    if (parameters.length > 0) {
+      componentStrategies.push([
+        {
+          type: 'body',
+          parameters: parameters.map(p => ({ type: 'text', text: String(p) }))
+        }
+      ]);
 
-    // Strategy 5: Static template or empty components
+      // Strategy 2: Body with 1st param + dynamic URL button with 1st param
+      const firstParam = String(parameters[0] || '');
+      componentStrategies.push([
+        { type: 'body', parameters: [{ type: 'text', text: firstParam }] },
+        { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: firstParam }] }
+      ]);
+
+      if (parameters.length > 1) {
+        componentStrategies.push([
+          { type: 'body', parameters: [{ type: 'text', text: firstParam }] },
+          { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: String(parameters[1]) }] }
+        ]);
+      }
+    }
+
+    // Strategy Fallback: Static template or empty components
     componentStrategies.push([]);
   }
 
