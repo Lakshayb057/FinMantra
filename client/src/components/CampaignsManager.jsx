@@ -663,7 +663,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, color: 'var(--ink)' }}>
+    <div className="campaigns-container">
       {/* Top Header / Actions Bar */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '1rem', flexShrink: 0 }}>
         <div>
@@ -678,7 +678,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
       </div>
 
       {/* Subtab Navigation Bar */}
-      <div style={{ display: 'flex', gap: '0.4rem', borderBottom: '1px solid var(--line)', paddingBottom: '0.75rem', marginBottom: '1.25rem', overflowX: 'auto', flexShrink: 0 }}>
+      <div className="campaigns-subnav">
         <button
           onClick={() => setActiveSubTab('communication_dashboard')}
           style={{
@@ -800,17 +800,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
       {activeSubTab === 'communication_dashboard' && (
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflowY: 'auto', paddingRight: '0.25rem' }}>
           {/* Dashboard Filter Bar */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-            gap: '0.65rem',
-            background: 'var(--paper-2)',
-            border: '1px solid var(--line)',
-            borderRadius: '12px',
-            padding: '0.85rem 1rem',
-            marginBottom: '1.25rem',
-            alignItems: 'flex-end'
-          }}>
+          <div className="campaigns-filter-grid">
             <div>
               <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: 'var(--muted)', marginBottom: '0.25rem' }}>
                 From Broadcast Date
@@ -911,7 +901,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
 
           {/* Top KPI Metric Cards */}
           {dashboardAnalytics && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.85rem', marginBottom: '1.5rem' }}>
+            <div className="campaigns-kpi-grid">
               {/* Broadcasts Count */}
               <div className="glass-panel" style={{ padding: '1.1rem', borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--muted)', fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase' }}>
@@ -1072,8 +1062,8 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
               </button>
             </div>
 
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem', textAlign: 'left' }}>
+            <div className="campaigns-table-wrapper">
+              <table className="campaigns-table">
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--line)', color: 'var(--muted)', fontSize: '0.75rem', textTransform: 'uppercase' }}>
                     <th style={{ padding: '0.6rem 0.75rem' }}>Broadcast Name</th>
@@ -1217,17 +1207,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
             </div>
 
             {/* Filter Bar based on broadcast date, broadcast name, meta whatsapp no, sender email */}
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-              gap: '0.5rem',
-              background: 'var(--paper-2)',
-              padding: '0.75rem',
-              borderRadius: '8px',
-              border: '1px solid var(--line)',
-              marginBottom: '1rem',
-              flexShrink: 0
-            }}>
+            <div className="campaigns-filter-grid">
               <div>
                 <label style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--muted)' }}>Broadcast Date From</label>
                 <input
@@ -1316,7 +1296,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
             </div>
 
             {/* Master Contacts Grid Table */}
-            <div style={{ flex: 1, overflowY: 'auto', border: '1px solid var(--line)', borderRadius: '8px', minHeight: 0 }}>
+            <div className="campaigns-table-wrapper">
               {isLoadingMaster ? (
                 <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--muted)' }}>
                   <RefreshCw size={28} className="spin-slow" style={{ color: 'var(--gold-deep)', marginBottom: '0.75rem' }} />
@@ -1329,7 +1309,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                   <div style={{ fontSize: '0.8rem', marginTop: '0.25rem' }}>Contacts are automatically merged and deduplicated whenever a Broadcast Campaign is launched.</div>
                 </div>
               ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem', textAlign: 'left' }}>
+                <table className="campaigns-table">
                   <thead style={{ position: 'sticky', top: 0, background: 'var(--paper-2)', zIndex: 10 }}>
                     <tr style={{ borderBottom: '1px solid var(--line)' }}>
                       <th style={{ padding: '0.65rem 0.75rem', width: '36px', textAlign: 'center' }}>
@@ -1499,7 +1479,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
             </div>
 
             {/* Broadcasts List */}
-            <div style={{ flex: 1, overflowY: 'auto', border: '1px solid var(--line)', borderRadius: '8px', minHeight: 0 }}>
+            <div className="campaigns-table-wrapper">
               {isLoadingBroadcasts ? (
                 <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--muted)' }}>
                   <RefreshCw size={28} className="spin-slow" style={{ color: 'var(--gold-deep)', marginBottom: '0.75rem' }} />
@@ -1512,7 +1492,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                   <div style={{ fontSize: '0.8rem', marginTop: '0.25rem' }}>Click "+ Create Broadcast" to launch a direct Meta WhatsApp or SMTP campaign.</div>
                 </div>
               ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem', textAlign: 'left' }}>
+                <table className="campaigns-table">
                   <thead style={{ position: 'sticky', top: 0, background: 'var(--paper-2)', zIndex: 10 }}>
                     <tr style={{ borderBottom: '1px solid var(--line)' }}>
                       <th style={{ padding: '0.7rem 0.85rem', fontWeight: 700 }}>Broadcast Name</th>
@@ -1737,7 +1717,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+              <div className="campaigns-grid-2col">
                 <div>
                   <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '0.25rem' }}>SMTP Port</label>
                   <input
@@ -1782,7 +1762,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+              <div className="campaigns-grid-2col">
                 <div>
                   <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '0.25rem' }}>From Name</label>
                   <input
@@ -1863,7 +1843,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
       {/* ========================================================================= */}
       {showNewBroadcastModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '1rem' }}>
-          <div style={{ background: 'var(--paper)', border: '1px solid var(--line)', borderRadius: '16px', maxWidth: '680px', width: '100%', maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 50px rgba(0,0,0,0.3)', overflow: 'hidden' }}>
+          <div className="campaigns-wizard-modal">
             {/* Modal Header */}
             <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
               <div>
