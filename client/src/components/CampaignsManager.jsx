@@ -236,6 +236,30 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
     }
   };
 
+  const deleteRejectedTemplates = async () => {
+    const rejectedCount = metaTemplates.filter(t => t.status === 'REJECTED').length;
+    if (rejectedCount === 0) {
+      showToast('No rejected templates to delete.', 'info');
+      return;
+    }
+    if (!window.confirm(`Delete ${rejectedCount} rejected template${rejectedCount !== 1 ? 's' : ''} from your Meta account? This cannot be undone.`)) return;
+    try {
+      const res = await fetch(`${API_URL}/campaigns/templates/meta-delete-rejected`, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' }
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast(`Deleted ${data.deleted} rejected template${data.deleted !== 1 ? 's' : ''} from Meta.`, 'success');
+        syncMetaStatuses(true);
+      } else {
+        showToast(data.error || 'Failed to delete rejected templates.', 'error');
+      }
+    } catch (err) {
+      showToast('Error deleting rejected templates: ' + err.message, 'error');
+    }
+  };
+
   const handleCreateTemplate = async (e) => {
     e.preventDefault();
     if (!newTemplateForm.name.trim() || !newTemplateForm.body.trim()) {
@@ -1790,6 +1814,23 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                         {metaTemplates.length} template{metaTemplates.length !== 1 ? 's' : ''} registered on your Meta Business Account
                       </p>
                     </div>
+                    {metaTemplates.filter(t => t.status === 'REJECTED').length > 0 && (
+                      <button
+                        onClick={deleteRejectedTemplates}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '0.4rem',
+                          padding: '0.4rem 0.85rem', fontSize: '0.78rem', fontWeight: 600,
+                          background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444',
+                          border: '1px solid rgba(239, 68, 68, 0.25)', borderRadius: '8px',
+                          cursor: 'pointer', transition: 'all 0.2s ease', marginLeft: 'auto'
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'; }}
+                      >
+                        <Trash2 size={13} />
+                        Delete Rejected ({metaTemplates.filter(t => t.status === 'REJECTED').length})
+                      </button>
+                    )}
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem' }}>

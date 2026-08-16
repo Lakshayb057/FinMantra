@@ -6536,6 +6536,69 @@ app.get('/api/campaigns/templates/meta-sync', authenticateToken, async (req, res
   }
 });
 
+// Delete rejected Meta templates
+app.post('/api/campaigns/templates/meta-delete-rejected', authenticateToken, async (req, res) => {
+  try {
+    const settings = await db.getSettings();
+    const apiKey = getSettingVal(settings, 'wa_api_key', 'WA_API_KEY');
+    let wabaId = getSettingVal(settings, 'wa_business_account_id', 'WA_BUSINESS_ACCOUNT_ID');
+    const apiVersion = getSettingVal(settings, 'wa_api_version', 'WA_API_VERSION', 'v25.0');
+
+    if (!apiKey) {
+      return res.status(400).json({ success: false, error: 'Meta API Key is not configured.' });
+    }
+
+    // Auto-discover WABA ID if not set
+    if (!wabaId || wabaId === 'undefined' || wabaId === 'null') {
+      const fetchWabas = () => new Promise((resolve) => {
+        const options = { hostname: 'graph.facebook.com', port: 443, path: `/${apiVersion}/me/whatsapp_business_accounts`, method: 'GET', headers: { 'Authorization': `Bearer ${apiKey}` } };
+        const req = https.request(options, (res) => { let body = ''; res.on('data', c => body += c); res.on('end', () => { try { const p = JSON.parse(body); resolve(p.data?.[0]?.id || null); } catch (e) { resolve(null); } }); });
+        req.on('error', () => resolve(null)); req.end();
+      });
+      wabaId = await fetchWabas();
+    }
+
+    if (!wabaId) {
+      return res.status(400).json({ success: false, error: 'Could not determine WhatsApp Business Account ID.' });
+    }
+
+    // Fetch all templates from Meta
+    const fetchMetaTemplates = () => new Promise((resolve, reject) => {
+      const options = { hostname: 'graph.facebook.com', port: 443, path: `/${apiVersion}/${wabaId}/message_templates?limit=100`, method: 'GET', headers: { 'Authorization': `Bearer ${apiKey}` } };
+      const req = https.request(options, (res) => { let body = ''; res.on('data', c => body += c); res.on('end', () => { if (res.statusCode >= 200 && res.statusCode < 300) { try { resolve(JSON.parse(body)); } catch (e) { reject(new Error('Invalid JSON.')); } } else { reject(new Error(`Meta API error ${res.statusCode}: ${body}`)); } }); });
+      req.setTimeout(10000, () => req.destroy(new Error('Timeout')));
+      req.on('error', err => reject(err)); req.end();
+    });
+
+    const result = await fetchMetaTemplates();
+    const rejectedTemplates = (result.data || []).filter(t => t.status === 'REJECTED');
+
+    if (rejectedTemplates.length === 0) {
+      return res.json({ success: true, deleted: 0, message: 'No rejected templates found.' });
+    }
+
+    // Delete each rejected template
+    const deleteTemplate = (name) => new Promise((resolve) => {
+      const options = { hostname: 'graph.facebook.com', port: 443, path: `/${apiVersion}/${wabaId}/message_templates?name=${encodeURIComponent(name)}`, method: 'DELETE', headers: { 'Authorization': `Bearer ${apiKey}` } };
+      const req = https.request(options, (res) => { let body = ''; res.on('data', c => body += c); res.on('end', () => { resolve({ name, status: res.statusCode, body }); }); });
+      req.on('error', (err) => resolve({ name, status: 500, body: err.message })); req.end();
+    });
+
+    const results = [];
+    for (const t of rejectedTemplates) {
+      const r = await deleteTemplate(t.name);
+      results.push(r);
+      console.log(`[Meta Template Delete] Deleted rejected template "${t.name}": status ${r.status}`);
+    }
+
+    const deleted = results.filter(r => r.status >= 200 && r.status < 300).length;
+    res.json({ success: true, deleted, total: rejectedTemplates.length, details: results.map(r => ({ name: r.name, success: r.status >= 200 && r.status < 300 })) });
+  } catch (err) {
+    console.error('[Meta Template Delete Error]', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Debug endpoint to inspect all Meta templates and rejection logs
 app.get('/api/campaigns/templates/meta-inspect', async (req, res) => {
   try {
