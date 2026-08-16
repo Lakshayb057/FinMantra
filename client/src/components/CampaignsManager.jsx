@@ -1,19 +1,33 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Users, Mail, MessageSquare, Plus, Trash2, Search, Upload, RefreshCw, X, Check,
   AlertCircle, Download, FileSpreadsheet, Play, Settings as SettingsIcon, HelpCircle, Info, Zap, Database, FileText,
-  Clock, Edit2, Lock
+  Clock, Edit2, Lock, BarChart3, TrendingUp, Filter, Eye, CheckCircle2, XCircle, ChevronRight, Calendar, PhoneCall,
+  Share2, ArrowUpRight, ShieldCheck, CheckCheck, Send
 } from 'lucide-react';
 
 export default function CampaignsManager({ theme, API_URL, token, showToast }) {
-  const [activeSubTab, setActiveSubTab] = useState('master_data'); // 'master_data' | 'data_storage' | 'broadcast' | 'automated' | 'settings' | 'guide' | 'templates'
+  const [activeSubTab, setActiveSubTab] = useState('communication_dashboard'); // 'communication_dashboard' | 'master_data' | 'broadcast' | 'templates' | 'settings' | 'guide'
   
+  // Meta Phone Numbers (WhatsApp senders with quality ratings)
+  const [metaPhoneNumbers, setMetaPhoneNumbers] = useState([]);
+  const [isLoadingPhoneNumbers, setIsLoadingPhoneNumbers] = useState(false);
+
+  // Communication Dashboard state
+  const [dashboardAnalytics, setDashboardAnalytics] = useState(null);
+  const [isLoadingAnalytics, setIsLoadingAnalytics] = useState(false);
+  const [dashFilterDateFrom, setDashFilterDateFrom] = useState('');
+  const [dashFilterDateTo, setDashFilterDateTo] = useState('');
+  const [dashFilterBroadcastName, setDashFilterBroadcastName] = useState('');
+  const [dashFilterMetaWaNo, setDashFilterMetaWaNo] = useState('');
+  const [dashFilterSenderEmail, setDashFilterSenderEmail] = useState('');
+
   // Templates Manager state
   const [templates, setTemplates] = useState([]);
   const [metaStatuses, setMetaStatuses] = useState({});
-  const [metaTemplates, setMetaTemplates] = useState([]);
   const [isSyncingMeta, setIsSyncingMeta] = useState(false);
   const [showCreateTemplateModal, setShowCreateTemplateModal] = useState(false);
+  const [templateTargetPhoneId, setTemplateTargetPhoneId] = useState('');
   const [editingTemplateId, setEditingTemplateId] = useState(null);
   const [newTemplateForm, setNewTemplateForm] = useState({
     name: '',
@@ -38,84 +52,45 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
 
   // Master Data Center state
   const [masterContacts, setMasterContacts] = useState([]);
-  const [masterContactsSearch, setMasterContactsSearch] = useState('');
-  const [showMasterUploadModal, setShowMasterUploadModal] = useState(false);
-  const [masterUploadFile, setMasterUploadFile] = useState(null);
-  const [isMasterUploading, setIsMasterUploading] = useState(false);
-  const [masterUploadResult, setMasterUploadResult] = useState(null);
-  
-  // Selection/Importing state
-  const [selectedMasterIds, setSelectedMasterIds] = useState(new Set());
-  const [showImportModal, setShowImportModal] = useState(false);
-  const [importSearch, setImportSearch] = useState('');
-  const [isImporting, setIsImporting] = useState(false);
-
-  // Master Import filters
-  const [filterPhone, setFilterPhone] = useState('');
-  const [filterEmail, setFilterEmail] = useState('');
-  const [filterAddress, setFilterAddress] = useState('');
-  const [filterFromDate, setFilterFromDate] = useState('');
-  const [filterToDate, setFilterToDate] = useState('');
-
-  // Master Data Center bulk delete states & filters
+  const [masterTotal, setMasterTotal] = useState(0);
+  const [masterPage, setMasterPage] = useState(1);
+  const [masterLimit, setMasterLimit] = useState(50);
+  const [isLoadingMaster, setIsLoadingMaster] = useState(false);
+  const [masterSearch, setMasterSearch] = useState('');
+  const [masterFilterBroadcastName, setMasterFilterBroadcastName] = useState('');
+  const [masterFilterDateFrom, setMasterFilterDateFrom] = useState('');
+  const [masterFilterDateTo, setMasterFilterDateTo] = useState('');
+  const [masterFilterMetaWaNo, setMasterFilterMetaWaNo] = useState('');
+  const [masterFilterSenderEmail, setMasterFilterSenderEmail] = useState('');
+  const [masterFilterOptions, setMasterFilterOptions] = useState({ broadcastNames: [], metaWhatsappNos: [], senderEmails: [] });
   const [selectedMasterDeleteIds, setSelectedMasterDeleteIds] = useState(new Set());
-  const [masterFilterPhone, setMasterFilterPhone] = useState('');
-  const [masterFilterEmail, setMasterFilterEmail] = useState('');
-  const [masterFilterAddress, setMasterFilterAddress] = useState('');
-  const [masterFilterFromDate, setMasterFilterFromDate] = useState('');
-  const [masterFilterToDate, setMasterFilterToDate] = useState('');
-  
-  // Campaigns list state
-  const [campaigns, setCampaigns] = useState([]);
-  const [selectedCampaignId, setSelectedCampaignId] = useState('');
-  const [newCampaignForm, setNewCampaignForm] = useState({ name: '', description: '' });
-  const [showCreateCampaignModal, setShowCreateCampaignModal] = useState(false);
-  const [isCreatingCampaign, setIsCreatingCampaign] = useState(false);
 
-  // Leads/Contacts storage state
-  const [contacts, setContacts] = useState([]);
-  const [contactsSearch, setContactsSearch] = useState('');
-  const [showUploadModal, setShowUploadModal] = useState(false);
-  const [uploadFile, setUploadFile] = useState(null);
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadResult, setUploadResult] = useState(null);
-
-  // Broadcasts state
+  // Broadcasts list & direct creation state
   const [broadcasts, setBroadcasts] = useState([]);
+  const [isLoadingBroadcasts, setIsLoadingBroadcasts] = useState(false);
   const [showNewBroadcastModal, setShowNewBroadcastModal] = useState(false);
-  const [editingBroadcastId, setEditingBroadcastId] = useState(null);
-  const [isCreatingBroadcast, setIsCreatingBroadcast] = useState(false);
-  const [newBroadcastForm, setNewBroadcastForm] = useState({
+  const [broadcastWizardStep, setBroadcastWizardStep] = useState(1); // 1: Info, 2: Channel, 3: Template, 4: Data Upload, 5: Preview, 6: Send/Schedule
+  const [isSubmittingBroadcast, setIsSubmittingBroadcast] = useState(false);
+
+  const [broadcastForm, setBroadcastForm] = useState({
     name: '',
     channel: 'whatsapp', // 'whatsapp' | 'email' | 'both'
-    whatsappTemplate: '',
-    whatsappMessage: '',
-    emailSubject: '',
-    emailBody: '',
-    scheduledAt: '',
-    mediaUrl: ''
+    meta_phone_number_id: '',
+    meta_phone_number: '',
+    sender_email: '',
+    whatsapp_template: '',
+    whatsapp_message: '',
+    email_subject: '',
+    email_body: '',
+    scheduled_at: '',
+    media_url: ''
   });
-  const [isLoadingBroadcasts, setIsLoadingBroadcasts] = useState(false);
-  const [nowTime, setNowTime] = useState(Date.now());
 
-  // 1-second ticker for live reverse countdown timers
-  useEffect(() => {
-    const timerInterval = setInterval(() => setNowTime(Date.now()), 1000);
-    return () => clearInterval(timerInterval);
-  }, []);
-
-  // Background auto-refresh when broadcasts are scheduled or processing
-  useEffect(() => {
-    if (activeSubTab === 'broadcast' && selectedCampaignId) {
-      const hasActive = broadcasts.some(b => b.status === 'scheduled' || b.status === 'processing');
-      if (hasActive) {
-        const pollInterval = setInterval(() => {
-          fetchCampaignBroadcasts(selectedCampaignId, true);
-        }, 3000);
-        return () => clearInterval(pollInterval);
-      }
-    }
-  }, [activeSubTab, selectedCampaignId, broadcasts]);
+  // Uploaded contacts inside the broadcast creation modal
+  const [broadcastUploadFile, setBroadcastUploadFile] = useState(null);
+  const [broadcastParsedLeads, setBroadcastParsedLeads] = useState([]);
+  const [broadcastUploadStats, setBroadcastUploadStats] = useState(null);
+  const [broadcastUploadError, setBroadcastUploadError] = useState('');
 
   // SMTP Settings state
   const [smtpSettings, setSmtpSettings] = useState({
@@ -129,604 +104,201 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
   });
   const [isSavingSettings, setIsSavingSettings] = useState(false);
 
-  // Load campaigns on mount
+  const [nowTime, setNowTime] = useState(Date.now());
+
+  // 1-second ticker for live reverse countdown timers
   useEffect(() => {
-    fetchCampaigns();
-    fetchGlobalSettings();
-    fetchMasterLeads();
-    fetchTemplates();
+    const timerInterval = setInterval(() => setNowTime(Date.now()), 1000);
+    return () => clearInterval(timerInterval);
   }, []);
 
-  // Load campaign specific data when selected campaign changes
-  useEffect(() => {
-    if (selectedCampaignId) {
-      fetchCampaignLeads(selectedCampaignId);
-      fetchCampaignBroadcasts(selectedCampaignId);
-    } else {
-      setContacts([]);
-      setBroadcasts([]);
-    }
-  }, [selectedCampaignId]);
-
-  const headers = {
+  const headers = useMemo(() => ({
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${token}`
-  };
+  }), [token]);
 
-  const fetchCampaigns = async () => {
+  // Initial load
+  useEffect(() => {
+    fetchMetaPhoneNumbers();
+    fetchCommunicationAnalytics();
+    fetchMasterFilterOptions();
+    fetchMasterLeads();
+    fetchBroadcasts();
+    fetchTemplates();
+    fetchGlobalSettings();
+  }, []);
+
+  // Poll active broadcasts
+  useEffect(() => {
+    const hasActive = broadcasts.some(b => b.status === 'scheduled' || b.status === 'processing');
+    if (hasActive) {
+      const pollInterval = setInterval(() => {
+        fetchBroadcasts(true);
+        if (activeSubTab === 'communication_dashboard') {
+          fetchCommunicationAnalytics(true);
+        }
+      }, 4000);
+      return () => clearInterval(pollInterval);
+    }
+  }, [broadcasts, activeSubTab]);
+
+  // Reload master leads when master filters change
+  useEffect(() => {
+    if (activeSubTab === 'master_data') {
+      fetchMasterLeads();
+    }
+  }, [masterPage, masterFilterBroadcastName, masterFilterDateFrom, masterFilterDateTo, masterFilterMetaWaNo, masterFilterSenderEmail]);
+
+  // Reload communication analytics when dashboard filters change
+  useEffect(() => {
+    if (activeSubTab === 'communication_dashboard') {
+      fetchCommunicationAnalytics();
+    }
+  }, [dashFilterDateFrom, dashFilterDateTo, dashFilterBroadcastName, dashFilterMetaWaNo, dashFilterSenderEmail]);
+
+  // --- API CALLS ---
+
+  const fetchMetaPhoneNumbers = async () => {
+    setIsLoadingPhoneNumbers(true);
     try {
-      const res = await fetch(`${API_URL}/campaigns`, { headers });
+      const res = await fetch(`${API_URL}/whatsapp/meta-phone-numbers`, { headers });
       const data = await res.json();
-      if (res.ok && data.success) {
-        setCampaigns(data.campaigns || []);
-        if (data.campaigns && data.campaigns.length > 0 && !selectedCampaignId) {
-          setSelectedCampaignId(data.campaigns[0].id);
+      if (data.phoneNumbers && Array.isArray(data.phoneNumbers)) {
+        setMetaPhoneNumbers(data.phoneNumbers);
+        if (data.phoneNumbers.length > 0 && !broadcastForm.meta_phone_number_id) {
+          setBroadcastForm(prev => ({
+            ...prev,
+            meta_phone_number_id: data.phoneNumbers[0].id,
+            meta_phone_number: data.phoneNumbers[0].display_phone_number || ''
+          }));
+          setTemplateTargetPhoneId(data.phoneNumbers[0].id);
         }
       }
     } catch (err) {
-      showToast('Error loading campaigns list.', 'error');
+      console.warn('[Fetch Meta Phones Error]:', err.message);
+    } finally {
+      setIsLoadingPhoneNumbers(false);
+    }
+  };
+
+  const fetchCommunicationAnalytics = async (silent = false) => {
+    if (!silent) setIsLoadingAnalytics(true);
+    try {
+      const query = new URLSearchParams();
+      if (dashFilterDateFrom) query.append('date_from', dashFilterDateFrom);
+      if (dashFilterDateTo) query.append('date_to', dashFilterDateTo);
+      if (dashFilterBroadcastName) query.append('broadcast_name', dashFilterBroadcastName);
+      if (dashFilterMetaWaNo) query.append('meta_whatsapp_no', dashFilterMetaWaNo);
+      if (dashFilterSenderEmail) query.append('sender_email', dashFilterSenderEmail);
+
+      const res = await fetch(`${API_URL}/campaigns/analytics/dashboard?${query.toString()}`, { headers });
+      const data = await res.json();
+      if (data.success && data.analytics) {
+        setDashboardAnalytics(data.analytics);
+      }
+    } catch (err) {
+      console.error('[Dashboard Analytics Error]:', err.message);
+    } finally {
+      if (!silent) setIsLoadingAnalytics(false);
+    }
+  };
+
+  const fetchMasterFilterOptions = async () => {
+    try {
+      const res = await fetch(`${API_URL}/campaigns/master/filter-options`, { headers });
+      const data = await res.json();
+      if (data.success && data.options) {
+        setMasterFilterOptions(data.options);
+      }
+    } catch (err) {
+      console.warn('[Filter options error]:', err.message);
+    }
+  };
+
+  const fetchMasterLeads = async () => {
+    setIsLoadingMaster(true);
+    try {
+      const query = new URLSearchParams();
+      if (masterSearch) query.append('search', masterSearch);
+      if (masterFilterBroadcastName) query.append('broadcast_name', masterFilterBroadcastName);
+      if (masterFilterDateFrom) query.append('broadcast_date_from', masterFilterDateFrom);
+      if (masterFilterDateTo) query.append('broadcast_date_to', masterFilterDateTo);
+      if (masterFilterMetaWaNo) query.append('meta_whatsapp_no', masterFilterMetaWaNo);
+      if (masterFilterSenderEmail) query.append('sender_email', masterFilterSenderEmail);
+      query.append('page', masterPage);
+      query.append('limit', masterLimit);
+
+      const res = await fetch(`${API_URL}/campaigns/master/leads?${query.toString()}`, { headers });
+      const data = await res.json();
+      if (data.success) {
+        setMasterContacts(data.leads || []);
+        setMasterTotal(data.total || 0);
+      }
+    } catch (err) {
+      console.error('[Fetch Master Leads Error]:', err.message);
+      showToast('Failed to load master records.', 'error');
+    } finally {
+      setIsLoadingMaster(false);
+    }
+  };
+
+  const fetchBroadcasts = async (silent = false) => {
+    if (!silent) setIsLoadingBroadcasts(true);
+    try {
+      const res = await fetch(`${API_URL}/campaigns/broadcasts/all`, { headers });
+      const data = await res.json();
+      if (data.success) {
+        setBroadcasts(data.broadcasts || []);
+      }
+    } catch (err) {
+      console.warn('[Fetch Broadcasts Error]:', err.message);
+    } finally {
+      if (!silent) setIsLoadingBroadcasts(false);
+    }
+  };
+
+  const fetchTemplates = async () => {
+    try {
+      const res = await fetch(`${API_URL}/campaigns/templates`, { headers });
+      const data = await res.json();
+      if (data.success) {
+        setTemplates(data.templates || []);
+      }
+    } catch (err) {
+      console.warn('[Fetch Templates Error]:', err.message);
     }
   };
 
   const fetchGlobalSettings = async () => {
     try {
       const res = await fetch(`${API_URL}/settings`, { headers });
-      if (res.ok) {
-        const data = await res.json();
+      const data = await res.json();
+      if (data.success && data.settings) {
+        const s = data.settings;
         setSmtpSettings({
-          host: data.campaign_smtp_host || '',
-          port: data.campaign_smtp_port || '465',
-          user: data.campaign_smtp_user || '',
-          pass: data.campaign_smtp_pass || '',
-          secure: data.campaign_smtp_secure || 'true',
-          fromName: data.campaign_smtp_from_name || 'FinMantra',
-          fromEmail: data.campaign_smtp_from_email || ''
+          host: s.campaign_smtp_host || '',
+          port: s.campaign_smtp_port || '465',
+          user: s.campaign_smtp_user || '',
+          pass: s.campaign_smtp_pass || '',
+          secure: s.campaign_smtp_secure || 'true',
+          fromName: s.campaign_smtp_from_name || 'FinMantra',
+          fromEmail: s.campaign_smtp_from_email || 'no-reply@finmantra.com'
         });
-      }
-    } catch (err) {
-      console.warn('Failed to load global SMTP settings:', err.message);
-    }
-  };
-
-  const fetchCampaignLeads = async (campaignId) => {
-    try {
-      const res = await fetch(`${API_URL}/campaigns/${campaignId}/leads`, { headers });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setContacts(data.leads || []);
-      }
-    } catch (err) {
-      showToast('Error fetching campaign contacts.', 'error');
-    }
-  };
-
-  const fetchCampaignBroadcasts = async (campaignId, isBackground = false) => {
-    if (!isBackground) setIsLoadingBroadcasts(true);
-    try {
-      const res = await fetch(`${API_URL}/campaigns/${campaignId}/broadcasts`, { headers });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setBroadcasts(data.broadcasts || []);
-      }
-    } catch (err) {
-      if (!isBackground) showToast('Error fetching campaign broadcasts.', 'error');
-    } finally {
-      if (!isBackground) setIsLoadingBroadcasts(false);
-    }
-  };
-
-  const fetchTemplates = async (skipMetaSync = false) => {
-    try {
-      const res = await fetch(`${API_URL}/campaigns/templates`, { headers });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setTemplates(data.templates || []);
-        if (!skipMetaSync) {
-          // Trigger status sync in the background
-          syncMetaStatuses(true);
+        if (!broadcastForm.sender_email && s.campaign_smtp_from_email) {
+          setBroadcastForm(prev => ({ ...prev, sender_email: s.campaign_smtp_from_email }));
         }
       }
     } catch (err) {
-      showToast('Error fetching campaign templates.', 'error');
+      console.warn('[Fetch Settings Error]:', err.message);
     }
   };
 
-  const syncMetaStatuses = async (isBackground = false) => {
-    setIsSyncingMeta(true);
-    try {
-      // Refresh templates list from DB first but skip recursive sync
-      await fetchTemplates(true);
-
-      const res = await fetch(`${API_URL}/campaigns/templates/meta-sync`, { headers });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setMetaStatuses(data.metaStatuses || {});
-        setMetaTemplates(data.metaTemplates || []);
-        if (!isBackground) {
-          showToast('Meta template statuses synced successfully!', 'success');
-        }
-      } else if (!isBackground) {
-        showToast(data.error || 'Failed to sync statuses with Meta.', 'error');
-      }
-    } catch (err) {
-      console.error('Failed to sync Meta template statuses:', err);
-      if (!isBackground) {
-        showToast('Error syncing with Meta: ' + err.message, 'error');
-      }
-    } finally {
-      setIsSyncingMeta(false);
-    }
-  };
-
-  const deleteRejectedTemplates = async () => {
-    const rejectedCount = metaTemplates.filter(t => t.status === 'REJECTED').length;
-    if (rejectedCount === 0) {
-      showToast('No rejected templates to delete.', 'info');
-      return;
-    }
-    if (!window.confirm(`Delete ${rejectedCount} rejected template${rejectedCount !== 1 ? 's' : ''} from your Meta account? This cannot be undone.`)) return;
-    try {
-      const res = await fetch(`${API_URL}/campaigns/templates/meta-delete-rejected`, {
-        method: 'POST',
-        headers: { ...headers, 'Content-Type': 'application/json' }
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        showToast(`Deleted ${data.deleted} rejected template${data.deleted !== 1 ? 's' : ''} from Meta.`, 'success');
-        syncMetaStatuses(true);
-      } else {
-        showToast(data.error || 'Failed to delete rejected templates.', 'error');
-      }
-    } catch (err) {
-      showToast('Error deleting rejected templates: ' + err.message, 'error');
-    }
-  };
-
-  const handleCreateTemplate = async (e) => {
-    e.preventDefault();
-    if (!newTemplateForm.name.trim() || !newTemplateForm.body.trim()) {
-      showToast('Name and Content/Body are required.', 'error');
-      return;
-    }
-    
-    setIsCreatingTemplate(true);
-    try {
-      const res = await fetch(`${API_URL}/campaigns/templates`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(newTemplateForm)
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        showToast('Template saved and registered with Meta successfully!', 'success');
-        setNewTemplateForm({
-          name: '',
-          type: 'whatsapp',
-          subject: '',
-          body: '',
-          metaTemplateName: '',
-          mediaUrl: '',
-          category: 'MARKETING',
-          language: 'en_US',
-          headerFormat: 'NONE',
-          buttons: {
-            buttonType: 'NONE',
-            ctaUrlText: '',
-            ctaUrlValue: '',
-            ctaPhoneText: '',
-            ctaPhoneValue: '',
-            quickReplies: ['', '', '']
-          }
-        });
-        setEditingTemplateId(null);
-        setShowCreateTemplateModal(false);
-        fetchTemplates();
-      } else {
-        showToast(data.error || 'Failed to save template.', 'error');
-      }
-    } catch (err) {
-      showToast('Error saving template: ' + err.message, 'error');
-    } finally {
-      setIsCreatingTemplate(false);
-    }
-  };
-
-  const handleDeleteTemplate = async (templateId) => {
-    if (!window.confirm('Are you sure you want to delete this template?')) return;
-    try {
-      const res = await fetch(`${API_URL}/campaigns/templates/${templateId}`, {
-        method: 'DELETE',
-        headers
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        showToast('Template deleted successfully.', 'info');
-        fetchTemplates();
-      } else {
-        showToast(data.error || 'Failed to delete template.', 'error');
-      }
-    } catch (err) {
-      showToast('Error deleting template.', 'error');
-    }
-  };
-
-  const handleCreateCampaign = async (e) => {
-    e.preventDefault();
-    if (!newCampaignForm.name.trim()) return;
-
-    setIsCreatingCampaign(true);
-    try {
-      const res = await fetch(`${API_URL}/campaigns`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(newCampaignForm)
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        showToast('🎉 Campaign created successfully!', 'success');
-        setNewCampaignForm({ name: '', description: '' });
-        setShowCreateCampaignModal(false);
-        fetchCampaigns();
-        if (data.campaign) {
-          setSelectedCampaignId(data.campaign.id);
-        }
-      } else {
-        showToast(data.error || 'Failed to create campaign', 'error');
-      }
-    } catch (err) {
-      showToast('Connection error while creating campaign.', 'error');
-    } finally {
-      setIsCreatingCampaign(false);
-    }
-  };
-
-  const handleDeleteCampaign = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this campaign? This will delete all its contacts and broadcasts permanently!')) return;
-
-    try {
-      const res = await fetch(`${API_URL}/campaigns/${id}`, {
-        method: 'DELETE',
-        headers
-      });
-      if (res.ok) {
-        showToast('Campaign deleted successfully.', 'info');
-        setCampaigns(prev => prev.filter(c => c.id !== id));
-        setSelectedCampaignId('');
-        fetchCampaigns();
-      }
-    } catch (err) {
-      showToast('Failed to delete campaign.', 'error');
-    }
-  };
-
-  const handleUploadContacts = async (e) => {
-    e.preventDefault();
-    if (!uploadFile) {
-      showToast('Please select a file to upload.', 'error');
-      return;
-    }
-
-    const formData = new FormData();
-    formData.append('file', uploadFile);
-
-    setIsUploading(true);
-    try {
-      const res = await fetch(`${API_URL}/campaigns/${selectedCampaignId}/leads/upload`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        body: formData
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setUploadResult(data);
-        showToast(`Bulk upload complete! Parsed ${data.created} contacts.`, 'success');
-        fetchCampaignLeads(selectedCampaignId);
-      } else {
-        showToast(data.error || 'Failed to process spreadsheet file.', 'error');
-      }
-    } catch (err) {
-      showToast('Error uploading file: ' + err.message, 'error');
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
-  const handleDeleteContact = async (leadId) => {
-    if (!window.confirm('Delete this contact?')) return;
-    try {
-      const res = await fetch(`${API_URL}/campaigns/${selectedCampaignId}/leads/${leadId}`, {
-        method: 'DELETE',
-        headers
-      });
-      if (res.ok) {
-        setContacts(prev => prev.filter(c => c.id !== leadId));
-        showToast('Contact removed.', 'info');
-      }
-    } catch (err) {
-      showToast('Error removing contact.', 'error');
-    }
-  };
-
-  const fetchMasterLeads = async () => {
-    try {
-      const res = await fetch(`${API_URL}/campaigns/master/leads`, { headers });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setMasterContacts(data.leads || []);
-      }
-    } catch (err) {
-      showToast('Error fetching master contacts.', 'error');
-    }
-  };
-
-  const handleUploadMasterContacts = async (e) => {
-    e.preventDefault();
-    if (!masterUploadFile) {
-      showToast('Please select a file to upload.', 'error');
-      return;
-    }
-
-    const formData = new FormData();
-    formData.append('file', masterUploadFile);
-
-    setIsMasterUploading(true);
-    try {
-      const res = await fetch(`${API_URL}/campaigns/master/leads/upload`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        body: formData
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setMasterUploadResult(data);
-        showToast(`Bulk master upload complete! Parsed ${data.insertedCount} contacts.`, 'success');
-        setMasterUploadFile(null);
-        fetchMasterLeads();
-      } else {
-        showToast(data.error || 'Failed to process spreadsheet file.', 'error');
-      }
-    } catch (err) {
-      showToast('Error uploading file: ' + err.message, 'error');
-    } finally {
-      setIsMasterUploading(false);
-    }
-  };
-
-  const handleDeleteMasterContact = async (leadId) => {
-    if (!window.confirm('Delete this contact from the Master Data Center?')) return;
-    try {
-      const res = await fetch(`${API_URL}/campaigns/master/leads/${leadId}`, {
-        method: 'DELETE',
-        headers
-      });
-      if (res.ok) {
-        setMasterContacts(prev => prev.filter(c => c.id !== leadId));
-        showToast('Contact removed from Master Data Center.', 'info');
-      }
-    } catch (err) {
-      showToast('Error removing contact.', 'error');
-    }
-  };
-
-  const handleImportMasterLeads = async () => {
-    if (!selectedCampaignId) {
-      showToast('Please select a campaign first.', 'error');
-      return;
-    }
-    const leadIds = Array.from(selectedMasterIds);
-    if (leadIds.length === 0) {
-      showToast('Please select at least one contact to import.', 'error');
-      return;
-    }
-
-    setIsImporting(true);
-    try {
-      const res = await fetch(`${API_URL}/campaigns/${selectedCampaignId}/leads/import-master`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ leadIds })
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        showToast(`Successfully imported ${data.importedCount} contacts to campaign!`, 'success');
-        setSelectedMasterIds(new Set());
-        setShowImportModal(false);
-        fetchCampaignLeads(selectedCampaignId);
-      } else {
-        showToast(data.error || 'Failed to import contacts.', 'error');
-      }
-    } catch (err) {
-      showToast('Error importing contacts: ' + err.message, 'error');
-    } finally {
-      setIsImporting(false);
-    }
-  };
-
-  const handleDeleteMasterContactsBulk = async () => {
-    const leadIds = Array.from(selectedMasterDeleteIds);
-    if (leadIds.length === 0) return;
-    if (!window.confirm(`Are you sure you want to delete these ${leadIds.length} contact(s) from the Master Data Center?`)) return;
-
-    try {
-      const res = await fetch(`${API_URL}/campaigns/master/leads/delete-bulk`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ leadIds })
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        showToast(`Successfully deleted ${data.deletedCount} contacts from Master Data Center.`, 'info');
-        setSelectedMasterDeleteIds(new Set());
-        fetchMasterLeads();
-      } else {
-        showToast(data.error || 'Failed to delete contacts.', 'error');
-      }
-    } catch (err) {
-      showToast('Error deleting contacts: ' + err.message, 'error');
-    }
-  };
-
-  // Helper to format ISO date to local datetime-local input string
-  const formatDateTimeLocal = (dateStr) => {
-    if (!dateStr) return '';
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return '';
-    const pad = (n) => String(n).padStart(2, '0');
-    const year = d.getFullYear();
-    const month = pad(d.getMonth() + 1);
-    const day = pad(d.getDate());
-    const hours = pad(d.getHours());
-    const minutes = pad(d.getMinutes());
-    return `${year}-${month}-${day}T${hours}:${minutes}`;
-  };
-
-  // Helper for live reverse countdown timer
-  const getRemainingTime = (scheduledAt) => {
-    if (!scheduledAt) return null;
-    const target = new Date(scheduledAt).getTime();
-    const diffMs = target - nowTime;
-    if (diffMs <= 0) return { expired: true, text: 'Triggering Now...' };
-
-    const totalSec = Math.floor(diffMs / 1000);
-    const days = Math.floor(totalSec / 86400);
-    const hours = Math.floor((totalSec % 86400) / 3600);
-    const minutes = Math.floor((totalSec % 3600) / 60);
-    const seconds = totalSec % 60;
-    const pad = (n) => String(n).padStart(2, '0');
-
-    let text = '';
-    if (days > 0) {
-      text = `${days}d ${pad(hours)}h ${pad(minutes)}m`;
-    } else if (hours > 0) {
-      text = `${pad(hours)}h ${pad(minutes)}m ${pad(seconds)}s`;
-    } else if (minutes > 0) {
-      text = `${pad(minutes)}m ${pad(seconds)}s`;
-    } else {
-      text = `${seconds}s`;
-    }
-    return { expired: false, text: `in ${text}`, diffMs };
-  };
-
-  const handleEditBroadcast = (b) => {
-    setEditingBroadcastId(b.id);
-    setNewBroadcastForm({
-      name: b.name || '',
-      channel: b.channel || 'whatsapp',
-      whatsappTemplate: b.whatsapp_template || '',
-      whatsappMessage: b.whatsapp_message || '',
-      emailSubject: b.email_subject || '',
-      emailBody: b.email_body || '',
-      scheduledAt: formatDateTimeLocal(b.scheduled_at),
-      mediaUrl: b.media_url || ''
-    });
-    setShowNewBroadcastModal(true);
-  };
-
-  const handleSaveBroadcast = async (e) => {
-    e.preventDefault();
-    if (!newBroadcastForm.name.trim()) {
-      showToast('Broadcast name is required.', 'error');
-      return;
-    }
-
-    setIsCreatingBroadcast(true);
-    try {
-      const isEdit = !!editingBroadcastId;
-      const url = isEdit 
-        ? `${API_URL}/campaigns/${selectedCampaignId}/broadcasts/${editingBroadcastId}`
-        : `${API_URL}/campaigns/${selectedCampaignId}/broadcasts`;
-      const method = isEdit ? 'PUT' : 'POST';
-
-      let isoScheduledAt = null;
-      if (newBroadcastForm.scheduledAt) {
-        const d = new Date(newBroadcastForm.scheduledAt);
-        if (!isNaN(d.getTime())) {
-          isoScheduledAt = d.toISOString();
-        }
-      }
-
-      const payload = {
-        ...newBroadcastForm,
-        scheduledAt: isoScheduledAt
-      };
-
-      const res = await fetch(url, {
-        method,
-        headers,
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        showToast(isEdit ? 'Broadcast schedule updated successfully!' : 'Broadcast created successfully!', 'success');
-        setShowNewBroadcastModal(false);
-        setEditingBroadcastId(null);
-        setNewBroadcastForm({
-          name: '',
-          channel: 'whatsapp',
-          whatsappTemplate: '',
-          whatsappMessage: '',
-          emailSubject: '',
-          emailBody: '',
-          scheduledAt: '',
-          mediaUrl: ''
-        });
-        fetchCampaignBroadcasts(selectedCampaignId);
-      } else {
-        showToast(data.error || `Failed to ${isEdit ? 'update' : 'create'} broadcast.`, 'error');
-      }
-    } catch (err) {
-      showToast('Error saving broadcast: ' + err.message, 'error');
-    } finally {
-      setIsCreatingBroadcast(false);
-    }
-  };
-
-  const handleTriggerBroadcast = async (broadcastId) => {
-    if (!window.confirm('Trigger this broadcast campaign now? Messages will be sent immediately.')) return;
-
-    try {
-      const res = await fetch(`${API_URL}/campaigns/${selectedCampaignId}/broadcasts/${broadcastId}/trigger`, {
-        method: 'POST',
-        headers
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        showToast('Broadcast execution started!', 'success');
-        fetchCampaignBroadcasts(selectedCampaignId);
-      } else {
-        showToast(data.error || 'Failed to trigger broadcast.', 'error');
-      }
-    } catch (err) {
-      showToast('Failed to trigger broadcast.', 'error');
-    }
-  };
-
-  const handleDeleteBroadcast = async (broadcastId) => {
-    if (!window.confirm('Are you sure you want to delete this broadcast?')) return;
-    try {
-      const res = await fetch(`${API_URL}/campaigns/${selectedCampaignId}/broadcasts/${broadcastId}`, {
-        method: 'DELETE',
-        headers
-      });
-      if (res.ok) {
-        setBroadcasts(prev => prev.filter(b => b.id !== broadcastId));
-        showToast('Broadcast deleted.', 'info');
-      }
-    } catch (err) {
-      showToast('Error deleting broadcast.', 'error');
-    }
-  };
-
-  const handleSaveSMTPSettings = async (e) => {
+  const handleSaveSmtpSettings = async (e) => {
     e.preventDefault();
     setIsSavingSettings(true);
     try {
       const res = await fetch(`${API_URL}/settings`, {
-        method: 'PUT',
+        method: 'POST',
         headers,
         body: JSON.stringify({
           campaign_smtp_host: smtpSettings.host,
@@ -738,145 +310,356 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
           campaign_smtp_from_email: smtpSettings.fromEmail
         })
       });
-      if (res.ok) {
-        showToast('SMTP settings saved successfully!', 'success');
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast('SMTP Gateway configuration updated successfully.', 'success');
       } else {
-        showToast('Failed to save SMTP configurations.', 'error');
+        showToast(data.error || 'Failed to save SMTP settings.', 'error');
       }
     } catch (err) {
-      showToast('Connection error while saving settings.', 'error');
+      showToast('Network error saving settings.', 'error');
     } finally {
       setIsSavingSettings(false);
     }
   };
 
-  const handleDownloadTemplate = () => {
-    const csvContent = "data:text/csv;charset=utf-8,Name,Contact,Mail,Address\nJohn Doe,919876543210,john@example.com,Mumbai India\nJane Smith,918888888888,jane@example.com,Delhi India";
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", "campaign_contacts_template.csv");
+  const handleExportMasterData = () => {
+    const query = new URLSearchParams();
+    if (masterSearch) query.append('search', masterSearch);
+    if (masterFilterBroadcastName) query.append('broadcast_name', masterFilterBroadcastName);
+    if (masterFilterDateFrom) query.append('broadcast_date_from', masterFilterDateFrom);
+    if (masterFilterDateTo) query.append('broadcast_date_to', masterFilterDateTo);
+    if (masterFilterMetaWaNo) query.append('meta_whatsapp_no', masterFilterMetaWaNo);
+    if (masterFilterSenderEmail) query.append('sender_email', masterFilterSenderEmail);
+
+    const exportUrl = `${API_URL}/campaigns/master/leads/export?${query.toString()}`;
+    window.open(exportUrl, '_blank');
+    showToast('Exporting master data with delivery rates & CTR...', 'info');
+  };
+
+  const handleDeleteMasterLead = async (leadId) => {
+    if (!window.confirm('Delete this contact permanently from Master Data Center?')) return;
+    try {
+      const res = await fetch(`${API_URL}/campaigns/master/leads/${leadId}`, {
+        method: 'DELETE',
+        headers
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast('Contact removed from Master Data Center.', 'info');
+        fetchMasterLeads();
+        fetchMasterFilterOptions();
+      } else {
+        showToast(data.error || 'Failed to delete contact.', 'error');
+      }
+    } catch (err) {
+      showToast('Network error while deleting contact.', 'error');
+    }
+  };
+
+  const handleDeleteMasterBulk = async () => {
+    const ids = Array.from(selectedMasterDeleteIds);
+    if (ids.length === 0) return;
+    if (!window.confirm(`Delete these ${ids.length} contacts permanently from Master Data Center?`)) return;
+
+    try {
+      const res = await fetch(`${API_URL}/campaigns/master/leads/delete-bulk`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ leadIds: ids })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(`Successfully deleted ${data.deletedCount} contacts.`, 'success');
+        setSelectedMasterDeleteIds(new Set());
+        fetchMasterLeads();
+        fetchMasterFilterOptions();
+      } else {
+        showToast(data.error || 'Bulk delete failed.', 'error');
+      }
+    } catch (err) {
+      showToast('Network error during bulk delete.', 'error');
+    }
+  };
+
+  // Download Sample Broadcast Template with FMCB00001 ID column
+  const handleDownloadSampleTemplate = () => {
+    // Detect custom template variables
+    let extraCols = [];
+    if (broadcastForm.whatsapp_template) {
+      const t = templates.find(item => item.name === broadcastForm.whatsapp_template || item.meta_template_name === broadcastForm.whatsapp_template);
+      if (t) {
+        const matches = [...t.body.matchAll(/\{\{(\d+)\}\}/g)];
+        const nums = matches.map(m => parseInt(m[1], 10));
+        const maxNum = nums.length > 0 ? Math.max(...nums) : 0;
+        for (let i = 1; i <= maxNum; i++) {
+          extraCols.push(`var${i}`);
+        }
+      }
+    }
+
+    const headersList = ['id', 'name', 'contact', 'mail', 'address', ...extraCols];
+    const sampleRow = ['FMCB00001', 'Rahul Sharma', '919876543210', 'rahul.sharma@example.com', 'Mumbai, Maharashtra', ...extraCols.map((_, i) => `Value ${i + 1}`)];
+    const sampleRow2 = ['FMCB00002', 'Priya Patel', '919812345678', 'priya.patel@example.com', 'Ahmedabad, Gujarat', ...extraCols.map((_, i) => `Value ${i + 1}`)];
+
+    const csvContent = [
+      headersList.map(h => `"${h}"`).join(','),
+      sampleRow.map(v => `"${v}"`).join(','),
+      sampleRow2.map(v => `"${v}"`).join(',')
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `finmantra_broadcast_template_${broadcastForm.whatsapp_template || 'sample'}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
-  const filteredContacts = contacts.filter(c => {
-    const search = contactsSearch.toLowerCase();
-    return (
-      (c.name || '').toLowerCase().includes(search) ||
-      (c.contact || '').toLowerCase().includes(search) ||
-      (c.mail || '').toLowerCase().includes(search) ||
-      (c.address || '').toLowerCase().includes(search)
-    );
-  });
+  // Parse Uploaded CSV / Excel for Broadcast
+  const handleBroadcastFileUpload = (file) => {
+    if (!file) return;
+    setBroadcastUploadFile(file);
+    setBroadcastUploadError('');
 
-  const filteredMasterContacts = masterContacts.filter(c => {
-    // 1. General search
-    const gen = masterContactsSearch.toLowerCase().trim();
-    if (gen) {
-      const matchGen = (c.name || '').toLowerCase().includes(gen) ||
-                       (c.contact || '').toLowerCase().includes(gen) ||
-                       (c.mail || '').toLowerCase().includes(gen) ||
-                       (c.address || '').toLowerCase().includes(gen);
-      if (!matchGen) return false;
-    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const text = e.target.result;
+        // Simple CSV parser for client preview
+        const lines = text.split(/\r\n|\n/).filter(line => line.trim().length > 0);
+        if (lines.length <= 1) {
+          setBroadcastUploadError('The uploaded file contains no data rows.');
+          return;
+        }
 
-    // 2. Phone filter
-    const phoneFilterClean = masterFilterPhone.replace(/\D/g, '');
-    if (phoneFilterClean) {
-      if (!(c.contact || '').includes(phoneFilterClean)) return false;
-    }
+        const rawHeaders = lines[0].split(',').map(h => h.replace(/^["']|["']$/g, '').trim().toLowerCase());
+        const idIdx = rawHeaders.findIndex(h => h === 'id' || h === 'campaign id' || h === 'campaign_id');
+        const nameIdx = rawHeaders.findIndex(h => h === 'name' || h === 'full name' || h === 'full_name');
+        const contactIdx = rawHeaders.findIndex(h => h === 'contact' || h === 'phone' || h === 'mobile' || h === 'number');
+        const mailIdx = rawHeaders.findIndex(h => h === 'mail' || h === 'email');
+        const addressIdx = rawHeaders.findIndex(h => h === 'address' || h === 'city' || h === 'location');
 
-    // 3. Email filter
-    const emailFilterClean = masterFilterEmail.toLowerCase().trim();
-    if (emailFilterClean) {
-      if (!(c.mail || '').toLowerCase().includes(emailFilterClean)) return false;
-    }
+        const parsed = [];
+        let autoIdCounter = 1;
 
-    // 4. Address filter
-    const addrFilterClean = masterFilterAddress.toLowerCase().trim();
-    if (addrFilterClean) {
-      if (!(c.address || '').toLowerCase().includes(addrFilterClean)) return false;
-    }
+        for (let i = 1; i < lines.length; i++) {
+          const rowVals = lines[i].split(',').map(v => v.replace(/^["']|["']$/g, '').trim());
+          let rawId = idIdx !== -1 ? rowVals[idIdx] : '';
+          
+          // ID Logic: If empty, give it id as "FMCB00001" and so on
+          if (!rawId || !rawId.startsWith('FMCB')) {
+            rawId = `FMCB${String(autoIdCounter).padStart(5, '0')}`;
+          }
+          autoIdCounter++;
 
-    // 5. Date filters
-    if (c.created_at) {
-      const createdTime = new Date(c.created_at).getTime();
-      if (masterFilterFromDate) {
-        const fromTime = new Date(masterFilterFromDate + 'T00:00:00').getTime();
-        if (createdTime < fromTime) return false;
+          const name = nameIdx !== -1 ? rowVals[nameIdx] : 'Customer';
+          const rawContact = contactIdx !== -1 ? rowVals[contactIdx] : '';
+          const contact = rawContact.replace(/\D/g, '');
+          const mail = mailIdx !== -1 ? rowVals[mailIdx] : '';
+          const address = addressIdx !== -1 ? rowVals[addressIdx] : '';
+
+          parsed.push({ id: rawId, name, contact, mail, address, rawRow: rowVals });
+        }
+
+        setBroadcastParsedLeads(parsed);
+        setBroadcastUploadStats({
+          totalRows: parsed.length,
+          validContacts: parsed.filter(p => p.contact && p.contact.length >= 10).length,
+          validEmails: parsed.filter(p => p.mail && p.mail.includes('@')).length
+        });
+      } catch (err) {
+        setBroadcastUploadError('Failed to parse file. Please upload a standard CSV format.');
       }
-      if (masterFilterToDate) {
-        const toTime = new Date(masterFilterToDate + 'T23:59:59').getTime();
-        if (createdTime > toTime) return false;
+    };
+    reader.readAsText(file);
+  };
+
+  // Submit Broadcast Dispatch / Schedule
+  const handleSubmitDirectBroadcast = async () => {
+    if (!broadcastForm.name.trim()) {
+      showToast('Please enter a Broadcast Name.', 'error');
+      setBroadcastWizardStep(1);
+      return;
+    }
+    if (!broadcastUploadFile && broadcastParsedLeads.length === 0) {
+      showToast('Please upload customer contacts data.', 'error');
+      setBroadcastWizardStep(4);
+      return;
+    }
+
+    setIsSubmittingBroadcast(true);
+    try {
+      const formData = new FormData();
+      formData.append('name', broadcastForm.name.trim());
+      formData.append('channel', broadcastForm.channel);
+      formData.append('meta_phone_number_id', broadcastForm.meta_phone_number_id);
+      formData.append('meta_phone_number', broadcastForm.meta_phone_number);
+      formData.append('sender_email', broadcastForm.sender_email);
+      formData.append('whatsapp_template', broadcastForm.whatsapp_template);
+      formData.append('whatsapp_message', broadcastForm.whatsapp_message);
+      formData.append('email_subject', broadcastForm.email_subject);
+      formData.append('email_body', broadcastForm.email_body);
+      formData.append('media_url', broadcastForm.media_url);
+      if (broadcastForm.scheduled_at) {
+        formData.append('scheduled_at', broadcastForm.scheduled_at);
       }
-    } else {
-      if (masterFilterFromDate || masterFilterToDate) return false;
-    }
 
-    return true;
-  });
-
-  const filteredImportContacts = masterContacts.filter(c => {
-    // 1. General search
-    const gen = importSearch.toLowerCase().trim();
-    if (gen) {
-      const matchGen = (c.name || '').toLowerCase().includes(gen) ||
-                       (c.contact || '').toLowerCase().includes(gen) ||
-                       (c.mail || '').toLowerCase().includes(gen) ||
-                       (c.address || '').toLowerCase().includes(gen);
-      if (!matchGen) return false;
-    }
-
-    // 2. Phone filter
-    const phoneFilterClean = filterPhone.replace(/\D/g, '');
-    if (phoneFilterClean) {
-      if (!(c.contact || '').includes(phoneFilterClean)) return false;
-    }
-
-    // 3. Email filter
-    const emailFilterClean = filterEmail.toLowerCase().trim();
-    if (emailFilterClean) {
-      if (!(c.mail || '').toLowerCase().includes(emailFilterClean)) return false;
-    }
-
-    // 4. Address filter
-    const addrFilterClean = filterAddress.toLowerCase().trim();
-    if (addrFilterClean) {
-      if (!(c.address || '').toLowerCase().includes(addrFilterClean)) return false;
-    }
-
-    // 5. Date filters
-    if (c.created_at) {
-      const createdTime = new Date(c.created_at).getTime();
-      if (filterFromDate) {
-        const fromTime = new Date(filterFromDate + 'T00:00:00').getTime();
-        if (createdTime < fromTime) return false;
+      if (broadcastUploadFile) {
+        formData.append('file', broadcastUploadFile);
+      } else {
+        formData.append('leads', JSON.stringify(broadcastParsedLeads));
       }
-      if (filterToDate) {
-        const toTime = new Date(filterToDate + 'T23:59:59').getTime();
-        if (createdTime > toTime) return false;
-      }
-    } else {
-      if (filterFromDate || filterToDate) return false;
-    }
 
-    return true;
-  });
+      const res = await fetch(`${API_URL}/campaigns/broadcasts/direct`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData
+      });
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        const stats = data.masterStats || {};
+        showToast(`Broadcast "${broadcastForm.name}" created! ${stats.totalProcessed || broadcastParsedLeads.length} contacts merged to Master Data without duplicates.`, 'success');
+        setShowNewBroadcastModal(false);
+        setBroadcastWizardStep(1);
+        setBroadcastUploadFile(null);
+        setBroadcastParsedLeads([]);
+        fetchBroadcasts();
+        fetchMasterLeads();
+        fetchMasterFilterOptions();
+        fetchCommunicationAnalytics();
+      } else {
+        showToast(data.error || 'Failed to dispatch broadcast.', 'error');
+      }
+    } catch (err) {
+      showToast('Network error while dispatching broadcast.', 'error');
+    } finally {
+      setIsSubmittingBroadcast(false);
+    }
+  };
+
+  // Trigger manual immediate send
+  const handleTriggerBroadcastNow = async (broadcastId) => {
+    if (!window.confirm('Trigger this broadcast immediately to all targeted contacts?')) return;
+    try {
+      const res = await fetch(`${API_URL}/campaigns/id/broadcasts/${broadcastId}/trigger`, {
+        method: 'POST',
+        headers
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast('Broadcast triggered! Processing in background.', 'success');
+        fetchBroadcasts();
+      } else {
+        showToast(data.error || 'Failed to trigger broadcast.', 'error');
+      }
+    } catch (err) {
+      showToast('Network error triggering broadcast.', 'error');
+    }
+  };
+
+  // Helper for Quality Rating badge colors
+  const getQualityRatingBadge = (rating) => {
+    const r = String(rating || '').toUpperCase();
+    if (r === 'GREEN' || r === 'HIGH') {
+      return <span style={{ padding: '0.15rem 0.5rem', borderRadius: '4px', background: 'rgba(22, 163, 123, 0.15)', color: '#16a37b', fontSize: '0.72rem', fontWeight: 700 }}>Quality: High (Green)</span>;
+    }
+    if (r === 'YELLOW' || r === 'MEDIUM') {
+      return <span style={{ padding: '0.15rem 0.5rem', borderRadius: '4px', background: 'rgba(224, 168, 46, 0.15)', color: 'var(--gold-deep)', fontSize: '0.72rem', fontWeight: 700 }}>Quality: Medium (Yellow)</span>;
+    }
+    if (r === 'RED' || r === 'LOW') {
+      return <span style={{ padding: '0.15rem 0.5rem', borderRadius: '4px', background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', fontSize: '0.72rem', fontWeight: 700 }}>Quality: Low (Red)</span>;
+    }
+    return <span style={{ padding: '0.15rem 0.5rem', borderRadius: '4px', background: 'rgba(150, 150, 150, 0.15)', color: 'var(--muted)', fontSize: '0.72rem', fontWeight: 700 }}>Quality: {rating || 'Standard'}</span>;
+  };
+
+  // Helper for Template Variable Preview replacement
+  const getRenderedTemplatePreview = () => {
+    if (!broadcastForm.whatsapp_template) return 'Please select a template to preview message.';
+    const t = templates.find(item => item.name === broadcastForm.whatsapp_template || item.meta_template_name === broadcastForm.whatsapp_template);
+    if (!t) return broadcastForm.whatsapp_message || 'Template selected';
+
+    let text = t.body || '';
+    const sampleLead = broadcastParsedLeads[0] || { name: 'Rahul Sharma', contact: '919876543210', mail: 'rahul@example.com' };
+    text = text.replace(/\{\{1\}\}/g, sampleLead.name || 'Rahul Sharma')
+               .replace(/\{\{2\}\}/g, broadcastForm.whatsapp_message || 'FinMantra Offer')
+               .replace(/\{name\}/gi, sampleLead.name || 'Rahul Sharma')
+               .replace(/\{contact\}/gi, sampleLead.contact || '919876543210');
+    return text;
+  };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, height: '100%' }}>
-      {/* Tab Navigation Menu */}
-      <div style={{ display: 'flex', gap: '0.5rem', borderBottom: '1px solid var(--line)', paddingBottom: '0.85rem', marginBottom: '1.25rem', overflowX: 'auto', flexShrink: 0 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, color: 'var(--ink)' }}>
+      {/* Top Header / Actions Bar */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '1rem', flexShrink: 0 }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 800, letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Zap size={22} style={{ color: 'var(--gold-deep)' }} />
+            OmniChannel Campaigns &amp; Broadcast Center
+          </h2>
+          <p style={{ margin: '0.25rem 0 0 0', color: 'var(--muted)', fontSize: '0.85rem' }}>
+            Direct Meta WhatsApp &amp; SMTP broadcast dispatch, unified master repository, and real-time delivery analytics.
+          </p>
+        </div>
+
+        <div style={{ display: 'flex', gap: '0.65rem' }}>
+          <button
+            onClick={() => {
+              setBroadcastWizardStep(1);
+              setShowNewBroadcastModal(true);
+            }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.45rem',
+              padding: '0.55rem 1.15rem',
+              borderRadius: '8px',
+              background: 'var(--gold-deep)',
+              color: '#fff',
+              border: 'none',
+              fontWeight: 700,
+              fontSize: '0.88rem',
+              cursor: 'pointer',
+              boxShadow: '0 4px 12px rgba(224, 168, 46, 0.25)'
+            }}
+          >
+            <Plus size={16} /> + Broadcast Campaign
+          </button>
+        </div>
+      </div>
+
+      {/* Subtab Navigation Bar */}
+      <div style={{ display: 'flex', gap: '0.4rem', borderBottom: '1px solid var(--line)', paddingBottom: '0.75rem', marginBottom: '1.25rem', overflowX: 'auto', flexShrink: 0 }}>
+        <button
+          onClick={() => setActiveSubTab('communication_dashboard')}
+          style={{
+            padding: '0.5rem 1rem',
+            borderRadius: '8px',
+            border: 'none',
+            fontSize: '0.86rem',
+            fontWeight: 700,
+            cursor: 'pointer',
+            background: activeSubTab === 'communication_dashboard' ? 'var(--gold-deep)' : 'transparent',
+            color: activeSubTab === 'communication_dashboard' ? '#fff' : 'var(--muted)',
+            transition: 'all 0.2s ease',
+            whiteSpace: 'nowrap'
+          }}
+        >
+          <BarChart3 size={15} style={{ marginRight: '0.45rem', verticalAlign: 'middle' }} />
+          Communication Dashboard
+        </button>
+
         <button
           onClick={() => setActiveSubTab('master_data')}
           style={{
-            padding: '0.55rem 1.1rem',
+            padding: '0.5rem 1rem',
             borderRadius: '8px',
             border: 'none',
-            fontSize: '0.88rem',
-            fontWeight: 600,
+            fontSize: '0.86rem',
+            fontWeight: 700,
             cursor: 'pointer',
             background: activeSubTab === 'master_data' ? 'var(--gold-deep)' : 'transparent',
             color: activeSubTab === 'master_data' ? '#fff' : 'var(--muted)',
@@ -884,35 +667,18 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
             whiteSpace: 'nowrap'
           }}
         >
-          <Database size={16} style={{ marginRight: '0.45rem', verticalAlign: 'middle' }} />
+          <Database size={15} style={{ marginRight: '0.45rem', verticalAlign: 'middle' }} />
           Master Data Center
         </button>
-        <button
-          onClick={() => setActiveSubTab('data_storage')}
-          style={{
-            padding: '0.55rem 1.1rem',
-            borderRadius: '8px',
-            border: 'none',
-            fontSize: '0.88rem',
-            fontWeight: 600,
-            cursor: 'pointer',
-            background: activeSubTab === 'data_storage' ? 'var(--gold-deep)' : 'transparent',
-            color: activeSubTab === 'data_storage' ? '#fff' : 'var(--muted)',
-            transition: 'all 0.2s ease',
-            whiteSpace: 'nowrap'
-          }}
-        >
-          <Users size={16} style={{ marginRight: '0.45rem', verticalAlign: 'middle' }} />
-          Campaign Data (Data Storage)
-        </button>
+
         <button
           onClick={() => setActiveSubTab('broadcast')}
           style={{
-            padding: '0.55rem 1.1rem',
+            padding: '0.5rem 1rem',
             borderRadius: '8px',
             border: 'none',
-            fontSize: '0.88rem',
-            fontWeight: 600,
+            fontSize: '0.86rem',
+            fontWeight: 700,
             cursor: 'pointer',
             background: activeSubTab === 'broadcast' ? 'var(--gold-deep)' : 'transparent',
             color: activeSubTab === 'broadcast' ? '#fff' : 'var(--muted)',
@@ -920,36 +686,18 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
             whiteSpace: 'nowrap'
           }}
         >
-          <MessageSquare size={16} style={{ marginRight: '0.45rem', verticalAlign: 'middle' }} />
+          <MessageSquare size={15} style={{ marginRight: '0.45rem', verticalAlign: 'middle' }} />
           Broadcast Campaigns
         </button>
 
         <button
-          onClick={() => setActiveSubTab('settings')}
-          style={{
-            padding: '0.55rem 1.1rem',
-            borderRadius: '8px',
-            border: 'none',
-            fontSize: '0.88rem',
-            fontWeight: 600,
-            cursor: 'pointer',
-            background: activeSubTab === 'settings' ? 'var(--gold-deep)' : 'transparent',
-            color: activeSubTab === 'settings' ? '#fff' : 'var(--muted)',
-            transition: 'all 0.2s ease',
-            whiteSpace: 'nowrap'
-          }}
-        >
-          <SettingsIcon size={16} style={{ marginRight: '0.45rem', verticalAlign: 'middle' }} />
-          SMTP Gateway Settings
-        </button>
-        <button
           onClick={() => setActiveSubTab('templates')}
           style={{
-            padding: '0.55rem 1.1rem',
+            padding: '0.5rem 1rem',
             borderRadius: '8px',
             border: 'none',
-            fontSize: '0.88rem',
-            fontWeight: 600,
+            fontSize: '0.86rem',
+            fontWeight: 700,
             cursor: 'pointer',
             background: activeSubTab === 'templates' ? 'var(--gold-deep)' : 'transparent',
             color: activeSubTab === 'templates' ? '#fff' : 'var(--muted)',
@@ -957,17 +705,37 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
             whiteSpace: 'nowrap'
           }}
         >
-          <FileText size={16} style={{ marginRight: '0.45rem', verticalAlign: 'middle' }} />
+          <FileText size={15} style={{ marginRight: '0.45rem', verticalAlign: 'middle' }} />
           Templates Manager
         </button>
+
+        <button
+          onClick={() => setActiveSubTab('settings')}
+          style={{
+            padding: '0.5rem 1rem',
+            borderRadius: '8px',
+            border: 'none',
+            fontSize: '0.86rem',
+            fontWeight: 700,
+            cursor: 'pointer',
+            background: activeSubTab === 'settings' ? 'var(--gold-deep)' : 'transparent',
+            color: activeSubTab === 'settings' ? '#fff' : 'var(--muted)',
+            transition: 'all 0.2s ease',
+            whiteSpace: 'nowrap'
+          }}
+        >
+          <SettingsIcon size={15} style={{ marginRight: '0.45rem', verticalAlign: 'middle' }} />
+          SMTP Gateway Settings
+        </button>
+
         <button
           onClick={() => setActiveSubTab('guide')}
           style={{
-            padding: '0.55rem 1.1rem',
+            padding: '0.5rem 1rem',
             borderRadius: '8px',
             border: 'none',
-            fontSize: '0.88rem',
-            fontWeight: 600,
+            fontSize: '0.86rem',
+            fontWeight: 700,
             cursor: 'pointer',
             background: activeSubTab === 'guide' ? 'var(--gold-deep)' : 'transparent',
             color: activeSubTab === 'guide' ? '#fff' : 'var(--muted)',
@@ -975,1992 +743,358 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
             whiteSpace: 'nowrap'
           }}
         >
-          <HelpCircle size={16} style={{ marginRight: '0.45rem', verticalAlign: 'middle' }} />
+          <HelpCircle size={15} style={{ marginRight: '0.45rem', verticalAlign: 'middle' }} />
           Developer Guide
         </button>
       </div>
 
-      {/* Campaigns Selector Header Bar */}
-      {activeSubTab !== 'settings' && activeSubTab !== 'guide' && activeSubTab !== 'master_data' && activeSubTab !== 'templates' && (
-        <div className="glass-panel" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.85rem 1.25rem', borderRadius: '12px', border: '1px solid var(--line)', marginBottom: '1.25rem', gap: '1rem', flexWrap: 'wrap', flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--muted)' }}>Select Campaign:</span>
-            <select
-              value={selectedCampaignId}
-              onChange={(e) => setSelectedCampaignId(e.target.value)}
-              style={{
-                background: 'var(--paper-2)',
-                border: '1px solid var(--line)',
-                borderRadius: '8px',
-                padding: '0.45rem 1.5rem 0.45rem 0.75rem',
-                color: 'var(--ink)',
-                fontSize: '0.9rem',
-                fontWeight: 600,
-                outline: 'none',
-                cursor: 'pointer'
-              }}
-            >
-              <option value="">-- Choose Campaign --</option>
-              {campaigns.map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
+      {/* ========================================================================= */}
+      {/* SUBTAB 1: COMMUNICATION DASHBOARD */}
+      {/* ========================================================================= */}
+      {activeSubTab === 'communication_dashboard' && (
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflowY: 'auto', paddingRight: '0.25rem' }}>
+          {/* Dashboard Filter Bar */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+            gap: '0.65rem',
+            background: 'var(--paper-2)',
+            border: '1px solid var(--line)',
+            borderRadius: '12px',
+            padding: '0.85rem 1rem',
+            marginBottom: '1.25rem',
+            alignItems: 'flex-end'
+          }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: 'var(--muted)', marginBottom: '0.25rem' }}>
+                From Broadcast Date
+              </label>
+              <input
+                type="date"
+                value={dashFilterDateFrom}
+                onChange={(e) => setDashFilterDateFrom(e.target.value)}
+                style={{ width: '100%', padding: '0.4rem 0.6rem', fontSize: '0.82rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
+              />
+            </div>
 
-            {activeSubTab !== 'broadcast' && (
-              <button
-                onClick={() => setShowCreateCampaignModal(true)}
-                className="btn-primary"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.45rem 0.85rem', fontSize: '0.82rem', height: '34px', background: 'var(--gold-deep)', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
+            <div>
+              <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: 'var(--muted)', marginBottom: '0.25rem' }}>
+                To Broadcast Date
+              </label>
+              <input
+                type="date"
+                value={dashFilterDateTo}
+                onChange={(e) => setDashFilterDateTo(e.target.value)}
+                style={{ width: '100%', padding: '0.4rem 0.6rem', fontSize: '0.82rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: 'var(--muted)', marginBottom: '0.25rem' }}>
+                Broadcast Name
+              </label>
+              <select
+                value={dashFilterBroadcastName}
+                onChange={(e) => setDashFilterBroadcastName(e.target.value)}
+                style={{ width: '100%', padding: '0.4rem 0.6rem', fontSize: '0.82rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
               >
-                <Plus size={14} /> New Campaign
-              </button>
-            )}
-          </div>
+                <option value="">All Broadcasts</option>
+                {masterFilterOptions.broadcastNames.map(name => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
+            </div>
 
-          {selectedCampaignId && (
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: 'var(--muted)', marginBottom: '0.25rem' }}>
+                Meta WhatsApp Sender
+              </label>
+              <select
+                value={dashFilterMetaWaNo}
+                onChange={(e) => setDashFilterMetaWaNo(e.target.value)}
+                style={{ width: '100%', padding: '0.4rem 0.6rem', fontSize: '0.82rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
+              >
+                <option value="">All WhatsApp Numbers</option>
+                {masterFilterOptions.metaWhatsappNos.map(no => (
+                  <option key={no} value={no}>{no}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: 'var(--muted)', marginBottom: '0.25rem' }}>
+                Sender Email
+              </label>
+              <select
+                value={dashFilterSenderEmail}
+                onChange={(e) => setDashFilterSenderEmail(e.target.value)}
+                style={{ width: '100%', padding: '0.4rem 0.6rem', fontSize: '0.82rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
+              >
+                <option value="">All Sender Emails</option>
+                {masterFilterOptions.senderEmails.map(em => (
+                  <option key={em} value={em}>{em}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
               <button
                 onClick={() => {
-                  fetchCampaignLeads(selectedCampaignId);
-                  fetchCampaignBroadcasts(selectedCampaignId);
-                  showToast('Refreshed campaign details.', 'info');
+                  setDashFilterDateFrom('');
+                  setDashFilterDateTo('');
+                  setDashFilterBroadcastName('');
+                  setDashFilterMetaWaNo('');
+                  setDashFilterSenderEmail('');
                 }}
-                className="btn-secondary"
-                style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: '34px', width: '34px', padding: 0, borderRadius: '6px', cursor: 'pointer' }}
-                title="Refresh Campaign Data"
+                style={{
+                  width: '100%',
+                  padding: '0.45rem',
+                  fontSize: '0.82rem',
+                  borderRadius: '6px',
+                  border: '1px solid var(--line)',
+                  background: 'var(--paper)',
+                  color: 'var(--muted)',
+                  cursor: 'pointer',
+                  fontWeight: 600
+                }}
               >
-                <RefreshCw size={15} />
+                Reset Filters
               </button>
-              <button
-                onClick={() => handleDeleteCampaign(selectedCampaignId)}
-                className="btn-secondary"
-                style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: '34px', width: '34px', padding: 0, borderRadius: '6px', cursor: 'pointer', background: 'rgba(209, 67, 67, 0.1)', color: 'var(--err)', borderColor: 'rgba(209, 67, 67, 0.2)' }}
-                title="Delete Selected Campaign"
-              >
-                <Trash2 size={15} />
-              </button>
+            </div>
+          </div>
+
+          {/* Top KPI Metric Cards */}
+          {dashboardAnalytics && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.85rem', marginBottom: '1.5rem' }}>
+              {/* Broadcasts Count */}
+              <div className="glass-panel" style={{ padding: '1.1rem', borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--muted)', fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase' }}>
+                  <span>Total Broadcasts</span>
+                  <Zap size={16} style={{ color: 'var(--gold-deep)' }} />
+                </div>
+                <div style={{ fontSize: '1.6rem', fontWeight: 800, marginTop: '0.4rem', color: 'var(--ink)' }}>
+                  {dashboardAnalytics.kpis.total_broadcasts || 0}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--muted)', marginTop: '0.25rem' }}>
+                  {dashboardAnalytics.kpis.wa_broadcasts || 0} WA • {dashboardAnalytics.kpis.email_broadcasts || 0} Email • {dashboardAnalytics.kpis.hybrid_broadcasts || 0} Hybrid
+                </div>
+              </div>
+
+              {/* Total Targeted */}
+              <div className="glass-panel" style={{ padding: '1.1rem', borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--muted)', fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase' }}>
+                  <span>Targeted Recipients</span>
+                  <Users size={16} style={{ color: '#3b82f6' }} />
+                </div>
+                <div style={{ fontSize: '1.6rem', fontWeight: 800, marginTop: '0.4rem', color: 'var(--ink)' }}>
+                  {(dashboardAnalytics.kpis.total_targeted || 0).toLocaleString()}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--muted)', marginTop: '0.25rem' }}>
+                  {(dashboardAnalytics.masterStats.total_master_contacts || 0).toLocaleString()} Unique Master Leads
+                </div>
+              </div>
+
+              {/* WhatsApp Delivery Rate */}
+              <div className="glass-panel" style={{ padding: '1.1rem', borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--muted)', fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase' }}>
+                  <span>WA Delivery Rate</span>
+                  <CheckCheck size={16} style={{ color: '#25D366' }} />
+                </div>
+                <div style={{ fontSize: '1.6rem', fontWeight: 800, marginTop: '0.4rem', color: '#25D366' }}>
+                  {dashboardAnalytics.masterStats.sum_wa_sent > 0 
+                    ? `${((dashboardAnalytics.masterStats.sum_wa_delivered / dashboardAnalytics.masterStats.sum_wa_sent) * 100).toFixed(1)}%` 
+                    : '100%'}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--muted)', marginTop: '0.25rem' }}>
+                  {dashboardAnalytics.masterStats.sum_wa_delivered} delivered of {dashboardAnalytics.masterStats.sum_wa_sent} sent
+                </div>
+              </div>
+
+              {/* WhatsApp CTR */}
+              <div className="glass-panel" style={{ padding: '1.1rem', borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--muted)', fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase' }}>
+                  <span>WhatsApp Unique CTR</span>
+                  <TrendingUp size={16} style={{ color: 'var(--gold-deep)' }} />
+                </div>
+                <div style={{ fontSize: '1.6rem', fontWeight: 800, marginTop: '0.4rem', color: 'var(--gold-deep)' }}>
+                  {dashboardAnalytics.masterStats.sum_wa_delivered > 0 
+                    ? `${((dashboardAnalytics.masterStats.sum_wa_clicked / dashboardAnalytics.masterStats.sum_wa_delivered) * 100).toFixed(1)}%` 
+                    : '0.0%'}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--muted)', marginTop: '0.25rem' }}>
+                  {dashboardAnalytics.masterStats.sum_wa_clicked} unique link clicks
+                </div>
+              </div>
+
+              {/* Email Delivery Rate */}
+              <div className="glass-panel" style={{ padding: '1.1rem', borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--muted)', fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase' }}>
+                  <span>Email Delivery Rate</span>
+                  <Mail size={16} style={{ color: '#8b5cf6' }} />
+                </div>
+                <div style={{ fontSize: '1.6rem', fontWeight: 800, marginTop: '0.4rem', color: '#8b5cf6' }}>
+                  {dashboardAnalytics.masterStats.sum_email_sent > 0 
+                    ? `${((dashboardAnalytics.masterStats.sum_email_delivered / dashboardAnalytics.masterStats.sum_email_sent) * 100).toFixed(1)}%` 
+                    : '100%'}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--muted)', marginTop: '0.25rem' }}>
+                  {dashboardAnalytics.masterStats.sum_email_delivered} delivered of {dashboardAnalytics.masterStats.sum_email_sent} sent
+                </div>
+              </div>
+
+              {/* Unsubscribe / Opt-outs */}
+              <div className="glass-panel" style={{ padding: '1.1rem', borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--muted)', fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase' }}>
+                  <span>Opt-out Rate</span>
+                  <ShieldCheck size={16} style={{ color: '#ef4444' }} />
+                </div>
+                <div style={{ fontSize: '1.6rem', fontWeight: 800, marginTop: '0.4rem', color: '#ef4444' }}>
+                  {(dashboardAnalytics.masterStats.wa_optout_count || 0) + (dashboardAnalytics.masterStats.email_optout_count || 0)}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--muted)', marginTop: '0.25rem' }}>
+                  {dashboardAnalytics.masterStats.wa_optout_count || 0} WA opt-outs • {dashboardAnalytics.masterStats.email_optout_count || 0} Email opt-outs
+                </div>
+              </div>
             </div>
           )}
-        </div>
-      )}
 
-      {/* Main Sub-Tab Viewport */}
-      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-        
-        {/* TAB 0: MASTER DATA CENTER */}
-        {activeSubTab === 'master_data' && (
-          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-            <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)', padding: '1.25rem' }}>
-              {/* Search and Action Strip */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', gap: '0.75rem', flexWrap: 'wrap', flexShrink: 0 }}>
-                <div style={{ position: 'relative', maxWidth: '320px', width: '100%' }}>
-                  <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} />
-                  <input
-                    type="text"
-                    placeholder="Search master data..."
-                    value={masterContactsSearch}
-                    onChange={(e) => setMasterContactsSearch(e.target.value)}
-                    style={{
-                      width: '100%',
-                      background: 'var(--paper-2)',
-                      border: '1px solid var(--line)',
-                      borderRadius: '8px',
-                      padding: '0.45rem 0.75rem 0.45rem 2.25rem',
-                      fontSize: '0.85rem',
-                      color: 'var(--ink)',
-                      outline: 'none',
-                      boxSizing: 'border-box'
-                    }}
-                  />
-                </div>
-
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  {selectedMasterDeleteIds.size > 0 && (
-                    <button
-                      onClick={handleDeleteMasterContactsBulk}
-                      className="btn-secondary"
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 1rem', fontSize: '0.85rem', background: 'rgba(209, 67, 67, 0.1)', color: 'var(--err)', borderColor: 'rgba(209, 67, 67, 0.2)', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
-                    >
-                      <Trash2 size={14} /> Delete Selected ({selectedMasterDeleteIds.size})
-                    </button>
-                  )}
-                  <button
-                    onClick={handleDownloadTemplate}
-                    className="btn-secondary"
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 1rem', fontSize: '0.85rem', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
-                  >
-                    <Download size={14} /> Download Template
-                  </button>
-                  <button
-                    onClick={() => {
-                      setSelectedMasterDeleteIds(new Set());
-                      setShowMasterUploadModal(true);
-                    }}
-                    className="btn-primary"
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 1rem', fontSize: '0.85rem', background: 'var(--gold-deep)', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
-                  >
-                    <Upload size={14} /> Upload Master Data
-                  </button>
-                </div>
-              </div>
-
-              {/* Advanced Filters Grid for Master Tab */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.5rem', background: 'var(--paper-2)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--line)', marginBottom: '1rem', flexShrink: 0 }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                  <label style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--muted)' }}>Phone Filter</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 91987..."
-                    value={masterFilterPhone}
-                    onChange={(e) => setMasterFilterPhone(e.target.value)}
-                    style={{ padding: '0.35rem 0.5rem', fontSize: '0.78rem', borderRadius: '4px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
-                  />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                  <label style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--muted)' }}>Email/Domain</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. @gmail.com"
-                    value={masterFilterEmail}
-                    onChange={(e) => setMasterFilterEmail(e.target.value)}
-                    style={{ padding: '0.35rem 0.5rem', fontSize: '0.78rem', borderRadius: '4px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
-                  />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                  <label style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--muted)' }}>Address Keyword</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Delhi"
-                    value={masterFilterAddress}
-                    onChange={(e) => setMasterFilterAddress(e.target.value)}
-                    style={{ padding: '0.35rem 0.5rem', fontSize: '0.78rem', borderRadius: '4px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
-                  />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                  <label style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--muted)' }}>Uploaded From</label>
-                  <input
-                    type="date"
-                    value={masterFilterFromDate}
-                    onChange={(e) => setMasterFilterFromDate(e.target.value)}
-                    style={{ padding: '0.3rem 0.5rem', fontSize: '0.78rem', borderRadius: '4px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
-                  />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                  <label style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--muted)' }}>Uploaded To</label>
-                  <input
-                    type="date"
-                    value={masterFilterToDate}
-                    onChange={(e) => setMasterFilterToDate(e.target.value)}
-                    style={{ padding: '0.3rem 0.5rem', fontSize: '0.78rem', borderRadius: '4px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
-                  />
-                </div>
-                <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMasterFilterPhone('');
-                      setMasterFilterEmail('');
-                      setMasterFilterAddress('');
-                      setMasterFilterFromDate('');
-                      setMasterFilterToDate('');
-                      setMasterContactsSearch('');
-                      setSelectedMasterDeleteIds(new Set());
-                    }}
-                    className="btn-secondary"
-                    style={{ padding: '0.35rem', fontSize: '0.78rem', width: '100%', height: '28px', borderRadius: '4px', cursor: 'pointer' }}
-                  >
-                    Reset Filters
-                  </button>
-                </div>
-              </div>
-
-              {/* Master Contacts grid list */}
-              <div style={{ flex: 1, overflowY: 'auto', border: '1px solid var(--line)', borderRadius: '8px', minHeight: 0 }}>
-                {filteredMasterContacts.length === 0 ? (
-                  <div style={{ padding: '4rem 2rem', textAlign: 'center', color: 'var(--muted)' }}>
-                    <FileSpreadsheet size={36} style={{ color: 'var(--line)', marginBottom: '0.75rem' }} />
-                    <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>No contacts found in Master Data Center.</div>
-                    <div style={{ fontSize: '0.78rem', marginTop: '0.25rem' }}>Upload an Excel or CSV file containing customer rows to populate the master repository.</div>
-                  </div>
-                ) : (
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'left' }}>
-                    <thead style={{ position: 'sticky', top: 0, background: 'var(--paper-2)', zIndex: 10 }}>
-                      <tr style={{ borderBottom: '1px solid var(--line)' }}>
-                        <th style={{ padding: '0.75rem 1rem', width: '40px', textAlign: 'center' }}>
-                          <input
-                            type="checkbox"
-                            checked={filteredMasterContacts.length > 0 && filteredMasterContacts.every(c => selectedMasterDeleteIds.has(c.id))}
-                            onChange={(e) => {
-                              const newSet = new Set(selectedMasterDeleteIds);
-                              if (e.target.checked) {
-                                filteredMasterContacts.forEach(c => newSet.add(c.id));
-                              } else {
-                                filteredMasterContacts.forEach(c => newSet.delete(c.id));
-                              }
-                              setSelectedMasterDeleteIds(newSet);
-                            }}
-                            style={{ cursor: 'pointer' }}
-                          />
-                        </th>
-                        <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--ink)' }}>Name</th>
-                        <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--ink)' }}>Contact (WhatsApp)</th>
-                        <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--ink)' }}>Email Address</th>
-                        <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--ink)' }}>Address</th>
-                        <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--ink)' }}>Uploaded At</th>
-                        <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--ink)', width: '60px', textAlign: 'right' }}>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredMasterContacts.map(c => {
-                        const isChecked = selectedMasterDeleteIds.has(c.id);
-                        return (
-                          <tr
-                            key={c.id}
-                            onClick={() => {
-                              const newSet = new Set(selectedMasterDeleteIds);
-                              if (isChecked) {
-                                newSet.delete(c.id);
-                              } else {
-                                newSet.add(c.id);
-                              }
-                              setSelectedMasterDeleteIds(newSet);
-                            }}
-                            style={{ borderBottom: '1px solid var(--line)', transition: 'background 0.15s ease', cursor: 'pointer', background: isChecked ? 'rgba(224, 168, 46, 0.05)' : 'transparent' }}
-                            className="table-row-hover"
-                          >
-                            <td style={{ padding: '0.75rem 1rem', textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
-                              <input
-                                type="checkbox"
-                                checked={isChecked}
-                                onChange={(e) => {
-                                  const newSet = new Set(selectedMasterDeleteIds);
-                                  if (e.target.checked) {
-                                    newSet.add(c.id);
-                                  } else {
-                                    newSet.delete(c.id);
-                                  }
-                                  setSelectedMasterDeleteIds(newSet);
-                                }}
-                                style={{ cursor: 'pointer' }}
-                              />
-                            </td>
-                            <td style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>{c.name}</td>
-                            <td style={{ padding: '0.75rem 1rem', fontFamily: 'var(--font-mono)' }}>{c.contact}</td>
-                            <td style={{ padding: '0.75rem 1rem' }}>{c.mail}</td>
-                            <td style={{ padding: '0.75rem 1rem', color: 'var(--muted)' }}>{c.address || '—'}</td>
-                            <td style={{ padding: '0.75rem 1rem', color: 'var(--muted)', fontSize: '0.78rem' }}>{c.created_at ? new Date(c.created_at).toLocaleString() : '—'}</td>
-                            <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
-                              <button
-                                onClick={() => handleDeleteMasterContact(c.id)}
-                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--err)', padding: '0.2rem' }}
-                                title="Delete Contact"
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-              
-              {/* Counter Footer */}
-              <div style={{ marginTop: '0.85rem', fontSize: '0.8rem', color: 'var(--muted)', display: 'flex', justifyContent: 'space-between', flexShrink: 0 }}>
-                <span>Showing {filteredMasterContacts.length} of {masterContacts.length} master entries</span>
-                <span>Centralized Pool</span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 1: DATA STORAGE (CONTACTS REPO) */}
-        {activeSubTab === 'data_storage' && (
-          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-            {!selectedCampaignId ? (
-              <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)', padding: '1.25rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexShrink: 0 }}>
-                  <div>
-                    <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700 }}>Operational Campaigns</h3>
-                    <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.8rem', color: 'var(--muted)' }}>Select a campaign to manage its contacts, or create a new campaign pool.</p>
-                  </div>
-                  <button
-                    onClick={() => setShowCreateCampaignModal(true)}
-                    className="btn-primary"
-                    style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.55rem 1rem', background: 'var(--gold-deep)', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }}
-                  >
-                    <Plus size={16} /> Create Campaign
-                  </button>
-                </div>
-
-                <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
-                  {campaigns.length === 0 ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '3.5rem 1rem', background: 'var(--paper-2)', borderRadius: '12px', border: '1px dashed var(--line)' }}>
-                      <Users size={36} style={{ color: 'var(--muted)', marginBottom: '0.75rem' }} />
-                      <div style={{ fontWeight: 600, color: 'var(--ink)', fontSize: '0.95rem' }}>No Campaigns Found</div>
-                      <p style={{ color: 'var(--muted)', fontSize: '0.8rem', textAlign: 'center', maxWidth: '360px', margin: '0.25rem 0 1rem 0' }}>Get started by creating your first credit card lead or referral campaign group.</p>
-                    </div>
-                  ) : (
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem', textAlign: 'left' }}>
-                      <thead>
-                        <tr style={{ borderBottom: '2px solid var(--line)', color: 'var(--muted)', fontWeight: 700 }}>
-                          <th style={{ padding: '0.75rem 1rem' }}>Campaign Name</th>
-                          <th style={{ padding: '0.75rem 1rem' }}>Description</th>
-                          <th style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>No. of Data (Contacts)</th>
-                          <th style={{ padding: '0.75rem 1rem' }}>Created At</th>
-                          <th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {campaigns.map(c => (
-                          <tr
-                            key={c.id}
-                            style={{ borderBottom: '1px solid var(--line)', transition: 'background 0.2s ease', cursor: 'pointer' }}
-                            className="table-row-hover"
-                          >
-                            <td
-                              onClick={() => setSelectedCampaignId(c.id)}
-                              style={{ padding: '0.75rem 1rem', fontWeight: 600, color: 'var(--gold-deep)' }}
-                            >
-                              {c.name}
-                            </td>
-                            <td
-                              onClick={() => setSelectedCampaignId(c.id)}
-                              style={{ padding: '0.75rem 1rem', color: 'var(--muted)', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                            >
-                              {c.description || <em style={{ opacity: 0.6 }}>No description</em>}
-                            </td>
-                            <td
-                              onClick={() => setSelectedCampaignId(c.id)}
-                              style={{ padding: '0.75rem 1rem', textAlign: 'center', fontWeight: 600 }}
-                            >
-                              <span style={{ background: 'rgba(224, 168, 46, 0.1)', color: 'var(--gold-deep)', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.8rem' }}>
-                                {c.leads_count || 0} Contacts
-                              </span>
-                            </td>
-                            <td
-                              onClick={() => setSelectedCampaignId(c.id)}
-                              style={{ padding: '0.75rem 1rem', color: 'var(--muted)', fontSize: '0.8rem' }}
-                            >
-                              {c.created_at ? new Date(c.created_at).toLocaleDateString() : 'N/A'}
-                            </td>
-                            <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDeleteCampaign(c.id);
-                                }}
-                                style={{ background: 'rgba(209, 67, 67, 0.1)', color: 'var(--err)', border: 'none', borderRadius: '4px', cursor: 'pointer', padding: '0.35rem 0.6rem' }}
-                                title="Delete Campaign"
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)', padding: '1.25rem' }}>
-                {/* Search and Action Strip */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', gap: '0.75rem', flexWrap: 'wrap', flexShrink: 0 }}>
-                  <div style={{ position: 'relative', maxWidth: '320px', width: '100%' }}>
-                    <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} />
-                    <input
-                      type="text"
-                      placeholder="Search name, phone, email, address..."
-                      value={contactsSearch}
-                      onChange={(e) => setContactsSearch(e.target.value)}
-                      style={{
-                        width: '100%',
-                        background: 'var(--paper-2)',
-                        border: '1px solid var(--line)',
-                        borderRadius: '8px',
-                        padding: '0.45rem 0.75rem 0.45rem 2.25rem',
-                        fontSize: '0.85rem',
-                        color: 'var(--ink)',
-                        outline: 'none',
-                        boxSizing: 'border-box'
-                      }}
-                    />
-                  </div>
-
-                  <button
-                    onClick={() => {
-                      setSelectedMasterIds(new Set());
-                      setFilterPhone('');
-                      setFilterEmail('');
-                      setFilterAddress('');
-                      setFilterFromDate('');
-                      setFilterToDate('');
-                      setImportSearch('');
-                      setShowImportModal(true);
-                    }}
-                    className="btn-primary"
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 1.1rem', fontSize: '0.85rem', background: 'var(--gold-deep)', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
-                  >
-                    <Plus size={14} /> Align from Master Data
-                  </button>
-                </div>
-
-                {/* Contacts grid list */}
-                <div style={{ flex: 1, overflowY: 'auto', border: '1px solid var(--line)', borderRadius: '8px', minHeight: 0 }}>
-                  {filteredContacts.length === 0 ? (
-                    <div style={{ padding: '4rem 2rem', textAlign: 'center', color: 'var(--muted)' }}>
-                      <FileSpreadsheet size={36} style={{ color: 'var(--line)', marginBottom: '0.75rem' }} />
-                      <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>No contacts found in campaign storage.</div>
-                      <div style={{ fontSize: '0.78rem', marginTop: '0.25rem' }}>Upload an Excel or CSV file containing customer rows to get started.</div>
-                    </div>
-                  ) : (
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'left' }}>
-                      <thead style={{ position: 'sticky', top: 0, background: 'var(--paper-2)', zIndex: 10 }}>
-                        <tr style={{ borderBottom: '1px solid var(--line)' }}>
-                          <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--ink)' }}>Name</th>
-                          <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--ink)' }}>Contact (WhatsApp)</th>
-                          <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--ink)' }}>Email Address</th>
-                          <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--ink)' }}>Address</th>
-                          <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--ink)', width: '60px', textAlign: 'right' }}>Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filteredContacts.map(c => (
-                          <tr key={c.id} style={{ borderBottom: '1px solid var(--line)', transition: 'background 0.15s ease' }} className="table-row-hover">
-                            <td style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>{c.name}</td>
-                            <td style={{ padding: '0.75rem 1rem', fontFamily: 'var(--font-mono)' }}>{c.contact}</td>
-                            <td style={{ padding: '0.75rem 1rem' }}>{c.mail}</td>
-                            <td style={{ padding: '0.75rem 1rem', color: 'var(--muted)' }}>{c.address || '—'}</td>
-                            <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
-                              <button
-                                onClick={() => handleDeleteContact(c.id)}
-                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--err)', padding: '0.2rem' }}
-                                title="Delete Contact"
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
-                
-                {/* Total Counter Footer */}
-                <div style={{ marginTop: '0.85rem', fontSize: '0.8rem', color: 'var(--muted)', display: 'flex', justifyContent: 'space-between', flexShrink: 0 }}>
-                  <span>Showing {filteredContacts.length} of {contacts.length} entries</span>
-                  <span>Campaign ID: <code>{selectedCampaignId}</code></span>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* TAB 2: BROADCAST CAMPAIGNS (CAMPAIGN CREATOR & STATS) */}
-        {activeSubTab === 'broadcast' && (
-          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-            {!selectedCampaignId ? (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, color: 'var(--muted)', background: 'var(--paper-2)', borderRadius: '12px', padding: '3rem', textAlign: 'center' }}>
-                <MessageSquare size={48} style={{ strokeWidth: 1.25, color: 'var(--muted)', marginBottom: '1rem' }} />
-                <h3 style={{ margin: '0 0 0.5rem 0' }}>No Campaign Selected</h3>
-                <p style={{ fontSize: '0.85rem', maxWidth: '400px', margin: '0 0 1.25rem 0' }}>Select an operational campaign from the selector above, or create a new campaign to begin scheduling broadcasts.</p>
-              </div>
-            ) : (
-              <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)', padding: '1.25rem' }}>
-                {/* Action Strip */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexShrink: 0 }}>
-                  <div>
-                    <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700 }}>Broadcast Schedules</h3>
-                    <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--muted)' }}>Outgoing WhatsApp & Email dispatch triggers for this campaign group.</p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      if (contacts.length === 0) {
-                        showToast('Please upload contacts to your campaign data storage before creating a broadcast.', 'error');
-                        return;
-                      }
-                      setEditingBroadcastId(null);
-                      setNewBroadcastForm({
-                        name: '',
-                        channel: 'whatsapp',
-                        whatsappTemplate: '',
-                        whatsappMessage: '',
-                        emailSubject: '',
-                        emailBody: '',
-                        scheduledAt: '',
-                        mediaUrl: ''
-                      });
-                      setShowNewBroadcastModal(true);
-                    }}
-                    className="btn-primary"
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 1rem', fontSize: '0.85rem', background: 'var(--gold-deep)', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
-                  >
-                    <Plus size={15} /> New Broadcast Campaign
-                  </button>
-                </div>
-
-                {/* Broadcasts grid list */}
-                <div style={{ flex: 1, overflowY: 'auto', border: '1px solid var(--line)', borderRadius: '8px', minHeight: 0 }}>
-                  {isLoadingBroadcasts ? (
-                    <div style={{ padding: '4rem 2rem', textAlign: 'center', color: 'var(--muted)' }}>
-                      <RefreshCw size={24} className="spin" style={{ marginBottom: '0.5rem' }} />
-                      <div>Loading scheduled campaigns...</div>
-                    </div>
-                  ) : broadcasts.length === 0 ? (
-                    <div style={{ padding: '4rem 2rem', textAlign: 'center', color: 'var(--muted)' }}>
-                      <MessageSquare size={36} style={{ color: 'var(--line)', marginBottom: '0.75rem' }} />
-                      <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>No broadcasts set up yet.</div>
-                      <div style={{ fontSize: '0.78rem', marginTop: '0.25rem' }}>Click "New Broadcast Campaign" to schedule WhatsApp notifications or bulk email.</div>
-                    </div>
-                  ) : (
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'left' }}>
-                      <thead style={{ position: 'sticky', top: 0, background: 'var(--paper-2)', zIndex: 10 }}>
-                        <tr style={{ borderBottom: '1px solid var(--line)' }}>
-                          <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--ink)' }}>Name</th>
-                          <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--ink)', width: '90px' }}>Channel</th>
-                          <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--ink)', width: '90px' }}>Type</th>
-                          <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--ink)', width: '110px' }}>Status</th>
-                          <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--ink)', width: '80px', textAlign: 'center' }}>Targeted</th>
-                          <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--ink)', width: '80px', textAlign: 'center' }}>Sent To</th>
-                          <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--ink)' }}>Performance</th>
-                          <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--ink)', width: '110px', textAlign: 'right' }}>Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {broadcasts.map(b => {
-                          const deliveryPercent = b.targeted_count > 0 ? Math.round((b.sent_count / b.targeted_count) * 100) : 0;
-                          const readPercent = b.status === 'sent' ? Math.round((b.sent_count > 0 ? 0.75 : 0) * 100) : 0;
-                          const timerInfo = b.status === 'scheduled' && b.scheduled_at ? getRemainingTime(b.scheduled_at) : null;
-
-                          return (
-                            <tr key={b.id} style={{ borderBottom: '1px solid var(--line)' }} className="table-row-hover">
-                              <td style={{ padding: '0.75rem 1rem' }}>
-                                <div style={{ fontWeight: 600, color: 'var(--ink)' }}>{b.name}</div>
-                                {b.scheduled_at && (
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.2rem' }}>
-                                    <span style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>
-                                      Scheduled: {new Date(b.scheduled_at).toLocaleString()}
-                                    </span>
-                                    {timerInfo && (
-                                      <span style={{
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: '0.3rem',
-                                        padding: '0.15rem 0.5rem',
-                                        borderRadius: '12px',
-                                        fontSize: '0.72rem',
-                                        fontWeight: 700,
-                                        fontFamily: 'monospace',
-                                        background: timerInfo.expired ? 'rgba(34, 197, 94, 0.18)' : 'rgba(234, 179, 8, 0.18)',
-                                        color: timerInfo.expired ? '#16a34a' : '#ca8a04',
-                                        border: `1px solid ${timerInfo.expired ? 'rgba(34, 197, 94, 0.35)' : 'rgba(234, 179, 8, 0.35)'}`
-                                      }}>
-                                        <Clock size={11} className={timerInfo.expired ? '' : 'spin'} />
-                                        {timerInfo.expired ? '⚡ Triggering Now...' : `⏳ ${timerInfo.text}`}
-                                      </span>
-                                    )}
-                                  </div>
-                                )}
-                              </td>
-                              <td style={{ padding: '0.75rem 1rem' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                                  {(b.channel === 'whatsapp' || b.channel === 'both') && <MessageSquare size={14} style={{ color: '#22c55e' }} title="WhatsApp" />}
-                                  {(b.channel === 'email' || b.channel === 'both') && <Mail size={14} style={{ color: '#3b82f6' }} title="Email" />}
-                                  <span style={{ fontSize: '0.75rem', textTransform: 'capitalize', color: 'var(--ink)', fontWeight: 500 }}>{b.channel}</span>
-                                </div>
-                              </td>
-                              <td style={{ padding: '0.75rem 1rem', color: 'var(--muted)', fontSize: '0.78rem' }}>One Way</td>
-                              <td style={{ padding: '0.75rem 1rem' }}>
-                                <span style={{
-                                  fontSize: '0.72rem',
-                                  fontWeight: 700,
-                                  padding: '0.15rem 0.5rem',
-                                  borderRadius: '20px',
-                                  textTransform: 'uppercase',
-                                  background: 
-                                    b.status === 'sent' ? 'rgba(34, 197, 94, 0.15)' : 
-                                    b.status === 'scheduled' ? 'rgba(234, 179, 8, 0.15)' : 
-                                    b.status === 'processing' ? 'rgba(59, 130, 246, 0.15)' : 
-                                    b.status === 'failed' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(255, 255, 255, 0.1)',
-                                  color: 
-                                    b.status === 'sent' ? '#22c55e' : 
-                                    b.status === 'scheduled' ? '#eab308' : 
-                                    b.status === 'processing' ? '#3b82f6' : 
-                                    b.status === 'failed' ? '#ef4444' : 'var(--muted)'
-                                }}>
-                                  {b.status}
-                                </span>
-                              </td>
-                              <td style={{ padding: '0.75rem 1rem', textAlign: 'center', fontWeight: 600 }}>{b.targeted_count}</td>
-                              <td style={{ padding: '0.75rem 1rem', textAlign: 'center', fontWeight: 600 }}>{b.sent_count}</td>
-                              <td style={{ padding: '0.75rem 1rem' }}>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', maxWidth: '140px' }}>
-                                  {/* Delivery bar */}
-                                  <div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.68rem', color: 'var(--muted)', marginBottom: '0.1rem' }}>
-                                      <span>Delivery Rate</span>
-                                      <span style={{ fontWeight: 600 }}>{deliveryPercent}%</span>
-                                    </div>
-                                    <div style={{ height: '5px', background: 'var(--paper-2)', borderRadius: '10px', overflow: 'hidden' }}>
-                                      <div style={{ height: '100%', width: `${deliveryPercent}%`, background: '#22c55e', borderRadius: '10px' }}></div>
-                                    </div>
-                                  </div>
-                                  
-                                  {/* Read bar */}
-                                  <div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.68rem', color: 'var(--muted)', marginBottom: '0.1rem' }}>
-                                      <span>Read Rate</span>
-                                      <span style={{ fontWeight: 600 }}>{readPercent}%</span>
-                                    </div>
-                                    <div style={{ height: '5px', background: 'var(--paper-2)', borderRadius: '10px', overflow: 'hidden' }}>
-                                      <div style={{ height: '100%', width: `${readPercent}%`, background: '#3b82f6', borderRadius: '10px' }}></div>
-                                    </div>
-                                  </div>
-                                </div>
-                              </td>
-                              <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
-                                <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'flex-end', alignItems: 'center' }}>
-                                  {/* Edit Button */}
-                                  <button
-                                    onClick={() => handleEditBroadcast(b)}
-                                    className="btn-secondary"
-                                    style={{
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
-                                      height: '28px',
-                                      width: '28px',
-                                      padding: 0,
-                                      borderRadius: '4px',
-                                      background: 'rgba(234, 179, 8, 0.12)',
-                                      color: '#d97706',
-                                      borderColor: 'rgba(234, 179, 8, 0.25)',
-                                      cursor: 'pointer'
-                                    }}
-                                    title="Edit Broadcast Schedule & Parameters"
-                                  >
-                                    <Edit2 size={12} />
-                                  </button>
-
-                                  {/* Trigger / Lock Button */}
-                                  {(() => {
-                                    const isScheduled = b.status === 'scheduled';
-                                    const isProcessing = b.status === 'processing';
-                                    const isSent = b.status === 'sent';
-
-                                    if (isProcessing) {
-                                      return (
-                                        <button
-                                          disabled
-                                          className="btn-secondary"
-                                          style={{
-                                            display: 'inline-flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            height: '28px',
-                                            width: '28px',
-                                            padding: 0,
-                                            borderRadius: '4px',
-                                            background: 'rgba(59, 130, 246, 0.15)',
-                                            color: '#3b82f6',
-                                            border: '1px solid rgba(59, 130, 246, 0.3)',
-                                            cursor: 'not-allowed'
-                                          }}
-                                          title="Broadcast is currently processing..."
-                                        >
-                                          <RefreshCw size={12} className="spin" />
-                                        </button>
-                                      );
-                                    }
-
-                                    if (isScheduled) {
-                                      return (
-                                        <button
-                                          disabled
-                                          className="btn-secondary"
-                                          style={{
-                                            display: 'inline-flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            height: '28px',
-                                            width: '28px',
-                                            padding: 0,
-                                            borderRadius: '4px',
-                                            background: 'rgba(234, 179, 8, 0.12)',
-                                            color: '#ca8a04',
-                                            border: '1px solid rgba(234, 179, 8, 0.25)',
-                                            cursor: 'not-allowed',
-                                            opacity: 0.8
-                                          }}
-                                          title="Locked: This broadcast is scheduled with an active timer. It will trigger automatically when the countdown hits 0."
-                                        >
-                                          <Lock size={12} />
-                                        </button>
-                                      );
-                                    }
-
-                                    // If status is SENT, check 1-hour throttle
-                                    let isLocked = false;
-                                    let minutesLeft = 0;
-                                    if (isSent && b.last_triggered_at && b.last_trigger_status === 'sent') {
-                                      const lastTriggered = new Date(b.last_triggered_at).getTime();
-                                      const diff = Date.now() - lastTriggered;
-                                      const oneHour = 60 * 60 * 1000;
-                                      if (diff < oneHour) {
-                                        isLocked = true;
-                                        minutesLeft = Math.ceil((oneHour - diff) / (60 * 1000));
-                                      }
-                                    }
-
-                                    return (
-                                      <button
-                                        onClick={() => handleTriggerBroadcast(b.id)}
-                                        disabled={isLocked}
-                                        className="btn-primary"
-                                        style={{ 
-                                          display: 'inline-flex', 
-                                          alignItems: 'center', 
-                                          justifyContent: 'center', 
-                                          height: '28px', 
-                                          width: '28px', 
-                                          padding: 0, 
-                                          borderRadius: '4px', 
-                                          background: isLocked ? 'var(--muted)' : '#22c55e', 
-                                          color: '#fff', 
-                                          border: 'none', 
-                                          cursor: isLocked ? 'not-allowed' : 'pointer',
-                                          opacity: isLocked ? 0.5 : 1
-                                        }}
-                                        title={isLocked ? `Locked. Ready in ${minutesLeft} mins` : (isSent ? "Trigger Broadcast Again" : "Trigger Broadcast Now")}
-                                      >
-                                        <Play size={12} />
-                                      </button>
-                                    );
-                                  })()}
-
-                                  {/* Delete Button */}
-                                  <button
-                                    onClick={() => handleDeleteBroadcast(b.id)}
-                                    className="btn-secondary"
-                                    style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: '28px', width: '28px', padding: 0, borderRadius: '4px', background: 'rgba(209, 67, 67, 0.1)', color: 'var(--err)', borderColor: 'rgba(209, 67, 67, 0.2)' }}
-                                    title="Delete Broadcast"
-                                  >
-                                    <Trash2 size={12} />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-
-
-        {/* TAB 4: SMTP GATEWAY SETTINGS */}
-        {activeSubTab === 'settings' && (
-          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-            <div className="glass-panel" style={{ borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)', padding: '1.75rem', maxWidth: '640px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', marginBottom: '1.25rem' }}>
-                <SettingsIcon size={22} style={{ color: 'var(--gold-deep)' }} />
-                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700 }}>SMTP Mail Gateway Configuration</h3>
-              </div>
-
-              <form onSubmit={handleSaveSMTPSettings}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px', gap: '1rem', marginBottom: '1rem' }}>
-                  <div className="form-group">
-                    <label className="form-label" style={{ fontWeight: 600 }}>SMTP Host / Server</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      placeholder="e.g. smtp.gmail.com"
-                      value={smtpSettings.host}
-                      onChange={(e) => setSmtpSettings({ ...smtpSettings, host: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label" style={{ fontWeight: 600 }}>Port</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      placeholder="e.g. 465"
-                      value={smtpSettings.port}
-                      onChange={(e) => setSmtpSettings({ ...smtpSettings, port: e.target.value })}
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-                  <div className="form-group">
-                    <label className="form-label" style={{ fontWeight: 600 }}>Username (Email Address)</label>
-                    <input
-                      type="email"
-                      className="form-input"
-                      placeholder="smtp-user@gmail.com"
-                      value={smtpSettings.user}
-                      onChange={(e) => setSmtpSettings({ ...smtpSettings, user: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label" style={{ fontWeight: 600 }}>Password</label>
-                    <input
-                      type="password"
-                      className="form-input"
-                      placeholder="••••••••••••••••"
-                      value={smtpSettings.pass}
-                      onChange={(e) => setSmtpSettings({ ...smtpSettings, pass: e.target.value })}
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.25rem' }}>
-                  <div className="form-group">
-                    <label className="form-label" style={{ fontWeight: 600 }}>Sender From Name</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      placeholder="FinMantra Notifications"
-                      value={smtpSettings.fromName}
-                      onChange={(e) => setSmtpSettings({ ...smtpSettings, fromName: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label" style={{ fontWeight: 600 }}>Sender From Email</label>
-                    <input
-                      type="email"
-                      className="form-input"
-                      placeholder="sender@domain.com"
-                      value={smtpSettings.fromEmail}
-                      onChange={(e) => setSmtpSettings({ ...smtpSettings, fromEmail: e.target.value })}
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div className="form-group" style={{ marginBottom: '1.5rem' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.88rem' }}>
-                    <input
-                      type="checkbox"
-                      checked={smtpSettings.secure === 'true'}
-                      onChange={(e) => setSmtpSettings({ ...smtpSettings, secure: e.target.checked ? 'true' : 'false' })}
-                      style={{ height: '16px', width: '16px', accentColor: 'var(--gold-deep)' }}
-                    />
-                    Use SSL / TLS connection protocol (Required for Gmail port 465)
-                  </label>
-                </div>
-
-                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', borderTop: '1px solid var(--line)', paddingTop: '1.25rem' }}>
-                  <button
-                    type="submit"
-                    className="btn-primary"
-                    disabled={isSavingSettings}
-                    style={{ background: 'var(--gold-deep)', color: '#fff', padding: '0.55rem 1.25rem' }}
-                  >
-                    {isSavingSettings ? 'Saving...' : 'Save Configuration'}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 5: DEVELOPER / ADMIN GUIDE */}
-        {activeSubTab === 'guide' && (
-          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-            <div className="glass-panel" style={{ borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)', padding: '1.75rem', maxWidth: '800px', overflowY: 'auto' }}>
-              <h3 style={{ margin: '0 0 1rem 0', fontSize: '1.25rem', fontWeight: 700 }}>Campaign Module Setup & Guidelines</h3>
-              
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                <div style={{ background: 'rgba(224, 168, 46, 0.08)', border: '1px solid rgba(224, 168, 46, 0.25)', padding: '1rem', borderRadius: '8px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700, color: 'var(--gold-deep)', fontSize: '0.9rem', marginBottom: '0.5rem' }}>
-                    <Info size={16} /> Spreadsheet Formatting Notice
-                  </div>
-                  <p style={{ fontSize: '0.8rem', color: 'var(--muted)', margin: 0 }}>
-                    When importing data into a campaign data storage repository, make sure the CSV or Excel file contains the exact column headers listed below. Order does not matter, but letters must match exactly.
-                  </p>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '0.75rem', fontSize: '0.75rem' }}>
-                    <thead>
-                      <tr style={{ borderBottom: '1px solid rgba(224, 168, 46, 0.2)' }}>
-                        <th style={{ padding: '0.4rem', textAlign: 'left', fontWeight: 700 }}>Header Column</th>
-                        <th style={{ padding: '0.4rem', textAlign: 'left', fontWeight: 700 }}>Validation Rules</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <td style={{ padding: '0.4rem' }}><code>Name</code> or <code>Full Name</code></td>
-                        <td style={{ padding: '0.4rem' }}>Required. Text value mapping customer's identifier.</td>
-                      </tr>
-                      <tr>
-                        <td style={{ padding: '0.4rem' }}><code>Contact</code> or <code>Phone</code></td>
-                        <td style={{ padding: '0.4rem' }}>Required. Must contain country code + phone digits (e.g. <code>919876543210</code>). Non-digits are stripped.</td>
-                      </tr>
-                      <tr>
-                        <td style={{ padding: '0.4rem' }}><code>Mail</code> or <code>Email</code></td>
-                        <td style={{ padding: '0.4rem' }}>Required. Valid email syntax checklist (e.g. <code>user@gmail.com</code>).</td>
-                      </tr>
-                      <tr>
-                        <td style={{ padding: '0.4rem' }}><code>Address</code></td>
-                        <td style={{ padding: '0.4rem' }}>Optional. General location details.</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-
-                <div>
-                  <h4 style={{ fontWeight: 700, margin: '0 0 0.5rem 0' }}>Dynamic Message Variables</h4>
-                  <p style={{ fontSize: '0.82rem', color: 'var(--muted)', margin: '0 0 0.75rem 0' }}>
-                    You can inject contact details into broadcast subject lines and message templates by writing bracket placeholders:
-                  </p>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem' }}>
-                    <div style={{ background: 'var(--paper-2)', padding: '0.65rem', borderRadius: '6px', border: '1px solid var(--line)', fontSize: '0.8rem' }}>
-                      <strong>Name Replacement</strong><br/>
-                      Use <code>{`{name}`}</code> to dynamically render target full name.
-                    </div>
-                    <div style={{ background: 'var(--paper-2)', padding: '0.65rem', borderRadius: '6px', border: '1px solid var(--line)', fontSize: '0.8rem' }}>
-                      <strong>Phone Replacement</strong><br/>
-                      Use <code>{`{contact}`}</code> to print target's contact number.
-                    </div>
-                    <div style={{ background: 'var(--paper-2)', padding: '0.65rem', borderRadius: '6px', border: '1px solid var(--line)', fontSize: '0.8rem' }}>
-                      <strong>Email Replacement</strong><br/>
-                      Use <code>{`{mail}`}</code> to print target's email.
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <h4 style={{ fontWeight: 700, margin: '0 0 0.5rem 0' }}>Active Gateways Fallback Mechanism</h4>
-                  <ul style={{ fontSize: '0.82rem', color: 'var(--muted)', margin: 0, paddingLeft: '1.25rem', lineHeight: 1.6 }}>
-                    <li><strong>Email broadcasts</strong> require valid configuration credentials under the Gateway Settings. If left empty, the scheduler will only log delivery outputs in a simulation mode.</li>
-                    <li><strong>WhatsApp broadcasts</strong> leverage the system's global gateway. If using the QR-code Baileys setup, confirm the device is CONNECTED in the primary settings page before running campaigns.</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* TAB: TEMPLATES MANAGER */}
-        {activeSubTab === 'templates' && (
-          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-            {/* Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexShrink: 0 }}>
-              <div>
-                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700 }}>Templates Manager</h3>
-                <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.8rem', color: 'var(--muted)' }}>Manage reusable layouts for Emails & Meta WhatsApp broadcasts.</p>
-              </div>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button
-                  onClick={syncMetaStatuses}
-                  disabled={isSyncingMeta}
-                  className="btn btn-secondary"
-                  style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.55rem 1rem', background: 'var(--paper-2)', color: 'var(--ink)', border: '1px solid var(--line)', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }}
-                >
-                  <RefreshCw size={14} className={isSyncingMeta ? 'spin' : ''} /> Sync Meta Status
-                </button>
-                <button
-                  onClick={() => {
-                    setNewTemplateForm({
-                      name: '',
-                      type: 'whatsapp',
-                      subject: '',
-                      body: '',
-                      metaTemplateName: '',
-                      mediaUrl: '',
-                      category: 'MARKETING',
-                      language: 'en_US',
-                      headerFormat: 'NONE',
-                      buttons: {
-                        buttonType: 'NONE',
-                        ctaUrlText: '',
-                        ctaUrlValue: '',
-                        ctaPhoneText: '',
-                        ctaPhoneValue: '',
-                        quickReplies: ['', '', '']
-                      }
-                    });
-                    setEditingTemplateId(null);
-                    setShowCreateTemplateModal(true);
-                  }}
-                  className="btn btn-primary"
-                  style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.55rem 1rem', background: 'var(--gold-deep)', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }}
-                >
-                  <Plus size={16} /> Create Template
+          {/* Active Sender Health and Status */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+            {/* Meta WhatsApp Phone Numbers with Quality Ratings */}
+            <div className="glass-panel" style={{ padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                  <MessageSquare size={16} style={{ color: '#25D366' }} /> Meta WhatsApp Sender Health
+                </h3>
+                <button onClick={fetchMetaPhoneNumbers} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }} title="Refresh Phone Numbers">
+                  <RefreshCw size={14} className={isLoadingPhoneNumbers ? 'spin-slow' : ''} />
                 </button>
               </div>
-            </div>
 
-            <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
-              {/* SECTION 1: Meta WhatsApp Templates */}
-              {metaTemplates.length > 0 && (
-                <div style={{ marginBottom: '2rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1rem' }}>
-                    <div style={{
-                      width: '28px', height: '28px', borderRadius: '50%', background: '#25D366',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
-                    }}>
-                      <MessageSquare size={14} style={{ color: '#fff' }} />
-                    </div>
-                    <div>
-                      <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--ink)' }}>Meta WhatsApp Templates</h4>
-                      <p style={{ margin: 0, fontSize: '0.72rem', color: 'var(--muted)' }}>
-                        {metaTemplates.length} template{metaTemplates.length !== 1 ? 's' : ''} registered on your Meta Business Account
-                      </p>
-                    </div>
-                    {metaTemplates.filter(t => t.status === 'REJECTED').length > 0 && (
-                      <button
-                        onClick={deleteRejectedTemplates}
-                        style={{
-                          display: 'flex', alignItems: 'center', gap: '0.4rem',
-                          padding: '0.4rem 0.85rem', fontSize: '0.78rem', fontWeight: 600,
-                          background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444',
-                          border: '1px solid rgba(239, 68, 68, 0.25)', borderRadius: '8px',
-                          cursor: 'pointer', transition: 'all 0.2s ease', marginLeft: 'auto'
-                        }}
-                        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)'; }}
-                        onMouseLeave={e => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'; }}
-                      >
-                        <Trash2 size={13} />
-                        Delete Rejected ({metaTemplates.filter(t => t.status === 'REJECTED').length})
-                      </button>
-                    )}
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem' }}>
-                    {metaTemplates.map(mt => {
-                      const bodyComp = mt.components?.find(c => c.type === 'BODY');
-                      const headerComp = mt.components?.find(c => c.type === 'HEADER');
-                      const buttonsComp = mt.components?.find(c => c.type === 'BUTTONS');
-                      const bodyText = bodyComp?.text || '';
-                      
-                      let statusBadgeBg = '#25D366';
-                      let statusBadgeColor = '#fff';
-                      if (mt.status === 'REJECTED') { statusBadgeBg = '#ef4444'; statusBadgeColor = '#fff'; }
-                      else if (mt.status === 'PENDING' || mt.status === 'IN_APPEAL') { statusBadgeBg = '#f59e0b'; statusBadgeColor = '#fff'; }
-                      else if (mt.status === 'PAUSED' || mt.status === 'DISABLED') { statusBadgeBg = '#6b7280'; statusBadgeColor = '#fff'; }
-
-                      return (
-                        <div
-                          key={mt.id}
-                          style={{
-                            borderRadius: '14px',
-                            overflow: 'hidden',
-                            border: '1px solid var(--line)',
-                            background: 'var(--paper)',
-                            transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-                            cursor: 'default'
-                          }}
-                          onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.08)'; }}
-                          onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
-                        >
-                          {/* Card Header - WhatsApp themed */}
-                          <div style={{
-                            background: 'linear-gradient(135deg, #075E54 0%, #128C7E 100%)',
-                            padding: '0.85rem 1rem',
-                            display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-                          }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                              <svg viewBox="0 0 24 24" width="18" height="18" fill="#25D366">
-                                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
-                              </svg>
-                              <span style={{ color: '#fff', fontSize: '0.82rem', fontWeight: 700, letterSpacing: '0.02em' }}>
-                                {mt.name}
-                              </span>
-                            </div>
-                            <span style={{
-                              fontSize: '0.62rem', fontWeight: 800, padding: '0.2rem 0.55rem',
-                              borderRadius: '10px', background: statusBadgeBg, color: statusBadgeColor,
-                              textTransform: 'uppercase', letterSpacing: '0.04em'
-                            }}>
-                              {mt.status}
-                            </span>
-                          </div>
-
-                          {/* WhatsApp Chat Preview */}
-                          <div style={{
-                            background: theme === 'dark' ? '#0b141a' : '#e5ddd5',
-                            backgroundImage: theme === 'dark' 
-                              ? 'none' 
-                              : 'url("data:image/svg+xml,%3Csvg width=\'200\' height=\'200\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cdefs%3E%3Cpattern id=\'p\' width=\'40\' height=\'40\' patternUnits=\'userSpaceOnUse\'%3E%3Ccircle cx=\'20\' cy=\'20\' r=\'1.2\' fill=\'%23d4cec3\' opacity=\'0.5\'/%3E%3C/pattern%3E%3C/defs%3E%3Crect width=\'200\' height=\'200\' fill=\'url(%23p)\'/%3E%3C/svg%3E")',
-                            padding: '1rem 0.85rem',
-                            minHeight: '120px'
-                          }}>
-                            {/* Message Bubble */}
-                            <div style={{
-                              background: theme === 'dark' ? '#005c4b' : '#dcf8c6',
-                              borderRadius: '0 8px 8px 8px',
-                              padding: '0.6rem 0.7rem',
-                              maxWidth: '95%',
-                              position: 'relative',
-                              boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
-                            }}>
-                              {/* Header preview */}
-                              {headerComp && (
-                                <div style={{ marginBottom: '0.4rem' }}>
-                                  {headerComp.format === 'IMAGE' && (
-                                    <div style={{
-                                      background: theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
-                                      borderRadius: '6px', padding: '1.25rem', textAlign: 'center',
-                                      marginBottom: '0.35rem', border: `1px dashed ${theme === 'dark' ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)'}`
-                                    }}>
-                                      <span style={{ fontSize: '1.5rem' }}>🖼️</span>
-                                      <div style={{ fontSize: '0.68rem', color: theme === 'dark' ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.4)', marginTop: '0.15rem' }}>Image Header</div>
-                                    </div>
-                                  )}
-                                  {headerComp.format === 'VIDEO' && (
-                                    <div style={{
-                                      background: theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
-                                      borderRadius: '6px', padding: '1.25rem', textAlign: 'center',
-                                      marginBottom: '0.35rem', border: `1px dashed ${theme === 'dark' ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)'}`
-                                    }}>
-                                      <span style={{ fontSize: '1.5rem' }}>🎬</span>
-                                      <div style={{ fontSize: '0.68rem', color: theme === 'dark' ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.4)', marginTop: '0.15rem' }}>Video Header</div>
-                                    </div>
-                                  )}
-                                  {headerComp.format === 'DOCUMENT' && (
-                                    <div style={{
-                                      background: theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
-                                      borderRadius: '6px', padding: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem',
-                                      marginBottom: '0.35rem', border: `1px dashed ${theme === 'dark' ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)'}`
-                                    }}>
-                                      <span style={{ fontSize: '1.2rem' }}>📄</span>
-                                      <span style={{ fontSize: '0.72rem', color: theme === 'dark' ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)' }}>Document Attachment</span>
-                                    </div>
-                                  )}
-                                  {headerComp.format === 'TEXT' && headerComp.text && (
-                                    <div style={{
-                                      fontWeight: 700,
-                                      fontSize: '0.82rem',
-                                      color: theme === 'dark' ? '#e9edef' : '#111b21',
-                                      marginBottom: '0.25rem'
-                                    }}>
-                                      {headerComp.text}
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-
-                              {/* Body text */}
-                              <div style={{
-                                fontSize: '0.78rem',
-                                lineHeight: '1.45',
-                                color: theme === 'dark' ? '#e9edef' : '#111b21',
-                                whiteSpace: 'pre-wrap',
-                                wordBreak: 'break-word'
-                              }}>
-                                {bodyText.replace(/\{\{(\d+)\}\}/g, (_, n) => `[Param ${n}]`)}
-                              </div>
-
-                              {/* Timestamp */}
-                              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.25rem' }}>
-                                <span style={{ fontSize: '0.62rem', color: theme === 'dark' ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.38)' }}>
-                                  {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                  <span style={{ marginLeft: '0.25rem' }}>✓✓</span>
-                                </span>
-                              </div>
-                            </div>
-
-                            {/* Button previews - outside the bubble like real WhatsApp */}
-                            {buttonsComp && buttonsComp.buttons && buttonsComp.buttons.length > 0 && (
-                              <div style={{ maxWidth: '95%', marginTop: '2px' }}>
-                                {buttonsComp.buttons.map((btn, bi) => (
-                                  <div
-                                    key={bi}
-                                    style={{
-                                      background: theme === 'dark' ? '#005c4b' : '#dcf8c6',
-                                      borderRadius: bi === buttonsComp.buttons.length - 1 ? '0 0 8px 8px' : '0',
-                                      padding: '0.5rem 0.7rem',
-                                      textAlign: 'center',
-                                      borderTop: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'}`,
-                                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem'
-                                    }}
-                                  >
-                                    {btn.type === 'URL' && (
-                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={theme === 'dark' ? '#53bdeb' : '#027eb5'} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                        <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" />
-                                      </svg>
-                                    )}
-                                    {btn.type === 'PHONE_NUMBER' && (
-                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={theme === 'dark' ? '#53bdeb' : '#027eb5'} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                        <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" />
-                                      </svg>
-                                    )}
-                                    {btn.type === 'QUICK_REPLY' && (
-                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={theme === 'dark' ? '#53bdeb' : '#027eb5'} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                        <polyline points="9 17 4 12 9 7" /><path d="M20 18v-2a4 4 0 00-4-4H4" />
-                                      </svg>
-                                    )}
-                                    <span style={{
-                                      fontSize: '0.76rem', fontWeight: 600,
-                                      color: theme === 'dark' ? '#53bdeb' : '#027eb5'
-                                    }}>
-                                      {btn.text}
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Card Footer - Meta info */}
-                          <div style={{
-                            padding: '0.65rem 1rem',
-                            borderTop: '1px solid var(--line)',
-                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                            background: 'var(--paper)'
-                          }}>
-                            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-                              <span style={{
-                                fontSize: '0.65rem', fontWeight: 700, padding: '0.15rem 0.4rem',
-                                borderRadius: '4px', textTransform: 'uppercase',
-                                background: mt.category === 'MARKETING' ? 'rgba(245, 158, 11, 0.12)' : mt.category === 'UTILITY' ? 'rgba(59, 130, 246, 0.12)' : 'rgba(16, 185, 129, 0.12)',
-                                color: mt.category === 'MARKETING' ? '#d97706' : mt.category === 'UTILITY' ? '#2563eb' : '#059669'
-                              }}>
-                                {mt.category}
-                              </span>
-                              <span style={{ fontSize: '0.68rem', color: 'var(--muted)' }}>
-                                {mt.language || 'en_US'}
-                              </span>
-                            </div>
-                            <span style={{ fontSize: '0.62rem', color: 'var(--muted)', fontFamily: 'monospace' }}>
-                              ID: {mt.id}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* SECTION 2: Custom/Local Templates */}
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1rem' }}>
-                  <div style={{
-                    width: '28px', height: '28px', borderRadius: '50%', background: 'var(--gold-deep)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
-                  }}>
-                    <FileText size={14} style={{ color: '#fff' }} />
-                  </div>
-                  <div>
-                    <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--ink)' }}>Custom Templates</h4>
-                    <p style={{ margin: 0, fontSize: '0.72rem', color: 'var(--muted)' }}>
-                      Templates registered in your FinMantra database
-                    </p>
-                  </div>
-                </div>
-
-                {templates.length === 0 ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '3.5rem 1rem', background: 'var(--paper-2)', borderRadius: '12px', border: '1px dashed var(--line)' }}>
-                    <HelpCircle size={36} style={{ color: 'var(--muted)', marginBottom: '0.75rem' }} />
-                    <div style={{ fontWeight: 600, color: 'var(--ink)', fontSize: '0.95rem' }}>No Custom Templates Found</div>
-                    <p style={{ color: 'var(--muted)', fontSize: '0.8rem', textAlign: 'center', maxWidth: '360px', margin: '0.25rem 0 1rem 0' }}>Click "Create Template" to register a new WhatsApp template or Email layout.</p>
-                  </div>
-                ) : (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1rem' }}>
-                    {templates.map(tpl => {
-                      const lookupKey = tpl.meta_template_name?.toLowerCase() || tpl.name?.toLowerCase();
-                      const metaInfo = metaStatuses[lookupKey];
-                      let statusText = 'Not Registered';
-                      let statusBg = 'rgba(107, 114, 128, 0.15)';
-                      let statusColor = '#6b7280';
-                      
-                      if (metaInfo) {
-                        statusText = metaInfo.status;
-                        if (statusText === 'APPROVED') {
-                          statusBg = 'rgba(16, 185, 129, 0.15)';
-                          statusColor = '#10b981';
-                        } else if (statusText?.includes('PENDING')) {
-                          statusBg = 'rgba(245, 158, 11, 0.15)';
-                          statusColor = '#f59e0b';
-                        } else if (statusText?.includes('REJECTED') || statusText?.includes('LIMIT')) {
-                          statusBg = 'rgba(239, 68, 68, 0.15)';
-                          statusColor = '#ef4444';
-                        }
-                      }
-
-                      return (
-                        <div
-                          key={tpl.id}
-                          className="glass-panel"
-                          style={{
-                            padding: '1.25rem',
-                            borderRadius: '12px',
-                            border: '1px solid var(--line)',
-                            background: 'var(--paper)',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            justifyContent: 'space-between',
-                            minHeight: '220px',
-                            transition: 'transform 0.2s ease, box-shadow 0.2s ease'
-                          }}
-                        >
-                          <div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
-                              <span style={{
-                                fontSize: '0.68rem',
-                                fontWeight: 700,
-                                padding: '0.2rem 0.5rem',
-                                borderRadius: '4px',
-                                textTransform: 'uppercase',
-                                background: tpl.type === 'email' ? 'rgba(59, 130, 246, 0.15)' : 'rgba(16, 185, 129, 0.15)',
-                                color: tpl.type === 'email' ? '#3b82f6' : '#10b981'
-                              }}>
-                                {tpl.type}
-                              </span>
-                              <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
-                                {tpl.type === 'whatsapp' && (
-                                  <span style={{
-                                    fontSize: '0.62rem',
-                                    fontWeight: 800,
-                                    padding: '0.15rem 0.4rem',
-                                    borderRadius: '4px',
-                                    background: statusBg,
-                                    color: statusColor,
-                                    textTransform: 'uppercase'
-                                  }}>
-                                    Meta: {statusText}
-                                  </span>
-                                )}
-                                <button
-                                  onClick={() => {
-                                    let parsedButtons = {
-                                      buttonType: 'NONE',
-                                      ctaUrlText: '',
-                                      ctaUrlValue: '',
-                                      ctaPhoneText: '',
-                                      ctaPhoneValue: '',
-                                      quickReplies: ['', '', '']
-                                    };
-                                    if (tpl.buttons) {
-                                      try {
-                                        const parsed = typeof tpl.buttons === 'string' ? JSON.parse(tpl.buttons) : tpl.buttons;
-                                        parsedButtons = { ...parsedButtons, ...parsed };
-                                      } catch (e) {}
-                                    }
-
-                                    setNewTemplateForm({
-                                      id: tpl.id,
-                                      name: tpl.name,
-                                      type: tpl.type,
-                                      subject: tpl.subject || '',
-                                      body: tpl.body || '',
-                                      metaTemplateName: tpl.meta_template_name || '',
-                                      mediaUrl: tpl.media_url || '',
-                                      category: tpl.category || 'MARKETING',
-                                      language: tpl.language || 'en_US',
-                                      headerFormat: tpl.header_format || 'NONE',
-                                      buttons: parsedButtons
-                                    });
-                                    setEditingTemplateId(tpl.id);
-                                    setShowCreateTemplateModal(true);
-                                  }}
-                                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: 0 }}
-                                  title="Edit Template"
-                                >
-                                  <FileText size={16} />
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteTemplate(tpl.id)}
-                                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: 0 }}
-                                  title="Delete Template"
-                                >
-                                  <Trash2 size={16} />
-                                </button>
-                              </div>
-                            </div>
-                            <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '1rem', fontWeight: 700, color: 'var(--ink)' }}>{tpl.name}</h4>
-                            
-                            {tpl.type === 'email' && (
-                              <div style={{ marginBottom: '0.5rem', fontSize: '0.8rem' }}>
-                                <span style={{ fontWeight: 600, color: 'var(--muted)' }}>Subject: </span>
-                                <span style={{ color: 'var(--ink)' }}>{tpl.subject}</span>
-                              </div>
-                            )}
-                            {tpl.type === 'whatsapp' && tpl.meta_template_name && (
-                              <div style={{ marginBottom: '0.5rem', fontSize: '0.8rem' }}>
-                                <span style={{ fontWeight: 600, color: 'var(--muted)' }}>Approved Code: </span>
-                                <code style={{ background: 'var(--paper-2)', padding: '0.1rem 0.3rem', borderRadius: '4px', fontSize: '0.75rem' }}>{tpl.meta_template_name}</code>
-                              </div>
-                            )}
-                            {tpl.media_url && (
-                              <div style={{ marginBottom: '0.5rem', fontSize: '0.8rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                <span style={{ fontWeight: 600, color: 'var(--muted)' }}>Attachment: </span>
-                                <a href={tpl.media_url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--gold-deep)', textDecoration: 'underline' }}>View Media Link</a>
-                              </div>
-                            )}
-                            
-                            <div style={{ marginTop: '0.5rem' }}>
-                              <span style={{ fontWeight: 600, color: 'var(--muted)', fontSize: '0.8rem' }}>Content Body:</span>
-                              <div style={{
-                                marginTop: '0.25rem',
-                                padding: '0.5rem',
-                                borderRadius: '6px',
-                                background: 'var(--paper-2)',
-                                fontSize: '0.78rem',
-                                color: 'var(--ink)',
-                                maxHeight: '100px',
-                                overflowY: 'auto',
-                                whiteSpace: 'pre-wrap',
-                                border: '1px solid var(--line)'
-                              }}>
-                                {tpl.body}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* CREATE CAMPAIGN MODAL */}
-      {showCreateCampaignModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: '1rem' }}>
-          <div className="glass-panel" style={{ width: '100%', maxWidth: '460px', borderRadius: '16px', background: 'var(--paper)', border: '1px solid var(--line)', padding: '1.5rem', borderTop: '4px solid var(--gold-deep)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', paddingBottom: '0.5rem', borderBottom: '1px solid var(--line)' }}>
-              <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700 }}>Create New Campaign Group</h3>
-              <button onClick={() => setShowCreateCampaignModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={18} /></button>
-            </div>
-
-            <form onSubmit={handleCreateCampaign}>
-              <div className="form-group" style={{ marginBottom: '1rem' }}>
-                <label className="form-label" style={{ fontWeight: 600 }}>Campaign Name</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder="e.g. Q3 Credit Card Leads"
-                  value={newCampaignForm.name}
-                  onChange={(e) => setNewCampaignForm({ ...newCampaignForm, name: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div className="form-group" style={{ marginBottom: '1.25rem' }}>
-                <label className="form-label" style={{ fontWeight: 600 }}>Description (Optional)</label>
-                <textarea
-                  className="form-input"
-                  placeholder="Notes on the origin or target criteria of these contacts..."
-                  value={newCampaignForm.description}
-                  onChange={(e) => setNewCampaignForm({ ...newCampaignForm, description: e.target.value })}
-                  rows={3}
-                  style={{ resize: 'vertical' }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', borderTop: '1px solid var(--line)', paddingTop: '1rem' }}>
-                <button type="button" onClick={() => setShowCreateCampaignModal(false)} className="btn-secondary">Cancel</button>
-                <button type="submit" className="btn-primary" disabled={isCreatingCampaign} style={{ background: 'var(--gold-deep)', color: '#fff' }}>
-                  {isCreatingCampaign ? 'Creating...' : 'Create Campaign'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* CREATE TEMPLATE MODAL */}
-      {showCreateTemplateModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: '1rem' }}>
-          <div className="glass-panel" style={{ width: '100%', maxWidth: '560px', maxHeight: '90vh', overflowY: 'auto', borderRadius: '16px', background: 'var(--paper)', border: '1px solid var(--line)', padding: '1.5rem', borderTop: '4px solid var(--gold-deep)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', paddingBottom: '0.5rem', borderBottom: '1px solid var(--line)' }}>
-              <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700 }}>{editingTemplateId ? 'Edit Message Template' : 'Save & Register New Template'}</h3>
-              <button onClick={() => { setShowCreateTemplateModal(false); setEditingTemplateId(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={18} /></button>
-            </div>
-
-            <form onSubmit={handleCreateTemplate}>
-              <div className="form-group" style={{ marginBottom: '1rem' }}>
-                <label className="form-label" style={{ fontWeight: 600 }}>Template Reference Name</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder="e.g. welcome_offer_v2"
-                  value={newTemplateForm.name}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    const cleanName = val.toLowerCase().replace(/[^a-z0-9_]/g, '_');
-                    setNewTemplateForm({ ...newTemplateForm, name: val, metaTemplateName: cleanName });
-                  }}
-                  required
-                />
-              </div>
-
-              <div className="form-group" style={{ marginBottom: '1rem' }}>
-                <label className="form-label" style={{ fontWeight: 600 }}>Template Type</label>
-                <select
-                  value={newTemplateForm.type}
-                  onChange={(e) => setNewTemplateForm({ ...newTemplateForm, type: e.target.value })}
-                  className="form-input"
-                  style={{ background: 'var(--paper-2)', color: 'var(--ink)' }}
-                >
-                  <option value="whatsapp">WhatsApp Template (Registers with Meta)</option>
-                  <option value="email">Email Template (Local Layout)</option>
-                </select>
-              </div>
-
-              {newTemplateForm.type === 'email' ? (
-                <div style={{ background: 'var(--paper-2)', border: '1px solid var(--line)', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
-                  <div className="form-group" style={{ marginBottom: '0.75rem' }}>
-                    <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Email Subject Line</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      placeholder="e.g. Hello {name}, your special offer is here!"
-                      value={newTemplateForm.subject || ''}
-                      onChange={(e) => setNewTemplateForm({ ...newTemplateForm, subject: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Email Body Content (HTML Supported)</label>
-                    <textarea
-                      className="form-input"
-                      placeholder="Enter email layout. Placeholders: {name}, {contact}, {mail}"
-                      value={newTemplateForm.body}
-                      onChange={(e) => setNewTemplateForm({ ...newTemplateForm, body: e.target.value })}
-                      rows={5}
-                      required
-                    />
-                  </div>
+              {metaPhoneNumbers.length === 0 ? (
+                <div style={{ color: 'var(--muted)', fontSize: '0.84rem', padding: '1rem 0' }}>
+                  No Meta WhatsApp business numbers loaded. Check WA_API_KEY in settings.
                 </div>
               ) : (
-                <div style={{ background: 'var(--paper-2)', border: '1px solid var(--line)', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
-                  <div style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--gold-deep)', marginBottom: '0.75rem' }}>Meta WABA API Parameters</div>
-                  
-                  <div className="form-group" style={{ marginBottom: '0.75rem' }}>
-                    <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Approved Template Name</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      placeholder="e.g. welcome_offer_v2"
-                      value={newTemplateForm.metaTemplateName || ''}
-                      onChange={(e) => setNewTemplateForm({ ...newTemplateForm, metaTemplateName: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_') })}
-                      required
-                    />
-                    <span style={{ fontSize: '0.7rem', color: 'var(--muted)', marginTop: '0.15rem', display: 'block' }}>
-                      Must be unique, lowercase, alphanumeric, and contain underscores only.
-                    </span>
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                    <div className="form-group">
-                      <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Template Category</label>
-                      <select
-                        value={newTemplateForm.category || 'MARKETING'}
-                        onChange={(e) => setNewTemplateForm({ ...newTemplateForm, category: e.target.value })}
-                        className="form-input"
-                        style={{ background: 'var(--paper)', color: 'var(--ink)' }}
-                      >
-                        <option value="MARKETING">MARKETING</option>
-                        <option value="UTILITY">UTILITY</option>
-                      </select>
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Language Code</label>
-                      <input
-                        type="text"
-                        className="form-input"
-                        value={newTemplateForm.language || 'en_US'}
-                        onChange={(e) => setNewTemplateForm({ ...newTemplateForm, language: e.target.value })}
-                        placeholder="e.g. en_US"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div className="form-group" style={{ marginBottom: '0.75rem' }}>
-                    <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Header Component format</label>
-                    <select
-                      value={newTemplateForm.headerFormat || 'NONE'}
-                      onChange={(e) => setNewTemplateForm({ ...newTemplateForm, headerFormat: e.target.value })}
-                      className="form-input"
-                      style={{ background: 'var(--paper)', color: 'var(--ink)' }}
-                    >
-                      <option value="NONE">NONE (No header component)</option>
-                      <option value="TEXT">TEXT header</option>
-                      <option value="IMAGE">IMAGE header (JPG/PNG)</option>
-                      <option value="VIDEO">VIDEO header (MP4)</option>
-                      <option value="DOCUMENT">DOCUMENT header (PDF)</option>
-                    </select>
-                  </div>
-
-                  {newTemplateForm.headerFormat && newTemplateForm.headerFormat !== 'NONE' && newTemplateForm.headerFormat !== 'TEXT' && (
-                    <div className="form-group" style={{ marginBottom: '0.75rem' }}>
-                      <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Default Send Media URL (Image/Video/PDF Link)</label>
-                      <input
-                        type="url"
-                        className="form-input"
-                        placeholder="e.g. https://domain.com/banner.jpg"
-                        value={newTemplateForm.mediaUrl || ''}
-                        onChange={(e) => setNewTemplateForm({ ...newTemplateForm, mediaUrl: e.target.value })}
-                      />
-                    </div>
-                  )}
-
-                  <div className="form-group">
-                    <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Template Body Text</label>
-                    <textarea
-                      className="form-input"
-                      placeholder="e.g. Welcome {{1}}, finish your application on: {{2}}"
-                      value={newTemplateForm.body}
-                      onChange={(e) => setNewTemplateForm({ ...newTemplateForm, body: e.target.value })}
-                      rows={4}
-                      required
-                    />
-                    <div style={{ marginTop: '0.45rem', padding: '0.5rem', background: 'rgba(224, 168, 46, 0.08)', border: '1px solid rgba(224, 168, 46, 0.25)', borderRadius: '6px', fontSize: '0.7rem', color: 'var(--gold-deep)' }}>
-                      <strong>Template Guidelines:</strong>
-                      <ul style={{ margin: '0.2rem 0 0 0', paddingLeft: '1rem', lineHeight: 1.4 }}>
-                        <li>Use parameters `{"{{1}}"}` for Name replacement, and `{"{{2}}"}` for dynamic link/message variables.</li>
-                        <li>Creating this template will register it <strong>live on your Facebook WhatsApp account</strong>. It will be ready to dispatch immediately once approved by Meta (typically 1-2 minutes).</li>
-                      </ul>
-                    </div>
-                  </div>
-
-                  {/* WhatsApp Buttons Config Section */}
-                  <div style={{ marginTop: '1rem', borderTop: '1px dashed var(--line)', paddingTop: '1rem' }}>
-                    <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Interactive Buttons (Optional)</label>
-                    <select
-                      value={newTemplateForm.buttons?.buttonType || 'NONE'}
-                      onChange={(e) => {
-                        const type = e.target.value;
-                        setNewTemplateForm({
-                          ...newTemplateForm,
-                          buttons: {
-                            ...newTemplateForm.buttons,
-                            buttonType: type
-                          }
-                        });
-                      }}
-                      className="form-input"
-                      style={{ background: 'var(--paper)', color: 'var(--ink)', marginBottom: '0.75rem' }}
-                    >
-                      <option value="NONE">No Buttons</option>
-                      <option value="CTA">Call-To-Action (URL & Phone)</option>
-                      <option value="QUICK_REPLIES">Quick Replies</option>
-                    </select>
-
-                    {newTemplateForm.buttons?.buttonType === 'CTA' && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', padding: '0.75rem', background: 'var(--paper)', borderRadius: '6px', border: '1px solid var(--line)' }}>
-                        <div style={{ fontWeight: 600, fontSize: '0.75rem', color: 'var(--gold-deep)' }}>Button 1: Call to Action (URL Website)</div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-                          <input
-                            type="text"
-                            placeholder="Button Label (e.g. Visit Website)"
-                            maxLength={25}
-                            value={newTemplateForm.buttons?.ctaUrlText || ''}
-                            onChange={(e) => setNewTemplateForm({
-                              ...newTemplateForm,
-                              buttons: { ...newTemplateForm.buttons, ctaUrlText: e.target.value }
-                            })}
-                            className="form-input"
-                            style={{ fontSize: '0.8rem' }}
-                          />
-                          <input
-                            type="text"
-                            placeholder="URL (e.g. https://domain.com/refer/{{1}})"
-                            value={newTemplateForm.buttons?.ctaUrlValue || ''}
-                            onChange={(e) => setNewTemplateForm({
-                              ...newTemplateForm,
-                              buttons: { ...newTemplateForm.buttons, ctaUrlValue: e.target.value }
-                            })}
-                            className="form-input"
-                            style={{ fontSize: '0.8rem' }}
-                          />
-                        </div>
-
-                        <div style={{ fontWeight: 600, fontSize: '0.75rem', color: 'var(--gold-deep)', marginTop: '0.35rem' }}>Button 2: Call Support (Phone Call - Optional)</div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-                          <input
-                            type="text"
-                            placeholder="Button Label (e.g. Call Us)"
-                            maxLength={25}
-                            value={newTemplateForm.buttons?.ctaPhoneText || ''}
-                            onChange={(e) => setNewTemplateForm({
-                              ...newTemplateForm,
-                              buttons: { ...newTemplateForm.buttons, ctaPhoneText: e.target.value }
-                            })}
-                            className="form-input"
-                            style={{ fontSize: '0.8rem' }}
-                          />
-                          <input
-                            type="text"
-                            placeholder="Phone Number (e.g. +919876543210)"
-                            value={newTemplateForm.buttons?.ctaPhoneValue || ''}
-                            onChange={(e) => setNewTemplateForm({
-                              ...newTemplateForm,
-                              buttons: { ...newTemplateForm.buttons, ctaPhoneValue: e.target.value }
-                            })}
-                            className="form-input"
-                            style={{ fontSize: '0.8rem' }}
-                          />
-                        </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                  {metaPhoneNumbers.map(p => (
+                    <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.65rem 0.85rem', borderRadius: '8px', background: 'var(--paper-2)', border: '1px solid var(--line)' }}>
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: '0.88rem' }}>{p.display_phone_number} ({p.verified_name || 'Business'})</div>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>Phone ID: {p.id}</div>
                       </div>
-                    )}
-
-                    {newTemplateForm.buttons?.buttonType === 'QUICK_REPLIES' && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', padding: '0.75rem', background: 'var(--paper)', borderRadius: '6px', border: '1px solid var(--line)' }}>
-                        <div style={{ fontWeight: 600, fontSize: '0.75rem', color: 'var(--gold-deep)' }}>Quick Reply Options (Up to 3, max 25 chars each)</div>
-                        {[0, 1, 2].map((idx) => (
-                          <input
-                            key={idx}
-                            type="text"
-                            placeholder={`Quick Reply Button ${idx + 1} Text`}
-                            maxLength={25}
-                            value={newTemplateForm.buttons?.quickReplies?.[idx] || ''}
-                            onChange={(e) => {
-                              const newReplies = [...(newTemplateForm.buttons?.quickReplies || ['', '', ''])];
-                              newReplies[idx] = e.target.value;
-                              setNewTemplateForm({
-                                ...newTemplateForm,
-                                buttons: { ...newTemplateForm.buttons, quickReplies: newReplies }
-                              });
-                            }}
-                            className="form-input"
-                            style={{ fontSize: '0.8rem' }}
-                          />
-                        ))}
+                      <div>
+                        {getQualityRatingBadge(p.quality_rating)}
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  ))}
                 </div>
               )}
+            </div>
 
-              <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '1.25rem', borderTop: '1px solid var(--line)', paddingTop: '1rem' }}>
-                <button type="button" onClick={() => setShowCreateTemplateModal(false)} className="btn-secondary">Cancel</button>
-                <button type="submit" disabled={isCreatingTemplate} className="btn-primary" style={{ background: 'var(--gold-deep)', color: '#fff' }}>
-                  {isCreatingTemplate ? 'Submitting to Meta...' : (editingTemplateId ? 'Update & Save Template' : 'Register & Save Template')}
+            {/* Email Gateway Sender Info */}
+            <div className="glass-panel" style={{ padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                  <Mail size={16} style={{ color: '#3b82f6' }} /> SMTP Sender Gateway
+                </h3>
+                <button onClick={() => setActiveSubTab('settings')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gold-deep)', fontSize: '0.78rem', fontWeight: 600 }}>
+                  Configure
                 </button>
               </div>
-            </form>
+
+              <div style={{ background: 'var(--paper-2)', padding: '0.85rem', borderRadius: '8px', border: '1px solid var(--line)', fontSize: '0.85rem' }}>
+                <div style={{ marginBottom: '0.4rem' }}>
+                  <strong>Host:</strong> {smtpSettings.host || 'smtp.titan.email (Configured)'}
+                </div>
+                <div style={{ marginBottom: '0.4rem' }}>
+                  <strong>From Name:</strong> {smtpSettings.fromName || 'FinMantra'}
+                </div>
+                <div>
+                  <strong>From Email:</strong> {smtpSettings.fromEmail || 'no-reply@finmantra.com'}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Recent Broadcasts Overview Table */}
+          <div className="glass-panel" style={{ padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)', flex: 1, minHeight: 0 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>Recent Broadcast Campaigns &amp; Delivery Stats</h3>
+              <button onClick={() => setActiveSubTab('broadcast')} style={{ background: 'none', border: 'none', color: 'var(--gold-deep)', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer' }}>
+                View All Broadcasts &rarr;
+              </button>
+            </div>
+
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem', textAlign: 'left' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--line)', color: 'var(--muted)', fontSize: '0.75rem', textTransform: 'uppercase' }}>
+                    <th style={{ padding: '0.6rem 0.75rem' }}>Broadcast Name</th>
+                    <th style={{ padding: '0.6rem 0.75rem' }}>Channel</th>
+                    <th style={{ padding: '0.6rem 0.75rem' }}>Sender</th>
+                    <th style={{ padding: '0.6rem 0.75rem' }}>Status</th>
+                    <th style={{ padding: '0.6rem 0.75rem' }}>Targeted</th>
+                    <th style={{ padding: '0.6rem 0.75rem' }}>Delivered</th>
+                    <th style={{ padding: '0.6rem 0.75rem' }}>CTR</th>
+                    <th style={{ padding: '0.6rem 0.75rem' }}>Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {broadcasts.slice(0, 10).map(b => {
+                    const ctr = b.delivered_count > 0 ? ((b.clicked_count / b.delivered_count) * 100).toFixed(1) : '0.0';
+                    return (
+                      <tr key={b.id} style={{ borderBottom: '1px solid var(--line)' }} className="table-row-hover">
+                        <td style={{ padding: '0.65rem 0.75rem', fontWeight: 700 }}>{b.name}</td>
+                        <td style={{ padding: '0.65rem 0.75rem', textTransform: 'capitalize' }}>{b.channel}</td>
+                        <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.78rem', color: 'var(--muted)' }}>
+                          {b.meta_phone_number || b.sender_email || 'Default'}
+                        </td>
+                        <td style={{ padding: '0.65rem 0.75rem' }}>
+                          <span style={{
+                            padding: '0.2rem 0.55rem',
+                            borderRadius: '999px',
+                            fontSize: '0.72rem',
+                            fontWeight: 700,
+                            background: b.status === 'sent' ? 'rgba(22, 163, 123, 0.12)' : b.status === 'processing' ? 'rgba(59, 130, 246, 0.12)' : 'rgba(224, 168, 46, 0.12)',
+                            color: b.status === 'sent' ? '#16a37b' : b.status === 'processing' ? '#3b82f6' : 'var(--gold-deep)'
+                          }}>
+                            {b.status}
+                          </span>
+                        </td>
+                        <td style={{ padding: '0.65rem 0.75rem', fontWeight: 600 }}>{b.targeted_count || 0}</td>
+                        <td style={{ padding: '0.65rem 0.75rem', color: '#16a37b', fontWeight: 600 }}>{b.delivered_count || b.sent_count || 0}</td>
+                        <td style={{ padding: '0.65rem 0.75rem', color: 'var(--gold-deep)', fontWeight: 700 }}>{ctr}%</td>
+                        <td style={{ padding: '0.65rem 0.75rem', color: 'var(--muted)', fontSize: '0.78rem' }}>
+                          {b.created_at ? new Date(b.created_at).toLocaleDateString() : '—'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
 
-      {/* UPLOAD CONTACTS MODAL */}
-      {showUploadModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: '1rem' }}>
-          <div className="glass-panel" style={{ width: '100%', maxWidth: '480px', borderRadius: '16px', background: 'var(--paper)', border: '1px solid var(--line)', padding: '1.5rem', borderTop: '4px solid var(--gold-deep)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', paddingBottom: '0.5rem', borderBottom: '1px solid var(--line)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <FileSpreadsheet size={20} style={{ color: 'var(--gold-deep)' }} />
-                <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700 }}>Upload Campaign Contacts</h3>
-              </div>
-              <button onClick={() => { setShowUploadModal(false); setUploadFile(null); setUploadResult(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={18} /></button>
-            </div>
-
-            {!uploadResult ? (
-              <form onSubmit={handleUploadContacts}>
-                <div style={{ background: 'rgba(224, 168, 46, 0.08)', border: '1px solid rgba(224, 168, 46, 0.2)', padding: '0.75rem', borderRadius: '8px', marginBottom: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.8rem' }}>
-                  <div>
-                    <span style={{ fontWeight: 700, color: 'var(--gold-deep)' }}>Need the CSV template?</span><br/>
-                    <span style={{ color: 'var(--muted)' }}>Includes all columns: Name, Contact, Mail, Address</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleDownloadTemplate}
-                    className="btn-primary"
-                    style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem', background: 'var(--gold-deep)', color: '#fff' }}
-                  >
-                    <Download size={12} /> Template
-                  </button>
-                </div>
-
-                <div className="form-group" style={{ marginBottom: '1.25rem' }}>
-                  <label className="form-label" style={{ fontWeight: 600 }}>Select CSV or Excel (.xlsx, .xls) File</label>
-                  <input
-                    type="file"
-                    accept=".csv, .xlsx, .xls"
-                    onChange={(e) => setUploadFile(e.target.files[0])}
-                    className="form-input"
-                    required
-                  />
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', borderTop: '1px solid var(--line)', paddingTop: '1rem' }}>
-                  <button type="button" onClick={() => { setShowUploadModal(false); setUploadFile(null); }} className="btn-secondary">Cancel</button>
-                  <button type="submit" className="btn-primary" disabled={isUploading} style={{ background: 'var(--gold-deep)', color: '#fff' }}>
-                    {isUploading ? 'Processing File...' : 'Upload & Validate'}
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <div>
-                <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
-                  <Check size={36} style={{ color: '#22c55e', background: 'rgba(34, 197, 94, 0.15)', padding: '0.55rem', borderRadius: '50%', marginBottom: '0.5rem' }} />
-                  <h4 style={{ margin: 0, fontWeight: 700 }}>Upload Processed Successfully</h4>
-                </div>
-
-                <div style={{ background: 'var(--paper-2)', padding: '0.85rem', borderRadius: '8px', border: '1px solid var(--line)', fontSize: '0.82rem', marginBottom: '1.25rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
-                    <span>Uploaded Contacts:</span>
-                    <span style={{ fontWeight: 700, color: '#22c55e' }}>{uploadResult.created}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
-                    <span>Rejected Rows:</span>
-                    <span style={{ fontWeight: 700, color: uploadResult.failed > 0 ? 'var(--err)' : 'var(--muted)' }}>{uploadResult.failed}</span>
-                  </div>
-                </div>
-
-                {uploadResult.errors && uploadResult.errors.length > 0 && (
-                  <div style={{ maxHeight: '120px', overflowY: 'auto', background: 'var(--paper-2)', border: '1px solid var(--line)', borderRadius: '6px', padding: '0.5rem', fontSize: '0.75rem', color: 'var(--err)', marginBottom: '1.25rem' }}>
-                    <div style={{ fontWeight: 700, marginBottom: '0.25rem' }}>Rejection Warnings:</div>
-                    {uploadResult.errors.map((err, i) => (
-                      <div key={i} style={{ marginBottom: '0.15rem' }}>• {err}</div>
-                    ))}
-                  </div>
-                )}
-
-                <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid var(--line)', paddingTop: '1rem' }}>
-                  <button
-                    onClick={() => {
-                      setShowUploadModal(false);
-                      setUploadFile(null);
-                      setUploadResult(null);
-                    }}
-                    className="btn-primary"
-                    style={{ background: 'var(--gold-deep)', color: '#fff' }}
-                  >
-                    Close Summary
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* UPLOAD MASTER CONTACTS MODAL */}
-      {showMasterUploadModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: '1rem' }}>
-          <div className="glass-panel" style={{ width: '100%', maxWidth: '480px', borderRadius: '16px', background: 'var(--paper)', border: '1px solid var(--line)', padding: '1.5rem', borderTop: '4px solid var(--gold-deep)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', paddingBottom: '0.5rem', borderBottom: '1px solid var(--line)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <FileSpreadsheet size={20} style={{ color: 'var(--gold-deep)' }} />
-                <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700 }}>Upload Master Contacts</h3>
-              </div>
-              <button onClick={() => { setShowMasterUploadModal(false); setMasterUploadFile(null); setMasterUploadResult(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={18} /></button>
-            </div>
-
-            {!masterUploadResult ? (
-              <form onSubmit={handleUploadMasterContacts}>
-                <div style={{ background: 'rgba(224, 168, 46, 0.08)', border: '1px solid rgba(224, 168, 46, 0.2)', padding: '0.75rem', borderRadius: '8px', marginBottom: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.8rem' }}>
-                  <div>
-                    <span style={{ fontWeight: 700, color: 'var(--gold-deep)' }}>Need the CSV template?</span><br/>
-                    <span style={{ color: 'var(--muted)' }}>Includes all columns: Name, Contact, Mail, Address</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleDownloadTemplate}
-                    className="btn-primary"
-                    style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem', background: 'var(--gold-deep)', color: '#fff' }}
-                  >
-                    <Download size={12} /> Template
-                  </button>
-                </div>
-
-                <div className="form-group" style={{ marginBottom: '1.25rem' }}>
-                  <label className="form-label" style={{ fontWeight: 600 }}>Select CSV or Excel (.xlsx, .xls) File</label>
-                  <input
-                    type="file"
-                    accept=".csv, .xlsx, .xls"
-                    onChange={(e) => setMasterUploadFile(e.target.files[0])}
-                    className="form-input"
-                    required
-                  />
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', borderTop: '1px solid var(--line)', paddingTop: '1rem' }}>
-                  <button type="button" onClick={() => { setShowMasterUploadModal(false); setMasterUploadFile(null); }} className="btn-secondary">Cancel</button>
-                  <button type="submit" className="btn-primary" disabled={isMasterUploading} style={{ background: 'var(--gold-deep)', color: '#fff' }}>
-                    {isMasterUploading ? 'Processing File...' : 'Upload Master Pool'}
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <div>
-                <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
-                  <Check size={36} style={{ color: '#22c55e', background: 'rgba(34, 197, 94, 0.15)', padding: '0.55rem', borderRadius: '50%', marginBottom: '0.5rem' }} />
-                  <h4 style={{ margin: 0, fontWeight: 700 }}>Upload Processed Successfully</h4>
-                </div>
-
-                <div style={{ background: 'var(--paper-2)', padding: '0.85rem', borderRadius: '8px', border: '1px solid var(--line)', fontSize: '0.82rem', marginBottom: '1.25rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
-                    <span>Uploaded Master Contacts:</span>
-                    <span style={{ fontWeight: 700, color: '#22c55e' }}>{masterUploadResult.insertedCount}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
-                    <span>Rejected Rows:</span>
-                    <span style={{ fontWeight: 700, color: masterUploadResult.rejectedCount > 0 ? 'var(--err)' : 'var(--muted)' }}>{masterUploadResult.rejectedCount}</span>
-                  </div>
-                </div>
-
-                {masterUploadResult.errors && masterUploadResult.errors.length > 0 && (
-                  <div style={{ maxHeight: '120px', overflowY: 'auto', background: 'var(--paper-2)', border: '1px solid var(--line)', borderRadius: '6px', padding: '0.5rem', fontSize: '0.75rem', color: 'var(--err)', marginBottom: '1.25rem' }}>
-                    <div style={{ fontWeight: 700, marginBottom: '0.25rem' }}>Rejection Warnings:</div>
-                    {masterUploadResult.errors.map((err, i) => (
-                      <div key={i} style={{ marginBottom: '0.15rem' }}>• {err}</div>
-                    ))}
-                  </div>
-                )}
-
-                <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid var(--line)', paddingTop: '1rem' }}>
-                  <button
-                    onClick={() => {
-                      setShowMasterUploadModal(false);
-                      setMasterUploadFile(null);
-                      setMasterUploadResult(null);
-                    }}
-                    className="btn-primary"
-                    style={{ background: 'var(--gold-deep)', color: '#fff' }}
-                  >
-                    Close Summary
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* IMPORT FROM MASTER DATA MODAL */}
-      {showImportModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: '1rem' }}>
-          <div className="glass-panel" style={{ width: '100%', maxWidth: '780px', maxHeight: '90vh', overflowY: 'auto', borderRadius: '16px', background: 'var(--paper)', border: '1px solid var(--line)', padding: '1.5rem', display: 'flex', flexDirection: 'column', borderTop: '4px solid var(--gold-deep)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', paddingBottom: '0.5rem', borderBottom: '1px solid var(--line)', flexShrink: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <Database size={20} style={{ color: 'var(--gold-deep)' }} />
-                <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700 }}>Add Contacts from Master Data Center</h3>
-              </div>
-              <button onClick={() => { setShowImportModal(false); setSelectedMasterIds(new Set()); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={18} /></button>
-            </div>
-
-            {/* Search filter in modal */}
-            <div style={{ marginBottom: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', flexShrink: 0 }}>
-              <div style={{ position: 'relative' }}>
+      {/* ========================================================================= */}
+      {/* SUBTAB 2: MASTER DATA CENTER */}
+      {/* ========================================================================= */}
+      {activeSubTab === 'master_data' && (
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+          <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)', padding: '1.25rem' }}>
+            {/* Top Filter Controls & Export */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', gap: '0.75rem', flexWrap: 'wrap', flexShrink: 0 }}>
+              {/* Search Box */}
+              <div style={{ position: 'relative', maxWidth: '340px', width: '100%' }}>
                 <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} />
                 <input
                   type="text"
-                  placeholder="General search by name, phone, email, address..."
-                  value={importSearch}
-                  onChange={(e) => setImportSearch(e.target.value)}
+                  placeholder="Search FinMantra ID, Name, Phone, Email..."
+                  value={masterSearch}
+                  onChange={(e) => setMasterSearch(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && fetchMasterLeads()}
                   style={{
                     width: '100%',
                     background: 'var(--paper-2)',
@@ -2975,149 +1109,263 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                 />
               </div>
 
-              {/* Advanced Filters Grid */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.5rem', background: 'var(--paper-2)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--line)' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                  <label style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--muted)' }}>Phone Filter</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 91987..."
-                    value={filterPhone}
-                    onChange={(e) => setFilterPhone(e.target.value)}
-                    style={{ padding: '0.35rem 0.5rem', fontSize: '0.78rem', borderRadius: '4px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
-                  />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                  <label style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--muted)' }}>Email/Domain</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. @gmail.com"
-                    value={filterEmail}
-                    onChange={(e) => setFilterEmail(e.target.value)}
-                    style={{ padding: '0.35rem 0.5rem', fontSize: '0.78rem', borderRadius: '4px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
-                  />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                  <label style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--muted)' }}>Address Keyword</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Delhi"
-                    value={filterAddress}
-                    onChange={(e) => setFilterAddress(e.target.value)}
-                    style={{ padding: '0.35rem 0.5rem', fontSize: '0.78rem', borderRadius: '4px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
-                  />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                  <label style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--muted)' }}>Uploaded From</label>
-                  <input
-                    type="date"
-                    value={filterFromDate}
-                    onChange={(e) => setFilterFromDate(e.target.value)}
-                    style={{ padding: '0.3rem 0.5rem', fontSize: '0.78rem', borderRadius: '4px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
-                  />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                  <label style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--muted)' }}>Uploaded To</label>
-                  <input
-                    type="date"
-                    value={filterToDate}
-                    onChange={(e) => setFilterToDate(e.target.value)}
-                    style={{ padding: '0.3rem 0.5rem', fontSize: '0.78rem', borderRadius: '4px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
-                  />
-                </div>
-                <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                {selectedMasterDeleteIds.size > 0 && (
                   <button
-                    type="button"
-                    onClick={() => {
-                      setFilterPhone('');
-                      setFilterEmail('');
-                      setFilterAddress('');
-                      setFilterFromDate('');
-                      setFilterToDate('');
-                      setImportSearch('');
-                      setSelectedMasterIds(new Set());
+                    onClick={handleDeleteMasterBulk}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                      padding: '0.45rem 1rem',
+                      fontSize: '0.85rem',
+                      background: 'rgba(239, 68, 68, 0.1)',
+                      color: '#ef4444',
+                      border: '1px solid rgba(239, 68, 68, 0.25)',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontWeight: 600
                     }}
-                    className="btn-secondary"
-                    style={{ padding: '0.35rem', fontSize: '0.78rem', width: '100%', height: '28px', borderRadius: '4px', cursor: 'pointer' }}
                   >
-                    Reset Filters
+                    <Trash2 size={14} /> Delete Selected ({selectedMasterDeleteIds.size})
                   </button>
-                </div>
+                )}
+
+                <button
+                  onClick={handleExportMasterData}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    padding: '0.45rem 1rem',
+                    fontSize: '0.85rem',
+                    background: 'var(--paper-2)',
+                    color: 'var(--ink)',
+                    border: '1px solid var(--line)',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontWeight: 600
+                  }}
+                >
+                  <Download size={14} /> Export Filtered Data (CSV)
+                </button>
               </div>
             </div>
 
-            {/* List with Checkboxes */}
-            <div style={{ flex: 1, overflowY: 'auto', border: '1px solid var(--line)', borderRadius: '8px', minHeight: '200px', marginBottom: '1rem' }}>
-              {filteredImportContacts.length === 0 ? (
+            {/* Filter Bar based on broadcast date, broadcast name, meta whatsapp no, sender email */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+              gap: '0.5rem',
+              background: 'var(--paper-2)',
+              padding: '0.75rem',
+              borderRadius: '8px',
+              border: '1px solid var(--line)',
+              marginBottom: '1rem',
+              flexShrink: 0
+            }}>
+              <div>
+                <label style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--muted)' }}>Broadcast Date From</label>
+                <input
+                  type="date"
+                  value={masterFilterDateFrom}
+                  onChange={(e) => setMasterFilterDateFrom(e.target.value)}
+                  style={{ width: '100%', padding: '0.35rem 0.5rem', fontSize: '0.78rem', borderRadius: '4px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)', boxSizing: 'border-box' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--muted)' }}>Broadcast Date To</label>
+                <input
+                  type="date"
+                  value={masterFilterDateTo}
+                  onChange={(e) => setMasterFilterDateTo(e.target.value)}
+                  style={{ width: '100%', padding: '0.35rem 0.5rem', fontSize: '0.78rem', borderRadius: '4px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)', boxSizing: 'border-box' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--muted)' }}>Broadcast Name</label>
+                <select
+                  value={masterFilterBroadcastName}
+                  onChange={(e) => setMasterFilterBroadcastName(e.target.value)}
+                  style={{ width: '100%', padding: '0.35rem 0.5rem', fontSize: '0.78rem', borderRadius: '4px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)', boxSizing: 'border-box' }}
+                >
+                  <option value="">All Broadcasts</option>
+                  {masterFilterOptions.broadcastNames.map(name => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--muted)' }}>Meta WhatsApp No</label>
+                <select
+                  value={masterFilterMetaWaNo}
+                  onChange={(e) => setMasterFilterMetaWaNo(e.target.value)}
+                  style={{ width: '100%', padding: '0.35rem 0.5rem', fontSize: '0.78rem', borderRadius: '4px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)', boxSizing: 'border-box' }}
+                >
+                  <option value="">All WhatsApp Numbers</option>
+                  {masterFilterOptions.metaWhatsappNos.map(no => (
+                    <option key={no} value={no}>{no}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--muted)' }}>Sender Email</label>
+                <select
+                  value={masterFilterSenderEmail}
+                  onChange={(e) => setMasterFilterSenderEmail(e.target.value)}
+                  style={{ width: '100%', padding: '0.35rem 0.5rem', fontSize: '0.78rem', borderRadius: '4px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)', boxSizing: 'border-box' }}
+                >
+                  <option value="">All Sender Emails</option>
+                  {masterFilterOptions.senderEmails.map(em => (
+                    <option key={em} value={em}>{em}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: '0.4rem' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMasterSearch('');
+                    setMasterFilterBroadcastName('');
+                    setMasterFilterDateFrom('');
+                    setMasterFilterDateTo('');
+                    setMasterFilterMetaWaNo('');
+                    setMasterFilterSenderEmail('');
+                  }}
+                  style={{ padding: '0.35rem', fontSize: '0.78rem', width: '100%', height: '28px', borderRadius: '4px', border: '1px solid var(--line)', background: 'var(--paper)', cursor: 'pointer' }}
+                >
+                  Reset
+                </button>
+                <button
+                  type="button"
+                  onClick={fetchMasterLeads}
+                  style={{ padding: '0.35rem', fontSize: '0.78rem', width: '100%', height: '28px', borderRadius: '4px', border: 'none', background: 'var(--gold-deep)', color: '#fff', cursor: 'pointer', fontWeight: 600 }}
+                >
+                  Apply
+                </button>
+              </div>
+            </div>
+
+            {/* Master Contacts Grid Table */}
+            <div style={{ flex: 1, overflowY: 'auto', border: '1px solid var(--line)', borderRadius: '8px', minHeight: 0 }}>
+              {isLoadingMaster ? (
                 <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--muted)' }}>
-                  No contacts found matching search in Master Data Center.
+                  <RefreshCw size={28} className="spin-slow" style={{ color: 'var(--gold-deep)', marginBottom: '0.75rem' }} />
+                  <div>Loading master data records...</div>
+                </div>
+              ) : masterContacts.length === 0 ? (
+                <div style={{ padding: '4rem 2rem', textAlign: 'center', color: 'var(--muted)' }}>
+                  <Database size={36} style={{ color: 'var(--line)', marginBottom: '0.75rem' }} />
+                  <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>No contacts found in Master Data Center.</div>
+                  <div style={{ fontSize: '0.8rem', marginTop: '0.25rem' }}>Contacts are automatically merged and deduplicated whenever a Broadcast Campaign is launched.</div>
                 </div>
               ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.83rem', textAlign: 'left' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem', textAlign: 'left' }}>
                   <thead style={{ position: 'sticky', top: 0, background: 'var(--paper-2)', zIndex: 10 }}>
                     <tr style={{ borderBottom: '1px solid var(--line)' }}>
-                      <th style={{ padding: '0.65rem 0.85rem', width: '40px', textAlign: 'center' }}>
+                      <th style={{ padding: '0.65rem 0.75rem', width: '36px', textAlign: 'center' }}>
                         <input
                           type="checkbox"
-                          checked={filteredImportContacts.length > 0 && filteredImportContacts.every(c => selectedMasterIds.has(c.id))}
+                          checked={masterContacts.length > 0 && masterContacts.every(c => selectedMasterDeleteIds.has(c.id))}
                           onChange={(e) => {
-                            const newSet = new Set(selectedMasterIds);
+                            const newSet = new Set(selectedMasterDeleteIds);
                             if (e.target.checked) {
-                              filteredImportContacts.forEach(c => newSet.add(c.id));
+                              masterContacts.forEach(c => newSet.add(c.id));
                             } else {
-                              filteredImportContacts.forEach(c => newSet.delete(c.id));
+                              masterContacts.forEach(c => newSet.delete(c.id));
                             }
-                            setSelectedMasterIds(newSet);
+                            setSelectedMasterDeleteIds(newSet);
                           }}
                           style={{ cursor: 'pointer' }}
                         />
                       </th>
-                      <th style={{ padding: '0.65rem 0.85rem', fontWeight: 700, color: 'var(--ink)' }}>Name</th>
-                      <th style={{ padding: '0.65rem 0.85rem', fontWeight: 700, color: 'var(--ink)' }}>Contact (WhatsApp)</th>
-                      <th style={{ padding: '0.65rem 0.85rem', fontWeight: 700, color: 'var(--ink)' }}>Email Address</th>
-                      <th style={{ padding: '0.65rem 0.85rem', fontWeight: 700, color: 'var(--ink)' }}>Address</th>
-                      <th style={{ padding: '0.65rem 0.85rem', fontWeight: 700, color: 'var(--ink)' }}>Uploaded At</th>
+                      <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700 }}>FinMantra ID</th>
+                      <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700 }}>Campaign ID</th>
+                      <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700 }}>Name</th>
+                      <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700 }}>Contact (Phone)</th>
+                      <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700 }}>Email</th>
+                      <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700 }}>WA Opt-in</th>
+                      <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700 }}>Email Opt-in</th>
+                      <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700 }}>WA Rates (Del/CTR)</th>
+                      <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700 }}>Email Rates (Del/CTR)</th>
+                      <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700 }}>Last Broadcast</th>
+                      <th style={{ padding: '0.65rem 0.75rem', textAlign: 'right' }}>Action</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredImportContacts.map(c => {
-                      const isChecked = selectedMasterIds.has(c.id);
+                    {masterContacts.map(c => {
+                      const isChecked = selectedMasterDeleteIds.has(c.id);
+                      const waDel = c.wa_sent_count > 0 ? ((c.wa_delivered_count / c.wa_sent_count) * 100).toFixed(0) : '—';
+                      const waCtr = c.wa_delivered_count > 0 ? ((c.wa_clicked_count / c.wa_delivered_count) * 100).toFixed(0) : '0';
+                      const emDel = c.email_sent_count > 0 ? ((c.email_delivered_count / c.email_sent_count) * 100).toFixed(0) : '—';
+                      const emCtr = c.email_delivered_count > 0 ? ((c.email_clicked_count / c.email_delivered_count) * 100).toFixed(0) : '0';
+
                       return (
                         <tr
                           key={c.id}
-                          onClick={() => {
-                            const newSet = new Set(selectedMasterIds);
-                            if (isChecked) {
-                              newSet.delete(c.id);
-                            } else {
-                              newSet.add(c.id);
-                            }
-                            setSelectedMasterIds(newSet);
-                          }}
-                          style={{ borderBottom: '1px solid var(--line)', cursor: 'pointer', background: isChecked ? 'rgba(224, 168, 46, 0.05)' : 'transparent', transition: 'background 0.1s' }}
+                          style={{ borderBottom: '1px solid var(--line)', background: isChecked ? 'rgba(224, 168, 46, 0.05)' : 'transparent' }}
                           className="table-row-hover"
                         >
-                          <td style={{ padding: '0.65rem 0.85rem', textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+                          <td style={{ padding: '0.65rem 0.75rem', textAlign: 'center' }}>
                             <input
                               type="checkbox"
                               checked={isChecked}
                               onChange={(e) => {
-                                const newSet = new Set(selectedMasterIds);
-                                if (e.target.checked) {
-                                  newSet.add(c.id);
-                                } else {
-                                  newSet.delete(c.id);
-                                }
-                                setSelectedMasterIds(newSet);
+                                const newSet = new Set(selectedMasterDeleteIds);
+                                if (e.target.checked) newSet.add(c.id);
+                                else newSet.delete(c.id);
+                                setSelectedMasterDeleteIds(newSet);
                               }}
                               style={{ cursor: 'pointer' }}
                             />
                           </td>
-                          <td style={{ padding: '0.65rem 0.85rem', fontWeight: 600 }}>{c.name}</td>
-                          <td style={{ padding: '0.65rem 0.85rem', fontFamily: 'var(--font-mono)' }}>{c.contact}</td>
-                          <td style={{ padding: '0.65rem 0.85rem' }}>{c.mail}</td>
-                          <td style={{ padding: '0.65rem 0.85rem', color: 'var(--muted)' }}>{c.address || '—'}</td>
-                          <td style={{ padding: '0.65rem 0.85rem', color: 'var(--muted)', fontSize: '0.78rem' }}>{c.created_at ? new Date(c.created_at).toLocaleString() : '—'}</td>
+                          <td style={{ padding: '0.65rem 0.75rem', fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--gold-deep)' }}>
+                            {c.finmantra_id || 'FM00001'}
+                          </td>
+                          <td style={{ padding: '0.65rem 0.75rem', fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--muted)' }}>
+                            {c.campaign_data_id || 'FMCB00001'}
+                          </td>
+                          <td style={{ padding: '0.65rem 0.75rem', fontWeight: 600 }}>{c.name}</td>
+                          <td style={{ padding: '0.65rem 0.75rem', fontFamily: 'var(--font-mono)' }}>{c.contact}</td>
+                          <td style={{ padding: '0.65rem 0.75rem' }}>{c.mail || '—'}</td>
+                          <td style={{ padding: '0.65rem 0.75rem' }}>
+                            {c.whatsapp_optin !== false ? (
+                              <span style={{ padding: '0.15rem 0.45rem', borderRadius: '4px', background: 'rgba(22, 163, 123, 0.12)', color: '#16a37b', fontSize: '0.72rem', fontWeight: 700 }}>Opted-in</span>
+                            ) : (
+                              <span style={{ padding: '0.15rem 0.45rem', borderRadius: '4px', background: 'rgba(239, 68, 68, 0.12)', color: '#ef4444', fontSize: '0.72rem', fontWeight: 700 }}>Opted-out</span>
+                            )}
+                          </td>
+                          <td style={{ padding: '0.65rem 0.75rem' }}>
+                            {c.email_optin !== false ? (
+                              <span style={{ padding: '0.15rem 0.45rem', borderRadius: '4px', background: 'rgba(22, 163, 123, 0.12)', color: '#16a37b', fontSize: '0.72rem', fontWeight: 700 }}>Opted-in</span>
+                            ) : (
+                              <span style={{ padding: '0.15rem 0.45rem', borderRadius: '4px', background: 'rgba(239, 68, 68, 0.12)', color: '#ef4444', fontSize: '0.72rem', fontWeight: 700 }}>Opted-out</span>
+                            )}
+                          </td>
+                          <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.78rem' }}>
+                            <span style={{ color: '#25D366', fontWeight: 600 }}>Del: {waDel}{waDel !== '—' ? '%' : ''}</span> • <span style={{ color: 'var(--gold-deep)', fontWeight: 600 }}>CTR: {waCtr}%</span>
+                          </td>
+                          <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.78rem' }}>
+                            <span style={{ color: '#3b82f6', fontWeight: 600 }}>Del: {emDel}{emDel !== '—' ? '%' : ''}</span> • <span style={{ color: 'var(--gold-deep)', fontWeight: 600 }}>CTR: {emCtr}%</span>
+                          </td>
+                          <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.78rem', color: 'var(--muted)' }}>
+                            {c.last_broadcast_name || '—'}
+                          </td>
+                          <td style={{ padding: '0.65rem 0.75rem', textAlign: 'right' }}>
+                            <button
+                              onClick={() => handleDeleteMasterLead(c.id)}
+                              style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.2rem' }}
+                              title="Delete Lead"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </td>
                         </tr>
                       );
                     })}
@@ -3126,20 +1374,26 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
               )}
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--line)', paddingTop: '1rem', flexShrink: 0 }}>
-              <span style={{ fontSize: '0.82rem', color: 'var(--muted)', fontWeight: 600 }}>
-                {selectedMasterIds.size} contact(s) selected
-              </span>
-              <div style={{ display: 'flex', gap: '0.75rem' }}>
-                <button type="button" onClick={() => { setShowImportModal(false); setSelectedMasterIds(new Set()); }} className="btn-secondary">Cancel</button>
+            {/* Pagination Controls */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.85rem', flexShrink: 0, fontSize: '0.82rem', color: 'var(--muted)' }}>
+              <div>
+                Showing {masterContacts.length} of {masterTotal} master contacts
+              </div>
+              <div style={{ display: 'flex', gap: '0.4rem' }}>
                 <button
-                  type="button"
-                  onClick={handleImportMasterLeads}
-                  disabled={isImporting || selectedMasterIds.size === 0}
-                  className="btn-primary"
-                  style={{ background: 'var(--gold-deep)', color: '#fff', opacity: selectedMasterIds.size === 0 ? 0.65 : 1, cursor: selectedMasterIds.size === 0 ? 'not-allowed' : 'pointer' }}
+                  disabled={masterPage <= 1}
+                  onClick={() => setMasterPage(p => Math.max(1, p - 1))}
+                  style={{ padding: '0.3rem 0.75rem', borderRadius: '4px', border: '1px solid var(--line)', background: 'var(--paper)', cursor: masterPage <= 1 ? 'not-allowed' : 'pointer' }}
                 >
-                  {isImporting ? 'Importing...' : `Import selected (${selectedMasterIds.size})`}
+                  Previous
+                </button>
+                <span style={{ padding: '0.3rem 0.6rem', fontWeight: 700, color: 'var(--ink)' }}>Page {masterPage}</span>
+                <button
+                  disabled={masterContacts.length < masterLimit}
+                  onClick={() => setMasterPage(p => p + 1)}
+                  style={{ padding: '0.3rem 0.75rem', borderRadius: '4px', border: '1px solid var(--line)', background: 'var(--paper)', cursor: masterContacts.length < masterLimit ? 'not-allowed' : 'pointer' }}
+                >
+                  Next
                 </button>
               </div>
             </div>
@@ -3147,180 +1401,949 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
         </div>
       )}
 
-      {/* NEW BROADCAST MODAL */}
-      {showNewBroadcastModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: '1rem' }}>
-          <div className="glass-panel" style={{ width: '100%', maxWidth: '640px', maxHeight: '90vh', overflowY: 'auto', borderRadius: '16px', background: 'var(--paper)', border: '1px solid var(--line)', padding: '1.5rem', borderTop: '4px solid var(--gold-deep)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', paddingBottom: '0.5rem', borderBottom: '1px solid var(--line)' }}>
-              <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700 }}>
-                {editingBroadcastId ? 'Edit Broadcast Schedule' : 'Set Outgoing Broadcast'}
-              </h3>
-              <button onClick={() => { setShowNewBroadcastModal(false); setEditingBroadcastId(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={18} /></button>
+      {/* ========================================================================= */}
+      {/* SUBTAB 3: BROADCAST CAMPAIGNS */}
+      {/* ========================================================================= */}
+      {activeSubTab === 'broadcast' && (
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+          <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)', padding: '1.25rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem', flexShrink: 0 }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700 }}>All Broadcast Campaigns</h3>
+                <div style={{ color: 'var(--muted)', fontSize: '0.82rem' }}>Manage scheduled dispatches, track deliverability, and trigger immediate sends.</div>
+              </div>
+              <button
+                onClick={() => {
+                  setBroadcastWizardStep(1);
+                  setShowNewBroadcastModal(true);
+                }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  padding: '0.5rem 1.1rem',
+                  borderRadius: '6px',
+                  background: 'var(--gold-deep)',
+                  color: '#fff',
+                  border: 'none',
+                  fontWeight: 700,
+                  fontSize: '0.86rem',
+                  cursor: 'pointer'
+                }}
+              >
+                <Plus size={15} /> Create Broadcast
+              </button>
             </div>
 
-            <form onSubmit={handleSaveBroadcast}>
-              <div className="form-group" style={{ marginBottom: '1rem' }}>
-                <label className="form-label" style={{ fontWeight: 600 }}>Broadcast Name</label>
+            {/* Broadcasts List */}
+            <div style={{ flex: 1, overflowY: 'auto', border: '1px solid var(--line)', borderRadius: '8px', minHeight: 0 }}>
+              {isLoadingBroadcasts ? (
+                <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--muted)' }}>
+                  <RefreshCw size={28} className="spin-slow" style={{ color: 'var(--gold-deep)', marginBottom: '0.75rem' }} />
+                  <div>Loading broadcasts...</div>
+                </div>
+              ) : broadcasts.length === 0 ? (
+                <div style={{ padding: '4rem 2rem', textAlign: 'center', color: 'var(--muted)' }}>
+                  <MessageSquare size={36} style={{ color: 'var(--line)', marginBottom: '0.75rem' }} />
+                  <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>No broadcasts created yet.</div>
+                  <div style={{ fontSize: '0.8rem', marginTop: '0.25rem' }}>Click "+ Create Broadcast" to launch a direct Meta WhatsApp or SMTP campaign.</div>
+                </div>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem', textAlign: 'left' }}>
+                  <thead style={{ position: 'sticky', top: 0, background: 'var(--paper-2)', zIndex: 10 }}>
+                    <tr style={{ borderBottom: '1px solid var(--line)' }}>
+                      <th style={{ padding: '0.7rem 0.85rem', fontWeight: 700 }}>Broadcast Name</th>
+                      <th style={{ padding: '0.7rem 0.85rem', fontWeight: 700 }}>Channel</th>
+                      <th style={{ padding: '0.7rem 0.85rem', fontWeight: 700 }}>Sender / Phone</th>
+                      <th style={{ padding: '0.7rem 0.85rem', fontWeight: 700 }}>Status</th>
+                      <th style={{ padding: '0.7rem 0.85rem', fontWeight: 700 }}>Targeted</th>
+                      <th style={{ padding: '0.7rem 0.85rem', fontWeight: 700 }}>Delivered</th>
+                      <th style={{ padding: '0.7rem 0.85rem', fontWeight: 700 }}>CTR</th>
+                      <th style={{ padding: '0.7rem 0.85rem', fontWeight: 700 }}>Schedule Time</th>
+                      <th style={{ padding: '0.7rem 0.85rem', textAlign: 'right', fontWeight: 700 }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {broadcasts.map(b => {
+                      const ctr = b.delivered_count > 0 ? ((b.clicked_count / b.delivered_count) * 100).toFixed(1) : '0.0';
+                      return (
+                        <tr key={b.id} style={{ borderBottom: '1px solid var(--line)' }} className="table-row-hover">
+                          <td style={{ padding: '0.75rem 0.85rem', fontWeight: 700 }}>{b.name}</td>
+                          <td style={{ padding: '0.75rem 0.85rem', textTransform: 'capitalize' }}>{b.channel}</td>
+                          <td style={{ padding: '0.75rem 0.85rem', fontSize: '0.78rem', color: 'var(--muted)' }}>
+                            {b.meta_phone_number || b.sender_email || 'Default Sender'}
+                          </td>
+                          <td style={{ padding: '0.75rem 0.85rem' }}>
+                            <span style={{
+                              padding: '0.2rem 0.55rem',
+                              borderRadius: '999px',
+                              fontSize: '0.72rem',
+                              fontWeight: 700,
+                              background: b.status === 'sent' ? 'rgba(22, 163, 123, 0.12)' : b.status === 'processing' ? 'rgba(59, 130, 246, 0.12)' : 'rgba(224, 168, 46, 0.12)',
+                              color: b.status === 'sent' ? '#16a37b' : b.status === 'processing' ? '#3b82f6' : 'var(--gold-deep)'
+                            }}>
+                              {b.status}
+                            </span>
+                          </td>
+                          <td style={{ padding: '0.75rem 0.85rem', fontWeight: 600 }}>{b.targeted_count || 0}</td>
+                          <td style={{ padding: '0.75rem 0.85rem', color: '#16a37b', fontWeight: 600 }}>{b.delivered_count || b.sent_count || 0}</td>
+                          <td style={{ padding: '0.75rem 0.85rem', color: 'var(--gold-deep)', fontWeight: 700 }}>{ctr}%</td>
+                          <td style={{ padding: '0.75rem 0.85rem', fontSize: '0.78rem', color: 'var(--muted)' }}>
+                            {b.scheduled_at ? new Date(b.scheduled_at).toLocaleString() : 'Direct / Immediate'}
+                          </td>
+                          <td style={{ padding: '0.75rem 0.85rem', textAlign: 'right' }}>
+                            {b.status !== 'sent' && b.status !== 'processing' && (
+                              <button
+                                onClick={() => handleTriggerBroadcastNow(b.id)}
+                                style={{
+                                  padding: '0.3rem 0.65rem',
+                                  borderRadius: '4px',
+                                  background: 'var(--gold-deep)',
+                                  color: '#fff',
+                                  border: 'none',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  marginRight: '0.4rem'
+                                }}
+                              >
+                                <Send size={12} style={{ marginRight: '0.25rem', verticalAlign: 'middle' }} /> Send Now
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* SUBTAB 4: TEMPLATES MANAGER */}
+      {/* ========================================================================= */}
+      {activeSubTab === 'templates' && (
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+          <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)', padding: '1.25rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem', flexShrink: 0 }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700 }}>Meta WhatsApp &amp; Email Template Manager</h3>
+                <div style={{ color: 'var(--muted)', fontSize: '0.82rem' }}>Templates registered with Meta Cloud API and verified under business accounts.</div>
+              </div>
+              <button
+                onClick={() => {
+                  setNewTemplateForm({
+                    name: '',
+                    type: 'whatsapp',
+                    subject: '',
+                    body: '',
+                    metaTemplateName: '',
+                    mediaUrl: '',
+                    category: 'MARKETING',
+                    language: 'en_US',
+                    headerFormat: 'NONE',
+                    buttons: { buttonType: 'NONE', ctaUrlText: '', ctaUrlValue: '', ctaPhoneText: '', ctaPhoneValue: '', quickReplies: ['', '', ''] }
+                  });
+                  setShowCreateTemplateModal(true);
+                }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  padding: '0.5rem 1.1rem',
+                  borderRadius: '6px',
+                  background: 'var(--gold-deep)',
+                  color: '#fff',
+                  border: 'none',
+                  fontWeight: 700,
+                  fontSize: '0.86rem',
+                  cursor: 'pointer'
+                }}
+              >
+                <Plus size={15} /> + Create Template
+              </button>
+            </div>
+
+            {/* Templates Grid */}
+            <div style={{ flex: 1, overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem', minHeight: 0 }}>
+              {templates.map(t => (
+                <div key={t.id} style={{ border: '1px solid var(--line)', borderRadius: '10px', background: 'var(--paper-2)', padding: '1.1rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                      <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>{t.name}</span>
+                      <span style={{ padding: '0.15rem 0.5rem', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 700, background: t.type === 'whatsapp' ? 'rgba(37, 211, 102, 0.15)' : 'rgba(59, 130, 246, 0.15)', color: t.type === 'whatsapp' ? '#25D366' : '#3b82f6' }}>
+                        {t.type}
+                      </span>
+                    </div>
+                    {t.meta_template_name && (
+                      <div style={{ fontSize: '0.75rem', color: 'var(--muted)', fontFamily: 'var(--font-mono)', marginBottom: '0.5rem' }}>
+                        Meta Name: {t.meta_template_name}
+                      </div>
+                    )}
+                    <div style={{ fontSize: '0.82rem', background: 'var(--paper)', padding: '0.65rem', borderRadius: '6px', border: '1px solid var(--line)', maxHeight: '110px', overflowY: 'auto', whiteSpace: 'pre-wrap', color: 'var(--ink)' }}>
+                      {t.body}
+                    </div>
+                  </div>
+                  <div style={{ marginTop: '0.85rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>
+                      {t.created_at ? new Date(t.created_at).toLocaleDateString() : ''}
+                    </span>
+                    <button
+                      onClick={async () => {
+                        if (!window.confirm(`Delete template "${t.name}"?`)) return;
+                        const res = await fetch(`${API_URL}/campaigns/templates/${t.id}`, { method: 'DELETE', headers });
+                        const data = await res.json();
+                        if (data.success) {
+                          showToast('Template deleted.', 'info');
+                          fetchTemplates();
+                        }
+                      }}
+                      style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.2rem' }}
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* SUBTAB 5: SMTP GATEWAY SETTINGS */}
+      {/* ========================================================================= */}
+      {activeSubTab === 'settings' && (
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflowY: 'auto' }}>
+          <div className="glass-panel" style={{ maxWidth: '640px', width: '100%', borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)', padding: '1.5rem', boxSizing: 'border-box' }}>
+            <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.15rem', fontWeight: 700 }}>SMTP Mail Gateway Configuration</h3>
+            <p style={{ margin: '0 0 1.25rem 0', color: 'var(--muted)', fontSize: '0.85rem' }}>Configure your custom SMTP host credentials for high-deliverability email broadcasts.</p>
+
+            <form onSubmit={handleSaveSmtpSettings} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '0.25rem' }}>SMTP Host</label>
                 <input
                   type="text"
-                  className="form-input"
-                  placeholder="e.g. Festival Credit Card Campaign"
-                  value={newBroadcastForm.name}
-                  onChange={(e) => setNewBroadcastForm({ ...newBroadcastForm, name: e.target.value })}
-                  required
+                  placeholder="e.g. smtp.titan.email or smtp.gmail.com"
+                  value={smtpSettings.host}
+                  onChange={(e) => setSmtpSettings({ ...smtpSettings, host: e.target.value })}
+                  style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)' }}
                 />
               </div>
 
-              <div className="form-group" style={{ marginBottom: '1rem' }}>
-                <label className="form-label" style={{ fontWeight: 600 }}>Select Reusable Template (Optional)</label>
-                <select
-                  onChange={(e) => {
-                    const tId = e.target.value;
-                    if (!tId) return;
-                    const selectedTpl = templates.find(t => t.id === tId);
-                    if (selectedTpl) {
-                      const updated = { ...newBroadcastForm };
-                      if (selectedTpl.type === 'email') {
-                        updated.channel = 'email';
-                        updated.emailSubject = selectedTpl.subject || '';
-                        updated.emailBody = selectedTpl.body || '';
-                      } else if (selectedTpl.type === 'whatsapp') {
-                        updated.channel = 'whatsapp';
-                        updated.whatsappTemplate = selectedTpl.meta_template_name || selectedTpl.name || '';
-                        updated.whatsappMessage = selectedTpl.body || '';
-                        updated.mediaUrl = selectedTpl.media_url || '';
-                      }
-                      setNewBroadcastForm(updated);
-                    }
-                  }}
-                  className="form-input"
-                  style={{ background: 'var(--paper-2)', color: 'var(--ink)' }}
-                >
-                  <option value="">-- Choose a Saved Template --</option>
-                  <optgroup label="WhatsApp Templates">
-                    {templates.filter(t => t.type === 'whatsapp').map(t => (
-                      <option key={t.id} value={t.id}>{t.name} ({t.meta_template_name || 'Free text'})</option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="Email Templates">
-                    {templates.filter(t => t.type === 'email').map(t => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
-                    ))}
-                  </optgroup>
-                </select>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '0.25rem' }}>SMTP Port</label>
+                  <input
+                    type="text"
+                    value={smtpSettings.port}
+                    onChange={(e) => setSmtpSettings({ ...smtpSettings, port: e.target.value })}
+                    style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '0.25rem' }}>Encryption</label>
+                  <select
+                    value={smtpSettings.secure}
+                    onChange={(e) => setSmtpSettings({ ...smtpSettings, secure: e.target.value })}
+                    style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)' }}
+                  >
+                    <option value="true">SSL / TLS (Port 465)</option>
+                    <option value="false">STARTTLS / Plain (Port 587)</option>
+                  </select>
+                </div>
               </div>
 
-              <div className="form-group" style={{ marginBottom: '1rem' }}>
-                <label className="form-label" style={{ fontWeight: 600 }}>Target Channel</label>
-                <select
-                  value={newBroadcastForm.channel}
-                  onChange={(e) => setNewBroadcastForm({ ...newBroadcastForm, channel: e.target.value })}
-                  className="form-input"
-                  style={{ background: 'var(--paper-2)', color: 'var(--ink)' }}
-                >
-                  <option value="whatsapp">WhatsApp notifications only</option>
-                  <option value="email">Email dispatch only</option>
-                  <option value="both">Both (WhatsApp & Email)</option>
-                </select>
-              </div>
-
-              {/* WHATSAPP OPTIONS */}
-              {(newBroadcastForm.channel === 'whatsapp' || newBroadcastForm.channel === 'both') && (
-                <div style={{ background: 'var(--paper-2)', border: '1px solid var(--line)', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
-                  <div style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--gold-deep)', marginBottom: '0.75rem' }}>WhatsApp Payload Customization</div>
-                  
-                  <div className="form-group" style={{ marginBottom: '0.75rem' }}>
-                    <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Meta Template Name (Optional)</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      placeholder="e.g. welcome_offer_v2 (Leave blank to send free-text via Baileys)"
-                      value={newBroadcastForm.whatsappTemplate}
-                      onChange={(e) => setNewBroadcastForm({ ...newBroadcastForm, whatsappTemplate: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="form-group" style={{ marginBottom: '0.75rem' }}>
-                    <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Header Media URL (Optional Image/Video/PDF Link)</label>
-                    <input
-                      type="url"
-                      className="form-input"
-                      placeholder="e.g. https://domain.com/banner.jpg (For Meta header components)"
-                      value={newBroadcastForm.mediaUrl || ''}
-                      onChange={(e) => setNewBroadcastForm({ ...newBroadcastForm, mediaUrl: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Message Content / Parameters</label>
-                    <textarea
-                      className="form-input"
-                      placeholder="Write message content. Use {name} for dynamic recipient name substitution."
-                      value={newBroadcastForm.whatsappMessage}
-                      onChange={(e) => setNewBroadcastForm({ ...newBroadcastForm, whatsappMessage: e.target.value })}
-                      rows={3}
-                      required={!newBroadcastForm.whatsappTemplate}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* EMAIL OPTIONS */}
-              {(newBroadcastForm.channel === 'email' || newBroadcastForm.channel === 'both') && (
-                <div style={{ background: 'var(--paper-2)', border: '1px solid var(--line)', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
-                  <div style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--gold-deep)', marginBottom: '0.75rem' }}>Email Payload Customization</div>
-                  
-                  <div className="form-group" style={{ marginBottom: '0.75rem' }}>
-                    <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Email Subject Line</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      placeholder="e.g. Hello {name}, check your pre-approved offers!"
-                      value={newBroadcastForm.emailSubject}
-                      onChange={(e) => setNewBroadcastForm({ ...newBroadcastForm, emailSubject: e.target.value })}
-                      required
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Email Body (HTML/Text)</label>
-                    <textarea
-                      className="form-input"
-                      placeholder="Write body text. HTML tags are supported. Placeholders: {name}, {contact}, {mail}."
-                      value={newBroadcastForm.emailBody}
-                      onChange={(e) => setNewBroadcastForm({ ...newBroadcastForm, emailBody: e.target.value })}
-                      rows={4}
-                      required
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* SCHEDULER TIME */}
-              <div className="form-group" style={{ marginBottom: '1.25rem' }}>
-                <label className="form-label" style={{ fontWeight: 600 }}>Release Schedule (DateTime)</label>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '0.25rem' }}>SMTP Username / Email</label>
                 <input
-                  type="datetime-local"
-                  className="form-input"
-                  value={newBroadcastForm.scheduledAt}
-                  onChange={(e) => setNewBroadcastForm({ ...newBroadcastForm, scheduledAt: e.target.value })}
+                  type="text"
+                  value={smtpSettings.user}
+                  onChange={(e) => setSmtpSettings({ ...smtpSettings, user: e.target.value })}
+                  style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)' }}
                 />
-                <span style={{ fontSize: '0.75rem', color: 'var(--muted)', marginTop: '0.2rem', display: 'block' }}>
-                  Leave empty to save as a manual trigger draft.
-                </span>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', borderTop: '1px solid var(--line)', paddingTop: '1rem' }}>
-                <button type="button" onClick={() => { setShowNewBroadcastModal(false); setEditingBroadcastId(null); }} className="btn-secondary">Cancel</button>
-                <button type="submit" className="btn-primary" disabled={isCreatingBroadcast} style={{ background: 'var(--gold-deep)', color: '#fff' }}>
-                  {isCreatingBroadcast ? 'Saving...' : (editingBroadcastId ? 'Save Changes' : 'Set Up Broadcast')}
-                </button>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '0.25rem' }}>SMTP Password / App Password</label>
+                <input
+                  type="password"
+                  value={smtpSettings.pass}
+                  onChange={(e) => setSmtpSettings({ ...smtpSettings, pass: e.target.value })}
+                  style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)' }}
+                />
               </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '0.25rem' }}>From Name</label>
+                  <input
+                    type="text"
+                    value={smtpSettings.fromName}
+                    onChange={(e) => setSmtpSettings({ ...smtpSettings, fromName: e.target.value })}
+                    style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '0.25rem' }}>From Email Address</label>
+                  <input
+                    type="email"
+                    value={smtpSettings.fromEmail}
+                    onChange={(e) => setSmtpSettings({ ...smtpSettings, fromEmail: e.target.value })}
+                    style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)' }}
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isSavingSettings}
+                style={{
+                  marginTop: '0.75rem',
+                  padding: '0.7rem',
+                  borderRadius: '8px',
+                  background: 'var(--gold-deep)',
+                  color: '#fff',
+                  border: 'none',
+                  fontWeight: 700,
+                  fontSize: '0.9rem',
+                  cursor: isSavingSettings ? 'not-allowed' : 'pointer'
+                }}
+              >
+                {isSavingSettings ? 'Saving Settings...' : 'Save SMTP Settings'}
+              </button>
             </form>
           </div>
         </div>
       )}
 
+      {/* ========================================================================= */}
+      {/* SUBTAB 6: DEVELOPER GUIDE */}
+      {/* ========================================================================= */}
+      {activeSubTab === 'guide' && (
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflowY: 'auto' }}>
+          <div className="glass-panel" style={{ maxWidth: '720px', width: '100%', borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)', padding: '1.5rem', boxSizing: 'border-box' }}>
+            <h3 style={{ margin: '0 0 0.75rem 0', fontSize: '1.2rem', fontWeight: 700 }}>FinMantra Campaign Architecture Guide</h3>
+            <p style={{ color: 'var(--muted)', fontSize: '0.88rem', lineHeight: 1.6 }}>
+              FinMantra provides an integrated direct-dispatch broadcast pipeline connected with Meta WhatsApp Cloud API and SMTP Gateways.
+            </p>
+
+            <h4 style={{ margin: '1.25rem 0 0.5rem 0', fontSize: '0.95rem', fontWeight: 700 }}>1. Direct Upload &amp; Zero Duplicate Master Data Center</h4>
+            <p style={{ color: 'var(--muted)', fontSize: '0.85rem', lineHeight: 1.5 }}>
+              Whenever you launch a Broadcast Campaign, contacts are directly validated and merged into the Master Data Center. If a contact phone or email already exists, the record is updated with new metrics without creating duplicates.
+            </p>
+
+            <h4 style={{ margin: '1.25rem 0 0.5rem 0', fontSize: '0.95rem', fontWeight: 700 }}>2. Sequential FinMantra IDs (FMCB00001)</h4>
+            <p style={{ color: 'var(--muted)', fontSize: '0.85rem', lineHeight: 1.5 }}>
+              The download template includes an ID column pre-filled with <code>FMCB00001</code>. If any uploaded row has an empty ID, FinMantra automatically assigns consecutive IDs in the format <code>FMCB00001</code>, <code>FMCB00002</code>, etc.
+            </p>
+
+            <h4 style={{ margin: '1.25rem 0 0.5rem 0', fontSize: '0.95rem', fontWeight: 700 }}>3. Public Unsubscribe &amp; Contact Center</h4>
+            <p style={{ color: 'var(--muted)', fontSize: '0.85rem', lineHeight: 1.5 }}>
+              Recipients can manage communication preferences or unsubscribe anytime at:
+              <br />
+              <code>https://thefinmantra.com/contact-center?id=master_id&amp;brodcast_id=example</code>
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 1: + BROADCAST CAMPAIGN 6-STEP WIZARD */}
+      {/* ========================================================================= */}
+      {showNewBroadcastModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '1rem' }}>
+          <div style={{ background: 'var(--paper)', border: '1px solid var(--line)', borderRadius: '16px', maxWidth: '680px', width: '100%', maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 50px rgba(0,0,0,0.3)', overflow: 'hidden' }}>
+            {/* Modal Header */}
+            <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800 }}>Create &amp; Launch Broadcast Campaign</h3>
+                <div style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>Step {broadcastWizardStep} of 6: {
+                  broadcastWizardStep === 1 ? 'Broadcast Information' :
+                  broadcastWizardStep === 2 ? 'Target Channel & Sender' :
+                  broadcastWizardStep === 3 ? 'Template & Content' :
+                  broadcastWizardStep === 4 ? 'Download Template & Upload Contacts' :
+                  broadcastWizardStep === 5 ? 'Interactive Live Preview' : 'Dispatch / Schedule'
+                }</div>
+              </div>
+              <button onClick={() => setShowNewBroadcastModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Step Progress Bar */}
+            <div style={{ height: '4px', background: 'var(--paper-2)', width: '100%', flexShrink: 0 }}>
+              <div style={{ height: '100%', background: 'var(--gold-deep)', width: `${(broadcastWizardStep / 6) * 100}%`, transition: 'width 0.3s ease' }} />
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: '1.5rem', overflowY: 'auto', flex: 1 }}>
+              {/* STEP 1: BROADCAST NAME */}
+              {broadcastWizardStep === 1 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.35rem' }}>
+                      Broadcast Campaign Name <span style={{ color: '#ef4444' }}>*</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Credit Card Special Diwali Offer 2026"
+                      value={broadcastForm.name}
+                      onChange={(e) => setBroadcastForm({ ...broadcastForm, name: e.target.value })}
+                      style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.9rem', boxSizing: 'border-box' }}
+                    />
+                    <div style={{ fontSize: '0.75rem', color: 'var(--muted)', marginTop: '0.35rem' }}>
+                      A descriptive identifier for analytics, logs, and master data indexing.
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 2: TARGET CHANNEL & SENDER SELECTION */}
+              {broadcastWizardStep === 2 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.5rem' }}>
+                      Select Target Channel
+                    </label>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.65rem' }}>
+                      {['whatsapp', 'email', 'both'].map(ch => (
+                        <div
+                          key={ch}
+                          onClick={() => setBroadcastForm({ ...broadcastForm, channel: ch })}
+                          style={{
+                            padding: '0.85rem',
+                            borderRadius: '10px',
+                            border: broadcastForm.channel === ch ? '2px solid var(--gold-deep)' : '1px solid var(--line)',
+                            background: broadcastForm.channel === ch ? 'rgba(224, 168, 46, 0.08)' : 'var(--paper-2)',
+                            cursor: 'pointer',
+                            textAlign: 'center',
+                            transition: 'all 0.2s ease'
+                          }}
+                        >
+                          <div style={{ fontWeight: 700, fontSize: '0.9rem', textTransform: 'capitalize' }}>{ch}</div>
+                          <div style={{ fontSize: '0.72rem', color: 'var(--muted)', marginTop: '0.2rem' }}>
+                            {ch === 'whatsapp' ? 'WhatsApp Direct' : ch === 'email' ? 'SMTP Mail' : 'WhatsApp + Email'}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* If WhatsApp: Choose WhatsApp Number with Quality Rating */}
+                  {(broadcastForm.channel === 'whatsapp' || broadcastForm.channel === 'both') && (
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.4rem' }}>
+                        Choose Meta WhatsApp Number (Sender Account)
+                      </label>
+                      {metaPhoneNumbers.length === 0 ? (
+                        <div style={{ padding: '0.75rem', background: 'rgba(224, 168, 46, 0.1)', border: '1px solid rgba(224, 168, 46, 0.3)', borderRadius: '8px', fontSize: '0.82rem' }}>
+                          Using system default WhatsApp Cloud API Phone Number ID.
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                          {metaPhoneNumbers.map(phone => {
+                            const isSelected = broadcastForm.meta_phone_number_id === phone.id;
+                            return (
+                              <div
+                                key={phone.id}
+                                onClick={() => setBroadcastForm({
+                                  ...broadcastForm,
+                                  meta_phone_number_id: phone.id,
+                                  meta_phone_number: phone.display_phone_number || ''
+                                })}
+                                style={{
+                                  display: 'flex',
+                                  justifyContent: 'space-between',
+                                  alignItems: 'center',
+                                  padding: '0.75rem 1rem',
+                                  borderRadius: '8px',
+                                  border: isSelected ? '2px solid var(--gold-deep)' : '1px solid var(--line)',
+                                  background: isSelected ? 'rgba(224, 168, 46, 0.08)' : 'var(--paper-2)',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                <div>
+                                  <div style={{ fontWeight: 700, fontSize: '0.88rem' }}>
+                                    {phone.display_phone_number} ({phone.verified_name || 'FinMantra Verified'})
+                                  </div>
+                                  <div style={{ fontSize: '0.72rem', color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>
+                                    ID: {phone.id}
+                                  </div>
+                                </div>
+                                <div>
+                                  {getQualityRatingBadge(phone.quality_rating)}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* If Email: Sender Email dropdown */}
+                  {(broadcastForm.channel === 'email' || broadcastForm.channel === 'both') && (
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.4rem' }}>
+                        Sender Email Address
+                      </label>
+                      <input
+                        type="email"
+                        value={broadcastForm.sender_email}
+                        onChange={(e) => setBroadcastForm({ ...broadcastForm, sender_email: e.target.value })}
+                        placeholder="e.g. offers@thefinmantra.com"
+                        style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.88rem', boxSizing: 'border-box' }}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* STEP 3: TEMPLATE & CONTENT SELECTION */}
+              {broadcastWizardStep === 3 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                  {/* WhatsApp Template Selector */}
+                  {(broadcastForm.channel === 'whatsapp' || broadcastForm.channel === 'both') && (
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.4rem' }}>
+                        Select WhatsApp Template as per Meta WhatsApp Number
+                      </label>
+                      <select
+                        value={broadcastForm.whatsapp_template}
+                        onChange={(e) => setBroadcastForm({ ...broadcastForm, whatsapp_template: e.target.value })}
+                        style={{ width: '100%', padding: '0.65rem 0.8rem', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.88rem', boxSizing: 'border-box' }}
+                      >
+                        <option value="">Select a template...</option>
+                        {templates.map(t => (
+                          <option key={t.id} value={t.name}>{t.name} {t.meta_template_name ? `(${t.meta_template_name})` : ''}</option>
+                        ))}
+                      </select>
+
+                      {broadcastForm.whatsapp_template && (
+                        <div style={{ marginTop: '0.75rem', padding: '0.85rem', borderRadius: '8px', background: 'var(--paper-2)', border: '1px solid var(--line)' }}>
+                          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: '0.35rem' }}>Template Body:</div>
+                          <div style={{ fontSize: '0.85rem', color: 'var(--ink)', whiteSpace: 'pre-wrap' }}>
+                            {templates.find(t => t.name === broadcastForm.whatsapp_template)?.body}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Email Subject & Body */}
+                  {(broadcastForm.channel === 'email' || broadcastForm.channel === 'both') && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.3rem' }}>Email Subject Line</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Exclusive Credit Card Eligibility for {name}"
+                          value={broadcastForm.email_subject}
+                          onChange={(e) => setBroadcastForm({ ...broadcastForm, email_subject: e.target.value })}
+                          style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.88rem', boxSizing: 'border-box' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.3rem' }}>Email HTML / Text Body</label>
+                        <textarea
+                          rows={4}
+                          placeholder="Dear {name}, here is your customized pre-approved offer..."
+                          value={broadcastForm.email_body}
+                          onChange={(e) => setBroadcastForm({ ...broadcastForm, email_body: e.target.value })}
+                          style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.88rem', boxSizing: 'border-box' }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* STEP 4: DOWNLOAD TEMPLATE & UPLOAD DATA */}
+              {broadcastWizardStep === 4 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                  {/* Download Template Action */}
+                  <div style={{ background: 'rgba(224, 168, 46, 0.08)', border: '1px solid rgba(224, 168, 46, 0.3)', borderRadius: '10px', padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: '0.92rem' }}>Download Pre-configured CSV Template</div>
+                      <div style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>Includes 'id' column initialized as 'FMCB00001' plus required parameters.</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleDownloadSampleTemplate}
+                      style={{
+                        padding: '0.5rem 1rem',
+                        borderRadius: '6px',
+                        background: 'var(--gold-deep)',
+                        color: '#fff',
+                        border: 'none',
+                        fontSize: '0.82rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.35rem'
+                      }}
+                    >
+                      <Download size={14} /> Download Template
+                    </button>
+                  </div>
+
+                  {/* Upload Contact Data Drag & Drop */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.4rem' }}>
+                      Upload Contact Data <span style={{ color: '#ef4444' }}>*</span> (Mandatory for Contact)
+                    </label>
+                    <div style={{
+                      border: '2px dashed var(--line)',
+                      borderRadius: '10px',
+                      padding: '1.5rem',
+                      textAlign: 'center',
+                      background: 'var(--paper-2)',
+                      cursor: 'pointer'
+                    }}>
+                      <input
+                        type="file"
+                        accept=".csv, .xlsx, .xls"
+                        onChange={(e) => handleBroadcastFileUpload(e.target.files[0])}
+                        style={{ display: 'none' }}
+                        id="broadcast-file-input"
+                      />
+                      <label htmlFor="broadcast-file-input" style={{ cursor: 'pointer' }}>
+                        <Upload size={28} style={{ color: 'var(--gold-deep)', marginBottom: '0.5rem' }} />
+                        <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>
+                          {broadcastUploadFile ? broadcastUploadFile.name : 'Click or Drag & Drop CSV / Excel contact file'}
+                        </div>
+                        <div style={{ fontSize: '0.78rem', color: 'var(--muted)', marginTop: '0.25rem' }}>
+                          Mandatory columns: contact phone numbers (WhatsApp) or email addresses.
+                        </div>
+                      </label>
+                    </div>
+
+                    {broadcastUploadError && (
+                      <div style={{ color: '#ef4444', fontSize: '0.82rem', marginTop: '0.5rem' }}>
+                        {broadcastUploadError}
+                      </div>
+                    )}
+
+                    {broadcastUploadStats && (
+                      <div style={{ marginTop: '0.85rem', padding: '0.75rem 1rem', background: 'rgba(22, 163, 123, 0.1)', border: '1px solid #16a37b', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ fontSize: '0.85rem', color: '#16a37b', fontWeight: 700 }}>
+                          Parsed {broadcastUploadStats.totalRows} customer contacts ready for broadcast.
+                        </div>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>Zero duplicate merge enabled</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 5: INTERACTIVE LIVE PREVIEW */}
+              {broadcastWizardStep === 5 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                  {/* Summary Card */}
+                  <div style={{ background: 'var(--paper-2)', border: '1px solid var(--line)', borderRadius: '10px', padding: '1rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem' }}>
+                    <div>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--muted)', textTransform: 'uppercase', fontWeight: 700 }}>Campaign Name</div>
+                      <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>{broadcastForm.name}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--muted)', textTransform: 'uppercase', fontWeight: 700 }}>Target Channel</div>
+                      <div style={{ fontWeight: 700, fontSize: '0.9rem', textTransform: 'capitalize' }}>{broadcastForm.channel}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--muted)', textTransform: 'uppercase', fontWeight: 700 }}>Recipients Count</div>
+                      <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--gold-deep)' }}>{broadcastParsedLeads.length} Leads</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--muted)', textTransform: 'uppercase', fontWeight: 700 }}>Sender</div>
+                      <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>{broadcastForm.meta_phone_number || broadcastForm.sender_email || 'Default'}</div>
+                    </div>
+                  </div>
+
+                  {/* Message Visual Preview */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.4rem' }}>
+                      Simulated Message Preview (Substituted with Row 1 Data)
+                    </label>
+                    <div style={{
+                      background: 'var(--paper-2)',
+                      border: '1px solid var(--line)',
+                      borderRadius: '12px',
+                      padding: '1.25rem',
+                      fontFamily: 'var(--font-sans)',
+                      fontSize: '0.88rem',
+                      lineHeight: 1.5,
+                      whiteSpace: 'pre-wrap'
+                    }}>
+                      {getRenderedTemplatePreview()}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 6: DISPATCH / SCHEDULE */}
+              {broadcastWizardStep === 6 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.5rem' }}>
+                      Dispatch Execution Mode
+                    </label>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                      <div
+                        onClick={() => setBroadcastForm({ ...broadcastForm, scheduled_at: '' })}
+                        style={{
+                          padding: '1rem',
+                          borderRadius: '10px',
+                          border: !broadcastForm.scheduled_at ? '2px solid var(--gold-deep)' : '1px solid var(--line)',
+                          background: !broadcastForm.scheduled_at ? 'rgba(224, 168, 46, 0.08)' : 'var(--paper-2)',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <div style={{ fontWeight: 700, fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                          <Send size={16} /> Direct Send (Immediate)
+                        </div>
+                        <div style={{ fontSize: '0.78rem', color: 'var(--muted)', marginTop: '0.35rem' }}>
+                          Start dispatching messages instantly via background runner.
+                        </div>
+                      </div>
+
+                      <div
+                        onClick={() => setBroadcastForm({ ...broadcastForm, scheduled_at: new Date(Date.now() + 3600000).toISOString().slice(0, 16) })}
+                        style={{
+                          padding: '1rem',
+                          borderRadius: '10px',
+                          border: broadcastForm.scheduled_at ? '2px solid var(--gold-deep)' : '1px solid var(--line)',
+                          background: broadcastForm.scheduled_at ? 'rgba(224, 168, 46, 0.08)' : 'var(--paper-2)',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <div style={{ fontWeight: 700, fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                          <Clock size={16} /> Schedule for Later
+                        </div>
+                        <div style={{ fontSize: '0.78rem', color: 'var(--muted)', marginTop: '0.35rem' }}>
+                          Specify exact date &amp; time for automatic broadcast trigger.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {broadcastForm.scheduled_at && (
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.35rem' }}>
+                        Select Broadcast Schedule Date &amp; Time
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={broadcastForm.scheduled_at}
+                        onChange={(e) => setBroadcastForm({ ...broadcastForm, scheduled_at: e.target.value })}
+                        style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.88rem', boxSizing: 'border-box' }}
+                      />
+                    </div>
+                  )}
+
+                  <div style={{ padding: '0.85rem', borderRadius: '8px', background: 'rgba(22, 163, 123, 0.1)', border: '1px solid #16a37b', fontSize: '0.82rem', color: '#16a37b' }}>
+                    <ShieldCheck size={16} style={{ verticalAlign: 'middle', marginRight: '0.35rem' }} />
+                    Uploaded customer data will be synchronized to Master Data Center with auto-assigned consecutive FMCB IDs and duplicate protection.
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer Controls */}
+            <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--paper-2)', flexShrink: 0 }}>
+              <button
+                type="button"
+                disabled={broadcastWizardStep === 1}
+                onClick={() => setBroadcastWizardStep(s => Math.max(1, s - 1))}
+                style={{
+                  padding: '0.55rem 1.1rem',
+                  borderRadius: '6px',
+                  border: '1px solid var(--line)',
+                  background: 'var(--paper)',
+                  color: 'var(--ink)',
+                  cursor: broadcastWizardStep === 1 ? 'not-allowed' : 'pointer',
+                  fontSize: '0.85rem',
+                  fontWeight: 600
+                }}
+              >
+                Back
+              </button>
+
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                {broadcastWizardStep < 6 ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (broadcastWizardStep === 1 && !broadcastForm.name.trim()) {
+                        showToast('Please enter a broadcast name.', 'error');
+                        return;
+                      }
+                      if (broadcastWizardStep === 4 && !broadcastUploadFile && broadcastParsedLeads.length === 0) {
+                        showToast('Please upload contact data.', 'error');
+                        return;
+                      }
+                      setBroadcastWizardStep(s => Math.min(6, s + 1));
+                    }}
+                    style={{
+                      padding: '0.55rem 1.25rem',
+                      borderRadius: '6px',
+                      background: 'var(--gold-deep)',
+                      color: '#fff',
+                      border: 'none',
+                      fontSize: '0.85rem',
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Next &rarr;
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={isSubmittingBroadcast}
+                    onClick={handleSubmitDirectBroadcast}
+                    style={{
+                      padding: '0.6rem 1.4rem',
+                      borderRadius: '6px',
+                      background: 'var(--gold-deep)',
+                      color: '#fff',
+                      border: 'none',
+                      fontSize: '0.88rem',
+                      fontWeight: 800,
+                      cursor: isSubmittingBroadcast ? 'not-allowed' : 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                      boxShadow: '0 4px 12px rgba(224, 168, 46, 0.3)'
+                    }}
+                  >
+                    {isSubmittingBroadcast ? <RefreshCw size={15} className="spin-slow" /> : <Send size={15} />}
+                    Launch Broadcast Campaign
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 2: CREATE TEMPLATE MODAL */}
+      {/* ========================================================================= */}
+      {showCreateTemplateModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '1rem' }}>
+          <div style={{ background: 'var(--paper)', border: '1px solid var(--line)', borderRadius: '16px', maxWidth: '580px', width: '100%', maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 50px rgba(0,0,0,0.3)', overflow: 'hidden' }}>
+            <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+              <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800 }}>Create New Message Template</h3>
+              <button onClick={() => setShowCreateTemplateModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{ padding: '1.5rem', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {/* Prompt which Meta WhatsApp Number to register under */}
+              {newTemplateForm.type === 'whatsapp' && (
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.35rem' }}>
+                    Select Meta WhatsApp Number (WABA Account Target)
+                  </label>
+                  <select
+                    value={templateTargetPhoneId}
+                    onChange={(e) => setTemplateTargetPhoneId(e.target.value)}
+                    style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.85rem' }}
+                  >
+                    {metaPhoneNumbers.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.display_phone_number} ({p.verified_name || 'Business'}) - Quality: {p.quality_rating || 'Standard'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.35rem' }}>Template Name (e.g. finmantra_welcome_offer)</label>
+                <input
+                  type="text"
+                  placeholder="lowercase_letters_and_underscores_only"
+                  value={newTemplateForm.name}
+                  onChange={(e) => setNewTemplateForm({ ...newTemplateForm, name: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_') })}
+                  style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.85rem', boxSizing: 'border-box' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.35rem' }}>Template Body (use {'{{1}}'}, {'{{2}}'} for variables)</label>
+                <textarea
+                  rows={4}
+                  placeholder="Hello {{1}}, congratulations! Your application is ready..."
+                  value={newTemplateForm.body}
+                  onChange={(e) => setNewTemplateForm({ ...newTemplateForm, body: e.target.value })}
+                  style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.85rem', boxSizing: 'border-box' }}
+                />
+              </div>
+            </div>
+
+            <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--line)', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', background: 'var(--paper-2)' }}>
+              <button
+                type="button"
+                onClick={() => setShowCreateTemplateModal(false)}
+                style={{ padding: '0.55rem 1rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper)', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isCreatingTemplate}
+                onClick={async () => {
+                  if (!newTemplateForm.name.trim() || !newTemplateForm.body.trim()) {
+                    showToast('Name and Body are required.', 'error');
+                    return;
+                  }
+                  setIsCreatingTemplate(true);
+                  try {
+                    const res = await fetch(`${API_URL}/campaigns/templates`, {
+                      method: 'POST',
+                      headers,
+                      body: JSON.stringify({
+                        ...newTemplateForm,
+                        meta_phone_number_id: templateTargetPhoneId
+                      })
+                    });
+                    const data = await res.json();
+                    if (res.ok && data.success) {
+                      showToast('Template created and synced to Meta.', 'success');
+                      setShowCreateTemplateModal(false);
+                      fetchTemplates();
+                    } else {
+                      showToast(data.error || 'Failed to create template.', 'error');
+                    }
+                  } catch (err) {
+                    showToast('Network error creating template.', 'error');
+                  } finally {
+                    setIsCreatingTemplate(false);
+                  }
+                }}
+                style={{
+                  padding: '0.55rem 1.25rem',
+                  borderRadius: '6px',
+                  background: 'var(--gold-deep)',
+                  color: '#fff',
+                  border: 'none',
+                  fontWeight: 700,
+                  cursor: isCreatingTemplate ? 'not-allowed' : 'pointer'
+                }}
+              >
+                {isCreatingTemplate ? 'Creating & Syncing...' : 'Create Template'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -380,7 +380,7 @@ function getFallbackText(isOtpAuth, parameters, settings) {
 // In-memory template strategy cache to eliminate trial-and-error HTTP round-trips
 const templateStrategyCache = new Map();
 
-async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOtpAuth = false, mediaUrl = null, preferredLang = null) {
+async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOtpAuth = false, mediaUrl = null, preferredLang = null, senderPhoneId = null) {
   const settings = await db.getSettings();
   const gateway = settings.whatsapp_gateway || 'meta';
 
@@ -401,7 +401,7 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
   }
 
   const apiKey = getSettingVal(settings, 'wa_api_key', 'WA_API_KEY');
-  const phoneId = getSettingVal(settings, 'wa_phone_number_id', 'WA_PHONE_NUMBER_ID');
+  const phoneId = senderPhoneId || getSettingVal(settings, 'wa_phone_number_id', 'WA_PHONE_NUMBER_ID');
   const apiVersion = getSettingVal(settings, 'wa_api_version', 'WA_API_VERSION', 'v25.0');
 
   if (!apiKey || !phoneId) {
@@ -6010,11 +6010,25 @@ async function checkAndRunScheduledBroadcasts() {
       await db.updateCampaignBroadcastStatus(b.id, 'processing');
       console.log(`[Campaign Scheduler] Started processing broadcast: "${b.name}" (ID: ${b.id})`);
 
-      // 2. Fetch leads
-      const leads = await db.getCampaignLeads(b.campaign_id);
+      // 2. Fetch leads (check master leads for this broadcast first, fallback to campaign leads)
+      let leads = [];
+      try {
+        const masterRes = await db.runQuery('SELECT * FROM campaign_master_leads WHERE last_broadcast_id = $1', [b.id]);
+        if (masterRes.rows && masterRes.rows.length > 0) {
+          leads = masterRes.rows;
+        }
+      } catch (e) {}
+
+      if (leads.length === 0 && b.campaign_id) {
+        leads = await db.getCampaignLeads(b.campaign_id);
+      }
+
       let sentCount = 0;
+      let deliveredCount = 0;
       let failedCount = 0;
 
+      const fromEmail = b.sender_email || settings.campaign_smtp_from_email || 'no-reply@finmantra.com';
+      const fromName = settings.campaign_smtp_from_name || 'FinMantra';
       const transporter = await getEmailTransporter();
 
       for (const lead of leads) {
@@ -6023,35 +6037,54 @@ async function checkAndRunScheduledBroadcasts() {
         let emailError = null;
         let waError = null;
 
-        // Perform dynamic replacements for {name}, {contact}, {mail}, {address}
+        // Perform dynamic replacements for {name}, {contact}, {mail}, {address}, {id}, {finmantra_id}, {campaign_data_id}
         const replacePlaceholders = (text) => {
           if (!text) return '';
           return text
             .replace(/{name}/gi, lead.name || '')
             .replace(/{contact}/gi, lead.contact || '')
             .replace(/{mail}/gi, lead.mail || '')
-            .replace(/{address}/gi, lead.address || '');
+            .replace(/{address}/gi, lead.address || '')
+            .replace(/{finmantra_id}/gi, lead.finmantra_id || '')
+            .replace(/{id}/gi, lead.campaign_data_id || lead.finmantra_id || lead.id || '');
         };
 
         // --- EMAIL CHANNEL ---
-        if (b.channel === 'email' || b.channel === 'both') {
-          const subject = replacePlaceholders(b.email_subject || 'FinMantra Campaign');
-          const body = replacePlaceholders(b.email_body || '');
-          
-          if (transporter) {
-            try {
-              await transporter.sendMail({
-                from: `"${fromName}" <${fromEmail}>`,
-                to: lead.mail,
-                subject,
-                html: body.replace(/\n/g, '<br/>')
-              });
-            } catch (err) {
-              emailSuccess = false;
-              emailError = err.message;
-            }
+        if ((b.channel === 'email' || b.channel === 'both') && lead.mail) {
+          if (lead.email_optin === false) {
+            emailSuccess = false;
+            emailError = 'User opted out of email communications.';
           } else {
-            console.log(`[Simulated Email] Sent to ${lead.mail} with subject "${subject}"`);
+            const subject = replacePlaceholders(b.email_subject || 'FinMantra Campaign');
+            let body = replacePlaceholders(b.email_body || '');
+            
+            // Append unsubscribe footer if not already present
+            const unSubUrl = `https://thefinmantra.com/contact-center?id=${encodeURIComponent(lead.finmantra_id || lead.id)}&brodcast_id=${encodeURIComponent(b.id)}`;
+            if (!body.includes('/contact-center')) {
+              body += `<br/><hr/><div style="font-size:11px;color:#888;margin-top:15px;">To manage notification preferences or unsubscribe, <a href="${unSubUrl}" style="color:#e0a82e;">click here to visit the FinMantra Contact Center</a>.</div>`;
+            }
+
+            if (transporter) {
+              try {
+                await transporter.sendMail({
+                  from: `"${fromName}" <${fromEmail}>`,
+                  to: lead.mail,
+                  subject,
+                  html: body.replace(/\n/g, '<br/>')
+                });
+                await db.incrementMasterLeadMetric(lead.id, 'email', 'sent');
+                await db.incrementMasterLeadMetric(lead.id, 'email', 'delivered');
+                deliveredCount++;
+              } catch (err) {
+                emailSuccess = false;
+                emailError = err.message;
+              }
+            } else {
+              console.log(`[Simulated Email] Sent to ${lead.mail} with subject "${subject}"`);
+              await db.incrementMasterLeadMetric(lead.id, 'email', 'sent');
+              await db.incrementMasterLeadMetric(lead.id, 'email', 'delivered');
+              deliveredCount++;
+            }
           }
 
           const logId = 'log_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
@@ -6066,76 +6099,87 @@ async function checkAndRunScheduledBroadcasts() {
         }
 
         // --- WHATSAPP CHANNEL ---
-        if (b.channel === 'whatsapp' || b.channel === 'both') {
-          const waMessage = replacePlaceholders(b.whatsapp_message || '');
-          
-          try {
-            if (b.whatsapp_template) {
-              const tNameClean = b.whatsapp_template.trim().toLowerCase();
-              const templateObj = templatesList.find(t => 
-                (t.name && t.name.trim().toLowerCase() === tNameClean) || 
-                (t.meta_template_name && t.meta_template_name.trim().toLowerCase() === tNameClean)
-              );
-
-              let params = [];
-              if (templateObj) {
-                const regex = /\{\{(\d+)\}\}/g;
-                const matches = [...templateObj.body.matchAll(regex)];
-                const paramNumbers = matches.map(m => parseInt(m[1], 10));
-                const maxBodyParam = paramNumbers.length > 0 ? Math.max(...paramNumbers) : 0;
-                
-                let hasDynamicButton = false;
-                let ctaBaseUrl = '';
-                if (templateObj.buttons) {
-                  try {
-                    const btnObj = JSON.parse(templateObj.buttons);
-                    if (btnObj.buttonType === 'CTA' && btnObj.ctaUrlValue && (btnObj.ctaUrlValue.includes('{{1}}') || btnObj.ctaUrlValue.includes('{{2}}'))) {
-                      hasDynamicButton = true;
-                      // Extract the base URL and replace the variable with actual lead data
-                      ctaBaseUrl = btnObj.ctaUrlValue
-                        .replace('{{1}}', lead.name || 'user')
-                        .replace('{{2}}', lead.contact || '');
-                    }
-                  } catch (e) {}
-                }
-
-                if (hasDynamicButton) {
-                  // For CTA button templates: body params + the dynamic URL as a separate parameter
-                  if (maxBodyParam === 1) {
-                    params = [lead.name, ctaBaseUrl];
-                  } else {
-                    params = [lead.name, ctaBaseUrl];
-                  }
-                } else {
-                  if (maxBodyParam === 1) {
-                    params = [lead.name];
-                  } else if (maxBodyParam === 2) {
-                    params = [lead.name, waMessage];
-                  } else {
-                    params = [lead.name, waMessage].slice(0, maxBodyParam);
-                  }
-                }
-              } else {
-                params = [lead.name, waMessage];
-              }
-
-              await sendWhatsAppTemplate(lead.contact, b.whatsapp_template, params, false, b.media_url, templateObj?.language || 'en_US');
-            } else {
-              const gateway = settings.whatsapp_gateway || 'baileys';
-              if (gateway === 'baileys') {
-                const status = baileys.getBaileysStatus();
-                if (status.status === 'CONNECTED') {
-                  await baileys.sendBaileysMessage(lead.contact, waMessage);
-                } else {
-                  throw new Error('Baileys WhatsApp device is not connected.');
-                }
-              } else {
-                throw new Error('Meta Graph API requires template. Free-text WhatsApp is only supported via Baileys linked device.');
-              }
-            }
-          } catch (err) {
+        if ((b.channel === 'whatsapp' || b.channel === 'both') && lead.contact) {
+          if (lead.whatsapp_optin === false) {
             waSuccess = false;
-            waError = err.message;
+            waError = 'User opted out of WhatsApp communications.';
+          } else {
+            const waMessage = replacePlaceholders(b.whatsapp_message || '');
+            
+            try {
+              if (b.whatsapp_template) {
+                const tNameClean = b.whatsapp_template.trim().toLowerCase();
+                const templateObj = templatesList.find(t => 
+                  (t.name && t.name.trim().toLowerCase() === tNameClean) || 
+                  (t.meta_template_name && t.meta_template_name.trim().toLowerCase() === tNameClean)
+                );
+
+                let params = [];
+                if (templateObj) {
+                  const regex = /\{\{(\d+)\}\}/g;
+                  const matches = [...templateObj.body.matchAll(regex)];
+                  const paramNumbers = matches.map(m => parseInt(m[1], 10));
+                  const maxBodyParam = paramNumbers.length > 0 ? Math.max(...paramNumbers) : 0;
+                  
+                  let hasDynamicButton = false;
+                  let ctaBaseUrl = '';
+                  if (templateObj.buttons) {
+                    try {
+                      const btnObj = JSON.parse(templateObj.buttons);
+                      if (btnObj.buttonType === 'CTA' && btnObj.ctaUrlValue && (btnObj.ctaUrlValue.includes('{{1}}') || btnObj.ctaUrlValue.includes('{{2}}'))) {
+                        hasDynamicButton = true;
+                        ctaBaseUrl = btnObj.ctaUrlValue
+                          .replace('{{1}}', lead.name || 'user')
+                          .replace('{{2}}', lead.contact || '');
+                      }
+                    } catch (e) {}
+                  }
+
+                  if (hasDynamicButton) {
+                    params = [lead.name, ctaBaseUrl];
+                  } else {
+                    if (maxBodyParam === 1) {
+                      params = [lead.name];
+                    } else if (maxBodyParam === 2) {
+                      params = [lead.name, waMessage];
+                    } else {
+                      params = [lead.name, waMessage].slice(0, maxBodyParam);
+                    }
+                  }
+                } else {
+                  params = [lead.name, waMessage];
+                }
+
+                await sendWhatsAppTemplate(
+                  lead.contact,
+                  b.whatsapp_template,
+                  params,
+                  false,
+                  b.media_url,
+                  templateObj?.language || 'en_US',
+                  b.meta_phone_number_id || null
+                );
+              } else {
+                const gateway = settings.whatsapp_gateway || 'baileys';
+                if (gateway === 'baileys') {
+                  const status = baileys.getBaileysStatus();
+                  if (status.status === 'CONNECTED') {
+                    await baileys.sendBaileysMessage(lead.contact, waMessage);
+                  } else {
+                    throw new Error('Baileys WhatsApp device is not connected.');
+                  }
+                } else {
+                  throw new Error('Meta Graph API requires template. Free-text WhatsApp is only supported via Baileys linked device.');
+                }
+              }
+
+              await db.incrementMasterLeadMetric(lead.id, 'whatsapp', 'sent');
+              await db.incrementMasterLeadMetric(lead.id, 'whatsapp', 'delivered');
+              deliveredCount++;
+            } catch (err) {
+              waSuccess = false;
+              waError = err.message;
+            }
           }
 
           const logId = 'log_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
@@ -6156,8 +6200,11 @@ async function checkAndRunScheduledBroadcasts() {
         }
       }
 
-      const finalStatus = failedCount === leads.length ? 'failed' : 'sent';
+      const finalStatus = (sentCount === 0 && leads.length > 0) ? 'failed' : 'sent';
       await db.updateCampaignBroadcastStatus(b.id, finalStatus, sentCount, failedCount);
+      try {
+        await db.runQuery('UPDATE campaign_broadcasts SET delivered_count = $2 WHERE id = $1', [b.id, deliveredCount]);
+      } catch (e) {}
       console.log(`[Campaign Scheduler] Completed broadcast: "${b.name}". Sent: ${sentCount}, Failed: ${failedCount}`);
 
       // Create system notification
@@ -6751,10 +6798,13 @@ app.get('/api/campaigns/templates', authenticateToken, async (req, res) => {
 // Create/Update a template
 app.post('/api/campaigns/templates', authenticateToken, async (req, res) => {
   try {
-    const { id, name, type, subject, body, metaTemplateName, mediaUrl, category, language, headerFormat, buttons } = req.body;
+    const { id, name, type, subject, body, metaTemplateName, mediaUrl, category, language, headerFormat, buttons, meta_phone_number_id, metaPhoneNumberId, waba_id, wabaId: customWabaId } = req.body;
     if (!name || !type || !body) {
       return res.status(400).json({ success: false, error: 'Name, Type and Body are required fields.' });
     }
+
+    const selectedPhoneId = meta_phone_number_id || metaPhoneNumberId || null;
+    let selectedWabaId = waba_id || customWabaId || null;
 
     let oldMetaName = null;
     if (id) {
@@ -6773,7 +6823,7 @@ app.post('/api/campaigns/templates', authenticateToken, async (req, res) => {
       const cleanName = metaTemplateName ? metaTemplateName.toLowerCase().replace(/[^a-z0-9_]/g, '_') : name.toLowerCase().replace(/[^a-z0-9_]/g, '_');
       const settings = await db.getSettings();
       const apiKey = getSettingVal(settings, 'wa_api_key', 'WA_API_KEY');
-      let wabaId = getSettingVal(settings, 'wa_business_account_id', 'WA_BUSINESS_ACCOUNT_ID');
+      let wabaId = selectedWabaId || getSettingVal(settings, 'wa_business_account_id', 'WA_BUSINESS_ACCOUNT_ID');
       const apiVersion = getSettingVal(settings, 'wa_api_version', 'WA_API_VERSION', 'v25.0');
       
       if (!apiKey) {
@@ -6831,7 +6881,7 @@ app.post('/api/campaigns/templates', authenticateToken, async (req, res) => {
       }
 
       try {
-        const phoneId = getSettingVal(settings, 'wa_phone_number_id', 'WA_PHONE_NUMBER_ID');
+        const phoneId = selectedPhoneId || getSettingVal(settings, 'wa_phone_number_id', 'WA_PHONE_NUMBER_ID');
         await registerMetaTemplate({
           apiKey,
           wabaId,
@@ -6861,7 +6911,9 @@ app.post('/api/campaigns/templates', authenticateToken, async (req, res) => {
       body,
       metaTemplateName: metaTemplateName ? metaTemplateName.toLowerCase().replace(/[^a-z0-9_]/g, '_') : null,
       mediaUrl: mediaUrl || null,
-      buttons: buttons ? (typeof buttons === 'string' ? buttons : JSON.stringify(buttons)) : null
+      buttons: buttons ? (typeof buttons === 'string' ? buttons : JSON.stringify(buttons)) : null,
+      metaPhoneNumberId: selectedPhoneId,
+      wabaId: selectedWabaId
     });
     res.json({ success: true, template: saved });
   } catch (err) {
@@ -6977,105 +7029,106 @@ app.delete('/api/campaigns/templates/:templateId', authenticateToken, async (req
   }
 });
 
-// --- MASTER DATA CENTER ROUTES ---
+// --- MASTER DATA CENTER & DIRECT BROADCAST PIPELINE ROUTES ---
 
-// List master leads
+// List master leads with advanced filters
 app.get('/api/campaigns/master/leads', authenticateToken, async (req, res) => {
   try {
-    const list = await db.getMasterLeads();
-    res.json({ success: true, leads: list });
+    const { search, broadcast_name, broadcast_date_from, broadcast_date_to, meta_whatsapp_no, sender_email, optin_whatsapp, optin_email, page, limit } = req.query;
+    const result = await db.getMasterLeadsFiltered({
+      search,
+      broadcastName: broadcast_name,
+      broadcastDateFrom: broadcast_date_from,
+      broadcastDateTo: broadcast_date_to,
+      metaWhatsappNo: meta_whatsapp_no,
+      senderEmail: sender_email,
+      optinWhatsapp: optin_whatsapp,
+      optinEmail: optin_email,
+      page: parseInt(page) || 1,
+      limit: limit ? parseInt(limit) : 50
+    });
+    res.json({ success: true, ...result });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// Upload master leads via Excel/CSV
-app.post('/api/campaigns/master/leads/upload', authenticateToken, upload.single('file'), async (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ success: false, error: 'No Excel/CSV file uploaded.' });
-  }
-
+// Master data filter options dropdowns
+app.get('/api/campaigns/master/filter-options', authenticateToken, async (req, res) => {
   try {
-    const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
-    const sheetName = workbook.SheetNames[0];
-    const rows = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
+    const options = await db.getMasterFilterOptions();
+    res.json({ success: true, options });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
-    if (!rows || rows.length === 0) {
-      return res.status(400).json({ success: false, error: 'Spreadsheet has no rows.' });
+// Export filtered master leads to CSV
+app.get('/api/campaigns/master/leads/export', authenticateToken, async (req, res) => {
+  try {
+    const { search, broadcast_name, broadcast_date_from, broadcast_date_to, meta_whatsapp_no, sender_email, optin_whatsapp, optin_email } = req.query;
+    const result = await db.getMasterLeadsFiltered({
+      search,
+      broadcastName: broadcast_name,
+      broadcastDateFrom: broadcast_date_from,
+      broadcastDateTo: broadcast_date_to,
+      metaWhatsappNo: meta_whatsapp_no,
+      senderEmail: sender_email,
+      optinWhatsapp: optin_whatsapp,
+      optinEmail: optin_email,
+      page: 1,
+      limit: 0 // fetch all matching records
+    });
+    
+    const leads = result.leads || [];
+    const csvRows = [];
+    csvRows.push([
+      'FinMantra ID', 'Campaign Data ID', 'Name', 'Contact', 'Email', 'Address',
+      'WhatsApp Opt-in', 'Email Opt-in', 'Last Broadcast Name', 'Last Broadcast Date',
+      'WhatsApp Sender No', 'Sender Email',
+      'WA Sent Count', 'WA Delivered Count', 'WA Read Count', 'WA Clicked Count', 'WA Delivery Rate %', 'WA CTR %',
+      'Email Sent Count', 'Email Delivered Count', 'Email Read Count', 'Email Clicked Count', 'Email Delivery Rate %', 'Email CTR %',
+      'Created At'
+    ].map(h => `"${h}"`).join(','));
+
+    for (const l of leads) {
+      const waDelRate = l.wa_sent_count > 0 ? ((l.wa_delivered_count / l.wa_sent_count) * 100).toFixed(1) : '0.0';
+      const waCtr = l.wa_delivered_count > 0 ? ((l.wa_clicked_count / l.wa_delivered_count) * 100).toFixed(1) : '0.0';
+      const emailDelRate = l.email_sent_count > 0 ? ((l.email_delivered_count / l.email_sent_count) * 100).toFixed(1) : '0.0';
+      const emailCtr = l.email_delivered_count > 0 ? ((l.email_clicked_count / l.email_delivered_count) * 100).toFixed(1) : '0.0';
+
+      csvRows.push([
+        l.finmantra_id || '',
+        l.campaign_data_id || '',
+        l.name || '',
+        l.contact || '',
+        l.mail || '',
+        l.address || '',
+        l.whatsapp_optin !== false ? 'True' : 'False',
+        l.email_optin !== false ? 'True' : 'False',
+        l.last_broadcast_name || '',
+        l.last_broadcast_date ? new Date(l.last_broadcast_date).toISOString().replace('T', ' ').substring(0, 19) : '',
+        l.meta_whatsapp_no || '',
+        l.sender_email || '',
+        l.wa_sent_count || 0,
+        l.wa_delivered_count || 0,
+        l.wa_read_count || 0,
+        l.wa_clicked_count || 0,
+        waDelRate,
+        waCtr,
+        l.email_sent_count || 0,
+        l.email_delivered_count || 0,
+        l.email_read_count || 0,
+        l.email_clicked_count || 0,
+        emailDelRate,
+        emailCtr,
+        l.created_at ? new Date(l.created_at).toISOString().replace('T', ' ').substring(0, 19) : ''
+      ].map(val => `"${String(val).replace(/"/g, '""')}"`).join(','));
     }
 
-    // Fetch existing master contacts to check for duplicates
-    const existingLeads = await db.getMasterLeads();
-    const existingPhones = new Set(existingLeads.map(l => l.contact));
-    const existingEmails = new Set(existingLeads.map(l => l.mail.toLowerCase().trim()));
-
-    // Track duplicates within the uploaded file itself
-    const sheetPhones = new Set();
-    const sheetEmails = new Set();
-
-    const leads = [];
-    let rejectedCount = 0;
-    const errors = [];
-
-    rows.forEach((r, idx) => {
-      const rowNum = idx + 2;
-      const name = (r['Name'] || r['name'] || r['Full Name'] || r['full_name'] || '').toString().trim();
-      const rawContact = (r['Contact'] || r['contact'] || r['Phone'] || r['phone'] || r['Mobile'] || r['mobile'] || '').toString().trim();
-      const contact = rawContact.replace(/\D/g, '');
-      const mail = (r['Mail'] || r['mail'] || r['Email'] || r['email'] || '').toString().trim();
-      const address = (r['Address'] || r['address'] || '').toString().trim();
-
-      if (!name) {
-        rejectedCount++;
-        errors.push(`Row ${rowNum}: Name is missing.`);
-        return;
-      }
-      if (!contact || contact.length < 10) {
-        rejectedCount++;
-        errors.push(`Row ${rowNum} (${name}): Contact number is missing or invalid.`);
-        return;
-      }
-      if (!mail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) {
-        rejectedCount++;
-        errors.push(`Row ${rowNum} (${name}): Email address is missing or invalid format.`);
-        return;
-      }
-
-      // Check duplicates
-      const mailKey = mail.toLowerCase().trim();
-      if (existingPhones.has(contact) || sheetPhones.has(contact)) {
-        rejectedCount++;
-        errors.push(`Row ${rowNum} (${name}): Contact phone number already exists in Master Data Center.`);
-        return;
-      }
-      if (existingEmails.has(mailKey) || sheetEmails.has(mailKey)) {
-        rejectedCount++;
-        errors.push(`Row ${rowNum} (${name}): Email address already exists in Master Data Center.`);
-        return;
-      }
-
-      sheetPhones.add(contact);
-      sheetEmails.add(mailKey);
-
-      leads.push({
-        id: 'ml_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6) + '_' + idx,
-        name,
-        contact,
-        mail,
-        address
-      });
-    });
-
-    if (leads.length > 0) {
-      await db.addMasterLeads(leads);
-    }
-
-    res.json({
-      success: true,
-      insertedCount: leads.length,
-      rejectedCount,
-      errors
-    });
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=finmantra_master_data_${Date.now()}.csv`);
+    res.status(200).send(csvRows.join('\n'));
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -7105,17 +7158,150 @@ app.post('/api/campaigns/master/leads/delete-bulk', authenticateToken, async (re
   }
 });
 
-// Import master leads to a specific campaign
-app.post('/api/campaigns/:id/leads/import-master', authenticateToken, async (req, res) => {
+// Create Direct Broadcast Campaign (Primary Pipeline)
+app.post('/api/campaigns/broadcasts/direct', authenticateToken, upload.single('file'), async (req, res) => {
   try {
-    const campaignId = req.params.id;
-    const { leadIds } = req.body;
-    if (!leadIds || !Array.isArray(leadIds) || leadIds.length === 0) {
-      return res.status(400).json({ success: false, error: 'No contact IDs selected for import.' });
+    const body = req.body || {};
+    const name = (body.name || '').trim();
+    const channel = (body.channel || 'whatsapp').trim();
+    const metaPhoneNumberId = (body.meta_phone_number_id || '').trim();
+    const metaPhoneNumber = (body.meta_phone_number || '').trim();
+    const senderEmail = (body.sender_email || '').trim();
+    const whatsappTemplate = (body.whatsapp_template || '').trim();
+    const whatsappMessage = (body.whatsapp_message || '').trim();
+    const emailSubject = (body.email_subject || '').trim();
+    const emailBody = (body.email_body || '').trim();
+    const scheduledAt = body.scheduled_at ? new Date(body.scheduled_at) : null;
+    const mediaUrl = (body.media_url || '').trim();
+
+    if (!name) {
+      return res.status(400).json({ success: false, error: 'Broadcast Name is required.' });
     }
-    const count = await db.importMasterLeadsToCampaign(campaignId, leadIds);
-    res.json({ success: true, importedCount: count });
+    if (!channel) {
+      return res.status(400).json({ success: false, error: 'Channel is required.' });
+    }
+
+    let rawLeads = [];
+    if (req.file) {
+      const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
+      const sheetName = workbook.SheetNames[0];
+      const rows = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
+      rawLeads = rows.map((r, idx) => {
+        const id = (r['ID'] || r['id'] || r['Campaign ID'] || r['Id'] || '').toString().trim();
+        const leadName = (r['Name'] || r['name'] || r['Full Name'] || r['full_name'] || '').toString().trim();
+        const rawContact = (r['Contact'] || r['contact'] || r['Phone'] || r['phone'] || r['Mobile'] || r['mobile'] || '').toString().trim();
+        const contact = rawContact.replace(/\D/g, '');
+        const mail = (r['Mail'] || r['mail'] || r['Email'] || r['email'] || '').toString().trim();
+        const address = (r['Address'] || r['address'] || r['City'] || '').toString().trim();
+        
+        // Capture extra template variables
+        const extra_data = {};
+        Object.keys(r).forEach(k => {
+          const lowerK = k.toLowerCase();
+          if (!['name', 'full name', 'full_name', 'contact', 'phone', 'mobile', 'mail', 'email', 'address', 'city', 'id', 'campaign id'].includes(lowerK)) {
+            extra_data[k] = r[k];
+          }
+        });
+
+        return { id, name: leadName || 'Contact', contact, mail, address, extra_data };
+      });
+    } else if (body.leads) {
+      try {
+        rawLeads = typeof body.leads === 'string' ? JSON.parse(body.leads) : body.leads;
+      } catch (e) {
+        rawLeads = [];
+      }
+    }
+
+    // Validation
+    if (channel === 'whatsapp' || channel === 'both') {
+      rawLeads = rawLeads.filter(l => l.contact && l.contact.length >= 10);
+      if (rawLeads.length === 0) {
+        return res.status(400).json({ success: false, error: 'Mandatory valid contact phone numbers (10+ digits) required for WhatsApp broadcast.' });
+      }
+    }
+    if (channel === 'email') {
+      rawLeads = rawLeads.filter(l => l.mail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(l.mail));
+      if (rawLeads.length === 0) {
+        return res.status(400).json({ success: false, error: 'Mandatory valid email addresses required for Email broadcast.' });
+      }
+    }
+
+    const broadcastId = 'bc_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
+
+    // Upsert all leads into Master Data Center (zero duplicates)
+    const upsertResult = await db.upsertMasterLeadsFromBroadcast(rawLeads, {
+      broadcastId,
+      broadcastName: name,
+      broadcastDate: new Date(),
+      metaWhatsappNo: metaPhoneNumber || metaPhoneNumberId,
+      senderEmail: senderEmail
+    });
+
+    // Ensure a default campaign exists
+    const campRes = await db.runQuery('SELECT id FROM campaigns LIMIT 1');
+    let campaignId = campRes.rows[0]?.id;
+    if (!campaignId) {
+      const newCamp = await db.createCampaign('camp_default', 'General Broadcasts', 'Unified Broadcast Pipeline');
+      campaignId = newCamp.id;
+    }
+
+    // Also save to campaign_leads for compatibility
+    const campaignLeads = upsertResult.leads.map(l => ({
+      id: 'cl_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6) + '_' + l.id,
+      campaign_id: campaignId,
+      name: l.name,
+      contact: l.contact,
+      mail: l.mail,
+      address: l.address
+    }));
+    await db.addCampaignLeads(campaignLeads).catch(() => {});
+
+    const targetedCount = upsertResult.total;
+
+    const newBroadcast = await db.createCampaignBroadcast(
+      broadcastId,
+      campaignId,
+      name,
+      channel,
+      whatsappTemplate || null,
+      whatsappMessage || null,
+      emailSubject || null,
+      emailBody || null,
+      targetedCount,
+      scheduledAt,
+      mediaUrl || null
+    );
+
+    await db.runQuery(
+      `UPDATE campaign_broadcasts 
+       SET meta_phone_number_id = $2, meta_phone_number = $3, sender_email = $4, uploaded_leads_count = $5 
+       WHERE id = $1`,
+      [broadcastId, metaPhoneNumberId || null, metaPhoneNumber || null, senderEmail || null, targetedCount]
+    );
+
+    // If not scheduled for later, trigger execution immediately
+    if (!scheduledAt || scheduledAt.getTime() <= Date.now()) {
+      await db.runQuery(
+        `UPDATE campaign_broadcasts 
+         SET status = 'scheduled', scheduled_at = CURRENT_TIMESTAMP 
+         WHERE id = $1`,
+        [broadcastId]
+      );
+      checkAndRunScheduledBroadcasts().catch(err => console.error('[Direct broadcast immediate dispatch error]', err));
+    }
+
+    res.json({
+      success: true,
+      broadcast: { ...newBroadcast, meta_phone_number_id: metaPhoneNumberId, meta_phone_number: metaPhoneNumber, sender_email: senderEmail },
+      masterStats: {
+        totalProcessed: upsertResult.total,
+        newInserted: upsertResult.inserted,
+        existingUpdated: upsertResult.updated
+      }
+    });
   } catch (err) {
+    console.error('[Direct Broadcast Error]:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -7138,7 +7324,6 @@ app.post('/api/campaigns', authenticateToken, async (req, res) => {
       return res.status(400).json({ success: false, error: 'Campaign name is required.' });
     }
 
-    // Enforce unique campaign names constraint
     const existing = await db.runQuery("SELECT * FROM campaigns WHERE LOWER(TRIM(name)) = LOWER(TRIM($1))", [name]);
     if (existing.rows && existing.rows.length > 0) {
       return res.status(400).json({ success: false, error: 'A campaign with this name already exists. Please choose a unique name.' });
@@ -7162,159 +7347,20 @@ app.delete('/api/campaigns/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// List campaign leads/contacts
-app.get('/api/campaigns/:id/leads', authenticateToken, async (req, res) => {
+// List broadcasts
+app.get('/api/campaigns/broadcasts/all', authenticateToken, async (req, res) => {
   try {
-    const list = await db.getCampaignLeads(req.params.id);
-    res.json({ success: true, leads: list });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// Upload campaign leads via Excel/CSV
-app.post('/api/campaigns/:id/leads/upload', authenticateToken, upload.single('file'), async (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ success: false, error: 'No Excel/CSV file uploaded.' });
-  }
-
-  try {
-    const campaignId = req.params.id;
-    const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
-    const sheetName = workbook.SheetNames[0];
-    const rows = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
-
-    if (!rows || rows.length === 0) {
-      return res.status(400).json({ success: false, error: 'Spreadsheet has no rows.' });
-    }
-
-    // Fetch existing contacts in the campaign to prevent duplicates
-    const existingLeads = await db.getCampaignLeads(campaignId);
-    const existingPhones = new Set(existingLeads.map(l => l.contact));
-    const existingEmails = new Set(existingLeads.map(l => l.mail.toLowerCase().trim()));
-
-    // Track duplicates within the uploaded file itself
-    const sheetPhones = new Set();
-    const sheetEmails = new Set();
-
-    const leads = [];
-    let rejectedCount = 0;
-    const errors = [];
-
-    rows.forEach((r, idx) => {
-      const rowNum = idx + 2;
-      const name = (r['Name'] || r['name'] || r['Full Name'] || r['full_name'] || '').toString().trim();
-      const rawContact = (r['Contact'] || r['contact'] || r['Phone'] || r['phone'] || r['Mobile'] || r['mobile'] || '').toString().trim();
-      const contact = rawContact.replace(/\D/g, '');
-      const mail = (r['Mail'] || r['mail'] || r['Email'] || r['email'] || '').toString().trim();
-      const address = (r['Address'] || r['address'] || '').toString().trim();
-
-      if (!name) {
-        rejectedCount++;
-        errors.push(`Row ${rowNum}: Name is missing.`);
-        return;
-      }
-      if (!contact || contact.length < 10) {
-        rejectedCount++;
-        errors.push(`Row ${rowNum} (${name}): Contact number is missing or invalid.`);
-        return;
-      }
-      if (!mail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) {
-        rejectedCount++;
-        errors.push(`Row ${rowNum} (${name}): Email address is missing or invalid format.`);
-        return;
-      }
-
-      // Check duplicates
-      const mailKey = mail.toLowerCase().trim();
-      if (existingPhones.has(contact) || sheetPhones.has(contact)) {
-        rejectedCount++;
-        errors.push(`Row ${rowNum} (${name}): Contact phone number already exists in this campaign.`);
-        return;
-      }
-      if (existingEmails.has(mailKey) || sheetEmails.has(mailKey)) {
-        rejectedCount++;
-        errors.push(`Row ${rowNum} (${name}): Email address already exists in this campaign.`);
-        return;
-      }
-
-      sheetPhones.add(contact);
-      sheetEmails.add(mailKey);
-
-      leads.push({
-        id: 'cl_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6) + '_' + idx,
-        campaign_id: campaignId,
-        name,
-        contact,
-        mail,
-        address
-      });
-    });
-
-    if (leads.length > 0) {
-      await db.addCampaignLeads(leads);
-    }
-
-    res.json({
-      success: true,
-      created: leads.length,
-      failed: rejectedCount,
-      errors
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// Delete lead
-app.delete('/api/campaigns/:id/leads/:leadId', authenticateToken, async (req, res) => {
-  try {
-    const deleted = await db.deleteCampaignLead(req.params.leadId);
-    res.json({ success: true, lead: deleted });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// List broadcasts under a campaign
-app.get('/api/campaigns/:id/broadcasts', authenticateToken, async (req, res) => {
-  try {
-    const list = await db.getCampaignBroadcasts(req.params.id);
+    const list = await db.getCampaignBroadcasts();
     res.json({ success: true, broadcasts: list });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// Create campaign broadcast (draft or scheduled)
-app.post('/api/campaigns/:id/broadcasts', authenticateToken, async (req, res) => {
+app.get('/api/campaigns/:id/broadcasts', authenticateToken, async (req, res) => {
   try {
-    const campaignId = req.params.id;
-    const { name, channel, whatsappTemplate, whatsappMessage, emailSubject, emailBody, scheduledAt, mediaUrl } = req.body;
-    
-    if (!name || !channel) {
-      return res.status(400).json({ success: false, error: 'Broadcast Name and Channel are required.' });
-    }
-
-    const leads = await db.getCampaignLeads(campaignId);
-    const targetedCount = leads.length;
-
-    const id = 'bc_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
-    const newBroadcast = await db.createCampaignBroadcast(
-      id,
-      campaignId,
-      name,
-      channel,
-      whatsappTemplate || null,
-      whatsappMessage || null,
-      emailSubject || null,
-      emailBody || null,
-      targetedCount,
-      scheduledAt ? new Date(scheduledAt) : null,
-      mediaUrl || null
-    );
-
-    res.json({ success: true, broadcast: newBroadcast });
+    const list = await db.getCampaignBroadcasts(req.params.id);
+    res.json({ success: true, broadcasts: list });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -7359,34 +7405,98 @@ app.post('/api/campaigns/:id/broadcasts/:broadcastId/trigger', authenticateToken
   }
 });
 
-// Update campaign broadcast (Edit parameters, template, or schedule time)
-app.put('/api/campaigns/:id/broadcasts/:broadcastId', authenticateToken, async (req, res) => {
+// Communication Dashboard Analytics API
+app.get('/api/campaigns/analytics/dashboard', authenticateToken, async (req, res) => {
   try {
-    const { broadcastId } = req.params;
-    const { name, channel, whatsappTemplate, whatsappMessage, emailSubject, emailBody, scheduledAt, mediaUrl } = req.body;
-    
-    if (!name || !channel) {
-      return res.status(400).json({ success: false, error: 'Broadcast Name and Channel are required.' });
-    }
-
-    const updated = await db.updateCampaignBroadcast(broadcastId, {
-      name,
-      channel,
-      whatsappTemplate: whatsappTemplate || null,
-      whatsappMessage: whatsappMessage || null,
-      emailSubject: emailSubject || null,
-      emailBody: emailBody || null,
-      scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
-      mediaUrl: mediaUrl || null
+    const { date_from, date_to, broadcast_name, meta_whatsapp_no, sender_email } = req.query;
+    const analytics = await db.getCommunicationDashboardAnalytics({
+      dateFrom: date_from,
+      dateTo: date_to,
+      broadcastName: broadcast_name,
+      metaWhatsappNo: meta_whatsapp_no,
+      senderEmail: sender_email
     });
-
-    if (!updated) {
-      return res.status(404).json({ success: false, error: 'Broadcast not found.' });
-    }
-
-    res.json({ success: true, broadcast: updated });
+    res.json({ success: true, analytics });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Public Contact Center Unsubscribe & Preference API
+app.get('/api/contact-center/details', async (req, res) => {
+  try {
+    const id = req.query.id || req.query.master_id;
+    const broadcastId = req.query.brodcast_id || req.query.broadcast_id;
+    if (!id) {
+      return res.status(400).json({ success: false, error: 'Missing contact ID.' });
+    }
+    const lead = await db.getMasterLeadById(id);
+    if (!lead) {
+      return res.status(404).json({ success: false, error: 'Contact profile not found in master records.' });
+    }
+    let broadcast = null;
+    if (broadcastId) {
+      broadcast = await db.getCampaignBroadcastById(broadcastId);
+    }
+    res.json({
+      success: true,
+      lead: {
+        id: lead.id,
+        finmantra_id: lead.finmantra_id,
+        campaign_data_id: lead.campaign_data_id,
+        name: lead.name,
+        contact: lead.contact ? lead.contact.replace(/(\d{2})(\d{4})(\d{4})/, '$1****$3') : '',
+        mail: lead.mail ? lead.mail.replace(/^(.{2})(.*)(@.*)$/, '$1***$3') : '',
+        whatsapp_optin: lead.whatsapp_optin !== false,
+        email_optin: lead.email_optin !== false
+      },
+      broadcast: broadcast ? { id: broadcast.id, name: broadcast.name, channel: broadcast.channel } : null
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/contact-center/optout', async (req, res) => {
+  try {
+    const { id, whatsapp_optin, email_optin, reason, broadcast_id } = req.body;
+    if (!id) {
+      return res.status(400).json({ success: false, error: 'Missing contact ID.' });
+    }
+    const updated = await db.updateMasterLeadOptin(id, { whatsapp_optin, email_optin, reason });
+    if (!updated) {
+      return res.status(404).json({ success: false, error: 'Contact profile not found.' });
+    }
+    res.json({
+      success: true,
+      message: 'Your notification preferences have been saved successfully.',
+      lead: {
+        id: updated.id,
+        whatsapp_optin: updated.whatsapp_optin !== false,
+        email_optin: updated.email_optin !== false
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Click & CTR Tracking Route
+app.get('/api/c/t/:broadcastId/:masterLeadId', async (req, res) => {
+  try {
+    const { broadcastId, masterLeadId } = req.params;
+    const targetUrl = req.query.url || 'https://thefinmantra.com';
+    const channel = req.query.channel || 'whatsapp';
+
+    if (broadcastId) {
+      await db.runQuery('UPDATE campaign_broadcasts SET clicked_count = COALESCE(clicked_count, 0) + 1 WHERE id = $1', [broadcastId]).catch(() => {});
+    }
+    if (masterLeadId) {
+      await db.incrementMasterLeadMetric(masterLeadId, channel, 'clicked').catch(() => {});
+    }
+    res.redirect(targetUrl);
+  } catch (e) {
+    res.redirect('https://thefinmantra.com');
   }
 });
 

@@ -11,6 +11,7 @@ import KiwiLanding from './components/KiwiLanding';
 import SimplyClickSbi from './components/SimplyClickSbi';
 import ScapiaLanding from './components/ScapiaLanding';
 import SbiQdeLanding from './components/SbiQdeLanding';
+import ContactCenterPage from './components/ContactCenterPage';
 import { resolveRedirectUrl } from './utils/analytics';
 // Cookie helper functions
 function setCookie(name, value, days) {
@@ -273,6 +274,9 @@ export default function App() {
     }
     if (currentPath === '/contact') {
       return <ContactPage navigateTo={navigateTo} />;
+    }
+    if (currentPath === '/contact-center' || pathParts[1] === 'contact-center') {
+      return <ContactCenterPage navigateTo={navigateTo} />;
     }
     if (currentPath === '/privacy-policy') {
       return <PrivacyPolicyPage navigateTo={navigateTo} />;

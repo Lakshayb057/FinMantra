@@ -488,7 +488,40 @@ async function initPgSchema() {
     await safeQuery("ALTER TABLE campaign_broadcasts ADD COLUMN IF NOT EXISTS media_url VARCHAR(255)");
     await safeQuery("ALTER TABLE campaign_broadcasts ADD COLUMN IF NOT EXISTS last_triggered_at TIMESTAMP WITH TIME ZONE");
     await safeQuery("ALTER TABLE campaign_broadcasts ADD COLUMN IF NOT EXISTS last_trigger_status VARCHAR(50)");
+    await safeQuery("ALTER TABLE campaign_broadcasts ADD COLUMN IF NOT EXISTS meta_phone_number_id VARCHAR(100)");
+    await safeQuery("ALTER TABLE campaign_broadcasts ADD COLUMN IF NOT EXISTS meta_phone_number VARCHAR(100)");
+    await safeQuery("ALTER TABLE campaign_broadcasts ADD COLUMN IF NOT EXISTS sender_email VARCHAR(255)");
+    await safeQuery("ALTER TABLE campaign_broadcasts ADD COLUMN IF NOT EXISTS delivered_count INTEGER DEFAULT 0");
+    await safeQuery("ALTER TABLE campaign_broadcasts ADD COLUMN IF NOT EXISTS read_count INTEGER DEFAULT 0");
+    await safeQuery("ALTER TABLE campaign_broadcasts ADD COLUMN IF NOT EXISTS clicked_count INTEGER DEFAULT 0");
+    await safeQuery("ALTER TABLE campaign_broadcasts ADD COLUMN IF NOT EXISTS uploaded_leads_count INTEGER DEFAULT 0");
+
     await safeQuery("ALTER TABLE campaign_templates ADD COLUMN IF NOT EXISTS buttons TEXT");
+    await safeQuery("ALTER TABLE campaign_templates ADD COLUMN IF NOT EXISTS meta_phone_number_id VARCHAR(100)");
+    await safeQuery("ALTER TABLE campaign_templates ADD COLUMN IF NOT EXISTS waba_id VARCHAR(100)");
+
+    await safeQuery("ALTER TABLE campaign_master_leads ADD COLUMN IF NOT EXISTS finmantra_id VARCHAR(50)");
+    await safeQuery("ALTER TABLE campaign_master_leads ADD COLUMN IF NOT EXISTS campaign_data_id VARCHAR(50)");
+    await safeQuery("ALTER TABLE campaign_master_leads ADD COLUMN IF NOT EXISTS whatsapp_optin BOOLEAN DEFAULT TRUE");
+    await safeQuery("ALTER TABLE campaign_master_leads ADD COLUMN IF NOT EXISTS email_optin BOOLEAN DEFAULT TRUE");
+    await safeQuery("ALTER TABLE campaign_master_leads ADD COLUMN IF NOT EXISTS last_broadcast_id VARCHAR(50)");
+    await safeQuery("ALTER TABLE campaign_master_leads ADD COLUMN IF NOT EXISTS last_broadcast_name VARCHAR(255)");
+    await safeQuery("ALTER TABLE campaign_master_leads ADD COLUMN IF NOT EXISTS last_broadcast_date TIMESTAMP WITH TIME ZONE");
+    await safeQuery("ALTER TABLE campaign_master_leads ADD COLUMN IF NOT EXISTS meta_whatsapp_no VARCHAR(100)");
+    await safeQuery("ALTER TABLE campaign_master_leads ADD COLUMN IF NOT EXISTS sender_email VARCHAR(255)");
+    await safeQuery("ALTER TABLE campaign_master_leads ADD COLUMN IF NOT EXISTS wa_sent_count INTEGER DEFAULT 0");
+    await safeQuery("ALTER TABLE campaign_master_leads ADD COLUMN IF NOT EXISTS wa_delivered_count INTEGER DEFAULT 0");
+    await safeQuery("ALTER TABLE campaign_master_leads ADD COLUMN IF NOT EXISTS wa_read_count INTEGER DEFAULT 0");
+    await safeQuery("ALTER TABLE campaign_master_leads ADD COLUMN IF NOT EXISTS wa_clicked_count INTEGER DEFAULT 0");
+    await safeQuery("ALTER TABLE campaign_master_leads ADD COLUMN IF NOT EXISTS email_sent_count INTEGER DEFAULT 0");
+    await safeQuery("ALTER TABLE campaign_master_leads ADD COLUMN IF NOT EXISTS email_delivered_count INTEGER DEFAULT 0");
+    await safeQuery("ALTER TABLE campaign_master_leads ADD COLUMN IF NOT EXISTS email_read_count INTEGER DEFAULT 0");
+    await safeQuery("ALTER TABLE campaign_master_leads ADD COLUMN IF NOT EXISTS email_clicked_count INTEGER DEFAULT 0");
+    await safeQuery("ALTER TABLE campaign_master_leads ADD COLUMN IF NOT EXISTS extra_data JSONB DEFAULT '{}'");
+    await safeQuery("ALTER TABLE campaign_master_leads ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP");
+    await safeQuery("CREATE INDEX IF NOT EXISTS idx_master_leads_last_bc_date ON campaign_master_leads (last_broadcast_date DESC)");
+    await safeQuery("CREATE INDEX IF NOT EXISTS idx_master_leads_finmantra_id ON campaign_master_leads (finmantra_id)");
+    await safeQuery("CREATE INDEX IF NOT EXISTS idx_master_leads_campaign_data_id ON campaign_master_leads (campaign_data_id)");
     await safeQuery("CREATE INDEX IF NOT EXISTS idx_meta_memberships_aud_lead ON meta_audience_memberships (audience_id, lead_id)");
     await safeQuery("CREATE INDEX IF NOT EXISTS idx_meta_memberships_state ON meta_audience_memberships (state)");
     await safeQuery("CREATE INDEX IF NOT EXISTS idx_meta_sync_jobs_aud ON meta_audience_sync_jobs (audience_id)");
@@ -3072,75 +3105,324 @@ const db = {
   },
 
   // --- Master Data Center Helper Operations ---
+  async getNextFinmantraId() {
+    const res = await pool.query("SELECT COUNT(*)::int as cnt FROM campaign_master_leads");
+    const count = (res.rows[0]?.cnt || 0) + 1;
+    return `FM${String(count).padStart(5, '0')}`;
+  },
+
+  async getNextCampaignDataId() {
+    const res = await pool.query("SELECT COUNT(*)::int as cnt FROM campaign_master_leads");
+    const count = (res.rows[0]?.cnt || 0) + 1;
+    return `FMCB${String(count).padStart(5, '0')}`;
+  },
+
+  async getMasterLeadsFiltered({
+    search = '',
+    broadcastName = '',
+    broadcastDateFrom = '',
+    broadcastDateTo = '',
+    metaWhatsappNo = '',
+    senderEmail = '',
+    optinWhatsapp = '',
+    optinEmail = '',
+    page = 1,
+    limit = 50
+  }) {
+    let whereClauses = [];
+    let params = [];
+
+    if (search && search.trim()) {
+      params.push(`%${search.trim().toLowerCase()}%`);
+      whereClauses.push(`(
+        LOWER(name) LIKE $${params.length} OR 
+        contact LIKE $${params.length} OR 
+        LOWER(mail) LIKE $${params.length} OR 
+        LOWER(COALESCE(finmantra_id, '')) LIKE $${params.length} OR 
+        LOWER(COALESCE(campaign_data_id, '')) LIKE $${params.length} OR 
+        LOWER(COALESCE(address, '')) LIKE $${params.length}
+      )`);
+    }
+
+    if (broadcastName && broadcastName.trim()) {
+      params.push(broadcastName.trim());
+      whereClauses.push(`last_broadcast_name = $${params.length}`);
+    }
+
+    if (broadcastDateFrom) {
+      params.push(new Date(broadcastDateFrom).toISOString());
+      whereClauses.push(`last_broadcast_date >= $${params.length}`);
+    }
+
+    if (broadcastDateTo) {
+      const toDate = new Date(broadcastDateTo);
+      toDate.setHours(23, 59, 59, 999);
+      params.push(toDate.toISOString());
+      whereClauses.push(`last_broadcast_date <= $${params.length}`);
+    }
+
+    if (metaWhatsappNo && metaWhatsappNo.trim()) {
+      params.push(metaWhatsappNo.trim());
+      whereClauses.push(`meta_whatsapp_no = $${params.length}`);
+    }
+
+    if (senderEmail && senderEmail.trim()) {
+      params.push(senderEmail.trim().toLowerCase());
+      whereClauses.push(`LOWER(sender_email) = $${params.length}`);
+    }
+
+    if (optinWhatsapp !== '' && optinWhatsapp !== undefined && optinWhatsapp !== null) {
+      params.push(optinWhatsapp === 'true' || optinWhatsapp === true);
+      whereClauses.push(`whatsapp_optin = $${params.length}`);
+    }
+
+    if (optinEmail !== '' && optinEmail !== undefined && optinEmail !== null) {
+      params.push(optinEmail === 'true' || optinEmail === true);
+      whereClauses.push(`email_optin = $${params.length}`);
+    }
+
+    const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
+    const countRes = await pool.query(
+      `SELECT COUNT(*)::int as total FROM campaign_master_leads ${whereSql}`,
+      params
+    );
+    const total = countRes.rows[0]?.total || 0;
+
+    let leads = [];
+    if (limit && limit > 0) {
+      const offset = (Math.max(1, page) - 1) * limit;
+      const dataParams = [...params, limit, offset];
+      const dataRes = await pool.query(
+        `SELECT * FROM campaign_master_leads 
+         ${whereSql} 
+         ORDER BY created_at DESC 
+         LIMIT $${dataParams.length - 1} OFFSET $${dataParams.length}`,
+        dataParams
+      );
+      leads = dataRes.rows;
+    } else {
+      // Return all for export
+      const dataRes = await pool.query(
+        `SELECT * FROM campaign_master_leads 
+         ${whereSql} 
+         ORDER BY created_at DESC`,
+        params
+      );
+      leads = dataRes.rows;
+    }
+
+    return { total, page: Number(page), limit: Number(limit), leads };
+  },
+
+  async getMasterFilterOptions() {
+    const [bcNamesRes, waNosRes, emailsRes] = await Promise.all([
+      pool.query(`SELECT DISTINCT last_broadcast_name FROM campaign_master_leads WHERE last_broadcast_name IS NOT NULL AND last_broadcast_name != '' ORDER BY last_broadcast_name`),
+      pool.query(`SELECT DISTINCT meta_whatsapp_no FROM campaign_master_leads WHERE meta_whatsapp_no IS NOT NULL AND meta_whatsapp_no != '' ORDER BY meta_whatsapp_no`),
+      pool.query(`SELECT DISTINCT sender_email FROM campaign_master_leads WHERE sender_email IS NOT NULL AND sender_email != '' ORDER BY sender_email`)
+    ]);
+
+    return {
+      broadcastNames: bcNamesRes.rows.map(r => r.last_broadcast_name),
+      metaWhatsappNos: waNosRes.rows.map(r => r.meta_whatsapp_no),
+      senderEmails: emailsRes.rows.map(r => r.sender_email)
+    };
+  },
+
   async getMasterLeads() {
     const res = await pool.query('SELECT * FROM campaign_master_leads ORDER BY created_at DESC');
     return res.rows;
   },
 
-  async addMasterLeads(leads) {
-    if (leads.length === 0) return 0;
+  async getMasterLeadById(id) {
+    const res = await pool.query('SELECT * FROM campaign_master_leads WHERE id = $1 OR finmantra_id = $1 OR campaign_data_id = $1 LIMIT 1', [id]);
+    return res.rows[0] || null;
+  },
+
+  async upsertMasterLeadsFromBroadcast(rawLeads, broadcastInfo = {}) {
+    if (!rawLeads || rawLeads.length === 0) return { total: 0, inserted: 0, updated: 0, leads: [] };
+
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      for (const lead of leads) {
-        await client.query(
-          `INSERT INTO campaign_master_leads (id, name, contact, mail, address) 
-           VALUES ($1, $2, $3, $4, $5) 
-           ON CONFLICT (id) DO UPDATE SET name = $2, contact = $3, mail = $4, address = $5`,
-          [lead.id, lead.name, lead.contact, lead.mail, lead.address]
+
+      // Get current master leads count to generate sequential IDs
+      const countRes = await client.query("SELECT COUNT(*)::int as cnt FROM campaign_master_leads");
+      let runningIndex = (countRes.rows[0]?.cnt || 0) + 1;
+
+      let insertedCount = 0;
+      let updatedCount = 0;
+      const processedLeads = [];
+
+      for (let i = 0; i < rawLeads.length; i++) {
+        const item = rawLeads[i];
+        const contact = String(item.contact || item.phone || item.mobile || '').trim().replace(/\D/g, '');
+        const mail = String(item.mail || item.email || '').trim();
+        const name = String(item.name || item.full_name || 'Contact').trim();
+        const address = String(item.address || item.city || item.location || '').trim();
+
+        if (!contact && !mail) continue; // Must have either contact or email
+
+        // Check if contact or email already exists in master leads
+        const existingRes = await client.query(
+          `SELECT * FROM campaign_master_leads 
+           WHERE (contact != '' AND contact = $1) 
+              OR (mail != '' AND LOWER(TRIM(mail)) = LOWER(TRIM($2))) 
+           LIMIT 1`,
+          [contact || '__NONE__', mail || '__NONE__']
         );
+
+        const bcId = broadcastInfo.broadcastId || null;
+        const bcName = broadcastInfo.broadcastName || null;
+        const bcDate = broadcastInfo.broadcastDate || new Date();
+        const metaWaNo = broadcastInfo.metaWhatsappNo || null;
+        const senderEmail = broadcastInfo.senderEmail || null;
+        const extraData = item.extra_data || item.vars || {};
+
+        if (existingRes.rows.length > 0) {
+          // UPDATE existing master lead
+          const existing = existingRes.rows[0];
+          const updatedName = name !== 'Contact' ? name : existing.name;
+          const updatedAddress = address ? address : existing.address;
+          const updatedContact = contact ? contact : existing.contact;
+          const updatedMail = mail ? mail : existing.mail;
+          const mergedExtra = { ...(existing.extra_data || {}), ...extraData };
+
+          // Keep existing IDs or backfill if missing
+          let fId = existing.finmantra_id;
+          let cId = existing.campaign_data_id;
+          if (!fId) {
+            fId = `FM${String(runningIndex).padStart(5, '0')}`;
+            runningIndex++;
+          }
+          if (!cId) {
+            cId = item.id && String(item.id).trim().startsWith('FMCB') ? String(item.id).trim() : `FMCB${String(runningIndex).padStart(5, '0')}`;
+          }
+
+          const updateRes = await client.query(
+            `UPDATE campaign_master_leads 
+             SET name = $2, contact = $3, mail = $4, address = $5,
+                 finmantra_id = COALESCE(finmantra_id, $6),
+                 campaign_data_id = COALESCE(campaign_data_id, $7),
+                 last_broadcast_id = COALESCE($8, last_broadcast_id),
+                 last_broadcast_name = COALESCE($9, last_broadcast_name),
+                 last_broadcast_date = COALESCE($10, last_broadcast_date),
+                 meta_whatsapp_no = COALESCE($11, meta_whatsapp_no),
+                 sender_email = COALESCE($12, sender_email),
+                 extra_data = $13,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = $1
+             RETURNING *`,
+            [
+              existing.id, updatedName, updatedContact, updatedMail, updatedAddress,
+              fId, cId, bcId, bcName, bcDate, metaWaNo, senderEmail, JSON.stringify(mergedExtra)
+            ]
+          );
+
+          updatedCount++;
+          processedLeads.push(updateRes.rows[0]);
+        } else {
+          // INSERT new master lead
+          const newId = 'ml_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 7) + '_' + i;
+          const fId = `FM${String(runningIndex).padStart(5, '0')}`;
+          // If uploaded data had an ID column, align it; if empty/unaligned, assign FMCB00001
+          let cId = item.id ? String(item.id).trim() : '';
+          if (!cId || !cId.startsWith('FMCB')) {
+            cId = `FMCB${String(runningIndex).padStart(5, '0')}`;
+          }
+          runningIndex++;
+
+          const insertRes = await client.query(
+            `INSERT INTO campaign_master_leads 
+             (id, finmantra_id, campaign_data_id, name, contact, mail, address, 
+              whatsapp_optin, email_optin, last_broadcast_id, last_broadcast_name, 
+              last_broadcast_date, meta_whatsapp_no, sender_email, extra_data, 
+              wa_sent_count, wa_delivered_count, wa_read_count, wa_clicked_count,
+              email_sent_count, email_delivered_count, email_read_count, email_clicked_count, created_at, updated_at) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 0, 0, 0, 0, 0, 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+             RETURNING *`,
+            [
+              newId, fId, cId, name, contact, mail, address,
+              true, true, bcId, bcName, bcDate, metaWaNo, senderEmail, JSON.stringify(extraData)
+            ]
+          );
+
+          insertedCount++;
+          processedLeads.push(insertRes.rows[0]);
+        }
       }
+
       await client.query('COMMIT');
-      return leads.length;
+      return {
+        total: processedLeads.length,
+        inserted: insertedCount,
+        updated: updatedCount,
+        leads: processedLeads
+      };
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;
     } finally {
       client.release();
     }
+  },
+
+  async updateMasterLeadOptin(idOrFinmantraId, { whatsapp_optin, email_optin, reason = '' }) {
+    const updates = [];
+    const params = [idOrFinmantraId];
+
+    if (whatsapp_optin !== undefined) {
+      params.push(Boolean(whatsapp_optin));
+      updates.push(`whatsapp_optin = $${params.length}`);
+    }
+
+    if (email_optin !== undefined) {
+      params.push(Boolean(email_optin));
+      updates.push(`email_optin = $${params.length}`);
+    }
+
+    if (updates.length === 0) return null;
+
+    updates.push(`updated_at = CURRENT_TIMESTAMP`);
+
+    const res = await pool.query(
+      `UPDATE campaign_master_leads 
+       SET ${updates.join(', ')} 
+       WHERE id = $1 OR finmantra_id = $1 OR campaign_data_id = $1 OR contact = $1 OR LOWER(mail) = LOWER($1)
+       RETURNING *`,
+      params
+    );
+    return res.rows[0] || null;
+  },
+
+  async incrementMasterLeadMetric(leadIdOrContact, channel, metricType) {
+    // channel: 'whatsapp' | 'email'
+    // metricType: 'sent' | 'delivered' | 'read' | 'clicked'
+    const columnMap = {
+      'whatsapp_sent': 'wa_sent_count',
+      'whatsapp_delivered': 'wa_delivered_count',
+      'whatsapp_read': 'wa_read_count',
+      'whatsapp_clicked': 'wa_clicked_count',
+      'email_sent': 'email_sent_count',
+      'email_delivered': 'email_delivered_count',
+      'email_read': 'email_read_count',
+      'email_clicked': 'email_clicked_count'
+    };
+
+    const targetCol = columnMap[`${channel}_${metricType}`];
+    if (!targetCol) return;
+
+    await pool.query(
+      `UPDATE campaign_master_leads 
+       SET ${targetCol} = COALESCE(${targetCol}, 0) + 1, updated_at = CURRENT_TIMESTAMP 
+       WHERE id = $1 OR contact = $1 OR LOWER(mail) = LOWER($1) OR finmantra_id = $1`,
+      [leadIdOrContact]
+    );
   },
 
   async deleteMasterLead(leadId) {
     const res = await pool.query('DELETE FROM campaign_master_leads WHERE id = $1 RETURNING *', [leadId]);
     return res.rows[0];
-  },
-
-  async importMasterLeadsToCampaign(campaignId, leadIds) {
-    if (leadIds.length === 0) return 0;
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      let count = 0;
-      for (const leadId of leadIds) {
-        const masterRes = await client.query('SELECT * FROM campaign_master_leads WHERE id = $1 LIMIT 1', [leadId]);
-        if (masterRes.rows.length > 0) {
-          const lead = masterRes.rows[0];
-          
-          // Check if contact or email already exists in target campaign
-          const dupRes = await client.query(
-            'SELECT 1 FROM campaign_leads WHERE campaign_id = $1 AND (contact = $2 OR LOWER(TRIM(mail)) = LOWER(TRIM($3))) LIMIT 1',
-            [campaignId, lead.contact, lead.mail]
-          );
-          if (dupRes.rows.length === 0) {
-            const targetId = 'cl_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6) + '_' + count;
-            await client.query(
-              `INSERT INTO campaign_leads (id, campaign_id, name, contact, mail, address) 
-               VALUES ($1, $2, $3, $4, $5, $6) 
-               ON CONFLICT DO NOTHING`,
-              [targetId, campaignId, lead.name, lead.contact, lead.mail, lead.address]
-            );
-            count++;
-          }
-        }
-      }
-      await client.query('COMMIT');
-      return count;
-    } catch (err) {
-      await client.query('ROLLBACK');
-      throw err;
-    } finally {
-      client.release();
-    }
   },
 
   async deleteMasterLeadsBulk(leadIds) {
@@ -3149,19 +3431,115 @@ const db = {
     return res.rowCount;
   },
 
+  // --- Communication Dashboard Analytics Operations ---
+  async getCommunicationDashboardAnalytics({
+    dateFrom = '',
+    dateTo = '',
+    broadcastName = '',
+    metaWhatsappNo = '',
+    senderEmail = ''
+  } = {}) {
+    let bcWhere = [];
+    let bcParams = [];
+
+    if (broadcastName && broadcastName.trim()) {
+      bcParams.push(broadcastName.trim());
+      bcWhere.push(`name = $${bcParams.length}`);
+    }
+
+    if (dateFrom) {
+      bcParams.push(new Date(dateFrom).toISOString());
+      bcWhere.push(`created_at >= $${bcParams.length}`);
+    }
+
+    if (dateTo) {
+      const toDate = new Date(dateTo);
+      toDate.setHours(23, 59, 59, 999);
+      bcParams.push(toDate.toISOString());
+      bcWhere.push(`created_at <= $${bcParams.length}`);
+    }
+
+    if (metaWhatsappNo && metaWhatsappNo.trim()) {
+      bcParams.push(metaWhatsappNo.trim());
+      bcWhere.push(`meta_phone_number = $${bcParams.length}`);
+    }
+
+    if (senderEmail && senderEmail.trim()) {
+      bcParams.push(senderEmail.trim().toLowerCase());
+      bcWhere.push(`LOWER(sender_email) = $${bcParams.length}`);
+    }
+
+    const bcWhereSql = bcWhere.length > 0 ? `WHERE ${bcWhere.join(' AND ')}` : '';
+
+    // Aggregate Broadcast KPIs
+    const kpiRes = await pool.query(
+      `SELECT 
+         COUNT(*)::int as total_broadcasts,
+         COALESCE(SUM(targeted_count), 0)::int as total_targeted,
+         COALESCE(SUM(sent_count), 0)::int as total_sent,
+         COALESCE(SUM(delivered_count), 0)::int as total_delivered,
+         COALESCE(SUM(read_count), 0)::int as total_read,
+         COALESCE(SUM(clicked_count), 0)::int as total_clicked,
+         COALESCE(SUM(failed_count), 0)::int as total_failed,
+         COUNT(CASE WHEN channel = 'whatsapp' THEN 1 END)::int as wa_broadcasts,
+         COUNT(CASE WHEN channel = 'email' THEN 1 END)::int as email_broadcasts,
+         COUNT(CASE WHEN channel = 'both' THEN 1 END)::int as hybrid_broadcasts
+       FROM campaign_broadcasts 
+       ${bcWhereSql}`,
+      bcParams
+    );
+    const kpis = kpiRes.rows[0] || {};
+
+    // Aggregate Master Leads Analytics
+    const masterStatsRes = await pool.query(
+      `SELECT 
+         COUNT(*)::int as total_master_contacts,
+         COUNT(CASE WHEN whatsapp_optin = true THEN 1 END)::int as wa_optin_count,
+         COUNT(CASE WHEN whatsapp_optin = false THEN 1 END)::int as wa_optout_count,
+         COUNT(CASE WHEN email_optin = true THEN 1 END)::int as email_optin_count,
+         COUNT(CASE WHEN email_optin = false THEN 1 END)::int as email_optout_count,
+         COALESCE(SUM(wa_sent_count), 0)::int as sum_wa_sent,
+         COALESCE(SUM(wa_delivered_count), 0)::int as sum_wa_delivered,
+         COALESCE(SUM(wa_read_count), 0)::int as sum_wa_read,
+         COALESCE(SUM(wa_clicked_count), 0)::int as sum_wa_clicked,
+         COALESCE(SUM(email_sent_count), 0)::int as sum_email_sent,
+         COALESCE(SUM(email_delivered_count), 0)::int as sum_email_delivered,
+         COALESCE(SUM(email_read_count), 0)::int as sum_email_read,
+         COALESCE(SUM(email_clicked_count), 0)::int as sum_email_clicked
+       FROM campaign_master_leads`
+    );
+    const masterStats = masterStatsRes.rows[0] || {};
+
+    // Fetch recent broadcasts with performance metrics
+    const broadcastsListRes = await pool.query(
+      `SELECT * FROM campaign_broadcasts 
+       ${bcWhereSql} 
+       ORDER BY created_at DESC 
+       LIMIT 50`,
+      bcParams
+    );
+
+    return {
+      kpis,
+      masterStats,
+      recentBroadcasts: broadcastsListRes.rows
+    };
+  },
+
   async getCampaignTemplates() {
     const res = await pool.query('SELECT * FROM campaign_templates ORDER BY created_at DESC');
     return res.rows;
   },
 
-  async createCampaignTemplate({ id, name, type, subject, body, metaTemplateName, mediaUrl, buttons }) {
+  async createCampaignTemplate({ id, name, type, subject, body, metaTemplateName, mediaUrl, buttons, metaPhoneNumberId, wabaId }) {
     const res = await pool.query(
-      `INSERT INTO campaign_templates (id, name, type, subject, body, meta_template_name, media_url, buttons)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `INSERT INTO campaign_templates (id, name, type, subject, body, meta_template_name, media_url, buttons, meta_phone_number_id, waba_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        ON CONFLICT (id) DO UPDATE SET 
-         name = $2, type = $3, subject = $4, body = $5, meta_template_name = $6, media_url = $7, buttons = $8
+         name = $2, type = $3, subject = $4, body = $5, meta_template_name = $6, media_url = $7, buttons = $8,
+         meta_phone_number_id = $9, waba_id = $10
        RETURNING *`,
-      [id, name, type, subject, body, metaTemplateName, mediaUrl, buttons || null]
+      [id, name, type, subject, body, metaTemplateName, mediaUrl, buttons || null, metaPhoneNumberId || null, wabaId || null]
     );
     return res.rows[0];
   },
@@ -3170,7 +3548,7 @@ const db = {
     const res = await pool.query('DELETE FROM campaign_templates WHERE id = $1 RETURNING *', [id]);
     return res.rows[0];
   }
-}
+};
 
 module.exports = db;
 
