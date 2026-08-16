@@ -6125,7 +6125,7 @@ async function checkAndRunScheduledBroadcasts() {
 }
 
 // Helper to register message template with Meta API
-const registerMetaTemplate = async ({ apiKey, wabaId, name, category, language, headerFormat, bodyText, buttons }) => {
+const registerMetaTemplate = async ({ apiKey, wabaId, name, category, language, headerFormat, bodyText, buttons, mediaUrl }) => {
   return new Promise((resolve, reject) => {
     const cleanName = name.toLowerCase().replace(/[^a-z0-9_]/g, '_');
     const components = [];
@@ -6137,6 +6137,11 @@ const registerMetaTemplate = async ({ apiKey, wabaId, name, category, language, 
       };
       if (headerFormat === 'TEXT') {
         headerComp.text = 'Notification';
+      } else {
+        const sampleUrl = mediaUrl && mediaUrl.trim() ? mediaUrl.trim() : 'https://uat.thefinmantra.com/logo.png';
+        headerComp.example = {
+          header_handle: [sampleUrl]
+        };
       }
       components.push(headerComp);
     }
@@ -6557,7 +6562,8 @@ app.post('/api/campaigns/templates', authenticateToken, async (req, res) => {
           language: language || 'en_US',
           headerFormat: headerFormat || 'NONE',
           bodyText: body,
-          buttons
+          buttons,
+          mediaUrl
         });
       } catch (metaErr) {
         return res.status(400).json({
