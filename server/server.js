@@ -6140,6 +6140,10 @@ const registerMetaTemplate = async ({ apiKey, wabaId, name, category, language, 
       });
     });
     
+    req.setTimeout(10000, () => {
+      req.destroy(new Error('Meta Graph API template registration request timed out.'));
+    });
+    
     req.on('error', (err) => reject(err));
     req.write(postData);
     req.end();
@@ -6186,6 +6190,9 @@ app.get('/api/campaigns/templates/meta-sync', authenticateToken, async (req, res
               } else { resolveWaba(null); }
             });
           });
+          req.setTimeout(10000, () => {
+            req.destroy(new Error('WABA accounts lookup timed out.'));
+          });
           req.on('error', () => resolveWaba(null));
           req.end();
         });
@@ -6214,6 +6221,9 @@ app.get('/api/campaigns/templates/meta-sync', authenticateToken, async (req, res
               try { resolve(JSON.parse(body)); } catch (e) { reject(new Error('Invalid JSON.')); }
             } else { reject(new Error(`Meta API error ${res.statusCode}: ${body}`)); }
           });
+        });
+        req.setTimeout(10000, () => {
+          req.destroy(new Error('Meta template list fetch timed out.'));
         });
         req.on('error', err => reject(err));
         req.end();
@@ -6292,6 +6302,9 @@ app.post('/api/campaigns/templates', authenticateToken, async (req, res) => {
                   } catch (e) { rejectWaba(new Error('WABA JSON parsing failed.')); }
                 } else { rejectWaba(new Error(`Failed to fetch WABA (status ${res.statusCode})`)); }
               });
+            });
+            req.setTimeout(10000, () => {
+              req.destroy(new Error('WABA accounts lookup timed out.'));
             });
             req.on('error', err => rejectWaba(err));
             req.end();
