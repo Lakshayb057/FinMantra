@@ -6124,9 +6124,83 @@ async function checkAndRunScheduledBroadcasts() {
   }
 }
 
-// Helper to register message template with Meta API
-const registerMetaTemplate = async ({ apiKey, wabaId, name, category, language, headerFormat, bodyText, buttons, mediaUrl }) => {
+// Helper to upload media from URL to Meta /media endpoint to get a handle ID
+const uploadMediaToMeta = async (apiKey, phoneId, mediaUrl, apiVersion = 'v25.0') => {
   return new Promise((resolve, reject) => {
+    const https = require('https');
+    https.get(mediaUrl, (res) => {
+      if (res.statusCode < 200 || res.statusCode >= 300) {
+        return reject(new Error(`Failed to download media file (status ${res.statusCode})`));
+      }
+      
+      const chunks = [];
+      res.on('data', chunk => chunks.push(chunk));
+      res.on('end', () => {
+        const buffer = Buffer.concat(chunks);
+        
+        let filename = 'file.png';
+        try {
+          const u = new URL(mediaUrl);
+          filename = u.pathname.split('/').pop() || 'file.png';
+        } catch (e) {}
+
+        const contentType = res.headers['content-type'] || 'image/png';
+        const boundary = '----WebKitFormBoundary' + Math.random().toString(36).substring(2);
+        const postData = [];
+        
+        postData.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="messaging_product"\r\n\r\nwhatsapp\r\n`));
+        postData.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${filename}"\r\nContent-Type: ${contentType}\r\n\r\n`));
+        postData.push(buffer);
+        postData.push(Buffer.from(`\r\n--${boundary}--\r\n`));
+
+        const totalLength = postData.reduce((acc, val) => acc + val.length, 0);
+        const payloadBuffer = Buffer.concat(postData, totalLength);
+
+        const options = {
+          hostname: 'graph.facebook.com',
+          port: 443,
+          path: `/${apiVersion}/${phoneId}/media`,
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': `multipart/form-data; boundary=${boundary}`,
+            'Content-Length': payloadBuffer.length
+          }
+        };
+
+        const req = https.request(options, (uploadRes) => {
+          let responseBody = '';
+          uploadRes.on('data', chunk => responseBody += chunk);
+          uploadRes.on('end', () => {
+            if (uploadRes.statusCode >= 200 && uploadRes.statusCode < 300) {
+              try {
+                const parsed = JSON.parse(responseBody);
+                if (parsed.id) {
+                  resolve(parsed.id);
+                } else {
+                  reject(new Error('Meta /media response did not return an id.'));
+                }
+              } catch (e) {
+                reject(new Error('Failed to parse Meta /media response.'));
+              }
+            } else {
+              reject(new Error(`Meta /media returned status ${uploadRes.statusCode}: ${responseBody}`));
+            }
+          });
+        });
+
+        req.setTimeout(15000);
+        req.on('error', err => reject(err));
+        req.write(payloadBuffer);
+        req.end();
+      });
+    }).on('error', err => reject(err));
+  });
+};
+
+// Helper to register message template with Meta API
+const registerMetaTemplate = async ({ apiKey, wabaId, phoneId, name, category, language, headerFormat, bodyText, buttons, mediaUrl }) => {
+  return new Promise(async (resolve, reject) => {
     const cleanName = name.toLowerCase().replace(/[^a-z0-9_]/g, '_');
     const components = [];
     
@@ -6139,9 +6213,23 @@ const registerMetaTemplate = async ({ apiKey, wabaId, name, category, language, 
         headerComp.text = 'Notification';
       } else {
         const sampleUrl = mediaUrl && mediaUrl.trim() ? mediaUrl.trim() : 'https://uat.thefinmantra.com/logo.png';
-        headerComp.example = {
-          header_handle: [sampleUrl]
-        };
+        try {
+          if (phoneId) {
+            const mediaId = await uploadMediaToMeta(apiKey, phoneId, sampleUrl);
+            headerComp.example = {
+              header_handle: [mediaId]
+            };
+          } else {
+            headerComp.example = {
+              header_handle: ["4:c2FtcGxlX2hhbmRsZQ=="]
+            };
+          }
+        } catch (mediaErr) {
+          console.warn('[Meta media upload failed, falling back to dummy handle]', mediaErr.message);
+          headerComp.example = {
+            header_handle: ["4:c2FtcGxlX2hhbmRsZQ=="]
+          };
+        }
       }
       components.push(headerComp);
     }
@@ -6554,9 +6642,11 @@ app.post('/api/campaigns/templates', authenticateToken, async (req, res) => {
       }
 
       try {
+        const phoneId = getSettingVal(settings, 'wa_phone_number_id', 'WA_PHONE_NUMBER_ID');
         await registerMetaTemplate({
           apiKey,
           wabaId,
+          phoneId,
           name: cleanName,
           category: category || 'MARKETING',
           language: language || 'en_US',
