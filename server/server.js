@@ -413,7 +413,7 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
 
   const baseLang = getSettingVal(settings, 'wa_template_language', 'WA_TEMPLATE_LANGUAGE', 'en');
 
-  const langCandidates = [baseLang, 'en', 'en_US', 'en_GB'].filter((v, i, a) => v && a.indexOf(v) === i);
+  const langCandidates = [baseLang, 'en_US', 'en', 'en_GB'].filter((v, i, a) => v && a.indexOf(v) === i);
 
   // Build list of candidate component payloads to guarantee delivery across all template variations
   const componentStrategies = [];
@@ -6041,17 +6041,27 @@ async function checkAndRunScheduledBroadcasts() {
                 const maxBodyParam = paramNumbers.length > 0 ? Math.max(...paramNumbers) : 0;
                 
                 let hasDynamicButton = false;
+                let ctaBaseUrl = '';
                 if (templateObj.buttons) {
                   try {
                     const btnObj = JSON.parse(templateObj.buttons);
                     if (btnObj.buttonType === 'CTA' && btnObj.ctaUrlValue && (btnObj.ctaUrlValue.includes('{{1}}') || btnObj.ctaUrlValue.includes('{{2}}'))) {
                       hasDynamicButton = true;
+                      // Extract the base URL and replace the variable with actual lead data
+                      ctaBaseUrl = btnObj.ctaUrlValue
+                        .replace('{{1}}', lead.name || 'user')
+                        .replace('{{2}}', lead.contact || '');
                     }
                   } catch (e) {}
                 }
 
                 if (hasDynamicButton) {
-                  params = [lead.name, waMessage];
+                  // For CTA button templates: body params + the dynamic URL as a separate parameter
+                  if (maxBodyParam === 1) {
+                    params = [lead.name, ctaBaseUrl];
+                  } else {
+                    params = [lead.name, ctaBaseUrl];
+                  }
                 } else {
                   if (maxBodyParam === 1) {
                     params = [lead.name];
