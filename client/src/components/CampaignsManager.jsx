@@ -2197,12 +2197,22 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                       </label>
                       <select
                         value={broadcastForm.whatsapp_template}
-                        onChange={(e) => setBroadcastForm({ ...broadcastForm, whatsapp_template: e.target.value })}
+                        onChange={(e) => {
+                          const chosen = e.target.value;
+                          const t = templates.find(item => item.name === chosen || item.meta_template_name === chosen);
+                          setBroadcastForm({
+                            ...broadcastForm,
+                            whatsapp_template: chosen,
+                            meta_phone_number_id: t?.meta_phone_number_id || broadcastForm.meta_phone_number_id
+                          });
+                        }}
                         style={{ width: '100%', padding: '0.65rem 0.8rem', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.88rem', boxSizing: 'border-box' }}
                       >
                         <option value="">Select a template...</option>
-                        {templates.map(t => (
-                          <option key={t.id} value={t.name}>{t.name} {t.meta_template_name ? `(${t.meta_template_name})` : ''}</option>
+                        {templates.filter(t => t.type === 'whatsapp').map(t => (
+                          <option key={t.id} value={t.meta_template_name || t.name}>
+                            {t.name}{t.meta_template_name && t.meta_template_name !== t.name ? ` (${t.meta_template_name})` : ''} - [{t.language || 'en_US'}]
+                          </option>
                         ))}
                       </select>
 
@@ -2210,7 +2220,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                         <div style={{ marginTop: '0.75rem', padding: '0.85rem', borderRadius: '8px', background: 'var(--paper-2)', border: '1px solid var(--line)' }}>
                           <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: '0.35rem' }}>Template Body:</div>
                           <div style={{ fontSize: '0.85rem', color: 'var(--ink)', whiteSpace: 'pre-wrap' }}>
-                            {templates.find(t => t.name === broadcastForm.whatsapp_template)?.body}
+                            {templates.find(t => t.name === broadcastForm.whatsapp_template || t.meta_template_name === broadcastForm.whatsapp_template)?.body}
                           </div>
                         </div>
                       )}
