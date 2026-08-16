@@ -4960,42 +4960,50 @@ app.get('/api/settings', async (req, res) => {
   }
 });
 
-// Update Settings (Admin Only)
-app.put('/api/settings', authenticateToken, requireAdmin, async (req, res) => {
-  // If editing form builder schema, enforce Super Admin (developer/Lakshay) privilege only
-  if (req.body.landing_form_schema && !req.user.canDelete) {
-    return res.status(403).json({ error: 'Landing Form Builder access is restricted to developer admin (Lakshay) only.' });
-  }
-
-  const oldSettings = await db.getSettings();
-  const updated = await db.updateSettings(req.body);
-
-  // If card_manager_banks is updated, diff to find deleted banks and clear agent assignments
-  if (req.body.card_manager_banks !== undefined) {
-    const oldBanks = oldSettings.card_manager_banks ? oldSettings.card_manager_banks.split(',').map(b => b.trim()).filter(Boolean) : [];
-    const newBanks = req.body.card_manager_banks ? req.body.card_manager_banks.split(',').map(b => b.trim()).filter(Boolean) : [];
-    const deletedBanks = oldBanks.filter(b => !newBanks.includes(b));
-    for (const bankName of deletedBanks) {
-      await db.removeAgentBankAssignment(bankName);
+// Update Settings (Admin Only) - support both PUT and POST
+const handleUpdateSettings = async (req, res) => {
+  try {
+    // If editing form builder schema, enforce Super Admin (developer/Lakshay) privilege only
+    if (req.body.landing_form_schema && !req.user?.canDelete) {
+      return res.status(403).json({ success: false, error: 'Landing Form Builder access is restricted to developer admin (Lakshay) only.' });
     }
-  }
-  
-  // Toggle Baileys session connection if gateway changed
-  if (oldSettings.whatsapp_gateway !== updated.whatsapp_gateway) {
-    console.log(`[Settings] WhatsApp gateway changed from '${oldSettings.whatsapp_gateway}' to '${updated.whatsapp_gateway}'`);
-    if (updated.whatsapp_gateway === 'meta') {
-      await baileys.stopBaileys();
-    } else if (updated.whatsapp_gateway === 'baileys') {
-      await baileys.startBaileys();
-    }
-  }
 
-  // Broadcast settings change
-  broadcast({ type: 'SETTINGS_UPDATED' });
-  broadcast({ type: 'AGENTS_UPDATED' }); // Broadcast agent update since assignments might have changed
-  
-  res.json(updated);
-});
+    const oldSettings = await db.getSettings();
+    const updated = await db.updateSettings(req.body);
+
+    // If card_manager_banks is updated, diff to find deleted banks and clear agent assignments
+    if (req.body.card_manager_banks !== undefined) {
+      const oldBanks = oldSettings.card_manager_banks ? oldSettings.card_manager_banks.split(',').map(b => b.trim()).filter(Boolean) : [];
+      const newBanks = req.body.card_manager_banks ? req.body.card_manager_banks.split(',').map(b => b.trim()).filter(Boolean) : [];
+      const deletedBanks = oldBanks.filter(b => !newBanks.includes(b));
+      for (const bankName of deletedBanks) {
+        await db.removeAgentBankAssignment(bankName);
+      }
+    }
+    
+    // Toggle Baileys session connection if gateway changed
+    if (oldSettings.whatsapp_gateway !== updated.whatsapp_gateway) {
+      console.log(`[Settings] WhatsApp gateway changed from '${oldSettings.whatsapp_gateway}' to '${updated.whatsapp_gateway}'`);
+      if (updated.whatsapp_gateway === 'meta') {
+        await baileys.stopBaileys();
+      } else if (updated.whatsapp_gateway === 'baileys') {
+        await baileys.startBaileys();
+      }
+    }
+
+    // Broadcast settings change
+    broadcast({ type: 'SETTINGS_UPDATED' });
+    broadcast({ type: 'AGENTS_UPDATED' }); // Broadcast agent update since assignments might have changed
+    
+    res.json({ success: true, settings: updated, ...updated });
+  } catch (err) {
+    console.error('[API Error] Updating /api/settings:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+app.put('/api/settings', authenticateToken, requireAdmin, handleUpdateSettings);
+app.post('/api/settings', authenticateToken, requireAdmin, handleUpdateSettings);
 
 // Check if pincode is in OCL & Negative Pincode List
 app.get('/api/pincodes/check-negative/:pincode', (req, res) => {

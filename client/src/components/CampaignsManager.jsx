@@ -273,20 +273,18 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
     try {
       const res = await fetch(`${API_URL}/settings`, { headers });
       const data = await res.json();
-      if (data.success && data.settings) {
-        const s = data.settings;
-        setSmtpSettings({
-          host: s.campaign_smtp_host || '',
-          port: s.campaign_smtp_port || '465',
-          user: s.campaign_smtp_user || '',
-          pass: s.campaign_smtp_pass || '',
-          secure: s.campaign_smtp_secure || 'true',
-          fromName: s.campaign_smtp_from_name || 'FinMantra',
-          fromEmail: s.campaign_smtp_from_email || 'no-reply@finmantra.com'
-        });
-        if (!broadcastForm.sender_email && s.campaign_smtp_from_email) {
-          setBroadcastForm(prev => ({ ...prev, sender_email: s.campaign_smtp_from_email }));
-        }
+      const s = data.settings || data || {};
+      setSmtpSettings({
+        host: s.campaign_smtp_host || '',
+        port: s.campaign_smtp_port || '465',
+        user: s.campaign_smtp_user || '',
+        pass: s.campaign_smtp_pass || '',
+        secure: s.campaign_smtp_secure !== undefined ? String(s.campaign_smtp_secure) : 'true',
+        fromName: s.campaign_smtp_from_name || 'FinMantra',
+        fromEmail: s.campaign_smtp_from_email || 'no-reply@finmantra.com'
+      });
+      if (!broadcastForm.sender_email && s.campaign_smtp_from_email) {
+        setBroadcastForm(prev => ({ ...prev, sender_email: s.campaign_smtp_from_email }));
       }
     } catch (err) {
       console.warn('[Fetch Settings Error]:', err.message);
@@ -298,7 +296,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
     setIsSavingSettings(true);
     try {
       const res = await fetch(`${API_URL}/settings`, {
-        method: 'POST',
+        method: 'PUT',
         headers,
         body: JSON.stringify({
           campaign_smtp_host: smtpSettings.host,
@@ -311,7 +309,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
         })
       });
       const data = await res.json();
-      if (res.ok && data.success) {
+      if (res.ok) {
         showToast('SMTP Gateway configuration updated successfully.', 'success');
       } else {
         showToast(data.error || 'Failed to save SMTP settings.', 'error');
@@ -1712,6 +1710,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                 <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '0.25rem' }}>SMTP Username / Email</label>
                 <input
                   type="text"
+                  autoComplete="username"
                   value={smtpSettings.user}
                   onChange={(e) => setSmtpSettings({ ...smtpSettings, user: e.target.value })}
                   style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)' }}
@@ -1722,6 +1721,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                 <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '0.25rem' }}>SMTP Password / App Password</label>
                 <input
                   type="password"
+                  autoComplete="current-password"
                   value={smtpSettings.pass}
                   onChange={(e) => setSmtpSettings({ ...smtpSettings, pass: e.target.value })}
                   style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)' }}
@@ -1733,6 +1733,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                   <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '0.25rem' }}>From Name</label>
                   <input
                     type="text"
+                    autoComplete="name"
                     value={smtpSettings.fromName}
                     onChange={(e) => setSmtpSettings({ ...smtpSettings, fromName: e.target.value })}
                     style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)' }}
@@ -1742,6 +1743,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                   <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '0.25rem' }}>From Email Address</label>
                   <input
                     type="email"
+                    autoComplete="email"
                     value={smtpSettings.fromEmail}
                     onChange={(e) => setSmtpSettings({ ...smtpSettings, fromEmail: e.target.value })}
                     style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)' }}
