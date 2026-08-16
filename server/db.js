@@ -3048,6 +3048,7 @@ const db = {
   },
 
   async deleteCampaignBroadcast(id) {
+    await pool.query('DELETE FROM campaign_logs WHERE broadcast_id = $1', [id]).catch(() => {});
     const res = await pool.query('DELETE FROM campaign_broadcasts WHERE id = $1 RETURNING *', [id]);
     return res.rows[0];
   },

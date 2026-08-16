@@ -7501,7 +7501,7 @@ app.get('/api/c/t/:broadcastId/:masterLeadId', async (req, res) => {
 });
 
 // Delete broadcast
-app.delete('/api/campaigns/:id/broadcasts/:broadcastId', authenticateToken, async (req, res) => {
+app.delete(['/api/campaigns/:id/broadcasts/:broadcastId', '/api/campaigns/broadcasts/:broadcastId'], authenticateToken, async (req, res) => {
   try {
     const deleted = await db.deleteCampaignBroadcast(req.params.broadcastId);
     res.json({ success: true, broadcast: deleted });

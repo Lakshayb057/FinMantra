@@ -561,6 +561,27 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
     }
   };
 
+  // Delete broadcast
+  const handleDeleteBroadcast = async (broadcastId, broadcastName = 'Broadcast') => {
+    if (!window.confirm(`Are you sure you want to permanently delete the broadcast "${broadcastName}"?`)) return;
+    try {
+      const res = await fetch(`${API_URL}/campaigns/broadcasts/${broadcastId}`, {
+        method: 'DELETE',
+        headers
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast('Broadcast deleted successfully.', 'info');
+        fetchBroadcasts();
+        fetchCommunicationAnalytics();
+      } else {
+        showToast(data.error || 'Failed to delete broadcast.', 'error');
+      }
+    } catch (err) {
+      showToast('Network error while deleting broadcast.', 'error');
+    }
+  };
+
   // Helper for Quality Rating badge colors
   const getQualityRatingBadge = (rating) => {
     const r = String(rating || '').toUpperCase();
@@ -1038,6 +1059,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                     <th style={{ padding: '0.6rem 0.75rem' }}>Delivered</th>
                     <th style={{ padding: '0.6rem 0.75rem' }}>CTR</th>
                     <th style={{ padding: '0.6rem 0.75rem' }}>Date</th>
+                    <th style={{ padding: '0.6rem 0.75rem', textAlign: 'right' }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1067,6 +1089,15 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                         <td style={{ padding: '0.65rem 0.75rem', color: 'var(--gold-deep)', fontWeight: 700 }}>{ctr}%</td>
                         <td style={{ padding: '0.65rem 0.75rem', color: 'var(--muted)', fontSize: '0.78rem' }}>
                           {b.created_at ? new Date(b.created_at).toLocaleDateString() : '—'}
+                        </td>
+                        <td style={{ padding: '0.65rem 0.75rem', textAlign: 'right' }}>
+                          <button
+                            onClick={() => handleDeleteBroadcast(b.id, b.name)}
+                            style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.2rem' }}
+                            title="Delete Broadcast"
+                          >
+                            <Trash2 size={15} />
+                          </button>
                         </td>
                       </tr>
                     );
@@ -1491,7 +1522,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                           <td style={{ padding: '0.75rem 0.85rem', fontSize: '0.78rem', color: 'var(--muted)' }}>
                             {b.scheduled_at ? new Date(b.scheduled_at).toLocaleString() : 'Direct / Immediate'}
                           </td>
-                          <td style={{ padding: '0.75rem 0.85rem', textAlign: 'right' }}>
+                          <td style={{ padding: '0.75rem 0.85rem', textAlign: 'right', whiteSpace: 'nowrap' }}>
                             {b.status !== 'sent' && b.status !== 'processing' && (
                               <button
                                 onClick={() => handleTriggerBroadcastNow(b.id)}
@@ -1506,10 +1537,30 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                                   cursor: 'pointer',
                                   marginRight: '0.4rem'
                                 }}
+                                title="Send broadcast now"
                               >
                                 <Send size={12} style={{ marginRight: '0.25rem', verticalAlign: 'middle' }} /> Send Now
                               </button>
                             )}
+                            <button
+                              onClick={() => handleDeleteBroadcast(b.id, b.name)}
+                              style={{
+                                padding: '0.3rem 0.55rem',
+                                borderRadius: '4px',
+                                background: 'rgba(239, 68, 68, 0.1)',
+                                color: '#ef4444',
+                                border: '1px solid rgba(239, 68, 68, 0.2)',
+                                fontSize: '0.75rem',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.25rem'
+                              }}
+                              title="Delete Broadcast"
+                            >
+                              <Trash2 size={13} /> Delete
+                            </button>
                           </td>
                         </tr>
                       );
