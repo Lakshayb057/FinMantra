@@ -3137,7 +3137,7 @@ const db = {
              COALESCE(ml.name, cl.name, 'Recipient') as lead_name,
              COALESCE(ml.contact, cl.contact, '') as lead_contact,
              COALESCE(ml.mail, cl.mail, '') as lead_mail,
-             COALESCE(ml.finmantra_id, cl.finmantra_id, '') as lead_finmantra_id
+             COALESCE(ml.finmantra_id, '') as lead_finmantra_id
       FROM campaign_logs l
       LEFT JOIN campaign_master_leads ml ON ml.id = l.campaign_lead_id
       LEFT JOIN campaign_leads cl ON cl.id = l.campaign_lead_id
