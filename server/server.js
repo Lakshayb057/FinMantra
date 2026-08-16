@@ -377,7 +377,10 @@ function getFallbackText(isOtpAuth, parameters, settings) {
 }
 
 // Helper to send messages via Meta WhatsApp Cloud API (with Baileys QR-Linked Device fallback)
-async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOtpAuth = false, mediaUrl = null) {
+// In-memory template strategy cache to eliminate trial-and-error HTTP round-trips
+const templateStrategyCache = new Map();
+
+async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOtpAuth = false, mediaUrl = null, preferredLang = null) {
   const settings = await db.getSettings();
   const gateway = settings.whatsapp_gateway || 'meta';
 
@@ -411,9 +414,14 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
     formattedPhone = '91' + formattedPhone; // Default to India country code if 10 digits
   }
 
-  const baseLang = getSettingVal(settings, 'wa_template_language', 'WA_TEMPLATE_LANGUAGE', 'en');
-
-  const langCandidates = [baseLang, 'en_US', 'en', 'en_GB'].filter((v, i, a) => v && a.indexOf(v) === i);
+  const configuredLang = getSettingVal(settings, 'wa_template_language', 'WA_TEMPLATE_LANGUAGE', 'en_US');
+  
+  // Prioritize en_US and preferredLang first to eliminate #132001 translation errors
+  let langCandidates = [];
+  if (preferredLang) langCandidates.push(preferredLang);
+  if (configuredLang && configuredLang !== 'en') langCandidates.push(configuredLang);
+  langCandidates.push('en_US', 'en', 'en_GB');
+  langCandidates = langCandidates.filter((v, i, a) => v && a.indexOf(v) === i);
 
   // Build list of candidate component payloads to guarantee delivery across all template variations
   const componentStrategies = [];
@@ -550,6 +558,41 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
     });
   };
 
+  const cacheKey = `${templateName}|${isOtpAuth ? 'otp' : 'std'}|${mediaUrl ? 'media' : 'nomedia'}`;
+  const cached = templateStrategyCache.get(cacheKey);
+
+  // Quick path: If we already know the working lang & strategy, test it first
+  if (cached && componentStrategies[cached.strategyIdx]) {
+    try {
+      let currentComponents = [...componentStrategies[cached.strategyIdx]];
+      if (mediaUrl) {
+        let mediaType = 'image';
+        const lower = mediaUrl.toLowerCase().trim();
+        if (lower.endsWith('.pdf') || lower.endsWith('.doc') || lower.endsWith('.docx')) mediaType = 'document';
+        else if (lower.endsWith('.mp4') || lower.endsWith('.mov') || lower.endsWith('.avi')) mediaType = 'video';
+        currentComponents.unshift({ type: 'header', parameters: [{ type: mediaType, [mediaType]: { link: mediaUrl } }] });
+      }
+
+      const payloadObj = {
+        messaging_product: 'whatsapp',
+        to: formattedPhone,
+        type: 'template',
+        template: {
+          name: templateName,
+          language: { code: cached.lang }
+        }
+      };
+      if (currentComponents.length > 0) payloadObj.template.components = currentComponents;
+
+      const result = await executeMetaRequest(payloadObj);
+      console.log(`[WhatsApp API] Fast delivery to ${formattedPhone} using "${templateName}" (${cached.lang}, strategy ${cached.strategyIdx + 1}).`);
+      return result;
+    } catch (cacheErr) {
+      // Invalidate stale cache and fall through to full candidate loop
+      templateStrategyCache.delete(cacheKey);
+    }
+  }
+
   let lastError = null;
   let isAuthFailure = false;
 
@@ -595,8 +638,8 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
       try {
         const result = await executeMetaRequest(payloadObj);
         console.log(`[WhatsApp API] Message sent successfully to ${formattedPhone} using template "${templateName}" (lang: ${lang}, strategy: ${sIdx + 1}).`);
-        console.log(`[WhatsApp API DEBUG] Payload: ${JSON.stringify(payloadObj)}`);
-        console.log(`[WhatsApp API DEBUG] Meta Response: ${JSON.stringify(result)}`);
+        // Cache winning strategy for subsequent requests
+        templateStrategyCache.set(cacheKey, { lang, strategyIdx: sIdx });
         return result;
       } catch (err) {
         lastError = err.message || `Meta API Error (status ${err.statusCode})`;
@@ -605,7 +648,6 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
           console.error(`[WhatsApp API CRITICAL] Authentication Failed for Meta API (Code: ${err.errorCode || 190}). Token is invalid or expired! Stopping further payload/language attempts for "${templateName}".`);
           break;
         }
-        console.warn(`[WhatsApp API Warning] Strategy ${sIdx + 1} with lang ${lang} failed for "${templateName}": ${lastError}. Trying next candidate...`);
       }
     }
     if (isAuthFailure) break;
@@ -6077,7 +6119,7 @@ async function checkAndRunScheduledBroadcasts() {
                 params = [lead.name, waMessage];
               }
 
-              await sendWhatsAppTemplate(lead.contact, b.whatsapp_template, params, false, b.media_url);
+              await sendWhatsAppTemplate(lead.contact, b.whatsapp_template, params, false, b.media_url, templateObj?.language || 'en_US');
             } else {
               const gateway = settings.whatsapp_gateway || 'baileys';
               if (gateway === 'baileys') {
