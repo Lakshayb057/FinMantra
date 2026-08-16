@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Users, Mail, MessageSquare, Plus, Trash2, Search, Upload, RefreshCw, X, Check,
   AlertCircle, Download, FileSpreadsheet, Play, Settings as SettingsIcon, HelpCircle, Info, Zap, Database, FileText,
-  Clock, Edit2
+  Clock, Edit2, Lock
 } from 'lucide-react';
 
 export default function CampaignsManager({ theme, API_URL, token, showToast }) {
@@ -1645,12 +1645,64 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                                     <Edit2 size={12} />
                                   </button>
 
-                                  {/* Trigger Now Button */}
+                                  {/* Trigger / Lock Button */}
                                   {(() => {
-                                    const isSent = b.status === 'sent';
+                                    const isScheduled = b.status === 'scheduled';
                                     const isProcessing = b.status === 'processing';
-                                    
-                                    // Check local client-side 1-hour throttle if status is sent
+                                    const isSent = b.status === 'sent';
+
+                                    if (isProcessing) {
+                                      return (
+                                        <button
+                                          disabled
+                                          className="btn-secondary"
+                                          style={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            height: '28px',
+                                            width: '28px',
+                                            padding: 0,
+                                            borderRadius: '4px',
+                                            background: 'rgba(59, 130, 246, 0.15)',
+                                            color: '#3b82f6',
+                                            border: '1px solid rgba(59, 130, 246, 0.3)',
+                                            cursor: 'not-allowed'
+                                          }}
+                                          title="Broadcast is currently processing..."
+                                        >
+                                          <RefreshCw size={12} className="spin" />
+                                        </button>
+                                      );
+                                    }
+
+                                    if (isScheduled) {
+                                      return (
+                                        <button
+                                          disabled
+                                          className="btn-secondary"
+                                          style={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            height: '28px',
+                                            width: '28px',
+                                            padding: 0,
+                                            borderRadius: '4px',
+                                            background: 'rgba(234, 179, 8, 0.12)',
+                                            color: '#ca8a04',
+                                            border: '1px solid rgba(234, 179, 8, 0.25)',
+                                            cursor: 'not-allowed',
+                                            opacity: 0.8
+                                          }}
+                                          title="Locked: This broadcast is scheduled with an active timer. It will trigger automatically when the countdown hits 0."
+                                        >
+                                          <Lock size={12} />
+                                        </button>
+                                      );
+                                    }
+
+                                    // If status is SENT, check 1-hour throttle
                                     let isLocked = false;
                                     let minutesLeft = 0;
                                     if (isSent && b.last_triggered_at && b.last_trigger_status === 'sent') {
@@ -1662,8 +1714,6 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                                         minutesLeft = Math.ceil((oneHour - diff) / (60 * 1000));
                                       }
                                     }
-
-                                    if (isProcessing) return null;
 
                                     return (
                                       <button
@@ -1684,7 +1734,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                                           cursor: isLocked ? 'not-allowed' : 'pointer',
                                           opacity: isLocked ? 0.5 : 1
                                         }}
-                                        title={isLocked ? `Locked. Ready in ${minutesLeft} mins` : "Trigger Broadcast Now"}
+                                        title={isLocked ? `Locked. Ready in ${minutesLeft} mins` : (isSent ? "Trigger Broadcast Again" : "Trigger Broadcast Now")}
                                       >
                                         <Play size={12} />
                                       </button>
