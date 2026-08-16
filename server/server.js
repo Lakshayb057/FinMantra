@@ -420,7 +420,7 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
   let langCandidates = [];
   if (preferredLang) langCandidates.push(preferredLang);
   if (configuredLang && configuredLang !== 'en') langCandidates.push(configuredLang);
-  langCandidates.push('en_US', 'en', 'en_GB');
+  langCandidates.push('en_US', 'en', 'en_GB', 'hi');
   langCandidates = langCandidates.filter((v, i, a) => v && a.indexOf(v) === i);
 
   // Build list of candidate component payloads to guarantee delivery across all template variations
@@ -6164,14 +6164,18 @@ async function checkAndRunScheduledBroadcasts() {
                   params = [lead.name, waMessage];
                 }
 
+                const actualTemplateName = templateObj?.meta_template_name || templateObj?.name || b.whatsapp_template;
+                const templateLanguage = templateObj?.language || 'en_US';
+                const phoneIdToUse = b.meta_phone_number_id || templateObj?.meta_phone_number_id || null;
+
                 await sendWhatsAppTemplate(
                   lead.contact,
-                  b.whatsapp_template,
+                  actualTemplateName,
                   params,
                   false,
                   b.media_url,
-                  templateObj?.language || 'en_US',
-                  b.meta_phone_number_id || null
+                  templateLanguage,
+                  phoneIdToUse
                 );
               } else {
                 const gateway = settings.whatsapp_gateway || 'baileys';
