@@ -641,10 +641,23 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
         : `${API_URL}/campaigns/${selectedCampaignId}/broadcasts`;
       const method = isEdit ? 'PUT' : 'POST';
 
+      let isoScheduledAt = null;
+      if (newBroadcastForm.scheduledAt) {
+        const d = new Date(newBroadcastForm.scheduledAt);
+        if (!isNaN(d.getTime())) {
+          isoScheduledAt = d.toISOString();
+        }
+      }
+
+      const payload = {
+        ...newBroadcastForm,
+        scheduledAt: isoScheduledAt
+      };
+
       const res = await fetch(url, {
         method,
         headers,
-        body: JSON.stringify(newBroadcastForm)
+        body: JSON.stringify(payload)
       });
       const data = await res.json();
       if (res.ok && data.success) {
