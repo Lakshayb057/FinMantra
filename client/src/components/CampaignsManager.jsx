@@ -192,30 +192,43 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
     }
   };
 
-  const fetchTemplates = async () => {
+  const fetchTemplates = async (skipMetaSync = false) => {
     try {
       const res = await fetch(`${API_URL}/campaigns/templates`, { headers });
       const data = await res.json();
       if (res.ok && data.success) {
         setTemplates(data.templates || []);
-        // Trigger status sync in the background
-        syncMetaStatuses();
+        if (!skipMetaSync) {
+          // Trigger status sync in the background
+          syncMetaStatuses(true);
+        }
       }
     } catch (err) {
       showToast('Error fetching campaign templates.', 'error');
     }
   };
 
-  const syncMetaStatuses = async () => {
+  const syncMetaStatuses = async (isBackground = false) => {
     setIsSyncingMeta(true);
     try {
+      // Refresh templates list from DB first but skip recursive sync
+      await fetchTemplates(true);
+
       const res = await fetch(`${API_URL}/campaigns/templates/meta-sync`, { headers });
       const data = await res.json();
       if (res.ok && data.success) {
         setMetaStatuses(data.metaStatuses || {});
+        if (!isBackground) {
+          showToast('Meta template statuses synced successfully!', 'success');
+        }
+      } else if (!isBackground) {
+        showToast(data.error || 'Failed to sync statuses with Meta.', 'error');
       }
     } catch (err) {
       console.error('Failed to sync Meta template statuses:', err);
+      if (!isBackground) {
+        showToast('Error syncing with Meta: ' + err.message, 'error');
+      }
     } finally {
       setIsSyncingMeta(false);
     }
