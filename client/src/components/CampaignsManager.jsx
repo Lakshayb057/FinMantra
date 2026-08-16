@@ -1914,7 +1914,21 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                       category: 'MARKETING',
                       language: 'en_US',
                       headerFormat: 'NONE',
-                      buttons: { buttonType: 'NONE', ctaUrlText: '', ctaUrlValue: '', ctaPhoneText: '', ctaPhoneValue: '', quickReplies: ['', '', ''] }
+                      headerText: '',
+                      headerSample: '',
+                      footerText: '',
+                      bodySampleValues: {},
+                      buttons: {
+                        buttonType: 'NONE',
+                        ctaUrlText: '',
+                        ctaUrlValue: '',
+                        ctaUrlSample: '',
+                        ctaPhoneText: '',
+                        ctaPhoneValue: '',
+                        quickReplies: ['Interested', 'Apply Now', 'Talk to Agent'],
+                        otpType: 'COPY_CODE',
+                        otpText: 'Copy Code'
+                      }
                     });
                     setShowCreateTemplateModal(true);
                   }}
@@ -3134,13 +3148,13 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                               <input
                                 type="text"
                                 placeholder={`e.g. ${vNum === 1 ? 'Rahul' : vNum === 2 ? 'FinMantra' : 'Sample'}`}
-                                value={newTemplateForm.bodySampleValues[vNum] || ''}
+                                value={(newTemplateForm.bodySampleValues || {})[vNum] || ''}
                                 onChange={(e) => {
                                   const val = e.target.value;
                                   setNewTemplateForm(prev => ({
                                     ...prev,
                                     bodySampleValues: {
-                                      ...prev.bodySampleValues,
+                                      ...(prev.bodySampleValues || {}),
                                       [vNum]: val
                                     }
                                   }));
@@ -3448,7 +3462,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                         {(() => {
                           let text = newTemplateForm.body || 'Type your message template body on the left...';
                           text = text.replace(/\{\{(\d+)\}\}/g, (match, p1) => {
-                            const val = newTemplateForm.bodySampleValues[p1];
+                            const val = (newTemplateForm.bodySampleValues || {})[p1];
                             return val && val.trim() ? val : match;
                           });
                           return text;
