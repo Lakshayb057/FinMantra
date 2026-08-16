@@ -5959,6 +5959,7 @@ async function checkAndRunScheduledBroadcasts() {
     const settings = await db.getSettings();
     const fromEmail = settings.campaign_smtp_from_email || 'no-reply@finmantra.com';
     const fromName = settings.campaign_smtp_from_name || 'FinMantra';
+    const templatesList = await db.getCampaignTemplates().catch(() => []);
 
     for (const b of scheduled) {
       // 1. Mark as processing
@@ -6026,7 +6027,44 @@ async function checkAndRunScheduledBroadcasts() {
           
           try {
             if (b.whatsapp_template) {
-              const params = [lead.name, waMessage];
+              const tNameClean = b.whatsapp_template.trim().toLowerCase();
+              const templateObj = templatesList.find(t => 
+                (t.name && t.name.trim().toLowerCase() === tNameClean) || 
+                (t.meta_template_name && t.meta_template_name.trim().toLowerCase() === tNameClean)
+              );
+
+              let params = [];
+              if (templateObj) {
+                const regex = /\{\{(\d+)\}\}/g;
+                const matches = [...templateObj.body.matchAll(regex)];
+                const paramNumbers = matches.map(m => parseInt(m[1], 10));
+                const maxBodyParam = paramNumbers.length > 0 ? Math.max(...paramNumbers) : 0;
+                
+                let hasDynamicButton = false;
+                if (templateObj.buttons) {
+                  try {
+                    const btnObj = JSON.parse(templateObj.buttons);
+                    if (btnObj.buttonType === 'CTA' && btnObj.ctaUrlValue && (btnObj.ctaUrlValue.includes('{{1}}') || btnObj.ctaUrlValue.includes('{{2}}'))) {
+                      hasDynamicButton = true;
+                    }
+                  } catch (e) {}
+                }
+
+                if (hasDynamicButton) {
+                  params = [lead.name, waMessage];
+                } else {
+                  if (maxBodyParam === 1) {
+                    params = [lead.name];
+                  } else if (maxBodyParam === 2) {
+                    params = [lead.name, waMessage];
+                  } else {
+                    params = [lead.name, waMessage].slice(0, maxBodyParam);
+                  }
+                }
+              } else {
+                params = [lead.name, waMessage];
+              }
+
               await sendWhatsAppTemplate(lead.contact, b.whatsapp_template, params, false, b.media_url);
             } else {
               const gateway = settings.whatsapp_gateway || 'baileys';
