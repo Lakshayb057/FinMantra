@@ -6601,9 +6601,8 @@ app.get('/api/campaigns/templates/debug-errors', async (req, res) => {
              b.name as broadcast_name, b.whatsapp_template
       FROM campaign_logs l
       JOIN campaign_broadcasts b ON l.broadcast_id = b.id
-      WHERE l.status = 'failed'
       ORDER BY l.sent_at DESC
-      LIMIT 10
+      LIMIT 20
     `;
     const result = await db.runQuery(query);
     res.json(result.rows);
