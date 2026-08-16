@@ -6247,6 +6247,85 @@ app.get('/api/campaigns/templates/meta-sync', authenticateToken, async (req, res
   }
 });
 
+// Debug endpoint to inspect all Meta templates and rejection logs
+app.get('/api/campaigns/templates/meta-inspect', authenticateToken, async (req, res) => {
+  try {
+    const settings = await db.getSettings();
+    const apiKey = getSettingVal(settings, 'wa_api_key', 'WA_API_KEY');
+    let wabaId = getSettingVal(settings, 'wa_business_account_id', 'WA_BUSINESS_ACCOUNT_ID');
+    const apiVersion = getSettingVal(settings, 'wa_api_version', 'WA_API_VERSION', 'v25.0');
+    
+    if (!apiKey) {
+      return res.status(400).json({ error: 'Meta API Key is not configured.' });
+    }
+
+    if (!wabaId || wabaId === 'undefined' || wabaId === 'null') {
+      const fetchWabas = async () => {
+        return new Promise((resolveWaba, rejectWaba) => {
+          const options = {
+            hostname: 'graph.facebook.com',
+            port: 443,
+            path: `/${apiVersion}/me/whatsapp_business_accounts`,
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${apiKey}` }
+          };
+          const req = https.request(options, (res) => {
+            let body = '';
+            res.on('data', chunk => body += chunk);
+            res.on('end', () => {
+              if (res.statusCode >= 200 && res.statusCode < 300) {
+                try {
+                  const parsed = JSON.parse(body);
+                  if (parsed.data && parsed.data.length > 0) {
+                    resolveWaba(parsed.data[0].id);
+                  } else { resolveWaba(null); }
+                } catch (e) { resolveWaba(null); }
+              } else { resolveWaba(null); }
+            });
+          });
+          req.setTimeout(5000);
+          req.on('error', () => resolveWaba(null));
+          req.end();
+        });
+      };
+      wabaId = await fetchWabas();
+    }
+
+    if (!wabaId) {
+      return res.status(400).json({ error: 'WABA ID not found.' });
+    }
+
+    const fetchMetaTemplates = () => {
+      return new Promise((resolve, reject) => {
+        const options = {
+          hostname: 'graph.facebook.com',
+          port: 443,
+          path: `/${apiVersion}/${wabaId}/message_templates?limit=100`,
+          method: 'GET',
+          headers: { 'Authorization': `Bearer ${apiKey}` }
+        };
+        const req = https.request(options, (res) => {
+          let body = '';
+          res.on('data', chunk => body += chunk);
+          res.on('end', () => {
+            if (res.statusCode >= 200 && res.statusCode < 300) {
+              try { resolve(JSON.parse(body)); } catch (e) { reject(new Error('Invalid JSON.')); }
+            } else { reject(new Error(`Meta API error ${res.statusCode}: ${body}`)); }
+          });
+        });
+        req.setTimeout(10000);
+        req.on('error', err => reject(err));
+        req.end();
+      });
+    };
+
+    const result = await fetchMetaTemplates();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // List all campaign templates
 app.get('/api/campaigns/templates', authenticateToken, async (req, res) => {
   try {
