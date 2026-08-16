@@ -2978,6 +2978,25 @@ const db = {
     return res.rows[0];
   },
 
+  async updateCampaignBroadcast(id, { name, channel, whatsappTemplate, whatsappMessage, emailSubject, emailBody, scheduledAt, mediaUrl }) {
+    const res = await pool.query(
+      `UPDATE campaign_broadcasts 
+       SET name = COALESCE($2, name), 
+           channel = COALESCE($3, channel), 
+           whatsapp_template = $4, 
+           whatsapp_message = $5, 
+           email_subject = $6, 
+           email_body = $7, 
+           scheduled_at = $8, 
+           media_url = $9,
+           status = CASE WHEN $8 IS NOT NULL THEN 'scheduled' ELSE status END
+       WHERE id = $1 
+       RETURNING *`,
+      [id, name, channel, whatsappTemplate || null, whatsappMessage || null, emailSubject || null, emailBody || null, scheduledAt ? new Date(scheduledAt) : null, mediaUrl || null]
+    );
+    return res.rows[0];
+  },
+
   async getCampaignBroadcasts(campaignId) {
     let res;
     if (campaignId) {

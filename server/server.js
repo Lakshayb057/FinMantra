@@ -7359,6 +7359,37 @@ app.post('/api/campaigns/:id/broadcasts/:broadcastId/trigger', authenticateToken
   }
 });
 
+// Update campaign broadcast (Edit parameters, template, or schedule time)
+app.put('/api/campaigns/:id/broadcasts/:broadcastId', authenticateToken, async (req, res) => {
+  try {
+    const { broadcastId } = req.params;
+    const { name, channel, whatsappTemplate, whatsappMessage, emailSubject, emailBody, scheduledAt, mediaUrl } = req.body;
+    
+    if (!name || !channel) {
+      return res.status(400).json({ success: false, error: 'Broadcast Name and Channel are required.' });
+    }
+
+    const updated = await db.updateCampaignBroadcast(broadcastId, {
+      name,
+      channel,
+      whatsappTemplate: whatsappTemplate || null,
+      whatsappMessage: whatsappMessage || null,
+      emailSubject: emailSubject || null,
+      emailBody: emailBody || null,
+      scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
+      mediaUrl: mediaUrl || null
+    });
+
+    if (!updated) {
+      return res.status(404).json({ success: false, error: 'Broadcast not found.' });
+    }
+
+    res.json({ success: true, broadcast: updated });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Delete broadcast
 app.delete('/api/campaigns/:id/broadcasts/:broadcastId', authenticateToken, async (req, res) => {
   try {
@@ -7401,9 +7432,9 @@ server.listen(PORT, async () => {
     await db.init();
     console.log('[Startup] Database initialization completed successfully.');
 
-    // Initialize campaign cron worker checking every 30 seconds
-    setInterval(checkAndRunScheduledBroadcasts, 30000);
-    console.log('[Startup] Campaigns Scheduled Broadcast daemon started.');
+    // Initialize campaign cron worker checking every 5 seconds for rapid instant dispatch
+    setInterval(checkAndRunScheduledBroadcasts, 5000);
+    console.log('[Startup] Campaigns Scheduled Broadcast daemon started (5s interval).');
 
     const settings = await db.getSettings();
     const gateway = settings.whatsapp_gateway || 'baileys';

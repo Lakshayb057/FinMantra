@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Users, Mail, MessageSquare, Plus, Trash2, Search, Upload, RefreshCw, X, Check,
-  AlertCircle, Download, FileSpreadsheet, Play, Settings as SettingsIcon, HelpCircle, Info, Zap, Database, FileText
+  AlertCircle, Download, FileSpreadsheet, Play, Settings as SettingsIcon, HelpCircle, Info, Zap, Database, FileText,
+  Clock, Edit2
 } from 'lucide-react';
 
 export default function CampaignsManager({ theme, API_URL, token, showToast }) {
@@ -82,6 +83,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
   // Broadcasts state
   const [broadcasts, setBroadcasts] = useState([]);
   const [showNewBroadcastModal, setShowNewBroadcastModal] = useState(false);
+  const [editingBroadcastId, setEditingBroadcastId] = useState(null);
   const [isCreatingBroadcast, setIsCreatingBroadcast] = useState(false);
   const [newBroadcastForm, setNewBroadcastForm] = useState({
     name: '',
@@ -94,6 +96,26 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
     mediaUrl: ''
   });
   const [isLoadingBroadcasts, setIsLoadingBroadcasts] = useState(false);
+  const [nowTime, setNowTime] = useState(Date.now());
+
+  // 1-second ticker for live reverse countdown timers
+  useEffect(() => {
+    const timerInterval = setInterval(() => setNowTime(Date.now()), 1000);
+    return () => clearInterval(timerInterval);
+  }, []);
+
+  // Background auto-refresh when broadcasts are scheduled or processing
+  useEffect(() => {
+    if (activeSubTab === 'broadcast' && selectedCampaignId) {
+      const hasActive = broadcasts.some(b => b.status === 'scheduled' || b.status === 'processing');
+      if (hasActive) {
+        const pollInterval = setInterval(() => {
+          fetchCampaignBroadcasts(selectedCampaignId, true);
+        }, 3000);
+        return () => clearInterval(pollInterval);
+      }
+    }
+  }, [activeSubTab, selectedCampaignId, broadcasts]);
 
   // SMTP Settings state
   const [smtpSettings, setSmtpSettings] = useState({
@@ -178,8 +200,8 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
     }
   };
 
-  const fetchCampaignBroadcasts = async (campaignId) => {
-    setIsLoadingBroadcasts(true);
+  const fetchCampaignBroadcasts = async (campaignId, isBackground = false) => {
+    if (!isBackground) setIsLoadingBroadcasts(true);
     try {
       const res = await fetch(`${API_URL}/campaigns/${campaignId}/broadcasts`, { headers });
       const data = await res.json();
@@ -187,9 +209,9 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
         setBroadcasts(data.broadcasts || []);
       }
     } catch (err) {
-      showToast('Error fetching campaign broadcasts.', 'error');
+      if (!isBackground) showToast('Error fetching campaign broadcasts.', 'error');
     } finally {
-      setIsLoadingBroadcasts(false);
+      if (!isBackground) setIsLoadingBroadcasts(false);
     }
   };
 
@@ -548,7 +570,63 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
     }
   };
 
-  const handleCreateBroadcast = async (e) => {
+  // Helper to format ISO date to local datetime-local input string
+  const formatDateTimeLocal = (dateStr) => {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return '';
+    const pad = (n) => String(n).padStart(2, '0');
+    const year = d.getFullYear();
+    const month = pad(d.getMonth() + 1);
+    const day = pad(d.getDate());
+    const hours = pad(d.getHours());
+    const minutes = pad(d.getMinutes());
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  };
+
+  // Helper for live reverse countdown timer
+  const getRemainingTime = (scheduledAt) => {
+    if (!scheduledAt) return null;
+    const target = new Date(scheduledAt).getTime();
+    const diffMs = target - nowTime;
+    if (diffMs <= 0) return { expired: true, text: 'Triggering Now...' };
+
+    const totalSec = Math.floor(diffMs / 1000);
+    const days = Math.floor(totalSec / 86400);
+    const hours = Math.floor((totalSec % 86400) / 3600);
+    const minutes = Math.floor((totalSec % 3600) / 60);
+    const seconds = totalSec % 60;
+    const pad = (n) => String(n).padStart(2, '0');
+
+    let text = '';
+    if (days > 0) {
+      text = `${days}d ${pad(hours)}h ${pad(minutes)}m`;
+    } else if (hours > 0) {
+      text = `${pad(hours)}h ${pad(minutes)}m ${pad(seconds)}s`;
+    } else if (minutes > 0) {
+      text = `${pad(minutes)}m ${pad(seconds)}s`;
+    } else {
+      text = `${seconds}s`;
+    }
+    return { expired: false, text: `in ${text}`, diffMs };
+  };
+
+  const handleEditBroadcast = (b) => {
+    setEditingBroadcastId(b.id);
+    setNewBroadcastForm({
+      name: b.name || '',
+      channel: b.channel || 'whatsapp',
+      whatsappTemplate: b.whatsapp_template || '',
+      whatsappMessage: b.whatsapp_message || '',
+      emailSubject: b.email_subject || '',
+      emailBody: b.email_body || '',
+      scheduledAt: formatDateTimeLocal(b.scheduled_at),
+      mediaUrl: b.media_url || ''
+    });
+    setShowNewBroadcastModal(true);
+  };
+
+  const handleSaveBroadcast = async (e) => {
     e.preventDefault();
     if (!newBroadcastForm.name.trim()) {
       showToast('Broadcast name is required.', 'error');
@@ -557,15 +635,22 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
 
     setIsCreatingBroadcast(true);
     try {
-      const res = await fetch(`${API_URL}/campaigns/${selectedCampaignId}/broadcasts`, {
-        method: 'POST',
+      const isEdit = !!editingBroadcastId;
+      const url = isEdit 
+        ? `${API_URL}/campaigns/${selectedCampaignId}/broadcasts/${editingBroadcastId}`
+        : `${API_URL}/campaigns/${selectedCampaignId}/broadcasts`;
+      const method = isEdit ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
         headers,
         body: JSON.stringify(newBroadcastForm)
       });
       const data = await res.json();
       if (res.ok && data.success) {
-        showToast('Broadcast created successfully!', 'success');
+        showToast(isEdit ? 'Broadcast schedule updated successfully!' : 'Broadcast created successfully!', 'success');
         setShowNewBroadcastModal(false);
+        setEditingBroadcastId(null);
         setNewBroadcastForm({
           name: '',
           channel: 'whatsapp',
@@ -573,14 +658,15 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
           whatsappMessage: '',
           emailSubject: '',
           emailBody: '',
-          scheduledAt: ''
+          scheduledAt: '',
+          mediaUrl: ''
         });
         fetchCampaignBroadcasts(selectedCampaignId);
       } else {
-        showToast(data.error || 'Failed to create broadcast.', 'error');
+        showToast(data.error || `Failed to ${isEdit ? 'update' : 'create'} broadcast.`, 'error');
       }
     } catch (err) {
-      showToast('Error creating broadcast: ' + err.message, 'error');
+      showToast('Error saving broadcast: ' + err.message, 'error');
     } finally {
       setIsCreatingBroadcast(false);
     }
@@ -1383,6 +1469,17 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                         showToast('Please upload contacts to your campaign data storage before creating a broadcast.', 'error');
                         return;
                       }
+                      setEditingBroadcastId(null);
+                      setNewBroadcastForm({
+                        name: '',
+                        channel: 'whatsapp',
+                        whatsappTemplate: '',
+                        whatsappMessage: '',
+                        emailSubject: '',
+                        emailBody: '',
+                        scheduledAt: '',
+                        mediaUrl: ''
+                      });
                       setShowNewBroadcastModal(true);
                     }}
                     className="btn-primary"
@@ -1423,14 +1520,35 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                         {broadcasts.map(b => {
                           const deliveryPercent = b.targeted_count > 0 ? Math.round((b.sent_count / b.targeted_count) * 100) : 0;
                           const readPercent = b.status === 'sent' ? Math.round((b.sent_count > 0 ? 0.75 : 0) * 100) : 0;
+                          const timerInfo = b.status === 'scheduled' && b.scheduled_at ? getRemainingTime(b.scheduled_at) : null;
 
                           return (
                             <tr key={b.id} style={{ borderBottom: '1px solid var(--line)' }} className="table-row-hover">
                               <td style={{ padding: '0.75rem 1rem' }}>
-                                <div style={{ fontWeight: 600 }}>{b.name}</div>
+                                <div style={{ fontWeight: 600, color: 'var(--ink)' }}>{b.name}</div>
                                 {b.scheduled_at && (
-                                  <div style={{ fontSize: '0.75rem', color: 'var(--muted)', marginTop: '0.15rem' }}>
-                                    Scheduled: {new Date(b.scheduled_at).toLocaleString()}
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.2rem' }}>
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>
+                                      Scheduled: {new Date(b.scheduled_at).toLocaleString()}
+                                    </span>
+                                    {timerInfo && (
+                                      <span style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '0.3rem',
+                                        padding: '0.15rem 0.5rem',
+                                        borderRadius: '12px',
+                                        fontSize: '0.72rem',
+                                        fontWeight: 700,
+                                        fontFamily: 'monospace',
+                                        background: timerInfo.expired ? 'rgba(34, 197, 94, 0.18)' : 'rgba(234, 179, 8, 0.18)',
+                                        color: timerInfo.expired ? '#16a34a' : '#ca8a04',
+                                        border: `1px solid ${timerInfo.expired ? 'rgba(34, 197, 94, 0.35)' : 'rgba(234, 179, 8, 0.35)'}`
+                                      }}>
+                                        <Clock size={11} className={timerInfo.expired ? '' : 'spin'} />
+                                        {timerInfo.expired ? '⚡ Triggering Now...' : `⏳ ${timerInfo.text}`}
+                                      </span>
+                                    )}
                                   </div>
                                 )}
                               </td>
@@ -1491,10 +1609,33 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                                 </div>
                               </td>
                               <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
-                                <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'flex-end' }}>
+                                <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'flex-end', alignItems: 'center' }}>
+                                  {/* Edit Button */}
+                                  <button
+                                    onClick={() => handleEditBroadcast(b)}
+                                    className="btn-secondary"
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      height: '28px',
+                                      width: '28px',
+                                      padding: 0,
+                                      borderRadius: '4px',
+                                      background: 'rgba(234, 179, 8, 0.12)',
+                                      color: '#d97706',
+                                      borderColor: 'rgba(234, 179, 8, 0.25)',
+                                      cursor: 'pointer'
+                                    }}
+                                    title="Edit Broadcast Schedule & Parameters"
+                                  >
+                                    <Edit2 size={12} />
+                                  </button>
+
+                                  {/* Trigger Now Button */}
                                   {(() => {
                                     const isSent = b.status === 'sent';
-                                    const isProcessing = b.status === 'processing' || b.status === 'scheduled';
+                                    const isProcessing = b.status === 'processing';
                                     
                                     // Check local client-side 1-hour throttle if status is sent
                                     let isLocked = false;
@@ -1536,6 +1677,8 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                                       </button>
                                     );
                                   })()}
+
+                                  {/* Delete Button */}
                                   <button
                                     onClick={() => handleDeleteBroadcast(b.id)}
                                     className="btn-secondary"
@@ -2946,11 +3089,13 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: '1rem' }}>
           <div className="glass-panel" style={{ width: '100%', maxWidth: '640px', maxHeight: '90vh', overflowY: 'auto', borderRadius: '16px', background: 'var(--paper)', border: '1px solid var(--line)', padding: '1.5rem', borderTop: '4px solid var(--gold-deep)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', paddingBottom: '0.5rem', borderBottom: '1px solid var(--line)' }}>
-              <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700 }}>Set Outgoing Broadcast</h3>
-              <button onClick={() => setShowNewBroadcastModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={18} /></button>
+              <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700 }}>
+                {editingBroadcastId ? 'Edit Broadcast Schedule' : 'Set Outgoing Broadcast'}
+              </h3>
+              <button onClick={() => { setShowNewBroadcastModal(false); setEditingBroadcastId(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={18} /></button>
             </div>
 
-            <form onSubmit={handleCreateBroadcast}>
+            <form onSubmit={handleSaveBroadcast}>
               <div className="form-group" style={{ marginBottom: '1rem' }}>
                 <label className="form-label" style={{ fontWeight: 600 }}>Broadcast Name</label>
                 <input
@@ -3103,9 +3248,9 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', borderTop: '1px solid var(--line)', paddingTop: '1rem' }}>
-                <button type="button" onClick={() => setShowNewBroadcastModal(false)} className="btn-secondary">Cancel</button>
+                <button type="button" onClick={() => { setShowNewBroadcastModal(false); setEditingBroadcastId(null); }} className="btn-secondary">Cancel</button>
                 <button type="submit" className="btn-primary" disabled={isCreatingBroadcast} style={{ background: 'var(--gold-deep)', color: '#fff' }}>
-                  {isCreatingBroadcast ? 'Scheduling...' : 'Set Up Broadcast'}
+                  {isCreatingBroadcast ? 'Saving...' : (editingBroadcastId ? 'Save Changes' : 'Set Up Broadcast')}
                 </button>
               </div>
             </form>
