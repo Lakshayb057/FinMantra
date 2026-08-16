@@ -595,6 +595,8 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
       try {
         const result = await executeMetaRequest(payloadObj);
         console.log(`[WhatsApp API] Message sent successfully to ${formattedPhone} using template "${templateName}" (lang: ${lang}, strategy: ${sIdx + 1}).`);
+        console.log(`[WhatsApp API DEBUG] Payload: ${JSON.stringify(payloadObj)}`);
+        console.log(`[WhatsApp API DEBUG] Meta Response: ${JSON.stringify(result)}`);
         return result;
       } catch (err) {
         lastError = err.message || `Meta API Error (status ${err.statusCode})`;
@@ -6509,6 +6511,7 @@ app.get('/api/campaigns/templates/meta-sync', authenticateToken, async (req, res
 
     const result = await fetchMetaTemplates();
     const metaStatuses = {};
+    const metaTemplatesFull = [];
     if (result && Array.isArray(result.data)) {
       for (const t of result.data) {
         metaStatuses[t.name.toLowerCase()] = {
@@ -6516,9 +6519,18 @@ app.get('/api/campaigns/templates/meta-sync', authenticateToken, async (req, res
           category: t.category,
           language: t.language
         };
+        metaTemplatesFull.push({
+          id: t.id,
+          name: t.name,
+          status: t.status,
+          category: t.category,
+          language: t.language,
+          components: t.components || [],
+          rejected_reason: t.rejected_reason || 'NONE'
+        });
       }
     }
-    res.json({ success: true, metaStatuses });
+    res.json({ success: true, metaStatuses, metaTemplates: metaTemplatesFull });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

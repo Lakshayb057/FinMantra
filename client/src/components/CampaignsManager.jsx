@@ -10,6 +10,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
   // Templates Manager state
   const [templates, setTemplates] = useState([]);
   const [metaStatuses, setMetaStatuses] = useState({});
+  const [metaTemplates, setMetaTemplates] = useState([]);
   const [isSyncingMeta, setIsSyncingMeta] = useState(false);
   const [showCreateTemplateModal, setShowCreateTemplateModal] = useState(false);
   const [editingTemplateId, setEditingTemplateId] = useState(null);
@@ -218,6 +219,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
       const data = await res.json();
       if (res.ok && data.success) {
         setMetaStatuses(data.metaStatuses || {});
+        setMetaTemplates(data.metaTemplates || []);
         if (!isBackground) {
           showToast('Meta template statuses synced successfully!', 'success');
         }
@@ -881,13 +883,15 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
               ))}
             </select>
 
-            <button
-              onClick={() => setShowCreateCampaignModal(true)}
-              className="btn-primary"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.45rem 0.85rem', fontSize: '0.82rem', height: '34px', background: 'var(--gold-deep)', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
-            >
-              <Plus size={14} /> New Campaign
-            </button>
+            {activeSubTab !== 'broadcast' && (
+              <button
+                onClick={() => setShowCreateCampaignModal(true)}
+                className="btn-primary"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.45rem 0.85rem', fontSize: '0.82rem', height: '34px', background: 'var(--gold-deep)', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
+              >
+                <Plus size={14} /> New Campaign
+              </button>
+            )}
           </div>
 
           {selectedCampaignId && (
@@ -1722,10 +1726,11 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
         {/* TAB: TEMPLATES MANAGER */}
         {activeSubTab === 'templates' && (
           <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+            {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexShrink: 0 }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700 }}>Custom Message Templates</h3>
-                <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.8rem', color: 'var(--muted)' }}>Manage reusable layouts and attachments for Emails and Meta WhatsApp broadcasts.</p>
+                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700 }}>Templates Manager</h3>
+                <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.8rem', color: 'var(--muted)' }}>Manage reusable layouts for Emails & Meta WhatsApp broadcasts.</p>
               </div>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
                 <button
@@ -1769,169 +1774,412 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
             </div>
 
             <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
-              {templates.length === 0 ? (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '3.5rem 1rem', background: 'var(--paper-2)', borderRadius: '12px', border: '1px dashed var(--line)' }}>
-                  <HelpCircle size={36} style={{ color: 'var(--muted)', marginBottom: '0.75rem' }} />
-                  <div style={{ fontWeight: 600, color: 'var(--ink)', fontSize: '0.95rem' }}>No Templates Found</div>
-                  <p style={{ color: 'var(--muted)', fontSize: '0.8rem', textAlign: 'center', maxWidth: '360px', margin: '0.25rem 0 1rem 0' }}>Get started by creating your first reusable WhatsApp template or Email layout.</p>
-                </div>
-              ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1rem' }}>
-                  {templates.map(tpl => {
-                    const lookupKey = tpl.meta_template_name?.toLowerCase() || tpl.name?.toLowerCase();
-                    const metaInfo = metaStatuses[lookupKey];
-                    let statusText = 'Not Registered';
-                    let statusBg = 'rgba(107, 114, 128, 0.15)';
-                    let statusColor = '#6b7280';
-                    
-                    if (metaInfo) {
-                      statusText = metaInfo.status;
-                      if (statusText === 'APPROVED') {
-                        statusBg = 'rgba(16, 185, 129, 0.15)';
-                        statusColor = '#10b981';
-                      } else if (statusText?.includes('PENDING')) {
-                        statusBg = 'rgba(245, 158, 11, 0.15)';
-                        statusColor = '#f59e0b';
-                      } else if (statusText?.includes('REJECTED') || statusText?.includes('LIMIT')) {
-                        statusBg = 'rgba(239, 68, 68, 0.15)';
-                        statusColor = '#ef4444';
-                      }
-                    }
+              {/* SECTION 1: Meta WhatsApp Templates */}
+              {metaTemplates.length > 0 && (
+                <div style={{ marginBottom: '2rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1rem' }}>
+                    <div style={{
+                      width: '28px', height: '28px', borderRadius: '50%', background: '#25D366',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+                    }}>
+                      <MessageSquare size={14} style={{ color: '#fff' }} />
+                    </div>
+                    <div>
+                      <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--ink)' }}>Meta WhatsApp Templates</h4>
+                      <p style={{ margin: 0, fontSize: '0.72rem', color: 'var(--muted)' }}>
+                        {metaTemplates.length} template{metaTemplates.length !== 1 ? 's' : ''} registered on your Meta Business Account
+                      </p>
+                    </div>
+                  </div>
 
-                    return (
-                      <div
-                        key={tpl.id}
-                        className="glass-panel"
-                        style={{
-                          padding: '1.25rem',
-                          borderRadius: '12px',
-                          border: '1px solid var(--line)',
-                          background: 'var(--paper)',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          justifyContent: 'space-between',
-                          minHeight: '220px',
-                          transition: 'transform 0.2s ease, box-shadow 0.2s ease'
-                        }}
-                      >
-                        <div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem' }}>
+                    {metaTemplates.map(mt => {
+                      const bodyComp = mt.components?.find(c => c.type === 'BODY');
+                      const headerComp = mt.components?.find(c => c.type === 'HEADER');
+                      const buttonsComp = mt.components?.find(c => c.type === 'BUTTONS');
+                      const bodyText = bodyComp?.text || '';
+                      
+                      let statusBadgeBg = '#25D366';
+                      let statusBadgeColor = '#fff';
+                      if (mt.status === 'REJECTED') { statusBadgeBg = '#ef4444'; statusBadgeColor = '#fff'; }
+                      else if (mt.status === 'PENDING' || mt.status === 'IN_APPEAL') { statusBadgeBg = '#f59e0b'; statusBadgeColor = '#fff'; }
+                      else if (mt.status === 'PAUSED' || mt.status === 'DISABLED') { statusBadgeBg = '#6b7280'; statusBadgeColor = '#fff'; }
+
+                      return (
+                        <div
+                          key={mt.id}
+                          style={{
+                            borderRadius: '14px',
+                            overflow: 'hidden',
+                            border: '1px solid var(--line)',
+                            background: 'var(--paper)',
+                            transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+                            cursor: 'default'
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.08)'; }}
+                          onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
+                        >
+                          {/* Card Header - WhatsApp themed */}
+                          <div style={{
+                            background: 'linear-gradient(135deg, #075E54 0%, #128C7E 100%)',
+                            padding: '0.85rem 1rem',
+                            display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <svg viewBox="0 0 24 24" width="18" height="18" fill="#25D366">
+                                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                              </svg>
+                              <span style={{ color: '#fff', fontSize: '0.82rem', fontWeight: 700, letterSpacing: '0.02em' }}>
+                                {mt.name}
+                              </span>
+                            </div>
                             <span style={{
-                              fontSize: '0.68rem',
-                              fontWeight: 700,
-                              padding: '0.2rem 0.5rem',
-                              borderRadius: '4px',
-                              textTransform: 'uppercase',
-                              background: tpl.type === 'email' ? 'rgba(59, 130, 246, 0.15)' : 'rgba(16, 185, 129, 0.15)',
-                              color: tpl.type === 'email' ? '#3b82f6' : '#10b981'
+                              fontSize: '0.62rem', fontWeight: 800, padding: '0.2rem 0.55rem',
+                              borderRadius: '10px', background: statusBadgeBg, color: statusBadgeColor,
+                              textTransform: 'uppercase', letterSpacing: '0.04em'
                             }}>
-                              {tpl.type}
+                              {mt.status}
                             </span>
-                            <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
-                              {tpl.type === 'whatsapp' && (
-                                <span style={{
-                                  fontSize: '0.62rem',
-                                  fontWeight: 800,
-                                  padding: '0.15rem 0.4rem',
-                                  borderRadius: '4px',
-                                  background: statusBg,
-                                  color: statusColor,
-                                  textTransform: 'uppercase'
-                                }}>
-                                  Meta: {statusText}
-                                </span>
-                              )}
-                              <button
-                                onClick={() => {
-                                  let parsedButtons = {
-                                    buttonType: 'NONE',
-                                    ctaUrlText: '',
-                                    ctaUrlValue: '',
-                                    ctaPhoneText: '',
-                                    ctaPhoneValue: '',
-                                    quickReplies: ['', '', '']
-                                  };
-                                  if (tpl.buttons) {
-                                    try {
-                                      const parsed = typeof tpl.buttons === 'string' ? JSON.parse(tpl.buttons) : tpl.buttons;
-                                      parsedButtons = { ...parsedButtons, ...parsed };
-                                    } catch (e) {}
-                                  }
-
-                                  setNewTemplateForm({
-                                    id: tpl.id,
-                                    name: tpl.name,
-                                    type: tpl.type,
-                                    subject: tpl.subject || '',
-                                    body: tpl.body || '',
-                                    metaTemplateName: tpl.meta_template_name || '',
-                                    mediaUrl: tpl.media_url || '',
-                                    category: tpl.category || 'MARKETING',
-                                    language: tpl.language || 'en_US',
-                                    headerFormat: tpl.header_format || 'NONE',
-                                    buttons: parsedButtons
-                                  });
-                                  setEditingTemplateId(tpl.id);
-                                  setShowCreateTemplateModal(true);
-                                }}
-                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: 0 }}
-                                title="Edit Template"
-                              >
-                                <FileText size={16} />
-                              </button>
-                              <button
-                                onClick={() => handleDeleteTemplate(tpl.id)}
-                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: 0 }}
-                                title="Delete Template"
-                              >
-                                <Trash2 size={16} />
-                              </button>
-                            </div>
                           </div>
-                          <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '1rem', fontWeight: 700, color: 'var(--ink)' }}>{tpl.name}</h4>
-                          
-                          {tpl.type === 'email' && (
-                            <div style={{ marginBottom: '0.5rem', fontSize: '0.8rem' }}>
-                              <span style={{ fontWeight: 600, color: 'var(--muted)' }}>Subject: </span>
-                              <span style={{ color: 'var(--ink)' }}>{tpl.subject}</span>
-                            </div>
-                          )}
-                          {tpl.type === 'whatsapp' && tpl.meta_template_name && (
-                            <div style={{ marginBottom: '0.5rem', fontSize: '0.8rem' }}>
-                              <span style={{ fontWeight: 600, color: 'var(--muted)' }}>Approved Code: </span>
-                              <code style={{ background: 'var(--paper-2)', padding: '0.1rem 0.3rem', borderRadius: '4px', fontSize: '0.75rem' }}>{tpl.meta_template_name}</code>
-                            </div>
-                          )}
-                          {tpl.media_url && (
-                            <div style={{ marginBottom: '0.5rem', fontSize: '0.8rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                              <span style={{ fontWeight: 600, color: 'var(--muted)' }}>Attachment: </span>
-                              <a href={tpl.media_url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--gold-deep)', textDecoration: 'underline' }}>View Media Link</a>
-                            </div>
-                          )}
-                          
-                          <div style={{ marginTop: '0.5rem' }}>
-                            <span style={{ fontWeight: 600, color: 'var(--muted)', fontSize: '0.8rem' }}>Content Body:</span>
+
+                          {/* WhatsApp Chat Preview */}
+                          <div style={{
+                            background: theme === 'dark' ? '#0b141a' : '#e5ddd5',
+                            backgroundImage: theme === 'dark' 
+                              ? 'none' 
+                              : 'url("data:image/svg+xml,%3Csvg width=\'200\' height=\'200\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cdefs%3E%3Cpattern id=\'p\' width=\'40\' height=\'40\' patternUnits=\'userSpaceOnUse\'%3E%3Ccircle cx=\'20\' cy=\'20\' r=\'1.2\' fill=\'%23d4cec3\' opacity=\'0.5\'/%3E%3C/pattern%3E%3C/defs%3E%3Crect width=\'200\' height=\'200\' fill=\'url(%23p)\'/%3E%3C/svg%3E")',
+                            padding: '1rem 0.85rem',
+                            minHeight: '120px'
+                          }}>
+                            {/* Message Bubble */}
                             <div style={{
-                              marginTop: '0.25rem',
-                              padding: '0.5rem',
-                              borderRadius: '6px',
-                              background: 'var(--paper-2)',
-                              fontSize: '0.78rem',
-                              color: 'var(--ink)',
-                              maxHeight: '100px',
-                              overflowY: 'auto',
-                              whiteSpace: 'pre-wrap',
-                              border: '1px solid var(--line)'
+                              background: theme === 'dark' ? '#005c4b' : '#dcf8c6',
+                              borderRadius: '0 8px 8px 8px',
+                              padding: '0.6rem 0.7rem',
+                              maxWidth: '95%',
+                              position: 'relative',
+                              boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
                             }}>
-                              {tpl.body}
+                              {/* Header preview */}
+                              {headerComp && (
+                                <div style={{ marginBottom: '0.4rem' }}>
+                                  {headerComp.format === 'IMAGE' && (
+                                    <div style={{
+                                      background: theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+                                      borderRadius: '6px', padding: '1.25rem', textAlign: 'center',
+                                      marginBottom: '0.35rem', border: `1px dashed ${theme === 'dark' ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)'}`
+                                    }}>
+                                      <span style={{ fontSize: '1.5rem' }}>🖼️</span>
+                                      <div style={{ fontSize: '0.68rem', color: theme === 'dark' ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.4)', marginTop: '0.15rem' }}>Image Header</div>
+                                    </div>
+                                  )}
+                                  {headerComp.format === 'VIDEO' && (
+                                    <div style={{
+                                      background: theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+                                      borderRadius: '6px', padding: '1.25rem', textAlign: 'center',
+                                      marginBottom: '0.35rem', border: `1px dashed ${theme === 'dark' ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)'}`
+                                    }}>
+                                      <span style={{ fontSize: '1.5rem' }}>🎬</span>
+                                      <div style={{ fontSize: '0.68rem', color: theme === 'dark' ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.4)', marginTop: '0.15rem' }}>Video Header</div>
+                                    </div>
+                                  )}
+                                  {headerComp.format === 'DOCUMENT' && (
+                                    <div style={{
+                                      background: theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+                                      borderRadius: '6px', padding: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem',
+                                      marginBottom: '0.35rem', border: `1px dashed ${theme === 'dark' ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)'}`
+                                    }}>
+                                      <span style={{ fontSize: '1.2rem' }}>📄</span>
+                                      <span style={{ fontSize: '0.72rem', color: theme === 'dark' ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)' }}>Document Attachment</span>
+                                    </div>
+                                  )}
+                                  {headerComp.format === 'TEXT' && headerComp.text && (
+                                    <div style={{
+                                      fontWeight: 700,
+                                      fontSize: '0.82rem',
+                                      color: theme === 'dark' ? '#e9edef' : '#111b21',
+                                      marginBottom: '0.25rem'
+                                    }}>
+                                      {headerComp.text}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Body text */}
+                              <div style={{
+                                fontSize: '0.78rem',
+                                lineHeight: '1.45',
+                                color: theme === 'dark' ? '#e9edef' : '#111b21',
+                                whiteSpace: 'pre-wrap',
+                                wordBreak: 'break-word'
+                              }}>
+                                {bodyText.replace(/\{\{(\d+)\}\}/g, (_, n) => `[Param ${n}]`)}
+                              </div>
+
+                              {/* Timestamp */}
+                              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.25rem' }}>
+                                <span style={{ fontSize: '0.62rem', color: theme === 'dark' ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.38)' }}>
+                                  {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                  <span style={{ marginLeft: '0.25rem' }}>✓✓</span>
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Button previews - outside the bubble like real WhatsApp */}
+                            {buttonsComp && buttonsComp.buttons && buttonsComp.buttons.length > 0 && (
+                              <div style={{ maxWidth: '95%', marginTop: '2px' }}>
+                                {buttonsComp.buttons.map((btn, bi) => (
+                                  <div
+                                    key={bi}
+                                    style={{
+                                      background: theme === 'dark' ? '#005c4b' : '#dcf8c6',
+                                      borderRadius: bi === buttonsComp.buttons.length - 1 ? '0 0 8px 8px' : '0',
+                                      padding: '0.5rem 0.7rem',
+                                      textAlign: 'center',
+                                      borderTop: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'}`,
+                                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem'
+                                    }}
+                                  >
+                                    {btn.type === 'URL' && (
+                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={theme === 'dark' ? '#53bdeb' : '#027eb5'} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" />
+                                      </svg>
+                                    )}
+                                    {btn.type === 'PHONE_NUMBER' && (
+                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={theme === 'dark' ? '#53bdeb' : '#027eb5'} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" />
+                                      </svg>
+                                    )}
+                                    {btn.type === 'QUICK_REPLY' && (
+                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={theme === 'dark' ? '#53bdeb' : '#027eb5'} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                        <polyline points="9 17 4 12 9 7" /><path d="M20 18v-2a4 4 0 00-4-4H4" />
+                                      </svg>
+                                    )}
+                                    <span style={{
+                                      fontSize: '0.76rem', fontWeight: 600,
+                                      color: theme === 'dark' ? '#53bdeb' : '#027eb5'
+                                    }}>
+                                      {btn.text}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Card Footer - Meta info */}
+                          <div style={{
+                            padding: '0.65rem 1rem',
+                            borderTop: '1px solid var(--line)',
+                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                            background: 'var(--paper)'
+                          }}>
+                            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                              <span style={{
+                                fontSize: '0.65rem', fontWeight: 700, padding: '0.15rem 0.4rem',
+                                borderRadius: '4px', textTransform: 'uppercase',
+                                background: mt.category === 'MARKETING' ? 'rgba(245, 158, 11, 0.12)' : mt.category === 'UTILITY' ? 'rgba(59, 130, 246, 0.12)' : 'rgba(16, 185, 129, 0.12)',
+                                color: mt.category === 'MARKETING' ? '#d97706' : mt.category === 'UTILITY' ? '#2563eb' : '#059669'
+                              }}>
+                                {mt.category}
+                              </span>
+                              <span style={{ fontSize: '0.68rem', color: 'var(--muted)' }}>
+                                {mt.language || 'en_US'}
+                              </span>
+                            </div>
+                            <span style={{ fontSize: '0.62rem', color: 'var(--muted)', fontFamily: 'monospace' }}>
+                              ID: {mt.id}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* SECTION 2: Custom/Local Templates */}
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1rem' }}>
+                  <div style={{
+                    width: '28px', height: '28px', borderRadius: '50%', background: 'var(--gold-deep)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+                  }}>
+                    <FileText size={14} style={{ color: '#fff' }} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--ink)' }}>Custom Templates</h4>
+                    <p style={{ margin: 0, fontSize: '0.72rem', color: 'var(--muted)' }}>
+                      Templates registered in your FinMantra database
+                    </p>
+                  </div>
+                </div>
+
+                {templates.length === 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '3.5rem 1rem', background: 'var(--paper-2)', borderRadius: '12px', border: '1px dashed var(--line)' }}>
+                    <HelpCircle size={36} style={{ color: 'var(--muted)', marginBottom: '0.75rem' }} />
+                    <div style={{ fontWeight: 600, color: 'var(--ink)', fontSize: '0.95rem' }}>No Custom Templates Found</div>
+                    <p style={{ color: 'var(--muted)', fontSize: '0.8rem', textAlign: 'center', maxWidth: '360px', margin: '0.25rem 0 1rem 0' }}>Click "Create Template" to register a new WhatsApp template or Email layout.</p>
+                  </div>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1rem' }}>
+                    {templates.map(tpl => {
+                      const lookupKey = tpl.meta_template_name?.toLowerCase() || tpl.name?.toLowerCase();
+                      const metaInfo = metaStatuses[lookupKey];
+                      let statusText = 'Not Registered';
+                      let statusBg = 'rgba(107, 114, 128, 0.15)';
+                      let statusColor = '#6b7280';
+                      
+                      if (metaInfo) {
+                        statusText = metaInfo.status;
+                        if (statusText === 'APPROVED') {
+                          statusBg = 'rgba(16, 185, 129, 0.15)';
+                          statusColor = '#10b981';
+                        } else if (statusText?.includes('PENDING')) {
+                          statusBg = 'rgba(245, 158, 11, 0.15)';
+                          statusColor = '#f59e0b';
+                        } else if (statusText?.includes('REJECTED') || statusText?.includes('LIMIT')) {
+                          statusBg = 'rgba(239, 68, 68, 0.15)';
+                          statusColor = '#ef4444';
+                        }
+                      }
+
+                      return (
+                        <div
+                          key={tpl.id}
+                          className="glass-panel"
+                          style={{
+                            padding: '1.25rem',
+                            borderRadius: '12px',
+                            border: '1px solid var(--line)',
+                            background: 'var(--paper)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            justifyContent: 'space-between',
+                            minHeight: '220px',
+                            transition: 'transform 0.2s ease, box-shadow 0.2s ease'
+                          }}
+                        >
+                          <div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
+                              <span style={{
+                                fontSize: '0.68rem',
+                                fontWeight: 700,
+                                padding: '0.2rem 0.5rem',
+                                borderRadius: '4px',
+                                textTransform: 'uppercase',
+                                background: tpl.type === 'email' ? 'rgba(59, 130, 246, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                                color: tpl.type === 'email' ? '#3b82f6' : '#10b981'
+                              }}>
+                                {tpl.type}
+                              </span>
+                              <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                                {tpl.type === 'whatsapp' && (
+                                  <span style={{
+                                    fontSize: '0.62rem',
+                                    fontWeight: 800,
+                                    padding: '0.15rem 0.4rem',
+                                    borderRadius: '4px',
+                                    background: statusBg,
+                                    color: statusColor,
+                                    textTransform: 'uppercase'
+                                  }}>
+                                    Meta: {statusText}
+                                  </span>
+                                )}
+                                <button
+                                  onClick={() => {
+                                    let parsedButtons = {
+                                      buttonType: 'NONE',
+                                      ctaUrlText: '',
+                                      ctaUrlValue: '',
+                                      ctaPhoneText: '',
+                                      ctaPhoneValue: '',
+                                      quickReplies: ['', '', '']
+                                    };
+                                    if (tpl.buttons) {
+                                      try {
+                                        const parsed = typeof tpl.buttons === 'string' ? JSON.parse(tpl.buttons) : tpl.buttons;
+                                        parsedButtons = { ...parsedButtons, ...parsed };
+                                      } catch (e) {}
+                                    }
+
+                                    setNewTemplateForm({
+                                      id: tpl.id,
+                                      name: tpl.name,
+                                      type: tpl.type,
+                                      subject: tpl.subject || '',
+                                      body: tpl.body || '',
+                                      metaTemplateName: tpl.meta_template_name || '',
+                                      mediaUrl: tpl.media_url || '',
+                                      category: tpl.category || 'MARKETING',
+                                      language: tpl.language || 'en_US',
+                                      headerFormat: tpl.header_format || 'NONE',
+                                      buttons: parsedButtons
+                                    });
+                                    setEditingTemplateId(tpl.id);
+                                    setShowCreateTemplateModal(true);
+                                  }}
+                                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: 0 }}
+                                  title="Edit Template"
+                                >
+                                  <FileText size={16} />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteTemplate(tpl.id)}
+                                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: 0 }}
+                                  title="Delete Template"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              </div>
+                            </div>
+                            <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '1rem', fontWeight: 700, color: 'var(--ink)' }}>{tpl.name}</h4>
+                            
+                            {tpl.type === 'email' && (
+                              <div style={{ marginBottom: '0.5rem', fontSize: '0.8rem' }}>
+                                <span style={{ fontWeight: 600, color: 'var(--muted)' }}>Subject: </span>
+                                <span style={{ color: 'var(--ink)' }}>{tpl.subject}</span>
+                              </div>
+                            )}
+                            {tpl.type === 'whatsapp' && tpl.meta_template_name && (
+                              <div style={{ marginBottom: '0.5rem', fontSize: '0.8rem' }}>
+                                <span style={{ fontWeight: 600, color: 'var(--muted)' }}>Approved Code: </span>
+                                <code style={{ background: 'var(--paper-2)', padding: '0.1rem 0.3rem', borderRadius: '4px', fontSize: '0.75rem' }}>{tpl.meta_template_name}</code>
+                              </div>
+                            )}
+                            {tpl.media_url && (
+                              <div style={{ marginBottom: '0.5rem', fontSize: '0.8rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                <span style={{ fontWeight: 600, color: 'var(--muted)' }}>Attachment: </span>
+                                <a href={tpl.media_url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--gold-deep)', textDecoration: 'underline' }}>View Media Link</a>
+                              </div>
+                            )}
+                            
+                            <div style={{ marginTop: '0.5rem' }}>
+                              <span style={{ fontWeight: 600, color: 'var(--muted)', fontSize: '0.8rem' }}>Content Body:</span>
+                              <div style={{
+                                marginTop: '0.25rem',
+                                padding: '0.5rem',
+                                borderRadius: '6px',
+                                background: 'var(--paper-2)',
+                                fontSize: '0.78rem',
+                                color: 'var(--ink)',
+                                maxHeight: '100px',
+                                overflowY: 'auto',
+                                whiteSpace: 'pre-wrap',
+                                border: '1px solid var(--line)'
+                              }}>
+                                {tpl.body}
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
