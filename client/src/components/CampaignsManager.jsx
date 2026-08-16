@@ -2985,14 +2985,55 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                   )}
 
                   {['IMAGE', 'VIDEO', 'DOCUMENT'].includes(newTemplateForm.headerFormat) && (
-                    <div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                       <input
-                        type="url"
-                        placeholder={`Sample ${newTemplateForm.headerFormat.toLowerCase()} URL (e.g. https://uat.thefinmantra.com/banner.png)`}
+                        type="text"
+                        placeholder={`Sample ${newTemplateForm.headerFormat.toLowerCase()} URL or upload from PC below`}
                         value={newTemplateForm.mediaUrl}
                         onChange={(e) => setNewTemplateForm({ ...newTemplateForm, mediaUrl: e.target.value })}
                         style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.85rem', boxSizing: 'border-box' }}
                       />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <label style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.35rem',
+                          padding: '0.35rem 0.7rem',
+                          borderRadius: '6px',
+                          border: '1px dashed var(--gold-deep)',
+                          background: 'rgba(224, 168, 46, 0.08)',
+                          fontSize: '0.78rem',
+                          cursor: 'pointer',
+                          fontWeight: 600,
+                          color: 'var(--ink)'
+                        }}>
+                          📁 Choose {newTemplateForm.headerFormat.toLowerCase()} file from PC
+                          <input
+                            type="file"
+                            accept={newTemplateForm.headerFormat === 'IMAGE' ? 'image/*' : newTemplateForm.headerFormat === 'VIDEO' ? 'video/*' : '.pdf,.doc,.docx'}
+                            style={{ display: 'none' }}
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                const reader = new FileReader();
+                                reader.onload = () => {
+                                  setNewTemplateForm(prev => ({ ...prev, mediaUrl: reader.result }));
+                                };
+                                reader.readAsDataURL(file);
+                              }
+                            }}
+                          />
+                        </label>
+                        {newTemplateForm.mediaUrl && (
+                          <button
+                            type="button"
+                            onClick={() => setNewTemplateForm(prev => ({ ...prev, mediaUrl: '' }))}
+                            style={{ fontSize: '0.75rem', color: '#ef4444', background: 'transparent', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
+                          >
+                            Remove file
+                          </button>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>

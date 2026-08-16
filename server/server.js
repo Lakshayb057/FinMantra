@@ -6577,38 +6577,57 @@ const fetchAppId = async (apiKey, apiVersion = 'v25.0') => {
 
 // Helper to perform Meta Resumable Upload for media templates and return a valid handle h
 const getResumableUploadHandle = async (apiKey, appId, mediaUrl, apiVersion = 'v25.0') => {
-  return new Promise((resolve, reject) => {
-    const https = require('https');
-    https.get(mediaUrl, (res) => {
-      if (res.statusCode < 200 || res.statusCode >= 300) {
-        return reject(new Error(`Failed to download media file (status ${res.statusCode})`));
-      }
-      
-      const chunks = [];
-      res.on('data', chunk => chunks.push(chunk));
-      res.on('end', async () => {
-        const buffer = Buffer.concat(chunks);
-        const fileLength = buffer.length;
-        const contentType = res.headers['content-type'] || 'image/png';
-        
-        let filename = 'file.png';
-        try {
-          const u = new URL(mediaUrl);
-          filename = u.pathname.split('/').pop() || 'file.png';
-        } catch (e) {}
+  return new Promise(async (resolve, reject) => {
+    try {
+      let buffer;
+      let contentType = 'image/png';
+      let filename = 'file.png';
 
-        try {
-          // Initialize upload session
-          const sessionOptions = {
-            hostname: 'graph.facebook.com',
-            port: 443,
-            path: `/${apiVersion}/${appId}/uploads?file_name=${encodeURIComponent(filename)}&file_length=${fileLength}&file_type=${encodeURIComponent(contentType)}`,
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${apiKey}`,
-              'Content-Type': 'application/json'
+      if (mediaUrl.startsWith('data:')) {
+        const matches = mediaUrl.match(/^data:([A-Za-z0-9-+\/]+);base64,(.+)$/);
+        if (matches) {
+          contentType = matches[1];
+          buffer = Buffer.from(matches[2], 'base64');
+          const ext = contentType.split('/')[1] || 'png';
+          filename = `media_${Date.now()}.${ext}`;
+        } else {
+          buffer = Buffer.from(mediaUrl.split(',')[1] || mediaUrl, 'base64');
+        }
+      } else {
+        const https = require('https');
+        const http = require('http');
+        const client = mediaUrl.startsWith('https:') ? https : http;
+        
+        buffer = await new Promise((dlResolve, dlReject) => {
+          client.get(mediaUrl, (res) => {
+            if (res.statusCode < 200 || res.statusCode >= 300) {
+              return dlReject(new Error(`Failed to download media file (status ${res.statusCode})`));
             }
-          };
+            contentType = res.headers['content-type'] || 'image/png';
+            try {
+              const u = new URL(mediaUrl);
+              filename = u.pathname.split('/').pop() || 'file.png';
+            } catch (e) {}
+            const chunks = [];
+            res.on('data', chunk => chunks.push(chunk));
+            res.on('end', () => dlResolve(Buffer.concat(chunks)));
+          }).on('error', dlReject);
+        });
+      }
+
+      const fileLength = buffer.length;
+
+      // Initialize upload session
+      const sessionOptions = {
+        hostname: 'graph.facebook.com',
+        port: 443,
+        path: `/${apiVersion}/${appId}/uploads?file_name=${encodeURIComponent(filename)}&file_length=${fileLength}&file_type=${encodeURIComponent(contentType)}`,
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        }
+      };
 
           const sessionId = await new Promise((resResolve, resReject) => {
             const sessionReq = https.request(sessionOptions, (sessionRes) => {
@@ -6677,12 +6696,10 @@ const getResumableUploadHandle = async (apiKey, appId, mediaUrl, apiVersion = 'v
             uploadReq.end();
           });
 
-          resolve(fileHandle);
-        } catch (err) {
-          reject(err);
-        }
-      });
-    }).on('error', err => reject(err));
+      resolve(fileHandle);
+    } catch (err) {
+      reject(err);
+    }
   });
 };
 
