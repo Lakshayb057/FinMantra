@@ -6248,7 +6248,7 @@ app.get('/api/campaigns/templates/meta-sync', authenticateToken, async (req, res
 });
 
 // Debug endpoint to inspect all Meta templates and rejection logs
-app.get('/api/campaigns/templates/meta-inspect', authenticateToken, async (req, res) => {
+app.get('/api/campaigns/templates/meta-inspect', async (req, res) => {
   try {
     const settings = await db.getSettings();
     const apiKey = getSettingVal(settings, 'wa_api_key', 'WA_API_KEY');
