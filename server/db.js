@@ -455,6 +455,19 @@ async function initPgSchema() {
       )
     `);
 
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS campaign_templates (
+        id VARCHAR(50) PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        type VARCHAR(50) NOT NULL,
+        subject VARCHAR(255),
+        body TEXT NOT NULL,
+        meta_template_name VARCHAR(255),
+        media_url VARCHAR(255),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     const safeQuery = async (qStr, params = []) => {
       try {
         await client.query('SAVEPOINT mig_sp');
@@ -472,6 +485,9 @@ async function initPgSchema() {
     await safeQuery("CREATE UNIQUE INDEX IF NOT EXISTS uq_idx_master_mail ON campaign_master_leads (LOWER(TRIM(mail)))");
     await safeQuery("CREATE UNIQUE INDEX IF NOT EXISTS uq_idx_campaign_contact ON campaign_leads (campaign_id, contact)");
     await safeQuery("CREATE UNIQUE INDEX IF NOT EXISTS uq_idx_campaign_mail ON campaign_leads (campaign_id, LOWER(TRIM(mail)))");
+    await safeQuery("ALTER TABLE campaign_broadcasts ADD COLUMN IF NOT EXISTS media_url VARCHAR(255)");
+    await safeQuery("ALTER TABLE campaign_broadcasts ADD COLUMN IF NOT EXISTS last_triggered_at TIMESTAMP WITH TIME ZONE");
+    await safeQuery("ALTER TABLE campaign_broadcasts ADD COLUMN IF NOT EXISTS last_trigger_status VARCHAR(50)");
     await safeQuery("CREATE INDEX IF NOT EXISTS idx_meta_memberships_aud_lead ON meta_audience_memberships (audience_id, lead_id)");
     await safeQuery("CREATE INDEX IF NOT EXISTS idx_meta_memberships_state ON meta_audience_memberships (state)");
     await safeQuery("CREATE INDEX IF NOT EXISTS idx_meta_sync_jobs_aud ON meta_audience_sync_jobs (audience_id)");
@@ -2944,13 +2960,13 @@ const db = {
     return res.rows[0];
   },
 
-  async createCampaignBroadcast(id, campaignId, name, channel, whatsappTemplate, whatsappMessage, emailSubject, emailBody, targetedCount, scheduledAt) {
+  async createCampaignBroadcast(id, campaignId, name, channel, whatsappTemplate, whatsappMessage, emailSubject, emailBody, targetedCount, scheduledAt, mediaUrl = null) {
     const res = await pool.query(
       `INSERT INTO campaign_broadcasts 
-       (id, campaign_id, name, channel, whatsapp_template, whatsapp_message, email_subject, email_body, targeted_count, scheduled_at, status) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) 
+       (id, campaign_id, name, channel, whatsapp_template, whatsapp_message, email_subject, email_body, targeted_count, scheduled_at, status, media_url) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) 
        RETURNING *`,
-      [id, campaignId, name, channel, whatsappTemplate, whatsappMessage, emailSubject, emailBody, targetedCount, scheduledAt, scheduledAt ? 'scheduled' : 'draft']
+      [id, campaignId, name, channel, whatsappTemplate, whatsappMessage, emailSubject, emailBody, targetedCount, scheduledAt, scheduledAt ? 'scheduled' : 'draft', mediaUrl]
     );
     return res.rows[0];
   },
@@ -2976,14 +2992,32 @@ const db = {
   },
 
   async updateCampaignBroadcastStatus(id, status, sentCount = 0, failedCount = 0) {
-    const res = await pool.query(
-      `UPDATE campaign_broadcasts 
-       SET status = $2, sent_count = $3, failed_count = $4 
-       WHERE id = $1 
-       RETURNING *`,
-      [id, status, sentCount, failedCount]
-    );
-    return res.rows[0];
+    let lastTriggerStatus = null;
+    if (status === 'sent') {
+      lastTriggerStatus = 'sent';
+    } else if (status === 'failed') {
+      lastTriggerStatus = 'failed';
+    }
+
+    if (lastTriggerStatus) {
+      const res = await pool.query(
+        `UPDATE campaign_broadcasts 
+         SET status = $2, sent_count = $3, failed_count = $4, last_triggered_at = CURRENT_TIMESTAMP, last_trigger_status = $5 
+         WHERE id = $1 
+         RETURNING *`,
+        [id, status, sentCount, failedCount, lastTriggerStatus]
+      );
+      return res.rows[0];
+    } else {
+      const res = await pool.query(
+        `UPDATE campaign_broadcasts 
+         SET status = $2, sent_count = $3, failed_count = $4 
+         WHERE id = $1 
+         RETURNING *`,
+        [id, status, sentCount, failedCount]
+      );
+      return res.rows[0];
+    }
   },
 
   async getScheduledBroadcastsToRun() {
@@ -3085,6 +3119,28 @@ const db = {
     if (leadIds.length === 0) return 0;
     const res = await pool.query('DELETE FROM campaign_master_leads WHERE id = ANY($1)', [leadIds]);
     return res.rowCount;
+  },
+
+  async getCampaignTemplates() {
+    const res = await pool.query('SELECT * FROM campaign_templates ORDER BY created_at DESC');
+    return res.rows;
+  },
+
+  async createCampaignTemplate({ id, name, type, subject, body, metaTemplateName, mediaUrl }) {
+    const res = await pool.query(
+      `INSERT INTO campaign_templates (id, name, type, subject, body, meta_template_name, media_url)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT (id) DO UPDATE SET 
+         name = $2, type = $3, subject = $4, body = $5, meta_template_name = $6, media_url = $7
+       RETURNING *`,
+      [id, name, type, subject, body, metaTemplateName, mediaUrl]
+    );
+    return res.rows[0];
+  },
+
+  async deleteCampaignTemplate(id) {
+    const res = await pool.query('DELETE FROM campaign_templates WHERE id = $1 RETURNING *', [id]);
+    return res.rows[0];
   }
 }
 

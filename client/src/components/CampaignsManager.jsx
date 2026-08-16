@@ -1,12 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Users, Mail, MessageSquare, Plus, Trash2, Search, Upload, RefreshCw, X, Check,
-  AlertCircle, Download, FileSpreadsheet, Play, Settings as SettingsIcon, HelpCircle, Info, Zap, Database
+  AlertCircle, Download, FileSpreadsheet, Play, Settings as SettingsIcon, HelpCircle, Info, Zap, Database, FileText
 } from 'lucide-react';
 
 export default function CampaignsManager({ theme, API_URL, token, showToast }) {
-  const [activeSubTab, setActiveSubTab] = useState('master_data'); // 'master_data' | 'data_storage' | 'broadcast' | 'automated' | 'settings' | 'guide'
+  const [activeSubTab, setActiveSubTab] = useState('master_data'); // 'master_data' | 'data_storage' | 'broadcast' | 'automated' | 'settings' | 'guide' | 'templates'
   
+  // Templates Manager state
+  const [templates, setTemplates] = useState([]);
+  const [showCreateTemplateModal, setShowCreateTemplateModal] = useState(false);
+  const [newTemplateForm, setNewTemplateForm] = useState({ name: '', type: 'whatsapp', subject: '', body: '', metaTemplateName: '', mediaUrl: '' });
+  const [isCreatingTemplate, setIsCreatingTemplate] = useState(false);
+
   // Master Data Center state
   const [masterContacts, setMasterContacts] = useState([]);
   const [masterContactsSearch, setMasterContactsSearch] = useState('');
@@ -62,7 +68,8 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
     whatsappMessage: '',
     emailSubject: '',
     emailBody: '',
-    scheduledAt: ''
+    scheduledAt: '',
+    mediaUrl: ''
   });
   const [isLoadingBroadcasts, setIsLoadingBroadcasts] = useState(false);
 
@@ -83,6 +90,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
     fetchCampaigns();
     fetchGlobalSettings();
     fetchMasterLeads();
+    fetchTemplates();
   }, []);
 
   // Load campaign specific data when selected campaign changes
@@ -160,6 +168,67 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
       showToast('Error fetching campaign broadcasts.', 'error');
     } finally {
       setIsLoadingBroadcasts(false);
+    }
+  };
+
+  const fetchTemplates = async () => {
+    try {
+      const res = await fetch(`${API_URL}/campaigns/templates`, { headers });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setTemplates(data.templates || []);
+      }
+    } catch (err) {
+      showToast('Error fetching campaign templates.', 'error');
+    }
+  };
+
+  const handleCreateTemplate = async (e) => {
+    e.preventDefault();
+    if (!newTemplateForm.name.trim() || !newTemplateForm.body.trim()) {
+      showToast('Name and Content/Body are required.', 'error');
+      return;
+    }
+    
+    setIsCreatingTemplate(true);
+    try {
+      const res = await fetch(`${API_URL}/campaigns/templates`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(newTemplateForm)
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast('Template saved successfully!', 'success');
+        setNewTemplateForm({ name: '', type: 'whatsapp', subject: '', body: '', metaTemplateName: '', mediaUrl: '' });
+        setShowCreateTemplateModal(false);
+        fetchTemplates();
+      } else {
+        showToast(data.error || 'Failed to save template.', 'error');
+      }
+    } catch (err) {
+      showToast('Error saving template: ' + err.message, 'error');
+    } finally {
+      setIsCreatingTemplate(false);
+    }
+  };
+
+  const handleDeleteTemplate = async (templateId) => {
+    if (!window.confirm('Are you sure you want to delete this template?')) return;
+    try {
+      const res = await fetch(`${API_URL}/campaigns/templates/${templateId}`, {
+        method: 'DELETE',
+        headers
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast('Template deleted successfully.', 'info');
+        fetchTemplates();
+      } else {
+        showToast(data.error || 'Failed to delete template.', 'error');
+      }
+    } catch (err) {
+      showToast('Error deleting template.', 'error');
     }
   };
 
@@ -696,6 +765,24 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
           SMTP Gateway Settings
         </button>
         <button
+          onClick={() => setActiveSubTab('templates')}
+          style={{
+            padding: '0.55rem 1.1rem',
+            borderRadius: '8px',
+            border: 'none',
+            fontSize: '0.88rem',
+            fontWeight: 600,
+            cursor: 'pointer',
+            background: activeSubTab === 'templates' ? 'var(--gold-deep)' : 'transparent',
+            color: activeSubTab === 'templates' ? '#fff' : 'var(--muted)',
+            transition: 'all 0.2s ease',
+            whiteSpace: 'nowrap'
+          }}
+        >
+          <FileText size={16} style={{ marginRight: '0.45rem', verticalAlign: 'middle' }} />
+          Templates Manager
+        </button>
+        <button
           onClick={() => setActiveSubTab('guide')}
           style={{
             padding: '0.55rem 1.1rem',
@@ -716,7 +803,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
       </div>
 
       {/* Campaigns Selector Header Bar */}
-      {activeSubTab !== 'settings' && activeSubTab !== 'guide' && activeSubTab !== 'master_data' && (
+      {activeSubTab !== 'settings' && activeSubTab !== 'guide' && activeSubTab !== 'master_data' && activeSubTab !== 'templates' && (
         <div className="glass-panel" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.85rem 1.25rem', borderRadius: '12px', border: '1px solid var(--line)', marginBottom: '1.25rem', gap: '1rem', flexWrap: 'wrap', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
             <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--muted)' }}>Select Campaign:</span>
@@ -1245,16 +1332,50 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                               </td>
                               <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
                                 <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'flex-end' }}>
-                                  {(b.status === 'draft' || b.status === 'failed') && (
-                                    <button
-                                      onClick={() => handleTriggerBroadcast(b.id)}
-                                      className="btn-primary"
-                                      style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: '28px', width: '28px', padding: 0, borderRadius: '4px', background: '#22c55e', color: '#fff', border: 'none', cursor: 'pointer' }}
-                                      title="Trigger Broadcast Now"
-                                    >
-                                      <Play size={12} />
-                                    </button>
-                                  )}
+                                  {(() => {
+                                    const isSent = b.status === 'sent';
+                                    const isProcessing = b.status === 'processing' || b.status === 'scheduled';
+                                    
+                                    // Check local client-side 1-hour throttle if status is sent
+                                    let isLocked = false;
+                                    let minutesLeft = 0;
+                                    if (isSent && b.last_triggered_at && b.last_trigger_status === 'sent') {
+                                      const lastTriggered = new Date(b.last_triggered_at).getTime();
+                                      const diff = Date.now() - lastTriggered;
+                                      const oneHour = 60 * 60 * 1000;
+                                      if (diff < oneHour) {
+                                        isLocked = true;
+                                        minutesLeft = Math.ceil((oneHour - diff) / (60 * 1000));
+                                      }
+                                    }
+
+                                    if (isProcessing) return null;
+
+                                    return (
+                                      <button
+                                        onClick={() => handleTriggerBroadcast(b.id)}
+                                        disabled={isLocked}
+                                        className="btn-primary"
+                                        style={{ 
+                                          display: 'inline-flex', 
+                                          alignItems: 'center', 
+                                          justifyContent: 'center', 
+                                          height: '28px', 
+                                          width: '28px', 
+                                          padding: 0, 
+                                          borderRadius: '4px', 
+                                          background: isLocked ? 'var(--muted)' : '#22c55e', 
+                                          color: '#fff', 
+                                          border: 'none', 
+                                          cursor: isLocked ? 'not-allowed' : 'pointer',
+                                          opacity: isLocked ? 0.5 : 1
+                                        }}
+                                        title={isLocked ? `Locked. Ready in ${minutesLeft} mins` : "Trigger Broadcast Now"}
+                                      >
+                                        <Play size={12} />
+                                      </button>
+                                    );
+                                  })()}
                                   <button
                                     onClick={() => handleDeleteBroadcast(b.id)}
                                     className="btn-secondary"
@@ -1523,6 +1644,119 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
           </div>
         )}
 
+        {/* TAB: TEMPLATES MANAGER */}
+        {activeSubTab === 'templates' && (
+          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexShrink: 0 }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700 }}>Custom Message Templates</h3>
+                <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.8rem', color: 'var(--muted)' }}>Manage reusable layouts and attachments for Emails and Meta WhatsApp broadcasts.</p>
+              </div>
+              <button
+                onClick={() => {
+                  setNewTemplateForm({ name: '', type: 'whatsapp', subject: '', body: '', metaTemplateName: '', mediaUrl: '' });
+                  setShowCreateTemplateModal(true);
+                }}
+                className="btn btn-primary"
+                style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.55rem 1rem', background: 'var(--gold-deep)', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }}
+              >
+                <Plus size={16} /> Create Template
+              </button>
+            </div>
+
+            <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+              {templates.length === 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '3.5rem 1rem', background: 'var(--paper-2)', borderRadius: '12px', border: '1px dashed var(--line)' }}>
+                  <HelpCircle size={36} style={{ color: 'var(--muted)', marginBottom: '0.75rem' }} />
+                  <div style={{ fontWeight: 600, color: 'var(--ink)', fontSize: '0.95rem' }}>No Templates Found</div>
+                  <p style={{ color: 'var(--muted)', fontSize: '0.8rem', textAlign: 'center', maxWidth: '360px', margin: '0.25rem 0 1rem 0' }}>Get started by creating your first reusable WhatsApp template or Email layout.</p>
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem' }}>
+                  {templates.map(tpl => (
+                    <div
+                      key={tpl.id}
+                      className="glass-panel"
+                      style={{
+                        padding: '1.25rem',
+                        borderRadius: '12px',
+                        border: '1px solid var(--line)',
+                        background: 'var(--paper)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        minHeight: '200px',
+                        transition: 'transform 0.2s ease, box-shadow 0.2s ease'
+                      }}
+                    >
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
+                          <span style={{
+                            fontSize: '0.68rem',
+                            fontWeight: 700,
+                            padding: '0.2rem 0.5rem',
+                            borderRadius: '4px',
+                            textTransform: 'uppercase',
+                            background: tpl.type === 'email' ? 'rgba(59, 130, 246, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                            color: tpl.type === 'email' ? '#3b82f6' : '#10b981'
+                          }}>
+                            {tpl.type}
+                          </span>
+                          <button
+                            onClick={() => handleDeleteTemplate(tpl.id)}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: 0 }}
+                            title="Delete Template"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                        <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '1rem', fontWeight: 700, color: 'var(--ink)' }}>{tpl.name}</h4>
+                        
+                        {tpl.type === 'email' && (
+                          <div style={{ marginBottom: '0.5rem', fontSize: '0.8rem' }}>
+                            <span style={{ fontWeight: 600, color: 'var(--muted)' }}>Subject: </span>
+                            <span style={{ color: 'var(--ink)' }}>{tpl.subject}</span>
+                          </div>
+                        )}
+                        {tpl.type === 'whatsapp' && tpl.meta_template_name && (
+                          <div style={{ marginBottom: '0.5rem', fontSize: '0.8rem' }}>
+                            <span style={{ fontWeight: 600, color: 'var(--muted)' }}>Meta Approved Name: </span>
+                            <code style={{ background: 'var(--paper-2)', padding: '0.1rem 0.3rem', borderRadius: '4px' }}>{tpl.meta_template_name}</code>
+                          </div>
+                        )}
+                        {tpl.media_url && (
+                          <div style={{ marginBottom: '0.5rem', fontSize: '0.8rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            <span style={{ fontWeight: 600, color: 'var(--muted)' }}>Attachment: </span>
+                            <a href={tpl.media_url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--gold-deep)', textDecoration: 'underline' }}>View Media Link</a>
+                          </div>
+                        )}
+                        
+                        <div style={{ marginTop: '0.5rem' }}>
+                          <span style={{ fontWeight: 600, color: 'var(--muted)', fontSize: '0.8rem' }}>Content Body:</span>
+                          <div style={{
+                            marginTop: '0.25rem',
+                            padding: '0.5rem',
+                            borderRadius: '6px',
+                            background: 'var(--paper-2)',
+                            fontSize: '0.78rem',
+                            color: 'var(--ink)',
+                            maxHeight: '100px',
+                            overflowY: 'auto',
+                            whiteSpace: 'pre-wrap',
+                            border: '1px solid var(--line)'
+                          }}>
+                            {tpl.body}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
       </div>
 
       {/* CREATE CAMPAIGN MODAL */}
@@ -1563,6 +1797,114 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                 <button type="button" onClick={() => setShowCreateCampaignModal(false)} className="btn-secondary">Cancel</button>
                 <button type="submit" className="btn-primary" disabled={isCreatingCampaign} style={{ background: 'var(--gold-deep)', color: '#fff' }}>
                   {isCreatingCampaign ? 'Creating...' : 'Create Campaign'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* CREATE TEMPLATE MODAL */}
+      {showCreateTemplateModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: '1rem' }}>
+          <div className="glass-panel" style={{ width: '100%', maxWidth: '520px', borderRadius: '16px', background: 'var(--paper)', border: '1px solid var(--line)', padding: '1.5rem', borderTop: '4px solid var(--gold-deep)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', paddingBottom: '0.5rem', borderBottom: '1px solid var(--line)' }}>
+              <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700 }}>Save New Template</h3>
+              <button onClick={() => setShowCreateTemplateModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={18} /></button>
+            </div>
+
+            <form onSubmit={handleCreateTemplate}>
+              <div className="form-group" style={{ marginBottom: '1rem' }}>
+                <label className="form-label" style={{ fontWeight: 600 }}>Template Name (For reference)</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="e.g. Festival Season Offer"
+                  value={newTemplateForm.name}
+                  onChange={(e) => setNewTemplateForm({ ...newTemplateForm, name: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '1rem' }}>
+                <label className="form-label" style={{ fontWeight: 600 }}>Template Type</label>
+                <select
+                  value={newTemplateForm.type}
+                  onChange={(e) => setNewTemplateForm({ ...newTemplateForm, type: e.target.value })}
+                  className="form-input"
+                  style={{ background: 'var(--paper-2)', color: 'var(--ink)' }}
+                >
+                  <option value="whatsapp">WhatsApp Template</option>
+                  <option value="email">Email Template</option>
+                </select>
+              </div>
+
+              {newTemplateForm.type === 'email' ? (
+                <div style={{ background: 'var(--paper-2)', border: '1px solid var(--line)', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
+                  <div className="form-group" style={{ marginBottom: '0.75rem' }}>
+                    <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Email Subject Line</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="e.g. Hello {name}, your special offer is here!"
+                      value={newTemplateForm.subject}
+                      onChange={(e) => setNewTemplateForm({ ...newTemplateForm, subject: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Email Body Content (HTML Supported)</label>
+                    <textarea
+                      className="form-input"
+                      placeholder="Enter email layout. Placeholders: {name}, {contact}, {mail}"
+                      value={newTemplateForm.body}
+                      onChange={(e) => setNewTemplateForm({ ...newTemplateForm, body: e.target.value })}
+                      rows={5}
+                      required
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div style={{ background: 'var(--paper-2)', border: '1px solid var(--line)', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
+                  <div className="form-group" style={{ marginBottom: '0.75rem' }}>
+                    <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Meta Approved Template Name</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="e.g. welcome_offer_v2"
+                      value={newTemplateForm.metaTemplateName}
+                      onChange={(e) => setNewTemplateForm({ ...newTemplateForm, metaTemplateName: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="form-group" style={{ marginBottom: '0.75rem' }}>
+                    <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Header Image/Media URL (Optional)</label>
+                    <input
+                      type="url"
+                      className="form-input"
+                      placeholder="e.g. https://domain.com/image.jpg (JPEG/PNG/PDF/MP4)"
+                      value={newTemplateForm.mediaUrl}
+                      onChange={(e) => setNewTemplateForm({ ...newTemplateForm, mediaUrl: e.target.value })}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Body Text / Parameter Content</label>
+                    <textarea
+                      className="form-input"
+                      placeholder="Enter WhatsApp template parameter text mapping parameter 2"
+                      value={newTemplateForm.body}
+                      onChange={(e) => setNewTemplateForm({ ...newTemplateForm, body: e.target.value })}
+                      rows={4}
+                      required
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '1.25rem', borderTop: '1px solid var(--line)', paddingTop: '1rem' }}>
+                <button type="button" onClick={() => setShowCreateTemplateModal(false)} className="btn-secondary">Cancel</button>
+                <button type="submit" disabled={isCreatingTemplate} className="btn-primary" style={{ background: 'var(--gold-deep)', color: '#fff' }}>
+                  {isCreatingTemplate ? 'Saving...' : 'Save Template'}
                 </button>
               </div>
             </form>
@@ -1986,6 +2328,45 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
               </div>
 
               <div className="form-group" style={{ marginBottom: '1rem' }}>
+                <label className="form-label" style={{ fontWeight: 600 }}>Select Reusable Template (Optional)</label>
+                <select
+                  onChange={(e) => {
+                    const tId = e.target.value;
+                    if (!tId) return;
+                    const selectedTpl = templates.find(t => t.id === tId);
+                    if (selectedTpl) {
+                      const updated = { ...newBroadcastForm };
+                      if (selectedTpl.type === 'email') {
+                        updated.channel = 'email';
+                        updated.emailSubject = selectedTpl.subject || '';
+                        updated.emailBody = selectedTpl.body || '';
+                      } else if (selectedTpl.type === 'whatsapp') {
+                        updated.channel = 'whatsapp';
+                        updated.whatsappTemplate = selectedTpl.meta_template_name || selectedTpl.name || '';
+                        updated.whatsappMessage = selectedTpl.body || '';
+                        updated.mediaUrl = selectedTpl.media_url || '';
+                      }
+                      setNewBroadcastForm(updated);
+                    }
+                  }}
+                  className="form-input"
+                  style={{ background: 'var(--paper-2)', color: 'var(--ink)' }}
+                >
+                  <option value="">-- Choose a Saved Template --</option>
+                  <optgroup label="WhatsApp Templates">
+                    {templates.filter(t => t.type === 'whatsapp').map(t => (
+                      <option key={t.id} value={t.id}>{t.name} ({t.meta_template_name || 'Free text'})</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Email Templates">
+                    {templates.filter(t => t.type === 'email').map(t => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </optgroup>
+                </select>
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '1rem' }}>
                 <label className="form-label" style={{ fontWeight: 600 }}>Target Channel</label>
                 <select
                   value={newBroadcastForm.channel}
@@ -2012,6 +2393,17 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                       placeholder="e.g. welcome_offer_v2 (Leave blank to send free-text via Baileys)"
                       value={newBroadcastForm.whatsappTemplate}
                       onChange={(e) => setNewBroadcastForm({ ...newBroadcastForm, whatsappTemplate: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="form-group" style={{ marginBottom: '0.75rem' }}>
+                    <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Header Media URL (Optional Image/Video/PDF Link)</label>
+                    <input
+                      type="url"
+                      className="form-input"
+                      placeholder="e.g. https://domain.com/banner.jpg (For Meta header components)"
+                      value={newBroadcastForm.mediaUrl || ''}
+                      onChange={(e) => setNewBroadcastForm({ ...newBroadcastForm, mediaUrl: e.target.value })}
                     />
                   </div>
 

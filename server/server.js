@@ -376,7 +376,7 @@ function getFallbackText(isOtpAuth, parameters, settings) {
 }
 
 // Helper to send messages via Meta WhatsApp Cloud API (with Baileys QR-Linked Device fallback)
-async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOtpAuth = false) {
+async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOtpAuth = false, mediaUrl = null) {
   const settings = await db.getSettings();
   const gateway = settings.whatsapp_gateway || 'meta';
 
@@ -555,6 +555,29 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
   // Try strategies and language codes sequentially
   for (const lang of langCandidates) {
     for (let sIdx = 0; sIdx < componentStrategies.length; sIdx++) {
+      let currentComponents = [...componentStrategies[sIdx]];
+      if (mediaUrl) {
+        let mediaType = 'image';
+        const lower = mediaUrl.toLowerCase().trim();
+        if (lower.endsWith('.pdf') || lower.endsWith('.doc') || lower.endsWith('.docx')) {
+          mediaType = 'document';
+        } else if (lower.endsWith('.mp4') || lower.endsWith('.mov') || lower.endsWith('.avi')) {
+          mediaType = 'video';
+        }
+        
+        currentComponents.unshift({
+          type: 'header',
+          parameters: [
+            {
+              type: mediaType,
+              [mediaType]: {
+                link: mediaUrl
+              }
+            }
+          ]
+        });
+      }
+
       const payloadObj = {
         messaging_product: 'whatsapp',
         to: formattedPhone,
@@ -564,8 +587,8 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
           language: { code: lang }
         }
       };
-      if (componentStrategies[sIdx].length > 0) {
-        payloadObj.template.components = componentStrategies[sIdx];
+      if (currentComponents.length > 0) {
+        payloadObj.template.components = currentComponents;
       }
 
       try {
@@ -6003,7 +6026,7 @@ async function checkAndRunScheduledBroadcasts() {
           try {
             if (b.whatsapp_template) {
               const params = [lead.name, waMessage];
-              await sendWhatsAppTemplate(lead.contact, b.whatsapp_template, params);
+              await sendWhatsAppTemplate(lead.contact, b.whatsapp_template, params, false, b.media_url);
             } else {
               const gateway = settings.whatsapp_gateway || 'baileys';
               if (gateway === 'baileys') {
@@ -6043,11 +6066,69 @@ async function checkAndRunScheduledBroadcasts() {
       const finalStatus = failedCount === leads.length ? 'failed' : 'sent';
       await db.updateCampaignBroadcastStatus(b.id, finalStatus, sentCount, failedCount);
       console.log(`[Campaign Scheduler] Completed broadcast: "${b.name}". Sent: ${sentCount}, Failed: ${failedCount}`);
+
+      // Create system notification
+      try {
+        await db.createNotification({
+          type: finalStatus === 'sent' ? 'success' : 'error',
+          title: finalStatus === 'sent' ? 'Campaign Broadcast Sent' : 'Campaign Broadcast Failed',
+          message: `Broadcast "${b.name}" finished. Channel: ${b.channel}. Sent: ${sentCount}, Failed: ${failedCount}.`,
+          details: { broadcastId: b.id, campaignId: b.campaign_id }
+        });
+        broadcast({ type: 'NOTIFICATION_CREATED' });
+      } catch (notifErr) {
+        console.error('[Campaign Scheduler Notification Error]', notifErr);
+      }
     }
   } catch (err) {
     console.error('[Campaign Scheduler Exception]:', err);
   }
 }
+
+// --- CAMPAIGN REUSABLE TEMPLATES ROUTES ---
+
+// List all campaign templates
+app.get('/api/campaigns/templates', authenticateToken, async (req, res) => {
+  try {
+    const list = await db.getCampaignTemplates();
+    res.json({ success: true, templates: list });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Create/Update a template
+app.post('/api/campaigns/templates', authenticateToken, async (req, res) => {
+  try {
+    const { id, name, type, subject, body, metaTemplateName, mediaUrl } = req.body;
+    if (!name || !type || !body) {
+      return res.status(400).json({ success: false, error: 'Name, Type and Body are required fields.' });
+    }
+    const templateId = id || 'tpl_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
+    const saved = await db.createCampaignTemplate({
+      id: templateId,
+      name,
+      type,
+      subject: subject || null,
+      body,
+      metaTemplateName: metaTemplateName || null,
+      mediaUrl: mediaUrl || null
+    });
+    res.json({ success: true, template: saved });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Delete a template
+app.delete('/api/campaigns/templates/:templateId', authenticateToken, async (req, res) => {
+  try {
+    const deleted = await db.deleteCampaignTemplate(req.params.templateId);
+    res.json({ success: true, template: deleted });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 // --- MASTER DATA CENTER ROUTES ---
 
@@ -6355,7 +6436,7 @@ app.get('/api/campaigns/:id/broadcasts', authenticateToken, async (req, res) => 
 app.post('/api/campaigns/:id/broadcasts', authenticateToken, async (req, res) => {
   try {
     const campaignId = req.params.id;
-    const { name, channel, whatsappTemplate, whatsappMessage, emailSubject, emailBody, scheduledAt } = req.body;
+    const { name, channel, whatsappTemplate, whatsappMessage, emailSubject, emailBody, scheduledAt, mediaUrl } = req.body;
     
     if (!name || !channel) {
       return res.status(400).json({ success: false, error: 'Broadcast Name and Channel are required.' });
@@ -6375,7 +6456,8 @@ app.post('/api/campaigns/:id/broadcasts', authenticateToken, async (req, res) =>
       emailSubject || null,
       emailBody || null,
       targetedCount,
-      scheduledAt ? new Date(scheduledAt) : null
+      scheduledAt ? new Date(scheduledAt) : null,
+      mediaUrl || null
     );
 
     res.json({ success: true, broadcast: newBroadcast });
@@ -6391,6 +6473,21 @@ app.post('/api/campaigns/:id/broadcasts/:broadcastId/trigger', authenticateToken
     const b = await db.getCampaignBroadcastById(broadcastId);
     if (!b) {
       return res.status(404).json({ success: false, error: 'Broadcast not found.' });
+    }
+
+    // Throttle check: Once per hour for successful broadcasts only
+    if (b.last_triggered_at && b.last_trigger_status === 'sent') {
+      const lastTriggered = new Date(b.last_triggered_at).getTime();
+      const now = Date.now();
+      const diffMs = now - lastTriggered;
+      const oneHourMs = 60 * 60 * 1000;
+      if (diffMs < oneHourMs) {
+        const remainingMin = Math.ceil((oneHourMs - diffMs) / (60 * 1000));
+        return res.status(400).json({
+          success: false,
+          error: `This successful broadcast was recently triggered. Please wait ${remainingMin} minutes before triggering it again.`
+        });
+      }
     }
 
     await db.runQuery(
