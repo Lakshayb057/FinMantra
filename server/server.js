@@ -6115,8 +6115,15 @@ const registerMetaTemplate = async ({ apiKey, wabaId, name, category, language, 
       const paramNumbers = matches.map(m => parseInt(m[1], 10));
       const maxParam = Math.max(...paramNumbers);
       const sampleValues = [];
+      const realisticDefaults = [
+        "Rahul",                        // Parameter 1 (Name)
+        "https://uat.thefinmantra.com",  // Parameter 2 (URL/Link)
+        "FinMantra Services",           // Parameter 3 (Company)
+        "24 hours",                     // Parameter 4 (Duration/Time)
+        "123456"                        // Parameter 5 (Number/OTP)
+      ];
       for (let i = 1; i <= maxParam; i++) {
-        sampleValues.push(`Placeholder ${i}`);
+        sampleValues.push(realisticDefaults[i - 1] || `Value ${i}`);
       }
       bodyComp.example = {
         body_text: [sampleValues]
