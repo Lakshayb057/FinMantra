@@ -6124,11 +6124,152 @@ async function checkAndRunScheduledBroadcasts() {
   }
 }
 
+// Helper to fetch the App ID connected to the developer token
+const fetchAppId = async (apiKey, apiVersion = 'v25.0') => {
+  return new Promise((resolve, reject) => {
+    const options = {
+      hostname: 'graph.facebook.com',
+      port: 443,
+      path: `/${apiVersion}/app`,
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${apiKey}` }
+    };
+    const req = https.request(options, (res) => {
+      let body = '';
+      res.on('data', chunk => body += chunk);
+      res.on('end', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          try {
+            const parsed = JSON.parse(body);
+            if (parsed.id) { resolve(parsed.id); } else { resolve(null); }
+          } catch (e) { resolve(null); }
+        } else { resolve(null); }
+      });
+    });
+    req.setTimeout(5000);
+    req.on('error', () => resolve(null));
+    req.end();
+  });
+};
+
+// Helper to perform Meta Resumable Upload for media templates and return a valid handle h
+const getResumableUploadHandle = async (apiKey, appId, mediaUrl, apiVersion = 'v25.0') => {
+  return new Promise((resolve, reject) => {
+    const https = require('https');
+    https.get(mediaUrl, (res) => {
+      if (res.statusCode < 200 || res.statusCode >= 300) {
+        return reject(new Error(`Failed to download media file (status ${res.statusCode})`));
+      }
+      
+      const chunks = [];
+      res.on('data', chunk => chunks.push(chunk));
+      res.on('end', async () => {
+        const buffer = Buffer.concat(chunks);
+        const fileLength = buffer.length;
+        const contentType = res.headers['content-type'] || 'image/png';
+        
+        let filename = 'file.png';
+        try {
+          const u = new URL(mediaUrl);
+          filename = u.pathname.split('/').pop() || 'file.png';
+        } catch (e) {}
+
+        try {
+          // Initialize upload session
+          const sessionOptions = {
+            hostname: 'graph.facebook.com',
+            port: 443,
+            path: `/${apiVersion}/${appId}/uploads?file_name=${encodeURIComponent(filename)}&file_length=${fileLength}&file_type=${encodeURIComponent(contentType)}`,
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${apiKey}`,
+              'Content-Type': 'application/json'
+            }
+          };
+
+          const sessionId = await new Promise((resResolve, resReject) => {
+            const sessionReq = https.request(sessionOptions, (sessionRes) => {
+              let sessionBody = '';
+              sessionRes.on('data', chunk => sessionBody += chunk);
+              sessionRes.on('end', () => {
+                if (sessionRes.statusCode >= 200 && sessionRes.statusCode < 300) {
+                  try {
+                    const parsed = JSON.parse(sessionBody);
+                    if (parsed.id) {
+                      resResolve(parsed.id);
+                    } else {
+                      resReject(new Error('Upload session response missing id.'));
+                    }
+                  } catch (e) {
+                    resReject(new Error('Failed to parse upload session response.'));
+                  }
+                } else {
+                  resReject(new Error(`Upload session returned status ${sessionRes.statusCode}: ${sessionBody}`));
+                }
+              });
+            });
+            sessionReq.setTimeout(8000);
+            sessionReq.on('error', err => resReject(err));
+            sessionReq.end();
+          });
+
+          // Upload raw binary data
+          const uploadOptions = {
+            hostname: 'graph.facebook.com',
+            port: 443,
+            path: `/${apiVersion}/${sessionId}`,
+            method: 'POST',
+            headers: {
+              'Authorization': `OAuth ${apiKey}`,
+              'file_offset': '0',
+              'Content-Type': contentType,
+              'Content-Length': fileLength
+            }
+          };
+
+          const fileHandle = await new Promise((uploadResolve, uploadReject) => {
+            const uploadReq = https.request(uploadOptions, (uploadRes) => {
+              let uploadBody = '';
+              uploadRes.on('data', chunk => uploadBody += chunk);
+              uploadRes.on('end', () => {
+                if (uploadRes.statusCode >= 200 && uploadRes.statusCode < 300) {
+                  try {
+                    const parsed = JSON.parse(uploadBody);
+                    if (parsed.h) {
+                      uploadResolve(parsed.h);
+                    } else {
+                      uploadReject(new Error('Meta upload response missing handle h.'));
+                    }
+                  } catch (e) {
+                    uploadReject(new Error('Failed to parse Meta upload response.'));
+                  }
+                } else {
+                  uploadReject(new Error(`Meta upload returned status ${uploadRes.statusCode}: ${uploadBody}`));
+                }
+              });
+            });
+            uploadReq.setTimeout(15000);
+            uploadReq.on('error', err => uploadReject(err));
+            uploadReq.write(buffer);
+            uploadReq.end();
+          });
+
+          resolve(fileHandle);
+        } catch (err) {
+          reject(err);
+        }
+      });
+    }).on('error', err => reject(err));
+  });
+};
+
 // Helper to register message template with Meta API
 const registerMetaTemplate = async ({ apiKey, wabaId, phoneId, name, category, language, headerFormat, bodyText, buttons, mediaUrl }) => {
   return new Promise(async (resolve, reject) => {
     const cleanName = name.toLowerCase().replace(/[^a-z0-9_]/g, '_');
     const components = [];
+    const settings = await db.getSettings().catch(() => ({}));
+    const apiVersion = getSettingVal(settings, 'wa_api_version', 'WA_API_VERSION', 'v25.0');
     
     if (headerFormat && headerFormat !== 'NONE') {
       const headerComp = {
@@ -6138,10 +6279,19 @@ const registerMetaTemplate = async ({ apiKey, wabaId, phoneId, name, category, l
       if (headerFormat === 'TEXT') {
         headerComp.text = 'Notification';
       } else {
-        // Use Meta's universal template preview media handle.
-        // This is officially supported by Meta to register and approve media templates instantly.
+        const sampleUrl = mediaUrl && mediaUrl.trim() ? mediaUrl.trim() : 'https://uat.thefinmantra.com/logo.png';
+        let finalHandle = "4:c2FtcGxlX2hhbmRsZQ=="; // Fallback handle
+        try {
+          const appId = await fetchAppId(apiKey, apiVersion);
+          if (appId) {
+            finalHandle = await getResumableUploadHandle(apiKey, appId, sampleUrl, apiVersion);
+          }
+        } catch (uploadErr) {
+          console.warn('[Resumable upload failed, falling back to dummy handle]', uploadErr.message);
+        }
+        
         headerComp.example = {
-          header_handle: ["4:c2FtcGxlX2hhbmRsZQ=="]
+          header_handle: [finalHandle]
         };
       }
       components.push(headerComp);
