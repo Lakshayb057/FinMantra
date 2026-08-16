@@ -503,6 +503,24 @@ async function initPgSchema() {
     await safeQuery("ALTER TABLE campaign_templates ADD COLUMN IF NOT EXISTS language VARCHAR(50) DEFAULT 'en_US'");
     await safeQuery("ALTER TABLE campaign_templates ADD COLUMN IF NOT EXISTS category VARCHAR(50) DEFAULT 'MARKETING'");
     await safeQuery("ALTER TABLE campaign_logs DROP CONSTRAINT IF EXISTS campaign_logs_campaign_lead_id_fkey");
+    await safeQuery("ALTER TABLE campaign_broadcasts ADD COLUMN IF NOT EXISTS smtp_account_id VARCHAR(50)");
+
+    await safeQuery(`
+      CREATE TABLE IF NOT EXISTS campaign_smtp_accounts (
+        id VARCHAR(50) PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        host VARCHAR(255) NOT NULL,
+        port INTEGER NOT NULL DEFAULT 465,
+        username VARCHAR(255) NOT NULL,
+        password TEXT NOT NULL,
+        secure BOOLEAN DEFAULT TRUE,
+        from_name VARCHAR(255) DEFAULT 'FinMantra',
+        from_email VARCHAR(255) NOT NULL,
+        is_default BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
 
     await safeQuery("ALTER TABLE campaign_master_leads ADD COLUMN IF NOT EXISTS finmantra_id VARCHAR(50)");
     await safeQuery("ALTER TABLE campaign_master_leads ADD COLUMN IF NOT EXISTS campaign_data_id VARCHAR(50)");
@@ -3015,7 +3033,7 @@ const db = {
     return res.rows[0];
   },
 
-  async updateCampaignBroadcast(id, { name, channel, whatsappTemplate, whatsappMessage, emailSubject, emailBody, scheduledAt, mediaUrl, metaPhoneNumberId, metaPhoneNumber, senderEmail }) {
+  async updateCampaignBroadcast(id, { name, channel, whatsappTemplate, whatsappMessage, emailSubject, emailBody, scheduledAt, mediaUrl, metaPhoneNumberId, metaPhoneNumber, senderEmail, smtpAccountId }) {
     const scheduledDate = scheduledAt ? new Date(scheduledAt) : null;
     const res = await pool.query(
       `UPDATE campaign_broadcasts 
@@ -3030,6 +3048,7 @@ const db = {
            meta_phone_number_id = COALESCE($10::text, meta_phone_number_id),
            meta_phone_number = COALESCE($11::text, meta_phone_number),
            sender_email = COALESCE($12::text, sender_email),
+           smtp_account_id = COALESCE($13::text, smtp_account_id),
            status = CASE WHEN $8::timestamptz IS NOT NULL AND status != 'sent' THEN 'scheduled' ELSE status END
        WHERE id = $1::text 
        RETURNING *`,
@@ -3045,9 +3064,84 @@ const db = {
         mediaUrl !== undefined ? (mediaUrl || null) : null,
         metaPhoneNumberId !== undefined ? (metaPhoneNumberId || null) : null,
         metaPhoneNumber !== undefined ? (metaPhoneNumber || null) : null,
-        senderEmail !== undefined ? (senderEmail || null) : null
+        senderEmail !== undefined ? (senderEmail || null) : null,
+        smtpAccountId !== undefined ? (smtpAccountId || null) : null
       ]
     );
+    return res.rows[0];
+  },
+
+  async getSmtpAccounts() {
+    const res = await pool.query('SELECT * FROM campaign_smtp_accounts ORDER BY is_default DESC, created_at ASC');
+    return res.rows;
+  },
+
+  async getSmtpAccountById(id) {
+    const res = await pool.query('SELECT * FROM campaign_smtp_accounts WHERE id = $1', [id]);
+    return res.rows[0] || null;
+  },
+
+  async getDefaultSmtpAccount() {
+    const res = await pool.query('SELECT * FROM campaign_smtp_accounts WHERE is_default = TRUE LIMIT 1');
+    if (res.rows.length > 0) return res.rows[0];
+    const anyRes = await pool.query('SELECT * FROM campaign_smtp_accounts ORDER BY created_at ASC LIMIT 1');
+    return anyRes.rows[0] || null;
+  },
+
+  async createSmtpAccount({ id, name, host, port, username, password, secure, fromName, fromEmail, isDefault }) {
+    const aid = id || ('smtp_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6));
+    if (isDefault) {
+      await pool.query('UPDATE campaign_smtp_accounts SET is_default = FALSE');
+    } else {
+      const countRes = await pool.query('SELECT COUNT(*) FROM campaign_smtp_accounts');
+      if (parseInt(countRes.rows[0].count, 10) === 0) {
+        isDefault = true;
+      }
+    }
+    const res = await pool.query(
+      `INSERT INTO campaign_smtp_accounts 
+       (id, name, host, port, username, password, secure, from_name, from_email, is_default)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       RETURNING *`,
+      [aid, name, host, parseInt(port, 10) || 465, username, password, secure ?? true, fromName || 'FinMantra', fromEmail, !!isDefault]
+    );
+    return res.rows[0];
+  },
+
+  async updateSmtpAccount(id, { name, host, port, username, password, secure, fromName, fromEmail, isDefault }) {
+    if (isDefault) {
+      await pool.query('UPDATE campaign_smtp_accounts SET is_default = FALSE WHERE id != $1', [id]);
+    }
+    const res = await pool.query(
+      `UPDATE campaign_smtp_accounts
+       SET name = COALESCE($2, name),
+           host = COALESCE($3, host),
+           port = COALESCE($4, port),
+           username = COALESCE($5, username),
+           password = CASE WHEN $6::text IS NOT NULL AND $6::text != '' THEN $6::text ELSE password END,
+           secure = COALESCE($7, secure),
+           from_name = COALESCE($8, from_name),
+           from_email = COALESCE($9, from_email),
+           is_default = COALESCE($10, is_default),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1
+       RETURNING *`,
+      [id, name, host, port ? parseInt(port, 10) : null, username, password || null, secure, fromName, fromEmail, isDefault]
+    );
+    return res.rows[0];
+  },
+
+  async deleteSmtpAccount(id) {
+    const res = await pool.query('DELETE FROM campaign_smtp_accounts WHERE id = $1 RETURNING *', [id]);
+    if (res.rows[0]?.is_default) {
+      await pool.query('UPDATE campaign_smtp_accounts SET is_default = TRUE WHERE id = (SELECT id FROM campaign_smtp_accounts ORDER BY created_at ASC LIMIT 1)');
+    }
+    return res.rows[0];
+  },
+
+  async setDefaultSmtpAccount(id) {
+    await pool.query('UPDATE campaign_smtp_accounts SET is_default = FALSE');
+    const res = await pool.query('UPDATE campaign_smtp_accounts SET is_default = TRUE WHERE id = $1 RETURNING *', [id]);
     return res.rows[0];
   },
 

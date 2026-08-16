@@ -6004,8 +6004,42 @@ app.post('/api/whatsapp/flow-endpoint', async (req, res) => {
 
 const nodemailer = require('nodemailer');
 
-// Dynamically create nodemailer transporter using SMTP settings in DB
-async function getEmailTransporter() {
+// Dynamically create nodemailer transporter using Multi-SMTP Account or DB Settings
+async function getEmailTransporter(smtpAccountId = null) {
+  let account = null;
+  if (smtpAccountId) {
+    account = await db.getSmtpAccountById(smtpAccountId).catch(() => null);
+  }
+  if (!account) {
+    account = await db.getDefaultSmtpAccount().catch(() => null);
+  }
+  
+  if (account) {
+    let host = String(account.host || '').trim().replace(/\s+/g, '.');
+    const port = parseInt(account.port, 10) || 465;
+    let user = String(account.username || '').trim();
+    let pass = String(account.password || '').trim();
+    if (host.includes('gmail')) {
+      pass = pass.replace(/\s+/g, '');
+    }
+    const secure = account.secure === true || account.secure === 'true' || port === 465;
+
+    if (host && user && pass) {
+      const transporter = nodemailer.createTransport({
+        host,
+        port,
+        secure,
+        auth: { user, pass }
+      });
+      return {
+        transporter,
+        fromName: account.from_name || 'FinMantra',
+        fromEmail: account.from_email || user
+      };
+    }
+  }
+
+  // Fallback to legacy single settings in DB
   const settings = await db.getSettings();
   let host = String(settings.campaign_smtp_host || '').trim().replace(/\s+/g, '.');
   const port = parseInt(settings.campaign_smtp_port, 10) || 465;
@@ -6018,32 +6052,144 @@ async function getEmailTransporter() {
 
   if (!host || !user || !pass) {
     console.log('[Email Campaigns] SMTP settings not configured. Running in mock/simulation mode.');
-    return null; // Fallback to mock mode
+    return null;
   }
 
-  return nodemailer.createTransport({
+  const transporter = nodemailer.createTransport({
     host,
     port,
     secure,
-    auth: {
-      user,
-      pass
-    }
+    auth: { user, pass }
   });
+  return {
+    transporter,
+    fromName: settings.campaign_smtp_from_name || 'FinMantra',
+    fromEmail: settings.campaign_smtp_from_email || user
+  };
 }
+
+// SMTP Accounts Management Endpoints
+app.get('/api/settings/smtp-accounts', authenticateToken, async (req, res) => {
+  try {
+    const list = await db.getSmtpAccounts();
+    const sanitized = list.map(acc => ({
+      ...acc,
+      password: acc.password ? '••••••••••••' : ''
+    }));
+    res.json({ success: true, accounts: sanitized });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/settings/smtp-accounts', authenticateToken, async (req, res) => {
+  try {
+    const { name, host, port, username, password, secure, fromName, fromEmail, isDefault } = req.body;
+    if (!name || !host || !username || !password || !fromEmail) {
+      return res.status(400).json({ success: false, error: 'Name, Host, Username, Password, and From Email are required.' });
+    }
+    let cleanHost = String(host || '').trim().replace(/\s+/g, '.');
+    let cleanPass = String(password || '').trim();
+    if (cleanHost.includes('gmail')) {
+      cleanPass = cleanPass.replace(/\s+/g, '');
+    }
+
+    const created = await db.createSmtpAccount({
+      name: name.trim(),
+      host: cleanHost,
+      port: parseInt(port, 10) || 465,
+      username: username.trim(),
+      password: cleanPass,
+      secure: secure === true || secure === 'true' || parseInt(port, 10) === 465,
+      fromName: fromName ? fromName.trim() : 'FinMantra',
+      fromEmail: fromEmail.trim(),
+      isDefault: !!isDefault
+    });
+
+    res.json({ success: true, account: { ...created, password: '••••••••••••' } });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.put('/api/settings/smtp-accounts/:id', authenticateToken, async (req, res) => {
+  try {
+    const { name, host, port, username, password, secure, fromName, fromEmail, isDefault } = req.body;
+    let cleanHost = host ? String(host).trim().replace(/\s+/g, '.') : undefined;
+    let cleanPass = password && !password.includes('•') ? String(password).trim() : undefined;
+    if (cleanHost && cleanHost.includes('gmail') && cleanPass) {
+      cleanPass = cleanPass.replace(/\s+/g, '');
+    }
+
+    const updated = await db.updateSmtpAccount(req.params.id, {
+      name: name ? name.trim() : undefined,
+      host: cleanHost,
+      port: port ? parseInt(port, 10) : undefined,
+      username: username ? username.trim() : undefined,
+      password: cleanPass,
+      secure: secure !== undefined ? (secure === true || secure === 'true') : undefined,
+      fromName: fromName ? fromName.trim() : undefined,
+      fromEmail: fromEmail ? fromEmail.trim() : undefined,
+      isDefault
+    });
+
+    res.json({ success: true, account: { ...updated, password: '••••••••••••' } });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.delete('/api/settings/smtp-accounts/:id', authenticateToken, async (req, res) => {
+  try {
+    const deleted = await db.deleteSmtpAccount(req.params.id);
+    res.json({ success: true, account: deleted });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/settings/smtp-accounts/:id/set-default', authenticateToken, async (req, res) => {
+  try {
+    const updated = await db.setDefaultSmtpAccount(req.params.id);
+    res.json({ success: true, account: updated });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 // Test SMTP Configuration Endpoint
 app.post('/api/settings/test-smtp', authenticateToken, async (req, res) => {
   try {
-    const { host, port, user, pass, secure, fromName, fromEmail, testRecipient } = req.body;
-    let cleanHost = String(host || '').trim().replace(/\s+/g, '.');
-    let cleanUser = String(user || '').trim();
-    let cleanPass = String(pass || '').trim();
+    const { accountId, host, port, user, pass, secure, fromName, fromEmail, testRecipient } = req.body;
+    let cleanHost = host;
+    let cleanPort = port;
+    let cleanUser = user;
+    let cleanPass = pass;
+    let cleanSecure = secure;
+    let cleanFromName = fromName;
+    let cleanFromEmail = fromEmail;
+
+    if (accountId) {
+      const acc = await db.getSmtpAccountById(accountId);
+      if (acc) {
+        cleanHost = acc.host;
+        cleanPort = acc.port;
+        cleanUser = acc.username;
+        cleanPass = acc.password;
+        cleanSecure = acc.secure;
+        cleanFromName = acc.from_name;
+        cleanFromEmail = acc.from_email;
+      }
+    }
+
+    cleanHost = String(cleanHost || '').trim().replace(/\s+/g, '.');
+    cleanUser = String(cleanUser || '').trim();
+    cleanPass = String(cleanPass || '').trim();
     if (cleanHost.includes('gmail')) {
       cleanPass = cleanPass.replace(/\s+/g, '');
     }
-    const cleanPort = parseInt(port, 10) || 465;
-    const isSecure = secure === 'true' || cleanPort === 465;
+    const finalPort = parseInt(cleanPort, 10) || 465;
+    const isSecure = cleanSecure === true || cleanSecure === 'true' || finalPort === 465;
 
     if (!cleanHost || !cleanUser || !cleanPass) {
       return res.status(400).json({ success: false, error: 'Host, Username and Password are required.' });
@@ -6051,7 +6197,7 @@ app.post('/api/settings/test-smtp', authenticateToken, async (req, res) => {
 
     const testTransporter = nodemailer.createTransport({
       host: cleanHost,
-      port: cleanPort,
+      port: finalPort,
       secure: isSecure,
       auth: {
         user: cleanUser,
@@ -6061,15 +6207,15 @@ app.post('/api/settings/test-smtp', authenticateToken, async (req, res) => {
 
     await testTransporter.verify();
 
-    const targetTo = testRecipient || cleanUser;
+    const targetTo = testRecipient || cleanFromEmail || cleanUser;
     await testTransporter.sendMail({
-      from: `"${fromName || 'FinMantra'}" <${fromEmail || cleanUser}>`,
+      from: `"${cleanFromName || 'FinMantra'}" <${cleanFromEmail || cleanUser}>`,
       to: targetTo,
       subject: 'FinMantra SMTP Test Email - Connection Successful',
       html: `<div style="font-family:sans-serif;padding:20px;background:#f9f9f9;border-radius:8px;">
         <h2 style="color:#e0a82e;">FinMantra SMTP Gateway Test</h2>
         <p>Your SMTP mail configuration is verified and working perfectly!</p>
-        <p><strong>Host:</strong> ${cleanHost}<br/><strong>Port:</strong> ${cleanPort}<br/><strong>User:</strong> ${cleanUser}</p>
+        <p><strong>Host:</strong> ${cleanHost}<br/><strong>Port:</strong> ${finalPort}<br/><strong>User:</strong> ${cleanUser}</p>
         <p style="font-size:12px;color:#888;">Sent from FinMantra Campaign Broadcast Engine.</p>
       </div>`
     });
@@ -6114,9 +6260,10 @@ async function checkAndRunScheduledBroadcasts() {
       let deliveredCount = 0;
       let failedCount = 0;
 
-      const fromEmail = b.sender_email || settings.campaign_smtp_from_email || 'no-reply@finmantra.com';
-      const fromName = settings.campaign_smtp_from_name || 'FinMantra';
-      const transporter = await getEmailTransporter();
+      const emailConfig = await getEmailTransporter(b.smtp_account_id);
+      const transporter = emailConfig?.transporter || null;
+      const fromEmail = b.sender_email || emailConfig?.fromEmail || settings.campaign_smtp_from_email || 'no-reply@finmantra.com';
+      const fromName = emailConfig?.fromName || settings.campaign_smtp_from_name || 'FinMantra';
 
       for (const lead of leads) {
         let emailAttempted = false;
@@ -7399,6 +7546,7 @@ app.post('/api/campaigns/broadcasts/direct', authenticateToken, upload.single('f
     const emailBody = (body.email_body || '').trim();
     const scheduledAt = body.scheduled_at ? new Date(body.scheduled_at) : null;
     const mediaUrl = (body.media_url || '').trim();
+    const smtpAccountId = (body.smtp_account_id || body.smtpAccountId || '').trim();
 
     if (!name) {
       return res.status(400).json({ success: false, error: 'Broadcast Name is required.' });
@@ -7501,9 +7649,9 @@ app.post('/api/campaigns/broadcasts/direct', authenticateToken, upload.single('f
 
     await db.runQuery(
       `UPDATE campaign_broadcasts 
-       SET meta_phone_number_id = $2, meta_phone_number = $3, sender_email = $4, uploaded_leads_count = $5 
+       SET meta_phone_number_id = $2, meta_phone_number = $3, sender_email = $4, uploaded_leads_count = $5, smtp_account_id = $6 
        WHERE id = $1`,
-      [broadcastId, metaPhoneNumberId || null, metaPhoneNumber || null, senderEmail || null, targetedCount]
+      [broadcastId, metaPhoneNumberId || null, metaPhoneNumber || null, senderEmail || null, targetedCount, smtpAccountId || null]
     );
 
     // If not scheduled for later, trigger execution immediately
@@ -7729,7 +7877,7 @@ app.get('/api/c/t/:broadcastId/:masterLeadId', async (req, res) => {
 // Update / Edit a broadcast
 app.put(['/api/campaigns/:id/broadcasts/:broadcastId', '/api/campaigns/broadcasts/:broadcastId'], authenticateToken, async (req, res) => {
   try {
-    const { name, channel, whatsappTemplate, whatsapp_template, whatsappMessage, whatsapp_message, emailSubject, email_subject, emailBody, email_body, scheduledAt, scheduled_at, mediaUrl, media_url, metaPhoneNumberId, meta_phone_number_id, metaPhoneNumber, meta_phone_number, senderEmail, sender_email } = req.body;
+    const { name, channel, whatsappTemplate, whatsapp_template, whatsappMessage, whatsapp_message, emailSubject, email_subject, emailBody, email_body, scheduledAt, scheduled_at, mediaUrl, media_url, metaPhoneNumberId, meta_phone_number_id, metaPhoneNumber, meta_phone_number, senderEmail, sender_email, smtpAccountId, smtp_account_id } = req.body;
     
     const updated = await db.updateCampaignBroadcast(req.params.broadcastId, {
       name,
@@ -7742,7 +7890,8 @@ app.put(['/api/campaigns/:id/broadcasts/:broadcastId', '/api/campaigns/broadcast
       mediaUrl: mediaUrl || media_url,
       metaPhoneNumberId: metaPhoneNumberId || meta_phone_number_id,
       metaPhoneNumber: metaPhoneNumber || meta_phone_number,
-      senderEmail: senderEmail || sender_email
+      senderEmail: senderEmail || sender_email,
+      smtpAccountId: smtpAccountId || smtp_account_id
     });
     
     res.json({ success: true, broadcast: updated });

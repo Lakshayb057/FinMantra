@@ -79,6 +79,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
     meta_phone_number_id: '',
     meta_phone_number: '',
     sender_email: '',
+    smtp_account_id: '',
     whatsapp_template: '',
     whatsapp_message: '',
     email_subject: '',
@@ -99,7 +100,27 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
   const [isSyncingMetaTemplates, setIsSyncingMetaTemplates] = useState(false);
 
-  // SMTP Settings state
+  // Multi-SMTP Accounts state
+  const [smtpAccounts, setSmtpAccounts] = useState([]);
+  const [isLoadingSmtpAccounts, setIsLoadingSmtpAccounts] = useState(false);
+  const [showSmtpModal, setShowSmtpModal] = useState(false);
+  const [editingSmtpAccount, setEditingSmtpAccount] = useState(null);
+  const [isSavingSmtpAccount, setIsSavingSmtpAccount] = useState(false);
+  const [testingSmtpAccountId, setTestingSmtpAccountId] = useState(null);
+  const [isTestingModalSmtp, setIsTestingModalSmtp] = useState(false);
+  const [smtpAccountForm, setSmtpAccountForm] = useState({
+    name: '',
+    host: 'smtp.gmail.com',
+    port: '465',
+    username: '',
+    password: '',
+    secure: 'true',
+    fromName: 'FinMantra',
+    fromEmail: '',
+    isDefault: false
+  });
+
+  // Legacy single SMTP Settings state
   const [smtpSettings, setSmtpSettings] = useState({
     host: '',
     port: '465',
@@ -133,6 +154,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
     fetchBroadcasts();
     fetchTemplates();
     fetchGlobalSettings();
+    fetchSmtpAccounts();
   }, []);
 
   // Poll active broadcasts
@@ -298,85 +320,186 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
     }
   };
 
-  const [isTestingSmtp, setIsTestingSmtp] = useState(false);
-
-  const handleSaveSmtpSettings = async (e) => {
-    if (e && e.preventDefault) e.preventDefault();
-    setIsSavingSettings(true);
-    const sanitizedHost = (smtpSettings.host || '').trim().replace(/\s+/g, '.');
-    const sanitizedUser = (smtpSettings.user || '').trim();
-    let sanitizedPass = (smtpSettings.pass || '').trim();
-    if (sanitizedHost.includes('gmail')) {
-      sanitizedPass = sanitizedPass.replace(/\s+/g, '');
-    }
-
+  // Multi-SMTP Account Handlers
+  const fetchSmtpAccounts = async () => {
+    setIsLoadingSmtpAccounts(true);
     try {
-      const res = await fetch(`${API_URL}/settings`, {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify({
-          campaign_smtp_host: sanitizedHost,
-          campaign_smtp_port: smtpSettings.port,
-          campaign_smtp_user: sanitizedUser,
-          campaign_smtp_pass: sanitizedPass,
-          campaign_smtp_secure: smtpSettings.secure,
-          campaign_smtp_from_name: smtpSettings.fromName,
-          campaign_smtp_from_email: smtpSettings.fromEmail
-        })
-      });
+      const res = await fetch(`${API_URL}/settings/smtp-accounts`, { headers });
       const data = await res.json();
-      if (res.ok) {
-        showToast('SMTP Gateway configuration saved successfully.', 'success');
-        setSmtpSettings(prev => ({
-          ...prev,
-          host: sanitizedHost,
-          user: sanitizedUser,
-          pass: sanitizedPass
-        }));
-      } else {
-        showToast(data.error || 'Failed to save SMTP settings.', 'error');
+      if (data.success) {
+        setSmtpAccounts(data.accounts || []);
+        const defaultAcc = data.accounts.find(a => a.is_default) || data.accounts[0];
+        if (defaultAcc && !broadcastForm.smtp_account_id) {
+          setBroadcastForm(prev => ({
+            ...prev,
+            smtp_account_id: defaultAcc.id,
+            sender_email: prev.sender_email || defaultAcc.from_email
+          }));
+        }
       }
     } catch (err) {
-      showToast('Network error saving settings.', 'error');
+      console.warn('[Fetch SMTP Accounts Error]:', err.message);
     } finally {
-      setIsSavingSettings(false);
+      setIsLoadingSmtpAccounts(false);
     }
   };
 
-  const handleTestSmtpConnection = async () => {
-    setIsTestingSmtp(true);
-    const sanitizedHost = (smtpSettings.host || '').trim().replace(/\s+/g, '.');
-    const sanitizedUser = (smtpSettings.user || '').trim();
-    let sanitizedPass = (smtpSettings.pass || '').trim();
-    if (sanitizedHost.includes('gmail')) {
-      sanitizedPass = sanitizedPass.replace(/\s+/g, '');
+  const handleOpenAddSmtpModal = () => {
+    setEditingSmtpAccount(null);
+    setSmtpAccountForm({
+      name: '',
+      host: 'smtp.gmail.com',
+      port: '465',
+      username: '',
+      password: '',
+      secure: 'true',
+      fromName: 'FinMantra',
+      fromEmail: '',
+      isDefault: smtpAccounts.length === 0
+    });
+    setShowSmtpModal(true);
+  };
+
+  const handleOpenEditSmtpModal = (account) => {
+    setEditingSmtpAccount(account);
+    setSmtpAccountForm({
+      name: account.name || '',
+      host: account.host || '',
+      port: String(account.port || '465'),
+      username: account.username || '',
+      password: '', // blank to preserve
+      secure: String(account.secure ?? 'true'),
+      fromName: account.from_name || 'FinMantra',
+      fromEmail: account.from_email || '',
+      isDefault: !!account.is_default
+    });
+    setShowSmtpModal(true);
+  };
+
+  const handleSaveSmtpAccountModal = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!smtpAccountForm.name.trim() || !smtpAccountForm.host.trim() || !smtpAccountForm.username.trim() || !smtpAccountForm.fromEmail.trim()) {
+      showToast('Please fill all mandatory fields (Name, Host, Username, From Email).', 'error');
+      return;
+    }
+    if (!editingSmtpAccount && !smtpAccountForm.password.trim()) {
+      showToast('Password is required for new SMTP account.', 'error');
+      return;
     }
 
+    setIsSavingSmtpAccount(true);
+    try {
+      const url = editingSmtpAccount 
+        ? `${API_URL}/settings/smtp-accounts/${editingSmtpAccount.id}`
+        : `${API_URL}/settings/smtp-accounts`;
+      const method = editingSmtpAccount ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
+        headers,
+        body: JSON.stringify(smtpAccountForm)
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(`SMTP account "${smtpAccountForm.name}" saved successfully!`, 'success');
+        setShowSmtpModal(false);
+        fetchSmtpAccounts();
+      } else {
+        showToast(data.error || 'Failed to save SMTP account.', 'error');
+      }
+    } catch (err) {
+      showToast('Network error saving SMTP account.', 'error');
+    } finally {
+      setIsSavingSmtpAccount(false);
+    }
+  };
+
+  const handleDeleteSmtpAccount = async (id, name) => {
+    if (!window.confirm(`Delete SMTP account "${name}"? This action cannot be undone.`)) return;
+    try {
+      const res = await fetch(`${API_URL}/settings/smtp-accounts/${id}`, {
+        method: 'DELETE',
+        headers
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(`SMTP account "${name}" deleted.`, 'info');
+        fetchSmtpAccounts();
+      } else {
+        showToast(data.error || 'Failed to delete SMTP account.', 'error');
+      }
+    } catch (err) {
+      showToast('Network error deleting SMTP account.', 'error');
+    }
+  };
+
+  const handleSetDefaultSmtpAccount = async (id, name) => {
+    try {
+      const res = await fetch(`${API_URL}/settings/smtp-accounts/${id}/set-default`, {
+        method: 'POST',
+        headers
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(`"${name}" is now the default primary outbound SMTP account.`, 'success');
+        fetchSmtpAccounts();
+      } else {
+        showToast(data.error || 'Failed to set default.', 'error');
+      }
+    } catch (err) {
+      showToast('Network error setting default SMTP.', 'error');
+    }
+  };
+
+  const handleTestSpecificSmtp = async (account) => {
+    setTestingSmtpAccountId(account.id);
+    try {
+      const res = await fetch(`${API_URL}/settings/test-smtp`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ accountId: account.id })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(data.message || 'SMTP Connection Verified Successfully!', 'success');
+      } else {
+        showToast(data.error || 'SMTP Connection Test Failed.', 'error');
+      }
+    } catch (err) {
+      showToast('Network error while testing SMTP connection.', 'error');
+    } finally {
+      setTestingSmtpAccountId(null);
+    }
+  };
+
+  const handleTestModalSmtp = async () => {
+    setIsTestingModalSmtp(true);
     try {
       const res = await fetch(`${API_URL}/settings/test-smtp`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
-          host: sanitizedHost,
-          port: smtpSettings.port,
-          user: sanitizedUser,
-          pass: sanitizedPass,
-          secure: smtpSettings.secure,
-          fromName: smtpSettings.fromName,
-          fromEmail: smtpSettings.fromEmail,
-          testRecipient: sanitizedUser || smtpSettings.fromEmail
+          accountId: editingSmtpAccount && !smtpAccountForm.password ? editingSmtpAccount.id : undefined,
+          host: smtpAccountForm.host,
+          port: smtpAccountForm.port,
+          user: smtpAccountForm.username,
+          pass: smtpAccountForm.password,
+          secure: smtpAccountForm.secure,
+          fromName: smtpAccountForm.fromName,
+          fromEmail: smtpAccountForm.fromEmail,
+          testRecipient: smtpAccountForm.fromEmail || smtpAccountForm.username
         })
       });
       const data = await res.json();
-      if (res.ok && data.success) {
-        showToast(data.message || 'SMTP Connection verified successfully!', 'success');
+      if (data.success) {
+        showToast(data.message || 'SMTP Connection Verified Successfully!', 'success');
       } else {
-        showToast(data.error || 'SMTP Connection failed. Please check credentials.', 'error');
+        showToast(data.error || 'SMTP Connection Test Failed.', 'error');
       }
     } catch (err) {
-      showToast('Network error testing SMTP connection.', 'error');
+      showToast('Network error while testing SMTP connection.', 'error');
     } finally {
-      setIsTestingSmtp(false);
+      setIsTestingModalSmtp(false);
     }
   };
 
@@ -543,6 +666,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
       meta_phone_number_id: b.meta_phone_number_id || '',
       meta_phone_number: b.meta_phone_number || '',
       sender_email: b.sender_email || '',
+      smtp_account_id: b.smtp_account_id || '',
       whatsapp_template: b.whatsapp_template || '',
       whatsapp_message: b.whatsapp_message || '',
       email_subject: b.email_subject || '',
@@ -1868,135 +1992,258 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
       )}
 
       {/* ========================================================================= */}
-      {/* SUBTAB 5: SMTP GATEWAY SETTINGS */}
+      {/* SUBTAB 5: MULTI-SMTP GATEWAY SETTINGS */}
       {/* ========================================================================= */}
       {activeSubTab === 'settings' && (
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflowY: 'auto' }}>
-          <div className="glass-panel" style={{ maxWidth: '640px', width: '100%', borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)', padding: '1.5rem', boxSizing: 'border-box' }}>
-            <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.15rem', fontWeight: 700 }}>SMTP Mail Gateway Configuration</h3>
-            <p style={{ margin: '0 0 1.25rem 0', color: 'var(--muted)', fontSize: '0.85rem' }}>Configure your custom SMTP host credentials for high-deliverability email broadcasts.</p>
-
-            <form onSubmit={handleSaveSmtpSettings} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+          <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)', padding: '1.25rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem', flexShrink: 0 }}>
               <div>
-                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '0.25rem' }}>SMTP Host</label>
-                <input
-                  type="text"
-                  placeholder="e.g. smtp.titan.email or smtp.gmail.com"
-                  value={smtpSettings.host}
-                  onChange={(e) => setSmtpSettings({ ...smtpSettings, host: e.target.value })}
-                  style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)' }}
-                />
-              </div>
-
-              <div className="campaigns-grid-2col">
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '0.25rem' }}>SMTP Port</label>
-                  <input
-                    type="text"
-                    value={smtpSettings.port}
-                    onChange={(e) => setSmtpSettings({ ...smtpSettings, port: e.target.value })}
-                    style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)' }}
-                  />
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '0.25rem' }}>Encryption</label>
-                  <select
-                    value={smtpSettings.secure}
-                    onChange={(e) => setSmtpSettings({ ...smtpSettings, secure: e.target.value })}
-                    style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)' }}
-                  >
-                    <option value="true">SSL / TLS (Port 465)</option>
-                    <option value="false">STARTTLS / Plain (Port 587)</option>
-                  </select>
+                <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Mail size={20} style={{ color: 'var(--gold-deep)' }} />
+                  Outbound SMTP Email Gateways &amp; Accounts
+                </h3>
+                <div style={{ color: 'var(--muted)', fontSize: '0.82rem', marginTop: '0.2rem' }}>
+                  Manage multiple SMTP host credentials with complete create, edit, test, delete, and default routing controls.
                 </div>
               </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '0.25rem' }}>SMTP Username / Email</label>
-                <input
-                  type="text"
-                  autoComplete="username"
-                  value={smtpSettings.user}
-                  onChange={(e) => setSmtpSettings({ ...smtpSettings, user: e.target.value })}
-                  style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)' }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '0.25rem' }}>SMTP Password / App Password</label>
-                <input
-                  type="password"
-                  autoComplete="current-password"
-                  value={smtpSettings.pass}
-                  onChange={(e) => setSmtpSettings({ ...smtpSettings, pass: e.target.value })}
-                  style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)' }}
-                />
-              </div>
-
-              <div className="campaigns-grid-2col">
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '0.25rem' }}>From Name</label>
-                  <input
-                    type="text"
-                    autoComplete="name"
-                    value={smtpSettings.fromName}
-                    onChange={(e) => setSmtpSettings({ ...smtpSettings, fromName: e.target.value })}
-                    style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)' }}
-                  />
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '0.25rem' }}>From Email Address</label>
-                  <input
-                    type="email"
-                    autoComplete="email"
-                    value={smtpSettings.fromEmail}
-                    onChange={(e) => setSmtpSettings({ ...smtpSettings, fromEmail: e.target.value })}
-                    style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)' }}
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.75rem', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                 <button
-                  type="submit"
-                  disabled={isSavingSettings}
+                  onClick={fetchSmtpAccounts}
+                  disabled={isLoadingSmtpAccounts}
                   style={{
-                    flex: 1,
-                    padding: '0.7rem',
-                    borderRadius: '8px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    padding: '0.5rem 0.9rem',
+                    borderRadius: '6px',
+                    background: 'var(--paper-2)',
+                    color: 'var(--ink)',
+                    border: '1px solid var(--line)',
+                    fontWeight: 600,
+                    fontSize: '0.84rem',
+                    cursor: isLoadingSmtpAccounts ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  <RefreshCw size={14} className={isLoadingSmtpAccounts ? 'spin-slow' : ''} />
+                  Refresh
+                </button>
+                <button
+                  onClick={handleOpenAddSmtpModal}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    padding: '0.5rem 1.1rem',
+                    borderRadius: '6px',
                     background: 'var(--gold-deep)',
                     color: '#fff',
                     border: 'none',
                     fontWeight: 700,
-                    fontSize: '0.9rem',
-                    cursor: isSavingSettings ? 'not-allowed' : 'pointer'
+                    fontSize: '0.86rem',
+                    cursor: 'pointer'
                   }}
                 >
-                  {isSavingSettings ? 'Saving Settings...' : 'Save SMTP Settings'}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleTestSmtpConnection}
-                  disabled={isTestingSmtp}
-                  style={{
-                    padding: '0.7rem 1.25rem',
-                    borderRadius: '8px',
-                    background: 'var(--paper-2)',
-                    color: 'var(--ink)',
-                    border: '1px solid var(--line)',
-                    fontWeight: 700,
-                    fontSize: '0.9rem',
-                    cursor: isTestingSmtp ? 'not-allowed' : 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.4rem'
-                  }}
-                >
-                  {isTestingSmtp ? <RefreshCw size={15} className="spin-slow" /> : <Send size={15} />}
-                  {isTestingSmtp ? 'Testing Connection...' : 'Test SMTP Connection'}
+                  <Plus size={15} /> + Add SMTP Account
                 </button>
               </div>
-            </form>
+            </div>
+
+            {/* SMTP Accounts Grid */}
+            <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+              {isLoadingSmtpAccounts ? (
+                <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--muted)' }}>
+                  <RefreshCw size={24} className="spin-slow" style={{ color: 'var(--gold-deep)', marginBottom: '0.5rem' }} />
+                  <div>Loading configured SMTP accounts...</div>
+                </div>
+              ) : smtpAccounts.length === 0 ? (
+                <div style={{ padding: '3.5rem', textAlign: 'center', background: 'var(--paper-2)', borderRadius: '12px', border: '1px dashed var(--line)' }}>
+                  <Mail size={36} style={{ color: 'var(--muted)', marginBottom: '0.75rem', opacity: 0.7 }} />
+                  <h4 style={{ margin: '0 0 0.4rem 0', fontWeight: 700 }}>No Outbound SMTP Accounts Configured</h4>
+                  <p style={{ margin: '0 0 1.25rem 0', color: 'var(--muted)', fontSize: '0.85rem' }}>Add your first SMTP email gateway (e.g. Gmail, Titan, Outlook, AWS SES) to send broadcasts.</p>
+                  <button
+                    onClick={handleOpenAddSmtpModal}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                      padding: '0.6rem 1.25rem',
+                      borderRadius: '8px',
+                      background: 'var(--gold-deep)',
+                      color: '#fff',
+                      border: 'none',
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <Plus size={16} /> + Add SMTP Account
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1rem' }}>
+                  {smtpAccounts.map(account => {
+                    const isTestingThis = testingSmtpAccountId === account.id;
+                    return (
+                      <div
+                        key={account.id}
+                        style={{
+                          border: account.is_default ? '2px solid var(--gold-deep)' : '1px solid var(--line)',
+                          borderRadius: '12px',
+                          background: 'var(--paper-2)',
+                          padding: '1.25rem',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          justifyContent: 'space-between',
+                          boxShadow: account.is_default ? '0 4px 15px rgba(224, 168, 46, 0.12)' : 'none'
+                        }}
+                      >
+                        <div>
+                          {/* Account Header */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
+                            <div>
+                              <div style={{ fontWeight: 800, fontSize: '1.02rem', color: 'var(--ink)' }}>{account.name}</div>
+                              <div style={{ fontSize: '0.75rem', color: 'var(--muted)', fontFamily: 'var(--font-mono)', marginTop: '0.15rem' }}>
+                                ID: {account.id}
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                              {account.is_default && (
+                                <span style={{
+                                  padding: '0.2rem 0.6rem',
+                                  borderRadius: '999px',
+                                  fontSize: '0.7rem',
+                                  fontWeight: 800,
+                                  background: 'rgba(224, 168, 46, 0.18)',
+                                  color: 'var(--gold-deep)',
+                                  border: '1px solid rgba(224, 168, 46, 0.4)'
+                                }}>
+                                  ★ DEFAULT
+                                </span>
+                              )}
+                              <span style={{
+                                padding: '0.2rem 0.5rem',
+                                borderRadius: '999px',
+                                fontSize: '0.7rem',
+                                fontWeight: 700,
+                                background: account.secure ? 'rgba(22, 163, 123, 0.12)' : 'rgba(59, 130, 246, 0.12)',
+                                color: account.secure ? '#16a37b' : '#3b82f6'
+                              }}>
+                                {account.secure ? 'SSL (465)' : 'TLS (587)'}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Account Details Box */}
+                          <div style={{ background: 'var(--paper)', borderRadius: '8px', border: '1px solid var(--line)', padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.4rem', fontSize: '0.82rem' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                              <span style={{ color: 'var(--muted)' }}>From Name:</span>
+                              <strong>{account.from_name || 'FinMantra'}</strong>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                              <span style={{ color: 'var(--muted)' }}>From Email:</span>
+                              <strong style={{ color: 'var(--ink)' }}>{account.from_email}</strong>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                              <span style={{ color: 'var(--muted)' }}>Host / Server:</span>
+                              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>{account.host}:{account.port}</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                              <span style={{ color: 'var(--muted)' }}>Username:</span>
+                              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>{account.username}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div style={{ marginTop: '1rem', paddingTop: '0.85rem', borderTop: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                          <div style={{ display: 'flex', gap: '0.4rem' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleTestSpecificSmtp(account)}
+                              disabled={isTestingThis}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.35rem',
+                                padding: '0.4rem 0.75rem',
+                                borderRadius: '6px',
+                                background: 'var(--paper)',
+                                color: 'var(--ink)',
+                                border: '1px solid var(--line)',
+                                fontSize: '0.78rem',
+                                fontWeight: 700,
+                                cursor: isTestingThis ? 'not-allowed' : 'pointer'
+                              }}
+                            >
+                              {isTestingThis ? <RefreshCw size={13} className="spin-slow" /> : <Zap size={13} style={{ color: 'var(--gold-deep)' }} />}
+                              {isTestingThis ? 'Testing...' : 'Test Connection'}
+                            </button>
+                            {!account.is_default && (
+                              <button
+                                type="button"
+                                onClick={() => handleSetDefaultSmtpAccount(account.id, account.name)}
+                                style={{
+                                  padding: '0.4rem 0.65rem',
+                                  borderRadius: '6px',
+                                  background: 'var(--paper)',
+                                  color: 'var(--muted)',
+                                  border: '1px solid var(--line)',
+                                  fontSize: '0.78rem',
+                                  fontWeight: 600,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                Set Default
+                              </button>
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', gap: '0.35rem' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditSmtpModal(account)}
+                              style={{
+                                padding: '0.4rem 0.65rem',
+                                borderRadius: '6px',
+                                background: 'var(--paper)',
+                                color: 'var(--ink)',
+                                border: '1px solid var(--line)',
+                                fontSize: '0.78rem',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.3rem'
+                              }}
+                            >
+                              <Edit2 size={13} /> Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteSmtpAccount(account.id, account.name)}
+                              style={{
+                                padding: '0.4rem 0.65rem',
+                                borderRadius: '6px',
+                                background: 'rgba(239, 68, 68, 0.08)',
+                                color: '#ef4444',
+                                border: '1px solid rgba(239, 68, 68, 0.25)',
+                                fontSize: '0.78rem',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.3rem'
+                              }}
+                            >
+                              <Trash2 size={13} /> Delete
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -2168,19 +2415,53 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                     </div>
                   )}
 
-                  {/* If Email: Sender Email dropdown */}
+                  {/* If Email: Outbound SMTP Account & Sender Email */}
                   {(broadcastForm.channel === 'email' || broadcastForm.channel === 'both') && (
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.4rem' }}>
-                        Sender Email Address
-                      </label>
-                      <input
-                        type="email"
-                        value={broadcastForm.sender_email}
-                        onChange={(e) => setBroadcastForm({ ...broadcastForm, sender_email: e.target.value })}
-                        placeholder="e.g. offers@thefinmantra.com"
-                        style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.88rem', boxSizing: 'border-box' }}
-                      />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.4rem' }}>
+                          Outbound SMTP Gateway Account (Sender Email)
+                        </label>
+                        {smtpAccounts.length > 0 ? (
+                          <select
+                            value={broadcastForm.smtp_account_id}
+                            onChange={(e) => {
+                              const aid = e.target.value;
+                              const acc = smtpAccounts.find(a => a.id === aid);
+                              setBroadcastForm({
+                                ...broadcastForm,
+                                smtp_account_id: aid,
+                                sender_email: acc ? acc.from_email : broadcastForm.sender_email
+                              });
+                            }}
+                            style={{ width: '100%', padding: '0.65rem 0.8rem', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.88rem', boxSizing: 'border-box' }}
+                          >
+                            <option value="">System Default SMTP</option>
+                            {smtpAccounts.map(acc => (
+                              <option key={acc.id} value={acc.id}>
+                                {acc.name} ({acc.from_email}) {acc.is_default ? '★ [DEFAULT]' : ''}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <div style={{ padding: '0.75rem', background: 'rgba(224, 168, 46, 0.1)', border: '1px solid rgba(224, 168, 46, 0.3)', borderRadius: '8px', fontSize: '0.82rem' }}>
+                            Using default SMTP settings. Configure additional accounts in the SMTP Gateway Settings tab.
+                          </div>
+                        )}
+                      </div>
+
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.4rem' }}>
+                          Custom From Email Override (Optional)
+                        </label>
+                        <input
+                          type="email"
+                          value={broadcastForm.sender_email}
+                          onChange={(e) => setBroadcastForm({ ...broadcastForm, sender_email: e.target.value })}
+                          placeholder="e.g. offers@thefinmantra.com"
+                          style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.88rem', boxSizing: 'border-box' }}
+                        />
+                      </div>
                     </div>
                   )}
                 </div>
@@ -2729,6 +3010,207 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                 Close
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 4: ADD / EDIT SMTP ACCOUNT MODAL */}
+      {/* ========================================================================= */}
+      {showSmtpModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '1rem' }}>
+          <div style={{ background: 'var(--paper)', border: '1px solid var(--line)', borderRadius: '16px', maxWidth: '580px', width: '100%', maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 50px rgba(0,0,0,0.3)', overflow: 'hidden' }}>
+            <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                  <Mail size={18} style={{ color: 'var(--gold-deep)' }} />
+                  {editingSmtpAccount ? 'Edit SMTP Gateway Account' : 'Add New SMTP Gateway Account'}
+                </h3>
+                <div style={{ fontSize: '0.78rem', color: 'var(--muted)', marginTop: '0.15rem' }}>
+                  {editingSmtpAccount ? `Editing account ${editingSmtpAccount.name}` : 'Configure custom host credentials for outbound email broadcasts.'}
+                </div>
+              </div>
+              <button onClick={() => setShowSmtpModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveSmtpAccountModal} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+              <div style={{ padding: '1.5rem', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.3rem' }}>
+                    Account Display Name <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. FinMantra Primary Gmail"
+                    value={smtpAccountForm.name}
+                    onChange={(e) => setSmtpAccountForm({ ...smtpAccountForm, name: e.target.value })}
+                    required
+                    style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.88rem', boxSizing: 'border-box' }}
+                  />
+                </div>
+
+                <div className="campaigns-grid-2col">
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.3rem' }}>
+                      SMTP Host <span style={{ color: '#ef4444' }}>*</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. smtp.gmail.com"
+                      value={smtpAccountForm.host}
+                      onChange={(e) => setSmtpAccountForm({ ...smtpAccountForm, host: e.target.value })}
+                      required
+                      style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.88rem', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.3rem' }}>
+                      SMTP Port &amp; Encryption
+                    </label>
+                    <div style={{ display: 'flex', gap: '0.4rem' }}>
+                      <input
+                        type="text"
+                        placeholder="465"
+                        value={smtpAccountForm.port}
+                        onChange={(e) => setSmtpAccountForm({ ...smtpAccountForm, port: e.target.value })}
+                        style={{ width: '80px', padding: '0.55rem 0.5rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.88rem', textAlign: 'center' }}
+                      />
+                      <select
+                        value={smtpAccountForm.secure}
+                        onChange={(e) => setSmtpAccountForm({ ...smtpAccountForm, secure: e.target.value })}
+                        style={{ flex: 1, padding: '0.55rem 0.5rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.84rem' }}
+                      >
+                        <option value="true">SSL (465)</option>
+                        <option value="false">TLS / Plain (587)</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.3rem' }}>
+                    SMTP Username / Login Email <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
+                  <input
+                    type="text"
+                    autoComplete="username"
+                    placeholder="e.g. spikemarketingsolutions25@gmail.com"
+                    value={smtpAccountForm.username}
+                    onChange={(e) => setSmtpAccountForm({ ...smtpAccountForm, username: e.target.value })}
+                    required
+                    style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.88rem', boxSizing: 'border-box' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.3rem' }}>
+                    SMTP Password / Google App Password {editingSmtpAccount ? '(Leave blank to keep unchanged)' : <span style={{ color: '#ef4444' }}>*</span>}
+                  </label>
+                  <input
+                    type="password"
+                    autoComplete="new-password"
+                    placeholder={editingSmtpAccount ? '•••••••••••• (Unchanged)' : '16-character App Password'}
+                    value={smtpAccountForm.password}
+                    onChange={(e) => setSmtpAccountForm({ ...smtpAccountForm, password: e.target.value })}
+                    required={!editingSmtpAccount}
+                    style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.88rem', boxSizing: 'border-box' }}
+                  />
+                </div>
+
+                <div className="campaigns-grid-2col">
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.3rem' }}>
+                      From Name
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="FinMantra"
+                      value={smtpAccountForm.fromName}
+                      onChange={(e) => setSmtpAccountForm({ ...smtpAccountForm, fromName: e.target.value })}
+                      style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.88rem', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.3rem' }}>
+                      From Email Address <span style={{ color: '#ef4444' }}>*</span>
+                    </label>
+                    <input
+                      type="email"
+                      placeholder="spikemarketingsolutions25@gmail.com"
+                      value={smtpAccountForm.fromEmail}
+                      onChange={(e) => setSmtpAccountForm({ ...smtpAccountForm, fromEmail: e.target.value })}
+                      required
+                      style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.88rem', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <input
+                    type="checkbox"
+                    id="isDefaultSmtp"
+                    checked={smtpAccountForm.isDefault}
+                    onChange={(e) => setSmtpAccountForm({ ...smtpAccountForm, isDefault: e.target.checked })}
+                    style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+                  />
+                  <label htmlFor="isDefaultSmtp" style={{ fontSize: '0.84rem', fontWeight: 600, cursor: 'pointer' }}>
+                    Set as Primary Default Outbound SMTP Account
+                  </label>
+                </div>
+              </div>
+
+              <div style={{ padding: '0.85rem 1.5rem', borderTop: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--paper-2)', flexShrink: 0 }}>
+                <button
+                  type="button"
+                  onClick={handleTestModalSmtp}
+                  disabled={isTestingModalSmtp}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.35rem',
+                    padding: '0.5rem 0.9rem',
+                    borderRadius: '6px',
+                    background: 'var(--paper)',
+                    color: 'var(--ink)',
+                    border: '1px solid var(--line)',
+                    fontSize: '0.84rem',
+                    fontWeight: 700,
+                    cursor: isTestingModalSmtp ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  {isTestingModalSmtp ? <RefreshCw size={14} className="spin-slow" /> : <Zap size={14} style={{ color: 'var(--gold-deep)' }} />}
+                  {isTestingModalSmtp ? 'Testing...' : 'Test Connection'}
+                </button>
+
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowSmtpModal(false)}
+                    style={{ padding: '0.5rem 1rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper)', cursor: 'pointer', fontWeight: 600, fontSize: '0.84rem' }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSavingSmtpAccount}
+                    style={{
+                      padding: '0.5rem 1.25rem',
+                      borderRadius: '6px',
+                      background: 'var(--gold-deep)',
+                      color: '#fff',
+                      border: 'none',
+                      fontWeight: 700,
+                      fontSize: '0.84rem',
+                      cursor: isSavingSmtpAccount ? 'not-allowed' : 'pointer'
+                    }}
+                  >
+                    {isSavingSmtpAccount ? 'Saving...' : (editingSmtpAccount ? 'Update Account' : 'Save Account')}
+                  </button>
+                </div>
+              </div>
+            </form>
           </div>
         </div>
       )}
