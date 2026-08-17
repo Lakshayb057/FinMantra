@@ -3511,9 +3511,10 @@ input:-webkit-autofill:active {
   overflow-y: auto;
   border: 1px solid var(--line);
   border-radius: 10px;
-  max-height: 600px;
+  max-height: 520px;
   -webkit-overflow-scrolling: touch;
   background: var(--paper);
+  position: relative;
 }
 
 .campaigns-table {
@@ -3535,7 +3536,7 @@ input:-webkit-autofill:active {
   border-bottom: 1px solid var(--line);
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: 10;
 }
 
 .campaigns-table td {
@@ -3555,6 +3556,11 @@ input:-webkit-autofill:active {
   gap: 1.25rem;
   width: 100%;
   box-sizing: border-box;
+  max-height: calc(100vh - 270px);
+  min-height: 380px;
+  overflow-y: auto;
+  padding-right: 0.35rem;
+  -webkit-overflow-scrolling: touch;
 }
 
 .wa-template-card {

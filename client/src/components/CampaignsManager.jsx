@@ -1207,66 +1207,6 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
               </div>
             </div>
           )}
-
-          {/* Active Sender Health and Status */}
-          <div className="campaigns-sender-grid">
-            {/* Meta WhatsApp Phone Numbers with Quality Ratings */}
-            <div className="glass-panel" style={{ padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                <h3 style={{ margin: 0, fontSize: '0.96rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                  <MessageSquare size={16} style={{ color: '#25D366' }} /> Meta WhatsApp Sender Health
-                </h3>
-                <button onClick={fetchMetaPhoneNumbers} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }} title="Refresh Phone Numbers">
-                  <RefreshCw size={14} className={isLoadingPhoneNumbers ? 'spin-slow' : ''} />
-                </button>
-              </div>
-
-              {metaPhoneNumbers.length === 0 ? (
-                <div style={{ color: 'var(--muted)', fontSize: '0.84rem', padding: '1rem 0' }}>
-                  No Meta WhatsApp business numbers loaded. Check WA_API_KEY in settings.
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-                  {metaPhoneNumbers.map(p => (
-                    <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.65rem 0.85rem', borderRadius: '8px', background: 'var(--paper-2)', border: '1px solid var(--line)', flexWrap: 'wrap', gap: '0.5rem' }}>
-                      <div>
-                        <div style={{ fontWeight: 700, fontSize: '0.88rem' }}>{p.display_phone_number} ({p.verified_name || 'Business'})</div>
-                        <div style={{ fontSize: '0.72rem', color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>Phone ID: {p.id}</div>
-                      </div>
-                      <div>
-                        {getQualityRatingBadge(p.quality_rating)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Email Gateway Sender Info */}
-            <div className="glass-panel" style={{ padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                <h3 style={{ margin: 0, fontSize: '0.96rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                  <Mail size={16} style={{ color: '#3b82f6' }} /> SMTP Sender Gateway
-                </h3>
-                <button onClick={() => setActiveSubTab('settings')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gold-deep)', fontSize: '0.78rem', fontWeight: 700 }}>
-                  Configure &rarr;
-                </button>
-              </div>
-
-              <div style={{ background: 'var(--paper-2)', padding: '0.85rem', borderRadius: '8px', border: '1px solid var(--line)', fontSize: '0.85rem' }}>
-                <div style={{ marginBottom: '0.4rem' }}>
-                  <strong>Host:</strong> {smtpSettings.host || 'smtp.gmail.com'}
-                </div>
-                <div style={{ marginBottom: '0.4rem' }}>
-                  <strong>From Name:</strong> {smtpSettings.fromName || 'FinMantra'}
-                </div>
-                <div>
-                  <strong>From Email:</strong> {smtpSettings.fromEmail || 'lakshayb057@gmail.com'}
-                </div>
-              </div>
-            </div>
-          </div>
-
           {/* Recent Broadcasts Overview Table */}
           <div className="glass-panel" style={{ padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)', display: 'flex', flexDirection: 'column', width: '100%', boxSizing: 'border-box', marginBottom: '2.5rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
