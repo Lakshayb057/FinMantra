@@ -48,6 +48,9 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
       ctaUrlText: '',
       ctaUrlValue: '',
       ctaUrlSample: '',
+      ctaUrl2Text: '',
+      ctaUrl2Value: '',
+      ctaUrl2Sample: '',
       ctaPhoneText: '',
       ctaPhoneValue: '',
       quickReplies: ['Interested', 'Apply Now', 'Talk to Agent'],
@@ -3314,15 +3317,16 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                   {newTemplateForm.buttons.buttonType === 'CTA' && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', padding: '0.75rem', borderRadius: '8px', background: 'var(--paper-2)', border: '1px solid var(--line)' }}>
                       {/* URL Button */}
+                      {/* URL Button 1 */}
                       <div>
                         <div style={{ fontSize: '0.78rem', fontWeight: 700, marginBottom: '0.3rem', color: 'var(--ink)' }}>
-                          Website URL Button:
+                          Website URL Button 1:
                         </div>
                         <div className="campaigns-grid-2col">
                           <input
                             type="text"
                             maxLength={25}
-                            placeholder="Button Text (e.g. Visit Website)"
+                            placeholder="Button Text (e.g. Track Status)"
                             value={newTemplateForm.buttons.ctaUrlText}
                             onChange={(e) => setNewTemplateForm(p => ({
                               ...p,
@@ -3332,7 +3336,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                           />
                           <input
                             type="text"
-                            placeholder="URL (e.g. https://uat.thefinmantra.com/apply)"
+                            placeholder="URL (e.g. https://thefinmantra.com/contact-center)"
                             value={newTemplateForm.buttons.ctaUrlValue}
                             onChange={(e) => setNewTemplateForm(p => ({
                               ...p,
@@ -3343,10 +3347,40 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                         </div>
                       </div>
 
+                      {/* URL Button 2 (Unsubscribe / Direct Link) */}
+                      <div>
+                        <div style={{ fontSize: '0.78rem', fontWeight: 700, marginBottom: '0.3rem', color: 'var(--ink)' }}>
+                          Website URL Button 2 (Unsubscribe / Custom URL):
+                        </div>
+                        <div className="campaigns-grid-2col">
+                          <input
+                            type="text"
+                            maxLength={25}
+                            placeholder="Button Text (e.g. Unsubscribe)"
+                            value={newTemplateForm.buttons.ctaUrl2Text}
+                            onChange={(e) => setNewTemplateForm(p => ({
+                              ...p,
+                              buttons: { ...p.buttons, ctaUrl2Text: e.target.value }
+                            }))}
+                            style={{ width: '100%', padding: '0.45rem 0.65rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)', fontSize: '0.82rem', boxSizing: 'border-box' }}
+                          />
+                          <input
+                            type="text"
+                            placeholder="URL (e.g. https://thefinmantra.com/unsubscribe?utm_channel=whatsapp&id={{1}})"
+                            value={newTemplateForm.buttons.ctaUrl2Value}
+                            onChange={(e) => setNewTemplateForm(p => ({
+                              ...p,
+                              buttons: { ...p.buttons, ctaUrl2Value: e.target.value }
+                            }))}
+                            style={{ width: '100%', padding: '0.45rem 0.65rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)', fontSize: '0.82rem', boxSizing: 'border-box' }}
+                          />
+                        </div>
+                      </div>
+
                       {/* Phone Call Button */}
                       <div>
                         <div style={{ fontSize: '0.78rem', fontWeight: 700, marginBottom: '0.3rem', color: 'var(--ink)' }}>
-                          Call Phone Number Button:
+                          Call Phone Number Button (Optional):
                         </div>
                         <div className="campaigns-grid-2col">
                           <input
@@ -3569,9 +3603,15 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                       {newTemplateForm.buttons.buttonType === 'CTA' && (
                         <div style={{ borderTop: '1px solid #2a3942', display: 'flex', flexDirection: 'column' }}>
                           {newTemplateForm.buttons.ctaUrlText && (
-                            <div style={{ padding: '0.6rem', textAlign: 'center', color: '#53bdeb', fontSize: '0.82rem', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem', borderBottom: newTemplateForm.buttons.ctaPhoneText ? '1px solid #2a3942' : 'none' }}>
+                            <div style={{ padding: '0.6rem', textAlign: 'center', color: '#53bdeb', fontSize: '0.82rem', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem', borderBottom: (newTemplateForm.buttons.ctaUrl2Text || newTemplateForm.buttons.ctaPhoneText) ? '1px solid #2a3942' : 'none' }}>
                               <ArrowUpRight size={14} />
                               {newTemplateForm.buttons.ctaUrlText}
+                            </div>
+                          )}
+                          {newTemplateForm.buttons.ctaUrl2Text && (
+                            <div style={{ padding: '0.6rem', textAlign: 'center', color: '#53bdeb', fontSize: '0.82rem', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem', borderBottom: newTemplateForm.buttons.ctaPhoneText ? '1px solid #2a3942' : 'none' }}>
+                              <ArrowUpRight size={14} />
+                              {newTemplateForm.buttons.ctaUrl2Text}
                             </div>
                           )}
                           {newTemplateForm.buttons.ctaPhoneText && (

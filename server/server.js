@@ -6873,8 +6873,6 @@ const registerMetaTemplate = async ({ apiKey, wabaId, phoneId, name, category, l
     if (buttons) {
       try {
         let btnObj = typeof buttons === 'string' ? JSON.parse(buttons) : buttons;
-        if (btnObj.buttonType === 'CTA') {
-          const buttonsArray = [];
           if (btnObj.ctaUrlText && btnObj.ctaUrlValue) {
             const btn = {
               type: 'URL',
@@ -6882,9 +6880,20 @@ const registerMetaTemplate = async ({ apiKey, wabaId, phoneId, name, category, l
               url: btnObj.ctaUrlValue.trim()
             };
             if (btnObj.ctaUrlValue.includes('{{1}}') || btnObj.ctaUrlValue.includes('{{2}}')) {
-              btn.example = [btnObj.ctaUrlSample && btnObj.ctaUrlSample.trim() ? btnObj.ctaUrlSample.trim() : "https://uat.thefinmantra.com/track/sample"];
+              btn.example = [btnObj.ctaUrlSample && btnObj.ctaUrlSample.trim() ? btnObj.ctaUrlSample.trim() : "FM00001"];
             }
             buttonsArray.push(btn);
+          }
+          if (btnObj.ctaUrl2Text && btnObj.ctaUrl2Value) {
+            const btn2 = {
+              type: 'URL',
+              text: btnObj.ctaUrl2Text.trim().substring(0, 25),
+              url: btnObj.ctaUrl2Value.trim()
+            };
+            if (btnObj.ctaUrl2Value.includes('{{1}}') || btnObj.ctaUrl2Value.includes('{{2}}')) {
+              btn2.example = [btnObj.ctaUrl2Sample && btnObj.ctaUrl2Sample.trim() ? btnObj.ctaUrl2Sample.trim() : "FM00001"];
+            }
+            buttonsArray.push(btn2);
           }
           if (btnObj.ctaPhoneText && btnObj.ctaPhoneValue) {
             let cleanPhone = String(btnObj.ctaPhoneValue).trim().replace(/[^\d+]/g, '');
