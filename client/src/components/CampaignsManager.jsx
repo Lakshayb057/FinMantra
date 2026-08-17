@@ -3934,7 +3934,8 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                             <div className="campaigns-grid-2col" style={{ gap: '0.4rem' }}>
                               <input
                                 type="text"
-                                placeholder="Button 1 Label (e.g. 👉 Complete Application)"
+                                maxLength={25}
+                                placeholder="Button 1 Label (e.g. Complete Application)"
                                 value={newTemplateForm.buttons.ctaUrlText}
                                 onChange={(e) => setNewTemplateForm(p => ({ ...p, buttons: { ...p.buttons, ctaUrlText: e.target.value } }))}
                                 style={{ width: '100%', padding: '0.45rem 0.65rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.82rem', boxSizing: 'border-box' }}
@@ -3969,7 +3970,8 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                             <div className="campaigns-grid-2col" style={{ gap: '0.4rem' }}>
                               <input
                                 type="text"
-                                placeholder="Button 2 Label (e.g. ⚙️ Preferences / Opt-out)"
+                                maxLength={25}
+                                placeholder="Button 2 Label (e.g. Preferences / Opt-out)"
                                 value={newTemplateForm.buttons.ctaUrl2Text || ''}
                                 onChange={(e) => setNewTemplateForm(p => ({ ...p, buttons: { ...p.buttons, ctaUrl2Text: e.target.value } }))}
                                 style={{ width: '100%', padding: '0.45rem 0.65rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.82rem', boxSizing: 'border-box' }}
@@ -4003,7 +4005,8 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                             <div className="campaigns-grid-2col" style={{ gap: '0.4rem' }}>
                               <input
                                 type="text"
-                                placeholder="Call Button Label (e.g. 📞 Call Support)"
+                                maxLength={25}
+                                placeholder="Call Button Label (e.g. Call Support)"
                                 value={newTemplateForm.buttons.ctaPhoneText || ''}
                                 onChange={(e) => setNewTemplateForm(p => ({ ...p, buttons: { ...p.buttons, ctaPhoneText: e.target.value } }))}
                                 style={{ width: '100%', padding: '0.45rem 0.65rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.82rem', boxSizing: 'border-box' }}
@@ -4016,6 +4019,9 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                                 style={{ width: '100%', padding: '0.45rem 0.65rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.82rem', boxSizing: 'border-box' }}
                               />
                             </div>
+                          </div>
+                          <div style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>
+                            ⚠️ Note: Meta strictly disallows emojis or formatting in button labels (use clean text up to 25 chars).
                           </div>
                         </div>
                       )}

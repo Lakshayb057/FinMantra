@@ -7045,6 +7045,18 @@ const registerMetaTemplate = async ({ apiKey, wabaId, phoneId, name, category, l
       });
     }
 
+    // Helper to sanitize button text per Meta rules (no emojis, asterisks, formatting, or variables)
+    const sanitizeBtnText = (txt, fallback = 'Action') => {
+      if (!txt) return fallback;
+      let clean = String(txt)
+        .replace(/[\r\n\t]+/g, ' ')
+        .replace(/[*_~`\{\}]/g, '')
+        .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1FA70}-\u{1FAFF}\u{FE00}-\u{FE0F}]/gu, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      return (clean || fallback).substring(0, 25);
+    };
+
     // 4. BUTTONS COMPONENT (Optional)
     if (buttons) {
       try {
@@ -7054,7 +7066,7 @@ const registerMetaTemplate = async ({ apiKey, wabaId, phoneId, name, category, l
           if (btnObj.ctaUrlText && btnObj.ctaUrlValue) {
             const btn = {
               type: 'URL',
-              text: btnObj.ctaUrlText.trim().substring(0, 25),
+              text: sanitizeBtnText(btnObj.ctaUrlText, 'Complete Application'),
               url: btnObj.ctaUrlValue.trim()
             };
             if (btnObj.ctaUrlValue.includes('{{1}}') || btnObj.ctaUrlValue.includes('{{2}}')) {
@@ -7065,7 +7077,7 @@ const registerMetaTemplate = async ({ apiKey, wabaId, phoneId, name, category, l
           if (btnObj.ctaUrl2Text && btnObj.ctaUrl2Value) {
             const btn2 = {
               type: 'URL',
-              text: btnObj.ctaUrl2Text.trim().substring(0, 25),
+              text: sanitizeBtnText(btnObj.ctaUrl2Text, 'Preferences'),
               url: btnObj.ctaUrl2Value.trim()
             };
             if (btnObj.ctaUrl2Value.includes('{{1}}') || btnObj.ctaUrl2Value.includes('{{2}}')) {
@@ -7086,7 +7098,7 @@ const registerMetaTemplate = async ({ apiKey, wabaId, phoneId, name, category, l
             }
             buttonsArray.push({
               type: 'PHONE_NUMBER',
-              text: btnObj.ctaPhoneText.trim().substring(0, 25),
+              text: sanitizeBtnText(btnObj.ctaPhoneText, 'Call Support'),
               phone_number: cleanPhone
             });
           }
@@ -7101,7 +7113,7 @@ const registerMetaTemplate = async ({ apiKey, wabaId, phoneId, name, category, l
             .filter(text => text && text.trim())
             .map(text => ({
               type: 'QUICK_REPLY',
-              text: text.trim().substring(0, 25)
+              text: sanitizeBtnText(text, 'Reply')
             }));
           if (buttonsArray.length > 0) {
             components.push({
