@@ -8029,9 +8029,9 @@ app.get('/api/campaigns/analytics/dashboard', authenticateToken, async (req, res
 // Public Contact Center Unsubscribe & Preference API
 app.get('/api/contact-center/details', async (req, res) => {
   try {
-    const id = req.query.id || req.query.master_id;
-    const broadcastId = req.query.brodcast_id || req.query.broadcast_id || req.query.b;
-    const channel = req.query.channel || 'all';
+    const id = req.query.id || req.query.master_id || req.query.lead_id || req.query.utm_id || req.query.uid;
+    const broadcastId = req.query.brodcast_id || req.query.broadcast_id || req.query.b || req.query.utm_brodcast_id || req.query.utm_broadcast_id || req.query.bc_id;
+    const channel = req.query.channel || req.query.utm_channel || req.query.ch || 'all';
 
     if (!id) {
       return res.status(400).json({ success: false, error: 'Missing contact ID.' });
@@ -8070,7 +8070,9 @@ app.get('/api/contact-center/details', async (req, res) => {
 
 app.post(['/api/contact-center/optout', '/api/c/unsubscribe'], async (req, res) => {
   try {
-    const { id, whatsapp_optin, email_optin, reason, broadcast_id, channel } = req.body;
+    const id = req.body.id || req.body.master_id || req.body.lead_id || req.body.utm_id || req.body.uid;
+    const broadcast_id = req.body.broadcast_id || req.body.brodcast_id || req.body.b || req.body.utm_brodcast_id || req.body.utm_broadcast_id;
+    const { whatsapp_optin, email_optin, reason, channel } = req.body;
     if (!id) {
       return res.status(400).json({ success: false, error: 'Missing contact ID.' });
     }

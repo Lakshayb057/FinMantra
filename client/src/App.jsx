@@ -246,7 +246,10 @@ export default function App() {
 
   // Route Dispatcher
   const renderView = () => {
-    const pathParts = currentPath.split('/');
+    const rawPath = currentPath || (typeof window !== 'undefined' ? window.location.pathname : '/');
+    const cleanPath = rawPath.split('?')[0].replace(/\/+$/, '') || '/';
+    const pathParts = cleanPath.split('/');
+
     if (pathParts[1] === 'refer') {
       const activeParts = pathParts.filter(Boolean);
       const urn = activeParts[activeParts.length - 1];
@@ -264,28 +267,28 @@ export default function App() {
     if (pathParts[1] === 'sbi_qde') {
       return <SbiQdeLanding navigateTo={navigateTo} utmParams={utmParams} />;
     }
-    if (currentPath === '/agent') {
+    if (cleanPath === '/agent' || pathParts[1] === 'agent') {
       return <AgentPortal navigateTo={navigateTo} theme={theme} toggleTheme={toggleTheme} />;
     }
-    if (currentPath === '/admin') {
+    if (cleanPath === '/admin' || pathParts[1] === 'admin') {
       return <AdminDashboard navigateTo={navigateTo} theme={theme} toggleTheme={toggleTheme} />;
     }
-    if (currentPath === '/about') {
+    if (cleanPath === '/about' || pathParts[1] === 'about') {
       return <AboutPage navigateTo={navigateTo} />;
     }
-    if (currentPath === '/contact') {
+    if (cleanPath === '/contact' || pathParts[1] === 'contact') {
       return <ContactPage navigateTo={navigateTo} />;
     }
-    if (currentPath === '/contact-center' || pathParts[1] === 'contact-center') {
+    if (cleanPath === '/contact-center' || pathParts[1] === 'contact-center') {
       return <ContactCenterPage navigateTo={navigateTo} />;
     }
-    if (currentPath === '/unsubscribe' || pathParts[1] === 'unsubscribe') {
+    if (cleanPath === '/unsubscribe' || pathParts[1] === 'unsubscribe') {
       return <UnsubscribePage navigateTo={navigateTo} />;
     }
-    if (currentPath === '/privacy-policy') {
+    if (cleanPath === '/privacy-policy' || pathParts[1] === 'privacy-policy') {
       return <PrivacyPolicyPage navigateTo={navigateTo} />;
     }
-    if (currentPath === '/terms') {
+    if (cleanPath === '/terms' || pathParts[1] === 'terms') {
       return <TermsPage navigateTo={navigateTo} />;
     }
     return <PublicLanding navigateTo={navigateTo} utmParams={utmParams} />;

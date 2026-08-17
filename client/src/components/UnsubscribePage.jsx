@@ -19,9 +19,9 @@ export default function UnsubscribePage({ navigateTo }) {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const id = params.get('id') || params.get('master_id');
-    const broadcastId = params.get('b') || params.get('brodcast_id') || params.get('broadcast_id');
-    const targetChannel = (params.get('channel') || 'all').toLowerCase();
+    const id = params.get('id') || params.get('master_id') || params.get('lead_id') || params.get('utm_id') || params.get('uid');
+    const broadcastId = params.get('b') || params.get('brodcast_id') || params.get('broadcast_id') || params.get('utm_brodcast_id') || params.get('utm_broadcast_id') || params.get('bc_id');
+    const targetChannel = (params.get('channel') || params.get('utm_channel') || params.get('ch') || 'all').toLowerCase();
     setChannel(targetChannel);
 
     if (!id) {
