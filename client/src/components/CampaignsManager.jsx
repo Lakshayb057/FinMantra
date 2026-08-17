@@ -305,6 +305,9 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
       const data = await res.json();
       if (data.success) {
         setTemplates(data.templates || []);
+        if (data.metaStatuses) {
+          setMetaStatuses(data.metaStatuses);
+        }
       }
     } catch (err) {
       console.warn('[Fetch Templates Error]:', err.message);
@@ -2286,8 +2289,18 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                 return (
                   <div className="wa-template-grid">
                     {filteredTemplates.map(t => {
-                      const status = metaStatuses[t.meta_template_name || t.name] || 'APPROVED';
-                      const isUtility = (t.category || '').toUpperCase() === 'UTILITY';
+                      const nameKey = (t.meta_template_name || t.name || '').toLowerCase();
+                      const metaInfo = metaStatuses[nameKey] || metaStatuses[t.name] || metaStatuses[t.meta_template_name];
+                      const statusRaw = String(
+                        (typeof metaInfo === 'object' && metaInfo?.status ? metaInfo.status : (metaInfo || t.status || (t.type === 'email' ? 'READY' : 'APPROVED')))
+                      ).toUpperCase();
+
+                      const isApproved = statusRaw === 'APPROVED' || statusRaw === 'READY';
+                      const isPending = statusRaw === 'PENDING' || statusRaw === 'IN_PROCESS' || statusRaw === 'EVALUATION' || statusRaw === 'PENDING_DELETION';
+                      const isRejected = statusRaw === 'REJECTED' || statusRaw === 'FAILED';
+                      const statusDisplay = isApproved ? (t.type === 'email' ? 'READY' : 'APPROVED') : isPending ? 'IN PROCESS' : isRejected ? 'REJECTED' : statusRaw;
+                      const statusBg = isApproved ? '#16a37b' : isPending ? '#d97706' : isRejected ? '#ef4444' : '#6b7280';
+                      const rejectionReason = (typeof metaInfo === 'object' && metaInfo?.rejected_reason) || t.rejected_reason || null;
 
                       // Extract / Parse Buttons
                       let parsedBtns = [];
@@ -2302,14 +2315,6 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                         if (Array.isArray(t.buttons.quickReplies)) {
                           t.buttons.quickReplies.filter(Boolean).forEach(qr => parsedBtns.push({ text: qr, type: 'QUICK_REPLY' }));
                         }
-                      }
-
-                      // Default fallbacks for interactive previews
-                      if (parsedBtns.length === 0 && t.type === 'whatsapp') {
-                        parsedBtns = [
-                          { text: '🌐 View Status / Preferences', type: 'URL' },
-                          { text: '🛡️ Unsubscribe', type: 'URL' }
-                        ];
                       }
 
                       if (t.type === 'email') {
@@ -2354,39 +2359,49 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                               </div>
                             </div>
 
-                            {/* Email Preview Canvas */}
-                            <div className="email-preview-canvas">
-                              <div className="email-preview-box">
-                                <div className="email-subject-line">
-                                  <span style={{ color: 'var(--muted)', fontSize: '0.74rem', fontWeight: 600, display: 'block', textTransform: 'uppercase' }}>Subject:</span>
-                                  {t.subject || '(No Subject Line)'}
-                                </div>
-                                <div style={{ whiteSpace: 'pre-wrap', maxHeight: '160px', overflowY: 'auto', fontSize: '0.82rem', color: 'var(--ink)' }}>
-                                  {(() => {
-                                    const text = t.body || '';
-                                    const parts = text.split(/(\{[a-zA-Z0-9_]+\})/g);
-                                    return parts.map((part, pIdx) => {
-                                      if (/^\{[a-zA-Z0-9_]+\}$/.test(part)) {
-                                        return <span key={pIdx} className="wa-chat-var-tag">{part}</span>;
-                                      }
-                                      return part;
-                                    });
-                                  })()}
-                                </div>
-                              </div>
+                            {/* Email Subject Bar */}
+                            <div style={{ background: 'var(--paper)', padding: '0.65rem 0.85rem', borderBottom: '1px solid var(--line)', fontSize: '0.82rem' }}>
+                              <span style={{ fontWeight: 700, color: 'var(--muted)', fontSize: '0.72rem', textTransform: 'uppercase', display: 'block', marginBottom: '0.15rem' }}>
+                                Subject:
+                              </span>
+                              <span style={{ fontWeight: 600, color: 'var(--ink)' }}>
+                                {t.subject || 'Exclusive Financial Opportunity'}
+                              </span>
+                            </div>
+
+                            {/* Email Body Preview */}
+                            <div style={{
+                              padding: '1rem 0.85rem',
+                              fontSize: '0.84rem',
+                              lineHeight: 1.45,
+                              color: 'var(--ink)',
+                              flex: 1,
+                              overflowY: 'auto',
+                              maxHeight: '220px',
+                              whiteSpace: 'pre-wrap',
+                              background: 'var(--paper)'
+                            }}>
+                              {t.body}
                             </div>
 
                             {/* Card Footer Actions */}
-                            <div className="wa-template-card-footer">
-                              <div style={{ display: 'flex', gap: '0.4rem' }}>
+                            <div style={{
+                              padding: '0.65rem 0.85rem',
+                              background: 'var(--paper-2)',
+                              borderTop: '1px solid var(--line)',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center'
+                            }}>
+                              <div style={{ display: 'flex', gap: '0.35rem' }}>
                                 <button
                                   type="button"
                                   onClick={() => handleEditTemplate(t)}
                                   style={{
                                     display: 'inline-flex',
                                     alignItems: 'center',
-                                    gap: '0.3rem',
-                                    padding: '0.4rem 0.75rem',
+                                    gap: '0.25rem',
+                                    padding: '0.4rem 0.65rem',
                                     borderRadius: '6px',
                                     background: 'var(--paper)',
                                     color: 'var(--ink)',
@@ -2397,9 +2412,8 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                                   }}
                                   title="Edit Template"
                                 >
-                                  <Edit2 size={13} style={{ color: 'var(--gold-deep)' }} /> Edit
+                                  <Edit3 size={13} /> Edit
                                 </button>
-
                                 <button
                                   type="button"
                                   onClick={() => handleDeleteTemplate(t.id, t.name)}
@@ -2427,9 +2441,8 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                                 onClick={() => {
                                   setBroadcastForm(prev => ({
                                     ...prev,
-                                    channel: 'email',
-                                    email_subject: t.subject || '',
-                                    email_body: t.body || ''
+                                    whatsapp_template: t.meta_template_name || t.name,
+                                    channel: 'email'
                                   }));
                                   setBroadcastWizardStep(1);
                                   setShowNewBroadcastModal(true);
@@ -2455,12 +2468,13 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                         );
                       }
 
+                      // Render WhatsApp Chat Card
                       return (
                         <div key={t.id} className="wa-template-card">
                           {/* WhatsApp Top App Bar */}
                           <div className="wa-card-app-bar">
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                              <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#25D366', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 900, fontSize: '0.82rem' }}>
+                              <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.76rem' }}>
                                 FM
                               </div>
                               <div>
@@ -2485,17 +2499,32 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                                 {t.category || 'UTILITY'}
                               </span>
                               <span style={{
-                                padding: '0.15rem 0.45rem',
+                                padding: '0.18rem 0.55rem',
                                 borderRadius: '999px',
                                 fontSize: '0.66rem',
                                 fontWeight: 800,
-                                background: status === 'APPROVED' ? '#16a37b' : status === 'PENDING' ? '#d97706' : '#ef4444',
-                                color: '#ffffff'
-                              }}>
-                                {status}
+                                background: statusBg,
+                                color: '#ffffff',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.25rem',
+                                boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+                              }} title={rejectionReason ? `Meta Rejection Reason: ${rejectionReason}` : `Meta Status: ${statusDisplay}`}>
+                                {isApproved && '✓ '}
+                                {isPending && '⏳ '}
+                                {isRejected && '✕ '}
+                                {statusDisplay}
                               </span>
                             </div>
                           </div>
+
+                          {/* Rejection Alert Banner if Rejected by Meta */}
+                          {isRejected && rejectionReason && (
+                            <div style={{ background: 'rgba(239, 68, 68, 0.1)', borderBottom: '1px solid rgba(239, 68, 68, 0.25)', padding: '0.4rem 0.75rem', fontSize: '0.72rem', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                              <AlertTriangle size={13} style={{ flexShrink: 0 }} />
+                              <span><strong>Meta Rejected:</strong> {rejectionReason}</span>
+                            </div>
+                          )}
 
                           {/* WhatsApp Chat Wallpaper Canvas */}
                           <div className="wa-chat-canvas">
@@ -2671,7 +2700,20 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                     </thead>
                     <tbody>
                       {filteredTemplates.map(t => {
-                        const status = metaStatuses[t.meta_template_name || t.name] || 'APPROVED';
+                        const nameKey = (t.meta_template_name || t.name || '').toLowerCase();
+                        const metaInfo = metaStatuses[nameKey] || metaStatuses[t.name] || metaStatuses[t.meta_template_name];
+                        const statusRaw = String(
+                          (typeof metaInfo === 'object' && metaInfo?.status ? metaInfo.status : (metaInfo || t.status || (t.type === 'email' ? 'READY' : 'APPROVED')))
+                        ).toUpperCase();
+
+                        const isApproved = statusRaw === 'APPROVED' || statusRaw === 'READY';
+                        const isPending = statusRaw === 'PENDING' || statusRaw === 'IN_PROCESS' || statusRaw === 'EVALUATION' || statusRaw === 'PENDING_DELETION';
+                        const isRejected = statusRaw === 'REJECTED' || statusRaw === 'FAILED';
+                        const statusDisplay = isApproved ? (t.type === 'email' ? 'READY' : 'APPROVED') : isPending ? 'IN PROCESS' : isRejected ? 'REJECTED' : statusRaw;
+                        const statusBg = isApproved ? 'rgba(22, 163, 123, 0.15)' : isPending ? 'rgba(224, 168, 46, 0.15)' : isRejected ? 'rgba(239, 68, 68, 0.15)' : 'rgba(107, 114, 128, 0.15)';
+                        const statusColor = isApproved ? '#16a37b' : isPending ? 'var(--gold-deep)' : isRejected ? '#ef4444' : '#6b7280';
+                        const rejectionReason = (typeof metaInfo === 'object' && metaInfo?.rejected_reason) || t.rejected_reason || null;
+
                         return (
                           <tr key={t.id} style={{ borderBottom: '1px solid var(--line)' }} className="table-row-hover">
                             <td style={{ padding: '0.75rem 0.85rem', fontWeight: 700 }}>{t.name}</td>
@@ -2698,14 +2740,20 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                             </td>
                             <td style={{ padding: '0.75rem 0.85rem' }}>
                               <span style={{
-                                padding: '0.2rem 0.55rem',
+                                padding: '0.2rem 0.6rem',
                                 borderRadius: '999px',
                                 fontSize: '0.72rem',
-                                fontWeight: 700,
-                                background: status === 'APPROVED' ? 'rgba(22, 163, 123, 0.12)' : status === 'PENDING' ? 'rgba(224, 168, 46, 0.12)' : 'rgba(239, 68, 68, 0.12)',
-                                color: status === 'APPROVED' ? '#16a37b' : status === 'PENDING' ? 'var(--gold-deep)' : '#ef4444'
-                              }}>
-                                {status}
+                                fontWeight: 800,
+                                background: statusBg,
+                                color: statusColor,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.25rem'
+                              }} title={rejectionReason ? `Meta Rejection Reason: ${rejectionReason}` : `Meta Status: ${statusDisplay}`}>
+                                {isApproved && '✓ '}
+                                {isPending && '⏳ '}
+                                {isRejected && '✕ '}
+                                {statusDisplay}
                               </span>
                             </td>
                             <td style={{ padding: '0.75rem 0.85rem', fontSize: '0.8rem', color: 'var(--muted)', maxWidth: '260px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>

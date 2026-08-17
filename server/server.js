@@ -7594,11 +7594,92 @@ app.post('/api/campaigns/templates/sync-from-meta', authenticateToken, async (re
   }
 });
 
-// List all campaign templates
+// List all campaign templates with real-time Meta status sync
 app.get('/api/campaigns/templates', authenticateToken, async (req, res) => {
   try {
     const list = await db.getCampaignTemplates();
-    res.json({ success: true, templates: list });
+    const metaStatuses = {};
+
+    // Check if Meta credentials exist to live-sync statuses
+    try {
+      const settings = await db.getSettings();
+      const apiKey = getSettingVal(settings, 'wa_api_key', 'WA_API_KEY');
+      let wabaId = getSettingVal(settings, 'wa_business_account_id', 'WA_BUSINESS_ACCOUNT_ID');
+      const apiVersion = getSettingVal(settings, 'wa_api_version', 'WA_API_VERSION', 'v25.0');
+
+      if (apiKey) {
+        if (!wabaId || wabaId === 'undefined' || wabaId === 'null') {
+          const fetchWabaId = () => new Promise((resolve) => {
+            const options = { hostname: 'graph.facebook.com', port: 443, path: `/${apiVersion}/me/whatsapp_business_accounts`, method: 'GET', headers: { 'Authorization': `Bearer ${apiKey}` } };
+            const reqW = https.request(options, (resp) => {
+              let b = '';
+              resp.on('data', c => b += c);
+              resp.on('end', () => { try { const p = JSON.parse(b); resolve(p.data?.[0]?.id || null); } catch (e) { resolve(null); } });
+            });
+            reqW.setTimeout(3500, () => reqW.destroy());
+            reqW.on('error', () => resolve(null));
+            reqW.end();
+          });
+          wabaId = await fetchWabaId();
+        }
+
+        if (wabaId) {
+          const fetchMetaStatuses = () => new Promise((resolve) => {
+            const options = {
+              hostname: 'graph.facebook.com',
+              port: 443,
+              path: `/${apiVersion}/${wabaId}/message_templates?limit=100&fields=name,status,category,language,rejected_reason`,
+              method: 'GET',
+              headers: { 'Authorization': `Bearer ${apiKey}` }
+            };
+            const reqM = https.request(options, (resp) => {
+              let b = '';
+              resp.on('data', c => b += c);
+              resp.on('end', () => {
+                try {
+                  const p = JSON.parse(b);
+                  resolve(p.data || []);
+                } catch (e) { resolve([]); }
+              });
+            });
+            reqM.setTimeout(4000, () => reqM.destroy());
+            reqM.on('error', () => resolve([]));
+            reqM.end();
+          });
+
+          const metaList = await fetchMetaStatuses();
+          if (Array.isArray(metaList) && metaList.length > 0) {
+            for (const mt of metaList) {
+              const key = mt.name.toLowerCase();
+              metaStatuses[key] = {
+                status: mt.status,
+                category: mt.category,
+                language: mt.language,
+                rejected_reason: mt.rejected_reason || null
+              };
+            }
+
+            // Merge Meta statuses into return list and update DB in background
+            for (const t of list) {
+              if (t.type === 'whatsapp') {
+                const nameKey = (t.meta_template_name || t.name || '').toLowerCase();
+                if (metaStatuses[nameKey]) {
+                  const liveMeta = metaStatuses[nameKey];
+                  t.status = liveMeta.status;
+                  t.rejected_reason = liveMeta.rejected_reason;
+                  // Asynchronously persist updated status to DB
+                  db.runQuery('UPDATE campaign_templates SET status = $1 WHERE id = $2', [liveMeta.status, t.id]).catch(() => {});
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch (syncErr) {
+      console.warn('[Meta live status sync skipped]', syncErr.message);
+    }
+
+    res.json({ success: true, templates: list, metaStatuses });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
