@@ -560,6 +560,7 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
 
     if (cleanParams.length > 0) {
       const firstParam = String(cleanParams[0] || 'Valued Customer');
+      const secondParam = cleanParams.length > 1 ? String(cleanParams[1]) : firstParam;
 
       // Strategy 1: Header image + All Body parameters (NO button params)
       componentStrategies.push([
@@ -578,33 +579,64 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
         }
       ]);
 
-      // Strategy 3: Header image + Body with 1st param
+      // Strategy 3: Body all params + Dynamic URL Button at index 1
+      componentStrategies.push([
+        {
+          type: 'body',
+          parameters: cleanParams.map(p => ({ type: 'text', text: String(p) }))
+        },
+        { type: 'button', sub_type: 'url', index: '1', parameters: [{ type: 'text', text: secondParam }] }
+      ]);
+
+      // Strategy 4: Body all params + Dynamic URL Button at index 0
+      componentStrategies.push([
+        {
+          type: 'body',
+          parameters: cleanParams.map(p => ({ type: 'text', text: String(p) }))
+        },
+        { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: firstParam }] }
+      ]);
+
+      // Strategy 5: Body all params + Dynamic URL Buttons at index 0 & 1
+      componentStrategies.push([
+        {
+          type: 'body',
+          parameters: cleanParams.map(p => ({ type: 'text', text: String(p) }))
+        },
+        { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: firstParam }] },
+        { type: 'button', sub_type: 'url', index: '1', parameters: [{ type: 'text', text: secondParam }] }
+      ]);
+
+      // Strategy 6: Header image + Body all params + Dynamic URL Button at index 1
+      componentStrategies.push([
+        createHeaderComp(defaultHeaderImg),
+        {
+          type: 'body',
+          parameters: cleanParams.map(p => ({ type: 'text', text: String(p) }))
+        },
+        { type: 'button', sub_type: 'url', index: '1', parameters: [{ type: 'text', text: secondParam }] }
+      ]);
+
+      // Strategy 7: Header image + Body all params + Dynamic URL Button at index 0
+      componentStrategies.push([
+        createHeaderComp(defaultHeaderImg),
+        {
+          type: 'body',
+          parameters: cleanParams.map(p => ({ type: 'text', text: String(p) }))
+        },
+        { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: firstParam }] }
+      ]);
+
+      // Strategy 8: Header image + Body with 1st param
       componentStrategies.push([
         createHeaderComp(defaultHeaderImg),
         { type: 'body', parameters: [{ type: 'text', text: firstParam }] }
       ]);
 
-      // Strategy 4: Body with 1st param
+      // Strategy 9: Body with 1st param
       componentStrategies.push([
         { type: 'body', parameters: [{ type: 'text', text: firstParam }] }
       ]);
-
-      // Strategy 5: Header image + Body with 1st param + dynamic URL button (only if firstParam non-empty)
-      if (firstParam.trim()) {
-        componentStrategies.push([
-          createHeaderComp(defaultHeaderImg),
-          { type: 'body', parameters: [{ type: 'text', text: firstParam }] },
-          { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: firstParam }] }
-        ]);
-      }
-
-      if (cleanParams.length > 1 && String(cleanParams[1]).trim()) {
-        componentStrategies.push([
-          createHeaderComp(defaultHeaderImg),
-          { type: 'body', parameters: [{ type: 'text', text: firstParam }] },
-          { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: String(cleanParams[1]) }] }
-        ]);
-      }
     }
 
     // Strategy Fallback: Header image only + empty body / Static template
@@ -644,6 +676,11 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
             let isAuthError = (res.statusCode === 401);
             let errorCode = null;
             let expectedHeaderType = null;
+            let noHeaderAllowed = false;
+            let noTranslation = false;
+            let missingButtonIdx = null;
+            let expectedBodyParamCount = null;
+
             try {
               const parsed = JSON.parse(responseBody);
               if (parsed && parsed.error) {
@@ -654,15 +691,30 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
                 if (errorCode === 190 || errorCode === 195 || errorCode === 102 || errorCode === 200) {
                   isAuthError = true;
                 }
-                // Check if Meta specifies a missing header format
-                const errDetails = parsed.error.error_data?.details || '';
+                if (errorCode === 132001 || (parsed.error.message && parsed.error.message.includes('does not exist in the translation'))) {
+                  noTranslation = true;
+                }
+                const errDetails = parsed.error.error_data?.details || parsed.error.message || '';
+                if (errDetails.includes('does not contain title component') || errDetails.includes('no parameters allowed')) {
+                  noHeaderAllowed = true;
+                }
                 if (errDetails.includes('expected IMAGE')) expectedHeaderType = 'image';
                 else if (errDetails.includes('expected DOCUMENT')) expectedHeaderType = 'document';
                 else if (errDetails.includes('expected VIDEO')) expectedHeaderType = 'video';
                 else if (errDetails.includes('expected TEXT')) expectedHeaderType = 'text';
+
+                const btnMatch = errDetails.match(/Button at index (\d+)/i);
+                if (btnMatch) {
+                  missingButtonIdx = parseInt(btnMatch[1], 10);
+                }
+
+                const paramMatch = errDetails.match(/expected number of params \((\d+)\)/i);
+                if (paramMatch) {
+                  expectedBodyParamCount = parseInt(paramMatch[1], 10);
+                }
               }
             } catch (e) {}
-            reject({ statusCode: res.statusCode, body: responseBody, message: errMsg, isAuthError, errorCode, expectedHeaderType });
+            reject({ statusCode: res.statusCode, body: responseBody, message: errMsg, isAuthError, errorCode, expectedHeaderType, noHeaderAllowed, noTranslation, missingButtonIdx, expectedBodyParamCount });
           }
         });
       });
@@ -711,7 +763,7 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
   // Try strategies and language codes sequentially
   for (const lang of langCandidates) {
     for (let sIdx = 0; sIdx < componentStrategies.length; sIdx++) {
-      let currentComponents = [...componentStrategies[sIdx]];
+      let currentComponents = JSON.parse(JSON.stringify(componentStrategies[sIdx]));
 
       const payloadObj = {
         messaging_product: 'whatsapp',
@@ -739,18 +791,60 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
           break;
         }
 
-        // Real-time automatic adaptation if Meta requests a specific header type
-        if (err.expectedHeaderType) {
+        // If template doesn't exist in this language translation, immediately skip to next language
+        if (err.noTranslation) {
+          break;
+        }
+
+        // Real-time automatic self-healing adaptation if Meta provides specific validation requirements
+        if (err.noHeaderAllowed || err.missingButtonIdx !== null || err.expectedBodyParamCount !== null || err.expectedHeaderType) {
           try {
-            const adaptedComponents = [...currentComponents.filter(c => c.type !== 'header')];
-            if (err.expectedHeaderType === 'text') {
-              adaptedComponents.unshift({ type: 'header', parameters: [{ type: 'text', text: parameters[0] || 'Notification' }] });
-            } else {
-              adaptedComponents.unshift(createHeaderComp(defaultHeaderImg, err.expectedHeaderType));
+            let adaptedComponents = [...currentComponents];
+
+            // 1. Fix header
+            if (err.noHeaderAllowed) {
+              adaptedComponents = adaptedComponents.filter(c => c.type !== 'header');
+            } else if (err.expectedHeaderType) {
+              adaptedComponents = adaptedComponents.filter(c => c.type !== 'header');
+              if (err.expectedHeaderType === 'text') {
+                adaptedComponents.unshift({ type: 'header', parameters: [{ type: 'text', text: parameters[0] || 'Notification' }] });
+              } else {
+                adaptedComponents.unshift(createHeaderComp(defaultHeaderImg, err.expectedHeaderType));
+              }
             }
+
+            // 2. Fix body param count
+            if (typeof err.expectedBodyParamCount === 'number' && err.expectedBodyParamCount >= 0) {
+              const bodyCompIdx = adaptedComponents.findIndex(c => c.type === 'body');
+              let adjustedParams = cleanParams.slice(0, err.expectedBodyParamCount).map(p => ({ type: 'text', text: String(p) }));
+              while (adjustedParams.length < err.expectedBodyParamCount) {
+                adjustedParams.push({ type: 'text', text: `Sample ${adjustedParams.length + 1}` });
+              }
+              if (bodyCompIdx !== -1) {
+                adaptedComponents[bodyCompIdx].parameters = adjustedParams;
+              } else if (err.expectedBodyParamCount > 0) {
+                adaptedComponents.push({ type: 'body', parameters: adjustedParams });
+              }
+            }
+
+            // 3. Fix missing button URL parameter
+            if (typeof err.missingButtonIdx === 'number') {
+              const bIdxStr = String(err.missingButtonIdx);
+              const existingBtn = adaptedComponents.find(c => c.type === 'button' && String(c.index) === bIdxStr);
+              const btnParamVal = cleanParams[err.missingButtonIdx] || cleanParams[0] || '1';
+              if (!existingBtn) {
+                adaptedComponents.push({
+                  type: 'button',
+                  sub_type: 'url',
+                  index: bIdxStr,
+                  parameters: [{ type: 'text', text: String(btnParamVal) }]
+                });
+              }
+            }
+
             payloadObj.template.components = adaptedComponents;
             const adaptedResult = await executeMetaRequest(payloadObj);
-            console.log(`[WhatsApp API] Auto-adapted header (${err.expectedHeaderType}) and sent successfully to ${formattedPhone}!`);
+            console.log(`[WhatsApp API] Self-healed & auto-adapted components sent successfully to ${formattedPhone}!`);
             templateStrategyCache.set(cacheKey, { lang, strategyIdx: sIdx });
             return adaptedResult;
           } catch (adaptErr) {
