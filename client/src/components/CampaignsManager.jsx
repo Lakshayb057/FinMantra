@@ -2028,8 +2028,8 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
       {/* SUBTAB 4: TEMPLATES MANAGER */}
       {/* ========================================================================= */}
       {activeSubTab === 'templates' && (
-        <div style={{ display: 'flex', flexDirection: 'column', width: '100%', marginBottom: '2.5rem' }}>
-          <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', width: '100%', borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)', padding: '1.25rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', width: '100%', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+          <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', width: '100%', flex: 1, minHeight: 0, borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)', padding: '1.25rem', overflow: 'hidden' }}>
             {/* Top Toolbar */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem', flexShrink: 0 }}>
               <div>
@@ -2188,17 +2188,68 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '0.4rem',
-                    padding: '0.45rem 1rem',
+                    padding: '0.45rem 0.9rem',
                     borderRadius: '6px',
-                    background: 'var(--gold-deep)',
+                    background: '#25D366',
                     color: '#fff',
                     border: 'none',
                     fontWeight: 700,
-                    fontSize: '0.84rem',
+                    fontSize: '0.82rem',
                     cursor: 'pointer'
                   }}
                 >
-                  <Plus size={15} /> + Create Template
+                  <MessageSquare size={14} /> + Create WhatsApp Template
+                </button>
+
+                <button
+                  onClick={() => {
+                    setEditingTemplateId(null);
+                    setNewTemplateForm({
+                      name: '',
+                      type: 'email',
+                      subject: '',
+                      body: `Hello {name},\n\nWe have an exclusive financial update tailored for your portfolio at FinMantra.\n\nYour Master Profile ID is: {finmantra_id}\n\nPlease click below to review your personalized benefits and offers:\n{contact_center_url}\n\nBest regards,\nFinMantra Team\n\n<hr style="border:none;border-top:1px solid #e2e8f0;margin:25px 0;"/><div style="font-size:12px;color:#888;text-align:center;">To manage notification preferences, <a href="{contact_center_url}" style="color:#e0a82e;text-decoration:none;font-weight:bold;">visit Contact Center</a> • <a href="{unsubscribe_url}" style="color:#ef4444;text-decoration:none;font-weight:bold;">Unsubscribe from Emails</a></div>`,
+                      metaTemplateName: '',
+                      category: 'MARKETING',
+                      language: 'en_US',
+                      headerFormat: 'NONE',
+                      headerText: '',
+                      headerSample: '',
+                      mediaUrl: '',
+                      footerText: '',
+                      bodySampleValues: {},
+                      buttons: {
+                        buttonType: 'NONE',
+                        ctaUrlText: '',
+                        ctaUrlValue: '',
+                        ctaUrlSample: '',
+                        ctaUrl2Text: '',
+                        ctaUrl2Value: '',
+                        ctaUrl2Sample: '',
+                        ctaPhoneText: '',
+                        ctaPhoneValue: '',
+                        quickReplies: [],
+                        otpType: 'COPY_CODE',
+                        otpText: ''
+                      }
+                    });
+                    setShowCreateTemplateModal(true);
+                  }}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    padding: '0.45rem 0.9rem',
+                    borderRadius: '6px',
+                    background: '#8b5cf6',
+                    color: '#fff',
+                    border: 'none',
+                    fontWeight: 700,
+                    fontSize: '0.82rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <Mail size={14} /> + Create Email Template
                 </button>
               </div>
             </div>
@@ -3544,20 +3595,24 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL 2: META-STYLE WHATSAPP BUSINESS TEMPLATE CREATOR STUDIO */}
+      {/* MODAL 2: WHATSAPP & EMAIL TEMPLATE CREATOR STUDIO */}
       {/* ========================================================================= */}
       {showCreateTemplateModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '1rem' }}>
-          <div style={{ background: 'var(--paper)', border: '1px solid var(--line)', borderRadius: '16px', maxWidth: '1080px', width: '100%', maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 60px rgba(0,0,0,0.35)', overflow: 'hidden' }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '1rem' }}>
+          <div style={{ background: 'var(--paper)', border: '1px solid var(--line)', borderRadius: '16px', maxWidth: '1100px', width: '100%', maxHeight: '94vh', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 60px rgba(0,0,0,0.4)', overflow: 'hidden' }}>
             {/* Header */}
             <div style={{ padding: '1.1rem 1.5rem', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, background: 'var(--paper-2)' }}>
               <div>
                 <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <MessageSquare size={20} style={{ color: '#25D366' }} />
-                  {editingTemplateId ? `Edit WhatsApp Template: ${newTemplateForm.name || ''}` : 'Create WhatsApp Template (Meta Cloud API)'}
+                  {newTemplateForm.type === 'email' ? <Mail size={20} style={{ color: '#8b5cf6' }} /> : <MessageSquare size={20} style={{ color: '#25D366' }} />}
+                  {editingTemplateId 
+                    ? `Edit ${newTemplateForm.type === 'email' ? 'Email' : 'WhatsApp'} Template: ${newTemplateForm.name || ''}` 
+                    : `Create ${newTemplateForm.type === 'email' ? 'Outbound Email' : 'WhatsApp Business'} Template`}
                 </h3>
                 <div style={{ fontSize: '0.78rem', color: 'var(--muted)', marginTop: '0.2rem' }}>
-                  {editingTemplateId ? 'Modify template content, CTA buttons, and re-sync with Meta WhatsApp Business Account.' : 'Build, test, and register official WhatsApp templates with media headers, dynamic variables, CTA buttons, and live device preview.'}
+                  {newTemplateForm.type === 'email'
+                    ? 'Design responsive email templates with subject personalization, dynamic tags ({name}, {unsubscribe_url}), and instant SMTP dispatch.'
+                    : 'Build and register official WhatsApp templates with media headers, dynamic variables ({{1}}), CTA buttons, and live device preview.'}
                 </div>
               </div>
               <button onClick={() => setShowCreateTemplateModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}>
@@ -3565,20 +3620,69 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
               </button>
             </div>
 
-            {/* Studio Body: Split Screen (Left: Builder Form, Right: Live WhatsApp Device Preview) */}
+            {/* Studio Body: Split Screen (Left: Builder Form, Right: Live WhatsApp or Email Preview) */}
             <div style={{ display: 'grid', gridTemplateColumns: '1.25fr 0.95fr', flex: 1, minHeight: 0, overflow: 'hidden' }}>
               {/* LEFT COLUMN: FORM BUILDER */}
               <div style={{ padding: '1.25rem 1.5rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1.25rem', borderRight: '1px solid var(--line)' }}>
-                {/* 1. Category & Account */}
+                
+                {/* 0. Channel Selector */}
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.4rem', textTransform: 'uppercase', color: 'var(--muted)' }}>
-                    1. Template Category &amp; Destination
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '0.4rem', textTransform: 'uppercase', color: 'var(--muted)' }}>
+                    Select Template Channel:
+                  </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                    <div
+                      onClick={() => setNewTemplateForm(p => ({ ...p, type: 'whatsapp' }))}
+                      style={{
+                        padding: '0.65rem 0.85rem',
+                        borderRadius: '8px',
+                        border: newTemplateForm.type === 'whatsapp' ? '2px solid #25D366' : '1px solid var(--line)',
+                        background: newTemplateForm.type === 'whatsapp' ? 'rgba(37, 211, 102, 0.12)' : 'var(--paper-2)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem'
+                      }}
+                    >
+                      <MessageSquare size={18} style={{ color: '#25D366' }} />
+                      <div>
+                        <div style={{ fontWeight: 800, fontSize: '0.85rem' }}>WhatsApp Template</div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>Meta Cloud API Verification</div>
+                      </div>
+                    </div>
+
+                    <div
+                      onClick={() => setNewTemplateForm(p => ({ ...p, type: 'email' }))}
+                      style={{
+                        padding: '0.65rem 0.85rem',
+                        borderRadius: '8px',
+                        border: newTemplateForm.type === 'email' ? '2px solid #8b5cf6' : '1px solid var(--line)',
+                        background: newTemplateForm.type === 'email' ? 'rgba(139, 92, 246, 0.12)' : 'var(--paper-2)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem'
+                      }}
+                    >
+                      <Mail size={18} style={{ color: '#8b5cf6' }} />
+                      <div>
+                        <div style={{ fontWeight: 800, fontSize: '0.85rem' }}>Email Template</div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>HTML / SMTP Gateway</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 1. Category & Details */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '0.4rem', textTransform: 'uppercase', color: 'var(--muted)' }}>
+                    1. Template Category &amp; Configuration
                   </label>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem', marginBottom: '0.75rem' }}>
                     {[
-                      { id: 'MARKETING', label: 'Marketing', desc: 'Promotions, discounts & offers' },
-                      { id: 'UTILITY', label: 'Utility', desc: 'Order alerts & account updates' },
-                      { id: 'AUTHENTICATION', label: 'Authentication', desc: 'OTP verification codes' }
+                      { id: 'MARKETING', label: 'Marketing', desc: 'Offers & promotions' },
+                      { id: 'UTILITY', label: 'Utility', desc: 'Updates & alerts' },
+                      { id: 'AUTHENTICATION', label: 'Authentication', desc: 'OTP verification' }
                     ].map(cat => {
                       const isSel = newTemplateForm.category === cat.id;
                       return (
@@ -3592,14 +3696,14 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                             }));
                           }}
                           style={{
-                            padding: '0.65rem 0.75rem',
+                            padding: '0.6rem 0.75rem',
                             borderRadius: '8px',
                             border: isSel ? '2px solid var(--gold-deep)' : '1px solid var(--line)',
                             background: isSel ? 'rgba(224, 168, 46, 0.1)' : 'var(--paper-2)',
                             cursor: 'pointer'
                           }}
                         >
-                          <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>{cat.label}</div>
+                          <div style={{ fontWeight: 700, fontSize: '0.84rem' }}>{cat.label}</div>
                           <div style={{ fontSize: '0.7rem', color: 'var(--muted)', marginTop: '0.15rem' }}>{cat.desc}</div>
                         </div>
                       );
@@ -3613,7 +3717,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                       </label>
                       <input
                         type="text"
-                        placeholder="e.g. finmantra_special_offer_v1"
+                        placeholder={newTemplateForm.type === 'email' ? 'e.g. finmantra_monthly_digest' : 'e.g. finmantra_special_offer_v1'}
                         value={newTemplateForm.name}
                         onChange={(e) => setNewTemplateForm({ ...newTemplateForm, name: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_') })}
                         style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.85rem', fontFamily: 'var(--font-mono)', boxSizing: 'border-box' }}
@@ -3636,14 +3740,11 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                         <option value="ar">Arabic [ar]</option>
                         <option value="mr">Marathi (मराठी) [mr]</option>
                         <option value="gu">Gujarati (ગુજરાતી) [gu]</option>
-                        <option value="ta">Tamil (தமிழ்) [ta]</option>
-                        <option value="te">Telugu (తెలుగు) [te]</option>
-                        <option value="bn">Bengali (বাংলা) [bn]</option>
                       </select>
                     </div>
                   </div>
 
-                  {metaPhoneNumbers.length > 0 && (
+                  {newTemplateForm.type === 'whatsapp' && metaPhoneNumbers.length > 0 && (
                     <div style={{ marginTop: '0.65rem' }}>
                       <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, marginBottom: '0.25rem' }}>
                         Target Meta WhatsApp Sender Account
@@ -3663,635 +3764,370 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                   )}
                 </div>
 
-                {/* 2. Header (Optional) */}
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.4rem', textTransform: 'uppercase', color: 'var(--muted)' }}>
-                    2. Header (Optional)
-                  </label>
-                  <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.65rem' }}>
-                    {['NONE', 'TEXT', 'IMAGE', 'VIDEO', 'DOCUMENT'].map(hf => {
-                      const isSel = newTemplateForm.headerFormat === hf;
-                      return (
-                        <button
-                          key={hf}
-                          type="button"
-                          onClick={() => setNewTemplateForm({ ...newTemplateForm, headerFormat: hf })}
-                          style={{
-                            padding: '0.35rem 0.75rem',
-                            borderRadius: '6px',
-                            border: isSel ? '2px solid var(--gold-deep)' : '1px solid var(--line)',
-                            background: isSel ? 'rgba(224, 168, 46, 0.12)' : 'var(--paper-2)',
-                            fontWeight: isSel ? 700 : 500,
-                            fontSize: '0.8rem',
-                            color: 'var(--ink)',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          {hf === 'NONE' ? 'None' : hf === 'TEXT' ? '📝 Text' : hf === 'IMAGE' ? '🖼️ Image' : hf === 'VIDEO' ? '🎥 Video' : '📄 Document'}
-                        </button>
-                      );
-                    })}
+                {/* EMAIL ONLY: SUBJECT LINE */}
+                {newTemplateForm.type === 'email' && (
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '0.4rem', textTransform: 'uppercase', color: 'var(--muted)' }}>
+                      2. Email Subject Line <span style={{ color: '#ef4444' }}>*</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Important Update for {name}: Your FinMantra Benefits"
+                      value={newTemplateForm.subject}
+                      onChange={(e) => setNewTemplateForm({ ...newTemplateForm, subject: e.target.value })}
+                      style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.88rem', boxSizing: 'border-box' }}
+                    />
                   </div>
+                )}
 
-                  {newTemplateForm.headerFormat === 'TEXT' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                      <input
-                        type="text"
-                        maxLength={60}
-                        placeholder="Header text (e.g. Exclusive Offer for {{1}})"
-                        value={newTemplateForm.headerText}
-                        onChange={(e) => setNewTemplateForm({ ...newTemplateForm, headerText: e.target.value })}
-                        style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.85rem', boxSizing: 'border-box' }}
-                      />
-                      {newTemplateForm.headerText.includes('{{1}}') && (
+                {/* WHATSAPP ONLY: HEADER (OPTIONAL) */}
+                {newTemplateForm.type === 'whatsapp' && (
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '0.4rem', textTransform: 'uppercase', color: 'var(--muted)' }}>
+                      2. WhatsApp Header (Optional)
+                    </label>
+                    <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.65rem' }}>
+                      {['NONE', 'TEXT', 'IMAGE', 'VIDEO', 'DOCUMENT'].map(hf => {
+                        const isSel = newTemplateForm.headerFormat === hf;
+                        return (
+                          <button
+                            key={hf}
+                            type="button"
+                            onClick={() => setNewTemplateForm({ ...newTemplateForm, headerFormat: hf })}
+                            style={{
+                              padding: '0.35rem 0.75rem',
+                              borderRadius: '6px',
+                              border: isSel ? '2px solid #25D366' : '1px solid var(--line)',
+                              background: isSel ? 'rgba(37, 211, 102, 0.12)' : 'var(--paper-2)',
+                              fontSize: '0.78rem',
+                              fontWeight: isSel ? 700 : 500,
+                              cursor: 'pointer',
+                              color: isSel ? '#16a37b' : 'var(--ink)'
+                            }}
+                          >
+                            {hf === 'NONE' ? 'None' : hf === 'TEXT' ? '📝 Text' : hf === 'IMAGE' ? '🖼️ Image' : hf === 'VIDEO' ? '🎥 Video' : '📄 Document'}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {newTemplateForm.headerFormat === 'TEXT' && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                         <input
                           type="text"
-                          placeholder="Header {{1}} Sample Value (e.g. Rahul)"
-                          value={newTemplateForm.headerSample}
-                          onChange={(e) => setNewTemplateForm({ ...newTemplateForm, headerSample: e.target.value })}
-                          style={{ width: '100%', padding: '0.45rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.82rem', boxSizing: 'border-box' }}
+                          maxLength={60}
+                          placeholder="Header text (e.g. Hello {{1}}, Welcome)"
+                          value={newTemplateForm.headerText}
+                          onChange={(e) => setNewTemplateForm({ ...newTemplateForm, headerText: e.target.value })}
+                          style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.84rem', boxSizing: 'border-box' }}
                         />
-                      )}
-                    </div>
-                  )}
-
-                  {['IMAGE', 'VIDEO', 'DOCUMENT'].includes(newTemplateForm.headerFormat) && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                      <input
-                        type="text"
-                        placeholder={`Sample ${newTemplateForm.headerFormat.toLowerCase()} URL or upload from PC below`}
-                        value={newTemplateForm.mediaUrl}
-                        onChange={(e) => setNewTemplateForm({ ...newTemplateForm, mediaUrl: e.target.value })}
-                        style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.85rem', boxSizing: 'border-box' }}
-                      />
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <label style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '0.35rem',
-                          padding: '0.35rem 0.7rem',
-                          borderRadius: '6px',
-                          border: '1px dashed var(--gold-deep)',
-                          background: 'rgba(224, 168, 46, 0.08)',
-                          fontSize: '0.78rem',
-                          cursor: 'pointer',
-                          fontWeight: 600,
-                          color: 'var(--ink)'
-                        }}>
-                          📁 Choose {newTemplateForm.headerFormat.toLowerCase()} file from PC
+                        {newTemplateForm.headerText.includes('{{1}}') && (
                           <input
-                            type="file"
-                            accept={newTemplateForm.headerFormat === 'IMAGE' ? 'image/*' : newTemplateForm.headerFormat === 'VIDEO' ? 'video/*' : '.pdf,.doc,.docx'}
-                            style={{ display: 'none' }}
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) {
-                                const reader = new FileReader();
-                                reader.onload = () => {
-                                  setNewTemplateForm(prev => ({ ...prev, mediaUrl: reader.result }));
-                                };
-                                reader.readAsDataURL(file);
-                              }
-                            }}
+                            type="text"
+                            placeholder="Sample value for {{1}} (e.g. John)"
+                            value={newTemplateForm.headerSample}
+                            onChange={(e) => setNewTemplateForm({ ...newTemplateForm, headerSample: e.target.value })}
+                            style={{ width: '100%', padding: '0.4rem 0.75rem', borderRadius: '6px', border: '1px dashed var(--line)', background: 'var(--paper)', color: 'var(--ink)', fontSize: '0.8rem', boxSizing: 'border-box' }}
                           />
-                        </label>
-                        {newTemplateForm.mediaUrl && (
-                          <button
-                            type="button"
-                            onClick={() => setNewTemplateForm(prev => ({ ...prev, mediaUrl: '' }))}
-                            style={{ fontSize: '0.75rem', color: '#ef4444', background: 'transparent', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
-                          >
-                            Remove file
-                          </button>
                         )}
                       </div>
-                    </div>
-                  )}
-                </div>
+                    )}
 
-                {/* 3. Body (Required) */}
+                    {['IMAGE', 'VIDEO', 'DOCUMENT'].includes(newTemplateForm.headerFormat) && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        <input
+                          type="text"
+                          placeholder={`Sample ${newTemplateForm.headerFormat.toLowerCase()} URL`}
+                          value={newTemplateForm.mediaUrl}
+                          onChange={(e) => setNewTemplateForm({ ...newTemplateForm, mediaUrl: e.target.value })}
+                          style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.84rem', boxSizing: 'border-box' }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 3. Body Message Content */}
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
-                    <label style={{ fontSize: '0.82rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--muted)' }}>
-                      3. Template Body <span style={{ color: '#ef4444' }}>*</span>
+                    <label style={{ fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--muted)' }}>
+                      3. Template Body Content <span style={{ color: '#ef4444' }}>*</span>
                     </label>
-                    <span style={{ fontSize: '0.75rem', color: (newTemplateForm.body?.length || 0) > 1024 ? '#ef4444' : 'var(--muted)' }}>
-                      {newTemplateForm.body?.length || 0} / 1024
-                    </span>
                   </div>
 
-                  {/* Body Toolbar */}
-                  <div style={{ display: 'flex', gap: '0.35rem', marginBottom: '0.4rem', flexWrap: 'wrap' }}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const matches = [...(newTemplateForm.body || '').matchAll(/\{\{(\d+)\}\}/g)];
-                        const highest = matches.length > 0 ? Math.max(...matches.map(m => parseInt(m[1], 10))) : 0;
-                        const nextNum = highest + 1;
-                        const nextTag = `{{${nextNum}}}`;
-                        setNewTemplateForm(prev => ({
-                          ...prev,
-                          body: (prev.body || '') + (prev.body?.endsWith(' ') || !prev.body ? '' : ' ') + nextTag,
-                          bodySampleValues: {
-                            ...prev.bodySampleValues,
-                            [nextNum]: prev.bodySampleValues[nextNum] || (nextNum === 1 ? 'Rahul' : nextNum === 2 ? 'FinMantra' : `Sample ${nextNum}`)
-                          }
-                        }));
-                      }}
-                      style={{
-                        padding: '0.3rem 0.65rem',
-                        borderRadius: '5px',
-                        border: '1px solid var(--gold-deep)',
-                        background: 'rgba(224, 168, 46, 0.15)',
-                        color: 'var(--gold-deep)',
-                        fontWeight: 700,
-                        fontSize: '0.78rem',
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '0.25rem'
-                      }}
-                    >
-                      <Plus size={13} /> Add Variable {'{{n}}'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setNewTemplateForm(p => ({ ...p, body: p.body + '*bold text*' }))}
-                      style={{ padding: '0.3rem 0.55rem', borderRadius: '5px', border: '1px solid var(--line)', background: 'var(--paper-2)', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}
-                    >
-                      *B*
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setNewTemplateForm(p => ({ ...p, body: p.body + '_italic text_' }))}
-                      style={{ padding: '0.3rem 0.55rem', borderRadius: '5px', border: '1px solid var(--line)', background: 'var(--paper-2)', fontSize: '0.78rem', fontStyle: 'italic', cursor: 'pointer' }}
-                    >
-                      _I_
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setNewTemplateForm(p => ({ ...p, body: p.body + '~strikethrough~' }))}
-                      style={{ padding: '0.3rem 0.55rem', borderRadius: '5px', border: '1px solid var(--line)', background: 'var(--paper-2)', fontSize: '0.78rem', textDecoration: 'line-through', cursor: 'pointer' }}
-                    >
-                      ~S~
-                    </button>
-                  </div>
-
-                  <textarea
-                    rows={5}
-                    maxLength={1024}
-                    placeholder="Hello {{1}}, congratulations! Your application with {{2}} is approved. Click below to continue."
-                    value={newTemplateForm.body}
-                    onChange={(e) => setNewTemplateForm({ ...newTemplateForm, body: e.target.value })}
-                    style={{ width: '100%', padding: '0.65rem 0.75rem', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.88rem', lineHeight: 1.5, boxSizing: 'border-box' }}
-                  />
-
-                  {/* Dynamic Body Sample Values Form (Meta Requirement) */}
-                  {(() => {
-                    const matches = [...(newTemplateForm.body || '').matchAll(/\{\{(\d+)\}\}/g)];
-                    const uniqueVars = Array.from(new Set(matches.map(m => parseInt(m[1], 10)))).sort((a, b) => a - b);
-                    if (uniqueVars.length === 0) return null;
-                    return (
-                      <div style={{ marginTop: '0.75rem', padding: '0.75rem', borderRadius: '8px', background: 'var(--paper-2)', border: '1px solid var(--line)' }}>
-                        <div style={{ fontSize: '0.78rem', fontWeight: 700, marginBottom: '0.4rem', color: 'var(--ink)' }}>
-                          Meta Variable Samples (Required for Approval):
-                        </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.5rem' }}>
-                          {uniqueVars.map(vNum => (
-                            <div key={vNum}>
-                              <label style={{ display: 'block', fontSize: '0.72rem', color: 'var(--muted)', marginBottom: '0.15rem' }}>
-                                Variable {'{{' + vNum + '}}'}
-                              </label>
-                              <input
-                                type="text"
-                                placeholder={`e.g. ${vNum === 1 ? 'Rahul' : vNum === 2 ? 'FinMantra' : 'Sample'}`}
-                                value={(newTemplateForm.bodySampleValues || {})[vNum] || ''}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  setNewTemplateForm(prev => ({
-                                    ...prev,
-                                    bodySampleValues: {
-                                      ...(prev.bodySampleValues || {}),
-                                      [vNum]: val
-                                    }
-                                  }));
-                                }}
-                                style={{ width: '100%', padding: '0.4rem 0.5rem', borderRadius: '5px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)', fontSize: '0.8rem', boxSizing: 'border-box' }}
-                              />
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
-
-                {/* 4. Footer (Optional) */}
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
-                    <label style={{ fontSize: '0.82rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--muted)' }}>
-                      4. Footer Text (Optional)
-                    </label>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>
-                      {newTemplateForm.footerText?.length || 0} / 60
-                    </span>
-                  </div>
-                  <input
-                    type="text"
-                    maxLength={60}
-                    placeholder="e.g. Reply STOP to unsubscribe • FinMantra Advisory"
-                    value={newTemplateForm.footerText}
-                    onChange={(e) => setNewTemplateForm({ ...newTemplateForm, footerText: e.target.value })}
-                    style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.85rem', boxSizing: 'border-box' }}
-                  />
-                </div>
-
-                {/* 5. Buttons (Optional) */}
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.4rem', textTransform: 'uppercase', color: 'var(--muted)' }}>
-                    5. Interactive Buttons
-                  </label>
-                  <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
-                    {[
-                      { id: 'NONE', label: 'None' },
-                      { id: 'CTA', label: '🔗 Call To Action (CTA)' },
-                      { id: 'QUICK_REPLIES', label: '💬 Quick Replies' },
-                      { id: 'OTP', label: '🔑 Authentication (OTP)' }
-                    ].map(bt => {
-                      const isSel = newTemplateForm.buttons.buttonType === bt.id;
-                      return (
-                        <button
-                          key={bt.id}
-                          type="button"
-                          onClick={() => setNewTemplateForm(p => ({
-                            ...p,
-                            buttons: { ...p.buttons, buttonType: bt.id }
-                          }))}
-                          style={{
-                            padding: '0.35rem 0.75rem',
-                            borderRadius: '6px',
-                            border: isSel ? '2px solid var(--gold-deep)' : '1px solid var(--line)',
-                            background: isSel ? 'rgba(224, 168, 46, 0.12)' : 'var(--paper-2)',
-                            fontWeight: isSel ? 700 : 500,
-                            fontSize: '0.8rem',
-                            color: 'var(--ink)',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          {bt.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* CTA Buttons Config */}
-                  {newTemplateForm.buttons.buttonType === 'CTA' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', padding: '0.75rem', borderRadius: '8px', background: 'var(--paper-2)', border: '1px solid var(--line)' }}>
-                      {/* URL Button */}
-                      {/* URL Button 1 */}
-                      <div>
-                        <div style={{ fontSize: '0.78rem', fontWeight: 700, marginBottom: '0.3rem', color: 'var(--ink)' }}>
-                          Website URL Button 1:
-                        </div>
-                        <div className="campaigns-grid-2col">
-                          <input
-                            type="text"
-                            maxLength={25}
-                            placeholder="Button Text (e.g. Track Status)"
-                            value={newTemplateForm.buttons.ctaUrlText}
-                            onChange={(e) => setNewTemplateForm(p => ({
-                              ...p,
-                              buttons: { ...p.buttons, ctaUrlText: e.target.value }
-                            }))}
-                            style={{ width: '100%', padding: '0.45rem 0.65rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)', fontSize: '0.82rem', boxSizing: 'border-box' }}
-                          />
-                          <input
-                            type="text"
-                            placeholder="URL (e.g. https://thefinmantra.com/contact-center)"
-                            value={newTemplateForm.buttons.ctaUrlValue}
-                            onChange={(e) => setNewTemplateForm(p => ({
-                              ...p,
-                              buttons: { ...p.buttons, ctaUrlValue: e.target.value }
-                            }))}
-                            style={{ width: '100%', padding: '0.45rem 0.65rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)', fontSize: '0.82rem', boxSizing: 'border-box' }}
-                          />
-                        </div>
-                      </div>
-
-                      {/* URL Button 2 (Unsubscribe / Direct Link) */}
-                      <div>
-                        <div style={{ fontSize: '0.78rem', fontWeight: 700, marginBottom: '0.3rem', color: 'var(--ink)' }}>
-                          Website URL Button 2 (Unsubscribe / Custom URL):
-                        </div>
-                        <div className="campaigns-grid-2col">
-                          <input
-                            type="text"
-                            maxLength={25}
-                            placeholder="Button Text (e.g. Unsubscribe)"
-                            value={newTemplateForm.buttons.ctaUrl2Text}
-                            onChange={(e) => setNewTemplateForm(p => ({
-                              ...p,
-                              buttons: { ...p.buttons, ctaUrl2Text: e.target.value }
-                            }))}
-                            style={{ width: '100%', padding: '0.45rem 0.65rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)', fontSize: '0.82rem', boxSizing: 'border-box' }}
-                          />
-                          <input
-                            type="text"
-                            placeholder="URL (e.g. https://thefinmantra.com/unsubscribe?utm_channel=whatsapp&id={{1}})"
-                            value={newTemplateForm.buttons.ctaUrl2Value}
-                            onChange={(e) => setNewTemplateForm(p => ({
-                              ...p,
-                              buttons: { ...p.buttons, ctaUrl2Value: e.target.value }
-                            }))}
-                            style={{ width: '100%', padding: '0.45rem 0.65rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)', fontSize: '0.82rem', boxSizing: 'border-box' }}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Phone Call Button */}
-                      <div>
-                        <div style={{ fontSize: '0.78rem', fontWeight: 700, marginBottom: '0.3rem', color: 'var(--ink)' }}>
-                          Call Phone Number Button (Optional):
-                        </div>
-                        <div className="campaigns-grid-2col">
-                          <input
-                            type="text"
-                            maxLength={25}
-                            placeholder="Button Text (e.g. Call Support)"
-                            value={newTemplateForm.buttons.ctaPhoneText}
-                            onChange={(e) => setNewTemplateForm(p => ({
-                              ...p,
-                              buttons: { ...p.buttons, ctaPhoneText: e.target.value }
-                            }))}
-                            style={{ width: '100%', padding: '0.45rem 0.65rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)', fontSize: '0.82rem', boxSizing: 'border-box' }}
-                          />
-                          <input
-                            type="text"
-                            placeholder="Phone with country code (+918796736100)"
-                            value={newTemplateForm.buttons.ctaPhoneValue}
-                            onChange={(e) => setNewTemplateForm(p => ({
-                              ...p,
-                              buttons: { ...p.buttons, ctaPhoneValue: e.target.value }
-                            }))}
-                            style={{ width: '100%', padding: '0.45rem 0.65rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)', fontSize: '0.82rem', boxSizing: 'border-box' }}
-                          />
-                        </div>
-                      </div>
+                  {/* Dynamic Tag Inserter for Email & WhatsApp */}
+                  <div style={{ background: 'var(--paper-2)', padding: '0.6rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', marginBottom: '0.5rem' }}>
+                    <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--muted)', marginBottom: '0.35rem' }}>
+                      ⚡ Click to Insert Dynamic Tags:
                     </div>
-                  )}
-
-                  {/* Quick Replies Config */}
-                  {newTemplateForm.buttons.buttonType === 'QUICK_REPLIES' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', padding: '0.75rem', borderRadius: '8px', background: 'var(--paper-2)', border: '1px solid var(--line)' }}>
-                      <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--ink)' }}>Quick Reply Button Labels (up to 3):</div>
-                      {(newTemplateForm.buttons.quickReplies || []).map((qr, idx) => (
-                        <div key={idx} style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
-                          <span style={{ fontSize: '0.78rem', color: 'var(--muted)', width: '20px' }}>{idx + 1}.</span>
-                          <input
-                            type="text"
-                            maxLength={25}
-                            placeholder={`Button ${idx + 1} text (e.g. Interested)`}
-                            value={qr}
-                            onChange={(e) => {
-                              const updated = [...(newTemplateForm.buttons.quickReplies || [])];
-                              updated[idx] = e.target.value;
-                              setNewTemplateForm(p => ({
-                                ...p,
-                                buttons: { ...p.buttons, quickReplies: updated }
-                              }));
-                            }}
-                            style={{ flex: 1, padding: '0.4rem 0.65rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)', fontSize: '0.82rem' }}
-                          />
-                          {(newTemplateForm.buttons.quickReplies || []).length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const updated = newTemplateForm.buttons.quickReplies.filter((_, i) => i !== idx);
-                                setNewTemplateForm(p => ({
-                                  ...p,
-                                  buttons: { ...p.buttons, quickReplies: updated }
-                                }));
-                              }}
-                              style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.2rem' }}
-                            >
-                              <X size={15} />
-                            </button>
-                          )}
-                        </div>
-                      ))}
-                      {(newTemplateForm.buttons.quickReplies || []).length < 3 && (
+                    <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                      {(newTemplateForm.type === 'email' ? [
+                        { tag: '{name}', label: '👤 {name}' },
+                        { tag: '{finmantra_id}', label: '🆔 {finmantra_id}' },
+                        { tag: '{unsubscribe_url}', label: '🛡️ {unsubscribe_url}' },
+                        { tag: '{contact_center_url}', label: '🌐 {contact_center_url}' },
+                        { tag: '{contact}', label: '📞 {contact}' },
+                        { tag: '{mail}', label: '✉️ {mail}' }
+                      ] : [
+                        { tag: '{{1}}', label: '{{1}} Name' },
+                        { tag: '{{2}}', label: '{{2}} Detail' },
+                        { tag: '{{3}}', label: '{{3}} Link/Code' },
+                        { tag: '*bold*', label: '*Bold*' },
+                        { tag: '_italic_', label: '_Italic_' }
+                      ]).map(item => (
                         <button
+                          key={item.tag}
                           type="button"
                           onClick={() => {
                             setNewTemplateForm(p => ({
                               ...p,
-                              buttons: {
-                                ...p.buttons,
-                                quickReplies: [...(p.buttons.quickReplies || []), '']
-                              }
+                              body: (p.body || '') + (p.body?.endsWith(' ') || !p.body ? '' : ' ') + item.tag
                             }));
                           }}
                           style={{
-                            alignSelf: 'flex-start',
-                            padding: '0.3rem 0.6rem',
-                            borderRadius: '5px',
-                            border: '1px dashed var(--line)',
+                            padding: '0.2rem 0.5rem',
+                            borderRadius: '4px',
+                            border: '1px solid var(--line)',
                             background: 'var(--paper)',
                             color: 'var(--ink)',
-                            fontSize: '0.75rem',
-                            fontWeight: 600,
-                            cursor: 'pointer',
-                            marginTop: '0.2rem'
+                            fontSize: '0.74rem',
+                            fontWeight: 700,
+                            cursor: 'pointer'
                           }}
                         >
-                          + Add Quick Reply Button
+                          {item.label}
+                        </button>
+                      ))}
+
+                      {newTemplateForm.type === 'email' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const standardEmailHtml = `Hello {name},\n\nWe have an exclusive financial update tailored for your portfolio at FinMantra.\n\nYour Master Profile ID is: {finmantra_id}\n\nPlease click below to review your personalized benefits and offers:\n{contact_center_url}\n\nBest regards,\nFinMantra Team\n\n<hr style="border:none;border-top:1px solid #e2e8f0;margin:25px 0;"/><div style="font-size:12px;color:#888;text-align:center;">To manage notification preferences, <a href="{contact_center_url}" style="color:#e0a82e;text-decoration:none;font-weight:bold;">visit Contact Center</a> • <a href="{unsubscribe_url}" style="color:#ef4444;text-decoration:none;font-weight:bold;">Unsubscribe from Emails</a></div>`;
+                            setNewTemplateForm(p => ({
+                              ...p,
+                              body: standardEmailHtml,
+                              subject: p.subject || 'Exclusive Financial Update for {name}'
+                            }));
+                          }}
+                          style={{
+                            padding: '0.2rem 0.55rem',
+                            borderRadius: '4px',
+                            border: '1px solid rgba(139, 92, 246, 0.4)',
+                            background: 'rgba(139, 92, 246, 0.12)',
+                            color: '#8b5cf6',
+                            fontSize: '0.74rem',
+                            fontWeight: 700,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          📄 Insert Standard Email Template
                         </button>
                       )}
                     </div>
-                  )}
+                  </div>
 
-                  {/* OTP Button Config */}
-                  {newTemplateForm.buttons.buttonType === 'OTP' && (
-                    <div style={{ padding: '0.75rem', borderRadius: '8px', background: 'rgba(22, 163, 123, 0.08)', border: '1px solid rgba(22, 163, 123, 0.3)', fontSize: '0.82rem' }}>
-                      <div style={{ fontWeight: 700, color: '#16a37b', marginBottom: '0.2rem' }}>
-                        🔑 Authentication OTP Button
-                      </div>
-                      <div style={{ color: 'var(--muted)', fontSize: '0.78rem' }}>
-                        Meta will automatically add a native <strong>Copy Code</strong> button with one-tap clipboard copy for OTP verification.
-                      </div>
-                    </div>
-                  )}
+                  <textarea
+                    rows={newTemplateForm.type === 'email' ? 8 : 5}
+                    placeholder={newTemplateForm.type === 'email' ? 'Enter email body (plain text or HTML with {name}, {unsubscribe_url})...' : 'Enter WhatsApp message body with {{1}}, {{2}}...'}
+                    value={newTemplateForm.body}
+                    onChange={(e) => setNewTemplateForm({ ...newTemplateForm, body: e.target.value })}
+                    style={{ width: '100%', padding: '0.65rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.85rem', fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }}
+                  />
                 </div>
+
+                {/* WHATSAPP ONLY: FOOTER & BUTTONS */}
+                {newTemplateForm.type === 'whatsapp' && (
+                  <>
+                    {/* 4. Footer */}
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '0.4rem', textTransform: 'uppercase', color: 'var(--muted)' }}>
+                        4. WhatsApp Footer (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        maxLength={60}
+                        placeholder="e.g. Reply STOP to opt out"
+                        value={newTemplateForm.footerText}
+                        onChange={(e) => setNewTemplateForm({ ...newTemplateForm, footerText: e.target.value })}
+                        style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.84rem', boxSizing: 'border-box' }}
+                      />
+                    </div>
+
+                    {/* 5. Buttons */}
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '0.4rem', textTransform: 'uppercase', color: 'var(--muted)' }}>
+                        5. Interactive Buttons
+                      </label>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '0.4rem', marginBottom: '0.65rem' }}>
+                        {[
+                          { id: 'NONE', label: 'None' },
+                          { id: 'CTA', label: '🔗 CTA Link' },
+                          { id: 'QUICK_REPLIES', label: '💬 Replies' },
+                          { id: 'OTP', label: '🔑 OTP' }
+                        ].map(bt => {
+                          const isSel = newTemplateForm.buttons.buttonType === bt.id;
+                          return (
+                            <button
+                              key={bt.id}
+                              type="button"
+                              onClick={() => setNewTemplateForm(p => ({ ...p, buttons: { ...p.buttons, buttonType: bt.id } }))}
+                              style={{
+                                padding: '0.45rem 0.5rem',
+                                borderRadius: '6px',
+                                border: isSel ? '2px solid #25D366' : '1px solid var(--line)',
+                                background: isSel ? 'rgba(37, 211, 102, 0.12)' : 'var(--paper-2)',
+                                fontSize: '0.78rem',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                color: isSel ? '#16a37b' : 'var(--ink)'
+                              }}
+                            >
+                              {bt.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {newTemplateForm.buttons.buttonType === 'CTA' && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                          <div className="campaigns-grid-2col">
+                            <input
+                              type="text"
+                              placeholder="Button 1 Text (e.g. View Offers)"
+                              value={newTemplateForm.buttons.ctaUrlText}
+                              onChange={(e) => setNewTemplateForm(p => ({ ...p, buttons: { ...p.buttons, ctaUrlText: e.target.value } }))}
+                              style={{ width: '100%', padding: '0.45rem 0.65rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.82rem', boxSizing: 'border-box' }}
+                            />
+                            <input
+                              type="text"
+                              placeholder="Button 1 URL (e.g. https://thefinmantra.com/contact-center)"
+                              value={newTemplateForm.buttons.ctaUrlValue}
+                              onChange={(e) => setNewTemplateForm(p => ({ ...p, buttons: { ...p.buttons, ctaUrlValue: e.target.value } }))}
+                              style={{ width: '100%', padding: '0.45rem 0.65rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.82rem', boxSizing: 'border-box' }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
 
-              {/* RIGHT COLUMN: LIVE WHATSAPP DEVICE SIMULATION */}
-              <div style={{ background: '#0c1317', padding: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', overflowY: 'auto' }}>
-                <div style={{ fontSize: '0.78rem', color: '#8696a0', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700, marginBottom: '0.75rem' }}>
-                  Live WhatsApp Preview
+              {/* RIGHT COLUMN: LIVE SIMULATION */}
+              <div style={{ background: newTemplateForm.type === 'email' ? 'var(--paper-2)' : '#0c1317', padding: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', overflowY: 'auto' }}>
+                <div style={{ fontSize: '0.78rem', color: newTemplateForm.type === 'email' ? 'var(--muted)' : '#8696a0', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700, marginBottom: '0.75rem' }}>
+                  {newTemplateForm.type === 'email' ? 'Live Outbound Email Client Preview' : 'Live WhatsApp Smartphone Preview'}
                 </div>
 
-                {/* Smartphone Card */}
-                <div style={{
-                  width: '100%',
-                  maxWidth: '340px',
-                  background: '#0b141a',
-                  borderRadius: '24px',
-                  border: '8px solid #1f2c34',
-                  boxShadow: '0 20px 40px rgba(0,0,0,0.6)',
-                  overflow: 'hidden',
-                  display: 'flex',
-                  flexDirection: 'column'
-                }}>
-                  {/* WhatsApp Top Header Bar */}
-                  <div style={{ background: '#202c33', padding: '0.65rem 0.85rem', display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#e9edef' }}>
-                    <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#25D366', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: '0.85rem' }}>
-                      FM
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: '0.84rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.25rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        FinMantra Official
-                        <CheckCircle2 size={13} style={{ color: '#25D366' }} />
-                      </div>
-                      <div style={{ fontSize: '0.68rem', color: '#8696a0' }}>Official Business Account</div>
-                    </div>
-                  </div>
-
-                  {/* WhatsApp Chat Canvas */}
+                {newTemplateForm.type === 'email' ? (
+                  /* Live Email Client Preview Card */
                   <div style={{
-                    padding: '1rem 0.75rem',
-                    background: '#0b141a',
-                    backgroundImage: 'radial-gradient(#1f2c34 1px, transparent 1px)',
-                    backgroundSize: '16px 16px',
+                    width: '100%',
+                    maxWidth: '420px',
+                    background: 'var(--paper)',
+                    borderRadius: '12px',
+                    border: '1px solid var(--line)',
+                    boxShadow: '0 10px 30px rgba(0,0,0,0.1)',
+                    overflow: 'hidden',
                     display: 'flex',
-                    flexDirection: 'column',
-                    gap: '0.5rem'
+                    flexDirection: 'column'
                   }}>
-                    {/* WhatsApp Message Bubble */}
-                    <div style={{
-                      background: '#202c33',
-                      borderRadius: '10px 10px 10px 2px',
-                      color: '#e9edef',
-                      overflow: 'hidden',
-                      boxShadow: '0 2px 5px rgba(0,0,0,0.3)',
-                      maxWidth: '92%'
-                    }}>
-                      {/* Media Header Preview */}
-                      {newTemplateForm.headerFormat === 'IMAGE' && (
-                        <div style={{ background: '#111b21', height: '140px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#8696a0', fontSize: '0.8rem', overflow: 'hidden' }}>
-                          {newTemplateForm.mediaUrl ? (
-                            <img src={newTemplateForm.mediaUrl} alt="Header" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.target.style.display = 'none'; }} />
-                          ) : (
-                            <span>🖼️ [Image Header Preview]</span>
-                          )}
-                        </div>
-                      )}
-
-                      {newTemplateForm.headerFormat === 'VIDEO' && (
-                        <div style={{ background: '#111b21', height: '120px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#8696a0', fontSize: '0.8rem' }}>
-                          🎥 [Video Header Preview]
-                        </div>
-                      )}
-
-                      {newTemplateForm.headerFormat === 'DOCUMENT' && (
-                        <div style={{ background: '#111b21', padding: '0.65rem', display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '1px solid #2a3942', color: '#e9edef', fontSize: '0.8rem' }}>
-                          <FileText size={20} style={{ color: '#25D366' }} />
-                          <div style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Document_Attachment.pdf</div>
-                        </div>
-                      )}
-
-                      {newTemplateForm.headerFormat === 'TEXT' && newTemplateForm.headerText && (
-                        <div style={{ padding: '0.65rem 0.75rem 0.25rem 0.75rem', fontWeight: 800, fontSize: '0.92rem', color: '#e9edef' }}>
-                          {newTemplateForm.headerText.replace(/\{\{1\}\}/g, newTemplateForm.headerSample || '{{1}}')}
-                        </div>
-                      )}
-
-                      {/* Body Content */}
-                      <div style={{ padding: '0.65rem 0.75rem 0.35rem 0.75rem', fontSize: '0.84rem', lineHeight: 1.45, whiteSpace: 'pre-wrap', color: '#e9edef' }}>
-                        {(() => {
-                          let text = newTemplateForm.body || 'Type your message template body on the left...';
-                          text = text.replace(/\{\{(\d+)\}\}/g, (match, p1) => {
-                            const val = (newTemplateForm.bodySampleValues || {})[p1];
-                            return val && val.trim() ? val : match;
-                          });
-                          return text;
-                        })()}
+                    <div style={{ background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)', padding: '0.75rem 1rem', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 800, fontSize: '0.86rem' }}>
+                        <Mail size={16} /> FinMantra Email Dispatch
                       </div>
-
-                      {/* Footer Content */}
-                      {newTemplateForm.footerText && (
-                        <div style={{ padding: '0 0.75rem 0.35rem 0.75rem', fontSize: '0.7rem', color: '#8696a0' }}>
-                          {newTemplateForm.footerText}
-                        </div>
-                      )}
-
-                      {/* Time & Read Receipts */}
-                      <div style={{ padding: '0 0.75rem 0.4rem 0.75rem', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '0.2rem', fontSize: '0.65rem', color: '#8696a0' }}>
-                        <span>10:45 AM</span>
-                        <CheckCheck size={12} style={{ color: '#53bdeb' }} />
-                      </div>
-
-                      {/* Button Actions in Message Card */}
-                      {newTemplateForm.buttons.buttonType === 'CTA' && (
-                        <div style={{ borderTop: '1px solid #2a3942', display: 'flex', flexDirection: 'column' }}>
-                          {newTemplateForm.buttons.ctaUrlText && (
-                            <div style={{ padding: '0.6rem', textAlign: 'center', color: '#53bdeb', fontSize: '0.82rem', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem', borderBottom: (newTemplateForm.buttons.ctaUrl2Text || newTemplateForm.buttons.ctaPhoneText) ? '1px solid #2a3942' : 'none' }}>
-                              <ArrowUpRight size={14} />
-                              {newTemplateForm.buttons.ctaUrlText}
-                            </div>
-                          )}
-                          {newTemplateForm.buttons.ctaUrl2Text && (
-                            <div style={{ padding: '0.6rem', textAlign: 'center', color: '#53bdeb', fontSize: '0.82rem', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem', borderBottom: newTemplateForm.buttons.ctaPhoneText ? '1px solid #2a3942' : 'none' }}>
-                              <ArrowUpRight size={14} />
-                              {newTemplateForm.buttons.ctaUrl2Text}
-                            </div>
-                          )}
-                          {newTemplateForm.buttons.ctaPhoneText && (
-                            <div style={{ padding: '0.6rem', textAlign: 'center', color: '#53bdeb', fontSize: '0.82rem', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}>
-                              <PhoneCall size={14} />
-                              {newTemplateForm.buttons.ctaPhoneText}
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {newTemplateForm.buttons.buttonType === 'OTP' && (
-                        <div style={{ borderTop: '1px solid #2a3942', padding: '0.6rem', textAlign: 'center', color: '#53bdeb', fontSize: '0.82rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
-                          <ShieldCheck size={15} /> Copy Code
-                        </div>
-                      )}
+                      <span style={{ fontSize: '0.68rem', background: 'rgba(255,255,255,0.2)', padding: '0.15rem 0.45rem', borderRadius: '4px' }}>
+                        HTML / SMTP
+                      </span>
                     </div>
 
-                    {/* Quick Replies Outside Bubble */}
-                    {newTemplateForm.buttons.buttonType === 'QUICK_REPLIES' && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', maxWidth: '92%' }}>
-                        {(newTemplateForm.buttons.quickReplies || []).filter(q => q && q.trim()).map((qr, idx) => (
-                          <div
-                            key={idx}
-                            style={{
-                              background: '#202c33',
-                              borderRadius: '8px',
-                              padding: '0.55rem',
-                              textAlign: 'center',
-                              color: '#53bdeb',
-                              fontSize: '0.82rem',
-                              fontWeight: 600,
-                              boxShadow: '0 2px 4px rgba(0,0,0,0.25)'
-                            }}
-                          >
-                            {qr}
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    <div style={{ padding: '0.85rem 1rem', borderBottom: '1px solid var(--line)', fontSize: '0.78rem', color: 'var(--muted)', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                      <div><strong style={{ color: 'var(--ink)' }}>From:</strong> FinMantra Official &lt;notifications@thefinmantra.com&gt;</div>
+                      <div><strong style={{ color: 'var(--ink)' }}>To:</strong> Rahul Sharma &lt;lead@customer.com&gt;</div>
+                      <div><strong style={{ color: 'var(--ink)' }}>Subject:</strong> <span style={{ color: '#4f46e5', fontWeight: 700 }}>{newTemplateForm.subject || '(Subject line)'}</span></div>
+                    </div>
+
+                    <div style={{ padding: '1rem', fontSize: '0.84rem', lineHeight: 1.5, color: 'var(--ink)', whiteSpace: 'pre-wrap', maxHeight: '280px', overflowY: 'auto' }}>
+                      {newTemplateForm.body || 'Type your email body on the left...'}
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  /* WhatsApp Smartphone Preview Card */
+                  <div style={{
+                    width: '100%',
+                    maxWidth: '340px',
+                    background: '#0b141a',
+                    borderRadius: '24px',
+                    border: '8px solid #1f2c34',
+                    boxShadow: '0 20px 40px rgba(0,0,0,0.6)',
+                    overflow: 'hidden',
+                    display: 'flex',
+                    flexDirection: 'column'
+                  }}>
+                    {/* WhatsApp Top Header Bar */}
+                    <div style={{ background: '#202c33', padding: '0.65rem 0.85rem', display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#e9edef' }}>
+                      <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#25D366', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: '0.85rem' }}>
+                        FM
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: '0.84rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.25rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          FinMantra Official
+                          <CheckCircle2 size={13} style={{ color: '#25D366' }} />
+                        </div>
+                        <div style={{ fontSize: '0.68rem', color: '#8696a0' }}>Official Business Account</div>
+                      </div>
+                    </div>
+
+                    {/* WhatsApp Chat Canvas */}
+                    <div style={{
+                      padding: '1rem 0.75rem',
+                      background: '#0b141a',
+                      backgroundImage: 'radial-gradient(#1f2c34 1px, transparent 1px)',
+                      backgroundSize: '16px 16px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '0.5rem'
+                    }}>
+                      <div style={{
+                        background: '#202c33',
+                        borderRadius: '10px 10px 10px 2px',
+                        color: '#e9edef',
+                        overflow: 'hidden',
+                        boxShadow: '0 2px 5px rgba(0,0,0,0.3)',
+                        maxWidth: '92%'
+                      }}>
+                        {newTemplateForm.headerFormat === 'TEXT' && newTemplateForm.headerText && (
+                          <div style={{ padding: '0.65rem 0.75rem 0.25rem 0.75rem', fontWeight: 800, fontSize: '0.92rem', color: '#e9edef' }}>
+                            {newTemplateForm.headerText.replace(/\{\{1\}\}/g, newTemplateForm.headerSample || '{{1}}')}
+                          </div>
+                        )}
+
+                        <div style={{ padding: '0.65rem 0.75rem 0.35rem 0.75rem', fontSize: '0.84rem', lineHeight: 1.45, whiteSpace: 'pre-wrap', color: '#e9edef' }}>
+                          {newTemplateForm.body || 'Type your WhatsApp message template body on the left...'}
+                        </div>
+
+                        {newTemplateForm.footerText && (
+                          <div style={{ padding: '0 0.75rem 0.35rem 0.75rem', fontSize: '0.7rem', color: '#8696a0' }}>
+                            {newTemplateForm.footerText}
+                          </div>
+                        )}
+
+                        <div style={{ padding: '0 0.75rem 0.4rem 0.75rem', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '0.2rem', fontSize: '0.65rem', color: '#8696a0' }}>
+                          <span>10:45 AM</span>
+                          <CheckCheck size={12} style={{ color: '#53bdeb' }} />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
             {/* Footer Actions */}
             <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--paper-2)', flexShrink: 0 }}>
               <div style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>
-                Template will be submitted to Meta for automated verification &amp; approval.
+                {newTemplateForm.type === 'email' ? 'Email template will be saved locally for instant SMTP dispatch.' : 'WhatsApp template will be submitted to Meta for automated verification & approval.'}
               </div>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
                 <button
@@ -4309,6 +4145,10 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                       showToast('Please enter both Template Name and Body.', 'error');
                       return;
                     }
+                    if (newTemplateForm.type === 'email' && !newTemplateForm.subject?.trim()) {
+                      showToast('Please enter an Email Subject Line.', 'error');
+                      return;
+                    }
                     setIsCreatingTemplate(true);
                     try {
                       const res = await fetch(`${API_URL}/campaigns/templates`, {
@@ -4322,11 +4162,11 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                       });
                       const data = await res.json();
                       if (res.ok && data.success) {
-                        showToast(editingTemplateId ? `Template "${newTemplateForm.name}" updated and re-synced with Meta!` : `Template "${newTemplateForm.name}" created and synced with Meta!`, 'success');
+                        showToast(editingTemplateId ? `Template "${newTemplateForm.name}" updated successfully!` : `Template "${newTemplateForm.name}" created successfully!`, 'success');
                         setShowCreateTemplateModal(false);
                         fetchTemplates();
                       } else {
-                        showToast(data.error || 'Failed to register template with Meta.', 'error');
+                        showToast(data.error || 'Failed to save template.', 'error');
                       }
                     } catch (err) {
                       showToast('Network error saving template.', 'error');
@@ -4337,7 +4177,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                   style={{
                     padding: '0.55rem 1.35rem',
                     borderRadius: '6px',
-                    background: '#25D366',
+                    background: newTemplateForm.type === 'email' ? '#8b5cf6' : '#25D366',
                     color: '#fff',
                     border: 'none',
                     fontWeight: 700,
@@ -4346,11 +4186,13 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '0.4rem',
-                    boxShadow: '0 4px 12px rgba(37, 211, 102, 0.3)'
+                    boxShadow: newTemplateForm.type === 'email' ? '0 4px 12px rgba(139, 92, 246, 0.3)' : '0 4px 12px rgba(37, 211, 102, 0.3)'
                   }}
                 >
-                  {isCreatingTemplate ? <RefreshCw size={15} className="spin-slow" /> : <Send size={15} />}
-                  {isCreatingTemplate ? 'Registering with Meta...' : 'Submit Template to Meta'}
+                  {isCreatingTemplate ? <RefreshCw size={15} className="spin-slow" /> : (newTemplateForm.type === 'email' ? <Mail size={15} /> : <Send size={15} />)}
+                  {isCreatingTemplate 
+                    ? (newTemplateForm.type === 'email' ? 'Saving Template...' : 'Registering with Meta...') 
+                    : (editingTemplateId ? 'Save & Update Template' : (newTemplateForm.type === 'email' ? 'Save Email Template' : 'Submit Template to Meta'))}
                 </button>
               </div>
             </div>
