@@ -3,7 +3,7 @@ import {
   Users, Mail, MessageSquare, Plus, Trash2, Search, Upload, RefreshCw, X, Check,
   AlertCircle, Download, FileSpreadsheet, Play, Settings as SettingsIcon, HelpCircle, Info, Zap, Database, FileText,
   Clock, Edit2, Lock, BarChart3, TrendingUp, Filter, Eye, CheckCircle2, XCircle, ChevronRight, Calendar, PhoneCall,
-  Share2, ArrowUpRight, ShieldCheck, CheckCheck, Send
+  Share2, ArrowUpRight, ShieldCheck, CheckCheck, Send, Smartphone
 } from 'lucide-react';
 
 export default function CampaignsManager({ theme, API_URL, token, showToast }) {
