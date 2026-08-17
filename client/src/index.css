@@ -3540,11 +3540,11 @@ input:-webkit-autofill:active {
 /* WhatsApp Chat Theme for Templates Manager */
 .wa-template-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
   gap: 1.25rem;
   width: 100%;
   box-sizing: border-box;
-  max-height: calc(100vh - 270px);
+  flex: 1;
   min-height: 380px;
   overflow-y: auto;
   padding-right: 0.35rem;
@@ -3555,7 +3555,7 @@ input:-webkit-autofill:active {
   border-radius: 14px;
   border: 1px solid var(--line);
   background: var(--paper);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.05);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -3564,41 +3564,45 @@ input:-webkit-autofill:active {
 
 .wa-template-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.09);
 }
 
-.wa-template-card-header {
-  padding: 0.85rem 1rem;
-  background: var(--paper-2);
-  border-bottom: 1px solid var(--line);
+.wa-card-app-bar {
+  padding: 0.75rem 1rem;
+  background: #075e54;
+  color: #ffffff;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 0.4rem;
+  gap: 0.5rem;
+}
+
+[data-theme='dark'] .wa-card-app-bar {
+  background: #1f2c34;
 }
 
 .wa-chat-canvas {
-  padding: 1.25rem 1rem;
+  padding: 1rem;
   background-color: #efeae2;
-  background-image: radial-gradient(#d1d7db 1px, transparent 1px);
-  background-size: 20px 20px;
+  background-image: radial-gradient(#d1d7db 1.2px, transparent 1.2px);
+  background-size: 18px 18px;
   flex: 1;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
+  min-height: 180px;
 }
 
 [data-theme='dark'] .wa-chat-canvas {
   background-color: #0b141a;
-  background-image: radial-gradient(#1f2c34 1px, transparent 1px);
+  background-image: radial-gradient(#1f2c34 1.2px, transparent 1.2px);
 }
 
 .wa-chat-bubble {
   background: #ffffff;
-  border-radius: 10px 10px 10px 2px;
+  border-radius: 8px 8px 8px 2px;
   padding: 0.85rem 1rem;
-  box-shadow: 0 1px 3px rgba(11, 20, 26, 0.13);
+  box-shadow: 0 1.5px 3px rgba(11, 20, 26, 0.14);
   position: relative;
   max-width: 100%;
   color: #111b21;
@@ -3617,32 +3621,44 @@ input:-webkit-autofill:active {
   font-size: 0.92rem;
   margin-bottom: 0.45rem;
   color: #111b21;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  padding-bottom: 0.35rem;
 }
 
 [data-theme='dark'] .wa-chat-header-text {
   color: #e9edef;
+  border-bottom-color: rgba(255, 255, 255, 0.08);
 }
 
 .wa-chat-body-text {
   white-space: pre-wrap;
-  font-size: 0.84rem;
+  font-size: 0.85rem;
+  color: inherit;
+  line-height: 1.5;
 }
 
 .wa-chat-var-tag {
-  background: rgba(224, 168, 46, 0.18);
+  background: rgba(224, 168, 46, 0.2);
   color: #d97706;
-  font-weight: 700;
-  padding: 0.1rem 0.35rem;
+  font-weight: 800;
+  padding: 0.12rem 0.4rem;
   border-radius: 4px;
   font-family: var(--font-mono);
-  font-size: 0.8rem;
+  font-size: 0.82rem;
   display: inline-block;
+  border: 1px solid rgba(224, 168, 46, 0.35);
+}
+
+[data-theme='dark'] .wa-chat-var-tag {
+  background: rgba(224, 168, 46, 0.25);
+  color: #fbbf24;
 }
 
 .wa-chat-footer-text {
   font-size: 0.72rem;
   color: #667781;
-  margin-top: 0.45rem;
+  margin-top: 0.5rem;
+  font-style: italic;
 }
 
 [data-theme='dark'] .wa-chat-footer-text {
@@ -3653,10 +3669,10 @@ input:-webkit-autofill:active {
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  gap: 0.25rem;
+  gap: 0.3rem;
   font-size: 0.68rem;
   color: #667781;
-  margin-top: 0.25rem;
+  margin-top: 0.35rem;
 }
 
 [data-theme='dark'] .wa-chat-time-stamp {
@@ -3664,26 +3680,27 @@ input:-webkit-autofill:active {
 }
 
 .wa-chat-btn-row {
-  margin-top: 0.6rem;
+  margin-top: 0.65rem;
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 0.4rem;
 }
 
 .wa-chat-btn-pill {
   background: #ffffff;
   border: 1px solid #e9edef;
   border-radius: 8px;
-  padding: 0.45rem 0.75rem;
+  padding: 0.5rem 0.85rem;
   text-align: center;
-  font-size: 0.8rem;
+  font-size: 0.82rem;
   font-weight: 700;
   color: #00a884;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.4rem;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  gap: 0.45rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  user-select: none;
 }
 
 [data-theme='dark'] .wa-chat-btn-pill {
@@ -3700,6 +3717,7 @@ input:-webkit-autofill:active {
   justify-content: space-between;
   align-items: center;
   gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 /* Modals */

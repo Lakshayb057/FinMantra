@@ -487,6 +487,89 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
     }
   };
 
+  const handleEditTemplate = (t) => {
+    setEditingTemplateId(t.id);
+    let parsedBtns = {
+      buttonType: 'NONE',
+      ctaUrlText: '',
+      ctaUrlValue: '',
+      ctaUrlSample: '',
+      ctaUrl2Text: '',
+      ctaUrl2Value: '',
+      ctaUrl2Sample: '',
+      ctaPhoneText: '',
+      ctaPhoneValue: '',
+      quickReplies: ['Interested', 'Apply Now', 'Talk to Agent'],
+      otpType: 'COPY_CODE',
+      otpText: 'Copy Code'
+    };
+
+    if (t.buttons) {
+      if (typeof t.buttons === 'object' && !Array.isArray(t.buttons)) {
+        parsedBtns = { ...parsedBtns, ...t.buttons };
+      } else if (typeof t.buttons === 'string') {
+        try {
+          const parsed = JSON.parse(t.buttons);
+          if (Array.isArray(parsed)) {
+            parsed.forEach((b, idx) => {
+              if (b.type === 'URL' && idx === 0) {
+                parsedBtns.buttonType = 'CTA_URL';
+                parsedBtns.ctaUrlText = b.text || '';
+                parsedBtns.ctaUrlValue = b.url || '';
+              } else if (b.type === 'URL' && idx === 1) {
+                parsedBtns.ctaUrl2Text = b.text || '';
+                parsedBtns.ctaUrl2Value = b.url || '';
+              } else if (b.type === 'PHONE_NUMBER' || b.type === 'PHONE') {
+                parsedBtns.buttonType = 'CTA_PHONE';
+                parsedBtns.ctaPhoneText = b.text || '';
+                parsedBtns.ctaPhoneValue = b.phone_number || '';
+              } else if (b.type === 'QUICK_REPLY') {
+                parsedBtns.buttonType = 'QUICK_REPLIES';
+              }
+            });
+          } else if (typeof parsed === 'object') {
+            parsedBtns = { ...parsedBtns, ...parsed };
+          }
+        } catch (e) {}
+      } else if (Array.isArray(t.buttons)) {
+        t.buttons.forEach((b, idx) => {
+          if (b.type === 'URL' && idx === 0) {
+            parsedBtns.buttonType = 'CTA_URL';
+            parsedBtns.ctaUrlText = b.text || '';
+            parsedBtns.ctaUrlValue = b.url || '';
+          } else if (b.type === 'URL' && idx === 1) {
+            parsedBtns.ctaUrl2Text = b.text || '';
+            parsedBtns.ctaUrl2Value = b.url || '';
+          } else if (b.type === 'PHONE_NUMBER' || b.type === 'PHONE') {
+            parsedBtns.buttonType = 'CTA_PHONE';
+            parsedBtns.ctaPhoneText = b.text || '';
+            parsedBtns.ctaPhoneValue = b.phone_number || '';
+          } else if (b.type === 'QUICK_REPLY') {
+            parsedBtns.buttonType = 'QUICK_REPLIES';
+          }
+        });
+      }
+    }
+
+    setNewTemplateForm({
+      name: t.name || '',
+      type: t.type || 'whatsapp',
+      subject: t.subject || '',
+      body: t.body || '',
+      metaTemplateName: t.meta_template_name || t.name || '',
+      category: (t.category || 'UTILITY').toUpperCase(),
+      language: t.language || 'en_US',
+      headerFormat: t.header_format || 'NONE',
+      headerText: t.header_text || '',
+      headerSample: t.header_sample || '',
+      mediaUrl: t.media_url || '',
+      footerText: t.footer_text || '',
+      bodySampleValues: t.body_sample_values || {},
+      buttons: parsedBtns
+    });
+    setShowCreateTemplateModal(true);
+  };
+
   const handleTestSpecificSmtp = async (account) => {
     setTestingSmtpAccountId(account.id);
     try {
@@ -2180,42 +2263,47 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
 
                       return (
                         <div key={t.id} className="wa-template-card">
-                          {/* Card Top Information */}
-                          <div className="wa-template-card-header">
-                            <div>
-                              <div style={{ fontWeight: 800, fontSize: '0.92rem', color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                                <span style={{ color: t.type === 'whatsapp' ? '#25D366' : '#8b5cf6' }}>●</span>
-                                {t.name}
+                          {/* WhatsApp Top App Bar */}
+                          <div className="wa-card-app-bar">
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#25D366', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 900, fontSize: '0.82rem' }}>
+                                FM
                               </div>
-                              <div style={{ fontSize: '0.72rem', color: 'var(--muted)', fontFamily: 'var(--font-mono)', marginTop: '0.1rem' }}>
-                                {t.meta_template_name || t.name} • {t.language || 'en_US'}
+                              <div>
+                                <div style={{ fontWeight: 800, fontSize: '0.88rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                                  FinMantra Official
+                                  <span style={{ color: '#53bdeb', fontSize: '0.8rem' }} title="Meta Verified">✓</span>
+                                </div>
+                                <div style={{ fontSize: '0.7rem', opacity: 0.85, fontFamily: 'var(--font-mono)' }}>
+                                  {t.name} • {t.language || 'en_US'}
+                                </div>
                               </div>
                             </div>
                             <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
                               <span style={{
                                 padding: '0.15rem 0.45rem',
                                 borderRadius: '4px',
-                                fontSize: '0.68rem',
+                                fontSize: '0.66rem',
                                 fontWeight: 800,
-                                background: isUtility ? 'rgba(59, 130, 246, 0.12)' : 'rgba(245, 158, 11, 0.12)',
-                                color: isUtility ? '#3b82f6' : '#d97706'
+                                background: 'rgba(255, 255, 255, 0.2)',
+                                color: '#ffffff'
                               }}>
-                                {t.category || 'MARKETING'}
+                                {t.category || 'UTILITY'}
                               </span>
                               <span style={{
                                 padding: '0.15rem 0.45rem',
                                 borderRadius: '999px',
-                                fontSize: '0.68rem',
+                                fontSize: '0.66rem',
                                 fontWeight: 800,
-                                background: status === 'APPROVED' ? 'rgba(22, 163, 123, 0.12)' : status === 'PENDING' ? 'rgba(224, 168, 46, 0.12)' : 'rgba(239, 68, 68, 0.12)',
-                                color: status === 'APPROVED' ? '#16a37b' : status === 'PENDING' ? 'var(--gold-deep)' : '#ef4444'
+                                background: status === 'APPROVED' ? '#16a37b' : status === 'PENDING' ? '#d97706' : '#ef4444',
+                                color: '#ffffff'
                               }}>
                                 {status}
                               </span>
                             </div>
                           </div>
 
-                          {/* WhatsApp Chat Canvas */}
+                          {/* WhatsApp Chat Wallpaper Canvas */}
                           <div className="wa-chat-canvas">
                             <div className="wa-chat-bubble">
                               {/* Header (if present) */}
@@ -2228,10 +2316,10 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                                 <div style={{
                                   background: 'rgba(0,0,0,0.06)',
                                   borderRadius: '6px',
-                                  padding: '0.6rem',
+                                  padding: '0.5rem',
                                   textAlign: 'center',
-                                  marginBottom: '0.5rem',
-                                  fontSize: '0.75rem',
+                                  marginBottom: '0.45rem',
+                                  fontSize: '0.74rem',
                                   fontWeight: 700,
                                   color: 'var(--muted)',
                                   display: 'flex',
@@ -2239,11 +2327,11 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                                   justifyContent: 'center',
                                   gap: '0.35rem'
                                 }}>
-                                  {t.header_format === 'IMAGE' ? '🖼️ [Header Image]' : t.header_format === 'VIDEO' ? '🎥 [Header Video]' : '📄 [Header Document]'}
+                                  {t.header_format === 'IMAGE' ? '🖼️ [Header Image / Media]' : t.header_format === 'VIDEO' ? '🎥 [Header Video]' : '📄 [Header Document]'}
                                 </div>
                               )}
 
-                              {/* Body with formatting */}
+                              {/* Body with bold, italic, and gold variable badges */}
                               <div className="wa-chat-body-text">
                                 {(() => {
                                   const text = t.body || '';
@@ -2290,9 +2378,54 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                             </div>
                           </div>
 
-                          {/* Card Footer Actions */}
+                          {/* Card Footer Actions: Edit, Delete, Use */}
                           <div className="wa-template-card-footer">
+                            <div style={{ display: 'flex', gap: '0.4rem' }}>
+                              <button
+                                type="button"
+                                onClick={() => handleEditTemplate(t)}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.3rem',
+                                  padding: '0.4rem 0.75rem',
+                                  borderRadius: '6px',
+                                  background: 'var(--paper)',
+                                  color: 'var(--ink)',
+                                  border: '1px solid var(--line)',
+                                  fontSize: '0.78rem',
+                                  fontWeight: 700,
+                                  cursor: 'pointer'
+                                }}
+                                title="Edit Template"
+                              >
+                                <Edit2 size={13} style={{ color: 'var(--gold-deep)' }} /> Edit
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteTemplate(t.id, t.name)}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.25rem',
+                                  padding: '0.4rem 0.65rem',
+                                  borderRadius: '6px',
+                                  background: 'rgba(239, 68, 68, 0.08)',
+                                  color: '#ef4444',
+                                  border: '1px solid rgba(239, 68, 68, 0.25)',
+                                  fontSize: '0.78rem',
+                                  fontWeight: 700,
+                                  cursor: 'pointer'
+                                }}
+                                title="Delete Template"
+                              >
+                                <Trash2 size={13} /> Delete
+                              </button>
+                            </div>
+
                             <button
+                              type="button"
                               onClick={() => {
                                 setBroadcastForm(prev => ({
                                   ...prev,
@@ -2306,37 +2439,17 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                                 display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: '0.35rem',
-                                padding: '0.4rem 0.75rem',
+                                padding: '0.4rem 0.85rem',
                                 borderRadius: '6px',
-                                background: 'rgba(224, 168, 46, 0.1)',
-                                color: 'var(--gold-deep)',
-                                border: '1px solid rgba(224, 168, 46, 0.25)',
+                                background: 'rgba(37, 211, 102, 0.12)',
+                                color: '#16a37b',
+                                border: '1px solid rgba(37, 211, 102, 0.3)',
                                 fontSize: '0.78rem',
-                                fontWeight: 700,
+                                fontWeight: 800,
                                 cursor: 'pointer'
                               }}
                             >
                               <Send size={13} /> Use in Broadcast
-                            </button>
-
-                            <button
-                              onClick={() => handleDeleteTemplate(t.id, t.name)}
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '0.25rem',
-                                padding: '0.4rem 0.65rem',
-                                borderRadius: '6px',
-                                background: 'rgba(239, 68, 68, 0.08)',
-                                color: '#ef4444',
-                                border: '1px solid rgba(239, 68, 68, 0.25)',
-                                fontSize: '0.78rem',
-                                fontWeight: 700,
-                                cursor: 'pointer'
-                              }}
-                              title="Delete Template"
-                            >
-                              <Trash2 size={13} /> Delete
                             </button>
                           </div>
                         </div>
@@ -2381,7 +2494,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                               </span>
                             </td>
                             <td style={{ padding: '0.75rem 0.85rem', fontSize: '0.78rem', fontWeight: 700, color: 'var(--muted)' }}>
-                              {t.category || 'MARKETING'}
+                              {t.category || 'UTILITY'}
                             </td>
                             <td style={{ padding: '0.75rem 0.85rem', fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: 'var(--muted)' }}>
                               {t.meta_template_name || t.name}
@@ -2401,11 +2514,33 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                                 {status}
                               </span>
                             </td>
-                            <td style={{ padding: '0.75rem 0.85rem', fontSize: '0.8rem', color: 'var(--muted)', maxWidth: '280px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            <td style={{ padding: '0.75rem 0.85rem', fontSize: '0.8rem', color: 'var(--muted)', maxWidth: '260px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                               {t.body || '—'}
                             </td>
                             <td style={{ padding: '0.75rem 0.85rem', textAlign: 'right', whiteSpace: 'nowrap' }}>
                               <button
+                                type="button"
+                                onClick={() => handleEditTemplate(t)}
+                                style={{
+                                  padding: '0.35rem 0.65rem',
+                                  borderRadius: '6px',
+                                  background: 'var(--paper)',
+                                  color: 'var(--ink)',
+                                  border: '1px solid var(--line)',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  marginRight: '0.35rem',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.25rem'
+                                }}
+                                title="Edit Template"
+                              >
+                                <Edit2 size={12} style={{ color: 'var(--gold-deep)' }} /> Edit
+                              </button>
+                              <button
+                                type="button"
                                 onClick={() => {
                                   setBroadcastForm(prev => ({
                                     ...prev,
@@ -2418,18 +2553,19 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                                 style={{
                                   padding: '0.35rem 0.65rem',
                                   borderRadius: '6px',
-                                  background: 'rgba(224, 168, 46, 0.1)',
-                                  color: 'var(--gold-deep)',
-                                  border: '1px solid rgba(224, 168, 46, 0.25)',
+                                  background: 'rgba(37, 211, 102, 0.1)',
+                                  color: '#16a37b',
+                                  border: '1px solid rgba(37, 211, 102, 0.25)',
                                   fontSize: '0.75rem',
-                                  fontWeight: 600,
+                                  fontWeight: 700,
                                   cursor: 'pointer',
-                                  marginRight: '0.4rem'
+                                  marginRight: '0.35rem'
                                 }}
                               >
                                 Use
                               </button>
                               <button
+                                type="button"
                                 onClick={() => handleDeleteTemplate(t.id, t.name)}
                                 style={{
                                   padding: '0.35rem 0.65rem',
@@ -2446,7 +2582,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                                 }}
                                 title="Delete Template"
                               >
-                                <Trash2 size={13} /> Delete
+                                <Trash2 size={12} /> Delete
                               </button>
                             </td>
                           </tr>
@@ -3247,10 +3383,10 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
               <div>
                 <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <MessageSquare size={20} style={{ color: '#25D366' }} />
-                  WhatsApp Business Template Studio (Meta Cloud API)
+                  {editingTemplateId ? `Edit WhatsApp Template: ${newTemplateForm.name || ''}` : 'Create WhatsApp Template (Meta Cloud API)'}
                 </h3>
                 <div style={{ fontSize: '0.78rem', color: 'var(--muted)', marginTop: '0.2rem' }}>
-                  Build, test, and register official WhatsApp templates with media headers, dynamic variables, CTA buttons, and live device preview.
+                  {editingTemplateId ? 'Modify template content, CTA buttons, and re-sync with Meta WhatsApp Business Account.' : 'Build, test, and register official WhatsApp templates with media headers, dynamic variables, CTA buttons, and live device preview.'}
                 </div>
               </div>
               <button onClick={() => setShowCreateTemplateModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}>
@@ -4009,19 +4145,20 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                         headers,
                         body: JSON.stringify({
                           ...newTemplateForm,
+                          id: editingTemplateId || undefined,
                           meta_phone_number_id: templateTargetPhoneId
                         })
                       });
                       const data = await res.json();
                       if (res.ok && data.success) {
-                        showToast(`Template "${newTemplateForm.name}" created and synced with Meta!`, 'success');
+                        showToast(editingTemplateId ? `Template "${newTemplateForm.name}" updated and re-synced with Meta!` : `Template "${newTemplateForm.name}" created and synced with Meta!`, 'success');
                         setShowCreateTemplateModal(false);
                         fetchTemplates();
                       } else {
                         showToast(data.error || 'Failed to register template with Meta.', 'error');
                       }
                     } catch (err) {
-                      showToast('Network error creating template.', 'error');
+                      showToast('Network error saving template.', 'error');
                     } finally {
                       setIsCreatingTemplate(false);
                     }
