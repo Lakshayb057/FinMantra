@@ -951,7 +951,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
       {/* SUBTAB 1: COMMUNICATION DASHBOARD */}
       {/* ========================================================================= */}
       {activeSubTab === 'communication_dashboard' && (
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflowY: 'auto', paddingRight: '0.25rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
           {/* Dashboard Filter Bar */}
           <div className="campaigns-filter-grid">
             <div>
@@ -1219,7 +1219,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
           </div>
 
           {/* Recent Broadcasts Overview Table */}
-          <div className="glass-panel" style={{ padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+          <div className="glass-panel" style={{ padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)', display: 'flex', flexDirection: 'column', width: '100%', boxSizing: 'border-box', marginBottom: '2.5rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
                 <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
@@ -1372,8 +1372,8 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
       {/* SUBTAB 2: MASTER DATA CENTER */}
       {/* ========================================================================= */}
       {activeSubTab === 'master_data' && (
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-          <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)', padding: '1.25rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', width: '100%', marginBottom: '2.5rem' }}>
+          <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', width: '100%', borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)', padding: '1.25rem' }}>
             {/* Top Filter Controls & Export */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', gap: '0.75rem', flexWrap: 'wrap', flexShrink: 0 }}>
               {/* Search Box */}
@@ -1418,12 +1418,12 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                       fontWeight: 600
                     }}
                   >
-                    <Trash2 size={14} /> Delete Selected ({selectedMasterDeleteIds.size})
+                    <Trash2 size={15} /> Delete Selected ({selectedMasterDeleteIds.size})
                   </button>
                 )}
 
                 <button
-                  onClick={handleExportMasterData}
+                  onClick={handleExportMasterCsv}
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
@@ -1438,39 +1438,45 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                     fontWeight: 600
                   }}
                 >
-                  <Download size={14} /> Export Filtered Data (CSV)
+                  <Download size={15} /> Export Master CSV
                 </button>
               </div>
             </div>
 
-            {/* Filter Bar based on broadcast date, broadcast name, meta whatsapp no, sender email */}
+            {/* Filter Bar */}
             <div className="campaigns-filter-grid">
               <div>
-                <label style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--muted)' }}>Broadcast Date From</label>
+                <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: 'var(--muted)', marginBottom: '0.25rem' }}>
+                  From Broadcast Date
+                </label>
                 <input
                   type="date"
                   value={masterFilterDateFrom}
-                  onChange={(e) => setMasterFilterDateFrom(e.target.value)}
-                  style={{ width: '100%', padding: '0.35rem 0.5rem', fontSize: '0.78rem', borderRadius: '4px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)', boxSizing: 'border-box' }}
+                  onChange={(e) => { setMasterFilterDateFrom(e.target.value); setMasterPage(1); }}
+                  style={{ width: '100%', padding: '0.4rem 0.6rem', fontSize: '0.82rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
                 />
               </div>
 
               <div>
-                <label style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--muted)' }}>Broadcast Date To</label>
+                <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: 'var(--muted)', marginBottom: '0.25rem' }}>
+                  To Broadcast Date
+                </label>
                 <input
                   type="date"
                   value={masterFilterDateTo}
-                  onChange={(e) => setMasterFilterDateTo(e.target.value)}
-                  style={{ width: '100%', padding: '0.35rem 0.5rem', fontSize: '0.78rem', borderRadius: '4px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)', boxSizing: 'border-box' }}
+                  onChange={(e) => { setMasterFilterDateTo(e.target.value); setMasterPage(1); }}
+                  style={{ width: '100%', padding: '0.4rem 0.6rem', fontSize: '0.82rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
                 />
               </div>
 
               <div>
-                <label style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--muted)' }}>Broadcast Name</label>
+                <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: 'var(--muted)', marginBottom: '0.25rem' }}>
+                  Broadcast Name
+                </label>
                 <select
                   value={masterFilterBroadcastName}
-                  onChange={(e) => setMasterFilterBroadcastName(e.target.value)}
-                  style={{ width: '100%', padding: '0.35rem 0.5rem', fontSize: '0.78rem', borderRadius: '4px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)', boxSizing: 'border-box' }}
+                  onChange={(e) => { setMasterFilterBroadcastName(e.target.value); setMasterPage(1); }}
+                  style={{ width: '100%', padding: '0.4rem 0.6rem', fontSize: '0.82rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
                 >
                   <option value="">All Broadcasts</option>
                   {masterFilterOptions.broadcastNames.map(name => (
@@ -1480,11 +1486,13 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
               </div>
 
               <div>
-                <label style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--muted)' }}>Meta WhatsApp No</label>
+                <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: 'var(--muted)', marginBottom: '0.25rem' }}>
+                  Meta WhatsApp Sender
+                </label>
                 <select
                   value={masterFilterMetaWaNo}
-                  onChange={(e) => setMasterFilterMetaWaNo(e.target.value)}
-                  style={{ width: '100%', padding: '0.35rem 0.5rem', fontSize: '0.78rem', borderRadius: '4px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)', boxSizing: 'border-box' }}
+                  onChange={(e) => { setMasterFilterMetaWaNo(e.target.value); setMasterPage(1); }}
+                  style={{ width: '100%', padding: '0.4rem 0.6rem', fontSize: '0.82rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
                 >
                   <option value="">All WhatsApp Numbers</option>
                   {masterFilterOptions.metaWhatsappNos.map(no => (
@@ -1494,11 +1502,13 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
               </div>
 
               <div>
-                <label style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--muted)' }}>Sender Email</label>
+                <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: 'var(--muted)', marginBottom: '0.25rem' }}>
+                  Sender Email
+                </label>
                 <select
                   value={masterFilterSenderEmail}
-                  onChange={(e) => setMasterFilterSenderEmail(e.target.value)}
-                  style={{ width: '100%', padding: '0.35rem 0.5rem', fontSize: '0.78rem', borderRadius: '4px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)', boxSizing: 'border-box' }}
+                  onChange={(e) => { setMasterFilterSenderEmail(e.target.value); setMasterPage(1); }}
+                  style={{ width: '100%', padding: '0.4rem 0.6rem', fontSize: '0.82rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
                 >
                   <option value="">All Sender Emails</option>
                   {masterFilterOptions.senderEmails.map(em => (
@@ -1507,182 +1517,200 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                 </select>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: '0.4rem' }}>
+              <div>
                 <button
-                  type="button"
                   onClick={() => {
-                    setMasterSearch('');
-                    setMasterFilterBroadcastName('');
                     setMasterFilterDateFrom('');
                     setMasterFilterDateTo('');
+                    setMasterFilterBroadcastName('');
                     setMasterFilterMetaWaNo('');
                     setMasterFilterSenderEmail('');
+                    setMasterPage(1);
                   }}
-                  style={{ padding: '0.35rem', fontSize: '0.78rem', width: '100%', height: '28px', borderRadius: '4px', border: '1px solid var(--line)', background: 'var(--paper)', cursor: 'pointer' }}
+                  style={{
+                    width: '100%',
+                    padding: '0.45rem',
+                    fontSize: '0.82rem',
+                    borderRadius: '6px',
+                    border: '1px solid var(--line)',
+                    background: 'var(--paper)',
+                    color: 'var(--muted)',
+                    cursor: 'pointer',
+                    fontWeight: 600
+                  }}
                 >
-                  Reset
-                </button>
-                <button
-                  type="button"
-                  onClick={fetchMasterLeads}
-                  style={{ padding: '0.35rem', fontSize: '0.78rem', width: '100%', height: '28px', borderRadius: '4px', border: 'none', background: 'var(--gold-deep)', color: '#fff', cursor: 'pointer', fontWeight: 600 }}
-                >
-                  Apply
+                  Reset Filters
                 </button>
               </div>
             </div>
 
-            {/* Master Contacts Grid Table */}
+            {/* Master Contacts Table */}
             <div className="campaigns-table-wrapper">
               {isLoadingMaster ? (
                 <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--muted)' }}>
                   <RefreshCw size={28} className="spin-slow" style={{ color: 'var(--gold-deep)', marginBottom: '0.75rem' }} />
-                  <div>Loading master data records...</div>
+                  <div>Loading master repository...</div>
                 </div>
               ) : masterContacts.length === 0 ? (
                 <div style={{ padding: '4rem 2rem', textAlign: 'center', color: 'var(--muted)' }}>
                   <Database size={36} style={{ color: 'var(--line)', marginBottom: '0.75rem' }} />
-                  <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>No contacts found in Master Data Center.</div>
-                  <div style={{ fontSize: '0.8rem', marginTop: '0.25rem' }}>Contacts are automatically merged and deduplicated whenever a Broadcast Campaign is launched.</div>
+                  <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>No master records found.</div>
+                  <div style={{ fontSize: '0.8rem', marginTop: '0.25rem' }}>Contacts will appear here automatically when uploaded via broadcasts.</div>
                 </div>
               ) : (
                 <table className="campaigns-table">
                   <thead style={{ position: 'sticky', top: 0, background: 'var(--paper-2)', zIndex: 10 }}>
                     <tr style={{ borderBottom: '1px solid var(--line)' }}>
-                      <th style={{ padding: '0.65rem 0.75rem', width: '36px', textAlign: 'center' }}>
+                      <th style={{ width: '40px', padding: '0.65rem 0.5rem', textAlign: 'center' }}>
                         <input
                           type="checkbox"
                           checked={masterContacts.length > 0 && masterContacts.every(c => selectedMasterDeleteIds.has(c.id))}
                           onChange={(e) => {
-                            const newSet = new Set(selectedMasterDeleteIds);
                             if (e.target.checked) {
-                              masterContacts.forEach(c => newSet.add(c.id));
+                              setSelectedMasterDeleteIds(new Set(masterContacts.map(c => c.id)));
                             } else {
-                              masterContacts.forEach(c => newSet.delete(c.id));
+                              setSelectedMasterDeleteIds(new Set());
                             }
-                            setSelectedMasterDeleteIds(newSet);
                           }}
-                          style={{ cursor: 'pointer' }}
                         />
                       </th>
                       <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700 }}>FinMantra ID</th>
                       <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700 }}>Campaign ID</th>
                       <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700 }}>Name</th>
-                      <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700 }}>Contact (Phone)</th>
-                      <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700 }}>Email</th>
+                      <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700 }}>Contact / Phone</th>
+                      <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700 }}>Email Address</th>
+                      <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700 }}>Address</th>
                       <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700 }}>WA Opt-in</th>
                       <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700 }}>Email Opt-in</th>
                       <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700 }}>WA Rates (Del/CTR)</th>
                       <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700 }}>Email Rates (Del/CTR)</th>
                       <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700 }}>Last Broadcast</th>
-                      <th style={{ padding: '0.65rem 0.75rem', textAlign: 'right' }}>Action</th>
+                      <th style={{ padding: '0.65rem 0.75rem', fontWeight: 700, textAlign: 'right' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {masterContacts.map(c => {
-                      const isChecked = selectedMasterDeleteIds.has(c.id);
-                      const waDel = c.wa_sent_count > 0 ? ((c.wa_delivered_count / c.wa_sent_count) * 100).toFixed(0) : '—';
+                      const waDel = c.wa_sent_count > 0 ? ((c.wa_delivered_count / c.wa_sent_count) * 100).toFixed(0) : '0';
                       const waCtr = c.wa_delivered_count > 0 ? ((c.wa_clicked_count / c.wa_delivered_count) * 100).toFixed(0) : '0';
-                      const emDel = c.email_sent_count > 0 ? ((c.email_delivered_count / c.email_sent_count) * 100).toFixed(0) : '—';
+                      const emDel = c.email_sent_count > 0 ? ((c.email_delivered_count / c.email_sent_count) * 100).toFixed(0) : '0';
                       const emCtr = c.email_delivered_count > 0 ? ((c.email_clicked_count / c.email_delivered_count) * 100).toFixed(0) : '0';
 
                       return (
-                        <tr
-                          key={c.id}
-                          style={{ borderBottom: '1px solid var(--line)', background: isChecked ? 'rgba(224, 168, 46, 0.05)' : 'transparent' }}
-                          className="table-row-hover"
-                        >
-                          <td style={{ padding: '0.65rem 0.75rem', textAlign: 'center' }}>
+                        <tr key={c.id} style={{ borderBottom: '1px solid var(--line)' }} className="table-row-hover">
+                          <td style={{ textAlign: 'center', padding: '0.65rem 0.5rem' }}>
                             <input
                               type="checkbox"
-                              checked={isChecked}
+                              checked={selectedMasterDeleteIds.has(c.id)}
                               onChange={(e) => {
                                 const newSet = new Set(selectedMasterDeleteIds);
                                 if (e.target.checked) newSet.add(c.id);
                                 else newSet.delete(c.id);
                                 setSelectedMasterDeleteIds(newSet);
                               }}
-                              style={{ cursor: 'pointer' }}
                             />
                           </td>
-                          <td style={{ padding: '0.65rem 0.75rem', fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--gold-deep)' }}>
-                            {c.finmantra_id || 'FM00001'}
+                          <td style={{ padding: '0.65rem 0.75rem', fontWeight: 700, fontFamily: 'var(--font-mono)', fontSize: '0.82rem', color: 'var(--gold-deep)' }}>
+                            {c.finmantra_id || c.id}
                           </td>
-                          <td style={{ padding: '0.65rem 0.75rem', fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--muted)' }}>
-                            {c.campaign_data_id || 'FMCB00001'}
+                          <td style={{ padding: '0.65rem 0.75rem', fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: 'var(--muted)' }}>
+                            {c.campaign_data_id || '—'}
                           </td>
-                          <td style={{ padding: '0.65rem 0.75rem', fontWeight: 600 }}>{c.name}</td>
-                          <td style={{ padding: '0.65rem 0.75rem', fontFamily: 'var(--font-mono)' }}>{c.contact}</td>
-                          <td style={{ padding: '0.65rem 0.75rem' }}>{c.mail || '—'}</td>
+                          <td style={{ padding: '0.65rem 0.75rem', fontWeight: 600 }}>{c.name || '—'}</td>
+                          <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.82rem' }}>{c.contact || '—'}</td>
+                          <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.82rem', color: 'var(--muted)' }}>{c.mail || '—'}</td>
+                          <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.78rem', color: 'var(--muted)', maxWidth: '140px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {c.address || '—'}
+                          </td>
                           <td style={{ padding: '0.65rem 0.75rem' }}>
                             <button
                               type="button"
-                              onClick={() => handleToggleMasterLeadOptin(c.id, 'whatsapp', c.whatsapp_optin !== false)}
+                              onClick={async () => {
+                                try {
+                                  const res = await fetch(`${API_URL}/campaigns/master-leads/${c.id}/toggle-optin`, {
+                                    method: 'POST',
+                                    headers,
+                                    body: JSON.stringify({ channel: 'whatsapp', optin: c.whatsapp_optin === false ? true : false })
+                                  });
+                                  if (res.ok) {
+                                    setMasterContacts(prev => prev.map(m => m.id === c.id ? { ...m, whatsapp_optin: c.whatsapp_optin === false ? true : false } : m));
+                                    showToast(`WhatsApp opt-in updated for ${c.name || c.contact}`, 'success');
+                                  }
+                                } catch (e) {
+                                  showToast('Failed to toggle opt-in', 'error');
+                                }
+                              }}
                               style={{
                                 border: 'none',
-                                cursor: 'pointer',
-                                padding: '0.2rem 0.55rem',
-                                borderRadius: '6px',
                                 background: c.whatsapp_optin !== false ? 'rgba(22, 163, 123, 0.12)' : 'rgba(239, 68, 68, 0.12)',
                                 color: c.whatsapp_optin !== false ? '#16a37b' : '#ef4444',
-                                fontSize: '0.74rem',
+                                padding: '0.2rem 0.55rem',
+                                borderRadius: '999px',
+                                fontSize: '0.72rem',
                                 fontWeight: 700,
+                                cursor: 'pointer',
                                 display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: '0.25rem'
                               }}
-                              title="Click to toggle WhatsApp Opt-in status"
+                              title="Click to toggle WhatsApp Opt-in"
                             >
-                              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: c.whatsapp_optin !== false ? '#16a37b' : '#ef4444' }} />
-                              {c.whatsapp_optin !== false ? 'Opted-in' : 'Opted-out'}
+                              {c.whatsapp_optin !== false ? '✓ Opted In' : '✕ Opted Out'}
                             </button>
                           </td>
                           <td style={{ padding: '0.65rem 0.75rem' }}>
                             <button
                               type="button"
-                              onClick={() => handleToggleMasterLeadOptin(c.id, 'email', c.email_optin !== false)}
+                              onClick={async () => {
+                                try {
+                                  const res = await fetch(`${API_URL}/campaigns/master-leads/${c.id}/toggle-optin`, {
+                                    method: 'POST',
+                                    headers,
+                                    body: JSON.stringify({ channel: 'email', optin: c.email_optin === false ? true : false })
+                                  });
+                                  if (res.ok) {
+                                    setMasterContacts(prev => prev.map(m => m.id === c.id ? { ...m, email_optin: c.email_optin === false ? true : false } : m));
+                                    showToast(`Email opt-in updated for ${c.name || c.mail}`, 'success');
+                                  }
+                                } catch (e) {
+                                  showToast('Failed to toggle opt-in', 'error');
+                                }
+                              }}
                               style={{
                                 border: 'none',
-                                cursor: 'pointer',
-                                padding: '0.2rem 0.55rem',
-                                borderRadius: '6px',
                                 background: c.email_optin !== false ? 'rgba(22, 163, 123, 0.12)' : 'rgba(239, 68, 68, 0.12)',
                                 color: c.email_optin !== false ? '#16a37b' : '#ef4444',
-                                fontSize: '0.74rem',
+                                padding: '0.2rem 0.55rem',
+                                borderRadius: '999px',
+                                fontSize: '0.72rem',
                                 fontWeight: 700,
+                                cursor: 'pointer',
                                 display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: '0.25rem'
                               }}
-                              title="Click to toggle Email Opt-in status"
+                              title="Click to toggle Email Opt-in"
                             >
-                              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: c.email_optin !== false ? '#16a37b' : '#ef4444' }} />
-                              {c.email_optin !== false ? 'Opted-in' : 'Opted-out'}
+                              {c.email_optin !== false ? '✓ Opted In' : '✕ Opted Out'}
                             </button>
                           </td>
-                          <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.78rem' }}>
-                            <span style={{ color: '#25D366', fontWeight: 700 }}>Del: {waDel}{waDel !== '—' ? '%' : ''}</span> • <span style={{ color: 'var(--gold-deep)', fontWeight: 700 }}>CTR: {waCtr}%</span>
+                          <td style={{ padding: '0.65rem 0.75rem' }}>
+                            <span style={{ fontSize: '0.74rem', padding: '0.18rem 0.45rem', borderRadius: '4px', background: 'var(--paper-2)', border: '1px solid var(--line)', fontWeight: 700, color: Number(waCtr) > 0 ? '#d97706' : 'var(--muted)' }}>
+                              Del: {waDel}% | CTR: {waCtr}%
+                            </span>
                           </td>
-                          <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.78rem' }}>
-                            <span style={{ color: '#3b82f6', fontWeight: 700 }}>Del: {emDel}{emDel !== '—' ? '%' : ''}</span> • <span style={{ color: 'var(--gold-deep)', fontWeight: 700 }}>CTR: {emCtr}%</span>
+                          <td style={{ padding: '0.65rem 0.75rem' }}>
+                            <span style={{ fontSize: '0.74rem', padding: '0.18rem 0.45rem', borderRadius: '4px', background: 'var(--paper-2)', border: '1px solid var(--line)', fontWeight: 700, color: Number(emCtr) > 0 ? '#d97706' : 'var(--muted)' }}>
+                              Del: {emDel}% | CTR: {emCtr}%
+                            </span>
                           </td>
                           <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.78rem', color: 'var(--muted)' }}>
-                            {c.last_broadcast_name || '—'}
+                            {c.broadcast_name || '—'}
                           </td>
                           <td style={{ padding: '0.65rem 0.75rem', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                            <a
-                              href={`/unsubscribe?id=${encodeURIComponent(c.finmantra_id || c.id)}&channel=whatsapp`}
-                              target="_blank"
-                              rel="noreferrer"
-                              style={{ color: 'var(--gold-deep)', textDecoration: 'none', marginRight: '0.6rem', fontSize: '0.75rem', fontWeight: 600 }}
-                              title="Open 1-Click Unsubscribe Page"
-                            >
-                              Unsub Link
-                            </a>
                             <button
-                              onClick={() => handleDeleteMasterLead(c.id)}
+                              onClick={() => handleDeleteMasterSingle(c.id, c.name || c.contact)}
                               style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.2rem' }}
-                              title="Delete Lead"
+                              title="Delete Contact"
                             >
                               <Trash2 size={15} />
                             </button>
@@ -1696,7 +1724,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
             </div>
 
             {/* Pagination Controls */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.85rem', flexShrink: 0, fontSize: '0.82rem', color: 'var(--muted)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', flexShrink: 0, fontSize: '0.82rem', color: 'var(--muted)' }}>
               <div>
                 Showing {masterContacts.length} of {masterTotal} master contacts
               </div>
@@ -1704,15 +1732,15 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                 <button
                   disabled={masterPage <= 1}
                   onClick={() => setMasterPage(p => Math.max(1, p - 1))}
-                  style={{ padding: '0.3rem 0.75rem', borderRadius: '4px', border: '1px solid var(--line)', background: 'var(--paper)', cursor: masterPage <= 1 ? 'not-allowed' : 'pointer' }}
+                  style={{ padding: '0.35rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper)', cursor: masterPage <= 1 ? 'not-allowed' : 'pointer' }}
                 >
                   Previous
                 </button>
-                <span style={{ padding: '0.3rem 0.6rem', fontWeight: 700, color: 'var(--ink)' }}>Page {masterPage}</span>
+                <span style={{ padding: '0.35rem 0.6rem', fontWeight: 700 }}>Page {masterPage}</span>
                 <button
                   disabled={masterContacts.length < masterLimit}
                   onClick={() => setMasterPage(p => p + 1)}
-                  style={{ padding: '0.3rem 0.75rem', borderRadius: '4px', border: '1px solid var(--line)', background: 'var(--paper)', cursor: masterContacts.length < masterLimit ? 'not-allowed' : 'pointer' }}
+                  style={{ padding: '0.35rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper)', cursor: masterContacts.length < masterLimit ? 'not-allowed' : 'pointer' }}
                 >
                   Next
                 </button>
@@ -1726,8 +1754,8 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
       {/* SUBTAB 3: BROADCAST CAMPAIGNS */}
       {/* ========================================================================= */}
       {activeSubTab === 'broadcast' && (
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-          <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)', padding: '1.25rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', width: '100%', marginBottom: '2.5rem' }}>
+          <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', width: '100%', borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)', padding: '1.25rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem', flexShrink: 0 }}>
               <div>
                 <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700 }}>All Broadcast Campaigns</h3>
@@ -1780,90 +1808,94 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                       <th style={{ padding: '0.7rem 0.85rem', fontWeight: 700 }}>Targeted</th>
                       <th style={{ padding: '0.7rem 0.85rem', fontWeight: 700 }}>Delivered</th>
                       <th style={{ padding: '0.7rem 0.85rem', fontWeight: 700 }}>CTR</th>
-                      <th style={{ padding: '0.7rem 0.85rem', fontWeight: 700 }}>Schedule Time</th>
-                      <th style={{ padding: '0.7rem 0.85rem', textAlign: 'right', fontWeight: 700 }}>Actions</th>
+                      <th style={{ padding: '0.7rem 0.85rem', fontWeight: 700 }}>Scheduled / Sent Date</th>
+                      <th style={{ padding: '0.7rem 0.85rem', fontWeight: 700, textAlign: 'right' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {broadcasts.map(b => {
-                      const ctr = b.delivered_count > 0 ? ((b.clicked_count / b.delivered_count) * 100).toFixed(1) : '0.0';
+                      const displayDelivered = b.channel === 'both' 
+                        ? (b.targeted_count && b.targeted_count <= b.delivered_count ? b.targeted_count : Math.ceil((b.delivered_count || 0) / 2))
+                        : (b.delivered_count || b.sent_count || 0);
+                      const effDelivered = displayDelivered > 0 ? displayDelivered : (b.delivered_count || 1);
+                      const ctr = effDelivered > 0 ? ((Math.min(b.clicked_count || 0, effDelivered) / effDelivered) * 100).toFixed(1) : '0.0';
+
                       return (
                         <tr key={b.id} style={{ borderBottom: '1px solid var(--line)' }} className="table-row-hover">
                           <td style={{ padding: '0.75rem 0.85rem', fontWeight: 700 }}>{b.name}</td>
-                          <td style={{ padding: '0.75rem 0.85rem', textTransform: 'capitalize' }}>{b.channel}</td>
-                          <td style={{ padding: '0.75rem 0.85rem', fontSize: '0.78rem', color: 'var(--muted)' }}>
-                            {b.meta_phone_number || b.sender_email || 'Default Sender'}
+                          <td style={{ padding: '0.75rem 0.85rem', textTransform: 'capitalize' }}>
+                            <span style={{
+                              padding: '0.2rem 0.55rem',
+                              borderRadius: '6px',
+                              fontSize: '0.74rem',
+                              fontWeight: 700,
+                              background: b.channel === 'whatsapp' ? 'rgba(37, 211, 102, 0.12)' : b.channel === 'email' ? 'rgba(139, 92, 246, 0.12)' : 'rgba(224, 168, 46, 0.12)',
+                              color: b.channel === 'whatsapp' ? '#25D366' : b.channel === 'email' ? '#8b5cf6' : 'var(--gold-deep)',
+                              border: `1px solid ${b.channel === 'whatsapp' ? 'rgba(37, 211, 102, 0.25)' : b.channel === 'email' ? 'rgba(139, 92, 246, 0.25)' : 'rgba(224, 168, 46, 0.25)'}`
+                            }}>
+                              {b.channel}
+                            </span>
+                          </td>
+                          <td style={{ padding: '0.75rem 0.85rem', fontSize: '0.82rem', color: 'var(--muted)' }}>
+                            {b.meta_phone_number || b.sender_email || 'Default'}
                           </td>
                           <td style={{ padding: '0.75rem 0.85rem' }}>
                             <span 
                               onClick={() => handleOpenBroadcastLogs(b)}
                               style={{
-                                padding: '0.2rem 0.55rem',
+                                padding: '0.25rem 0.65rem',
                                 borderRadius: '999px',
-                                fontSize: '0.72rem',
-                                fontWeight: 700,
+                                fontSize: '0.74rem',
+                                fontWeight: 800,
                                 background: b.status === 'sent' ? 'rgba(22, 163, 123, 0.12)' : b.status === 'processing' ? 'rgba(59, 130, 246, 0.12)' : b.status === 'failed' ? 'rgba(239, 68, 68, 0.12)' : 'rgba(224, 168, 46, 0.12)',
                                 color: b.status === 'sent' ? '#16a37b' : b.status === 'processing' ? '#3b82f6' : b.status === 'failed' ? '#ef4444' : 'var(--gold-deep)',
-                                cursor: 'pointer'
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.35rem'
                               }}
                               title="Click to view detailed delivery logs"
                             >
+                              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: b.status === 'sent' ? '#16a37b' : b.status === 'processing' ? '#3b82f6' : b.status === 'failed' ? '#ef4444' : 'var(--gold-deep)' }} />
                               {b.status}
                             </span>
                           </td>
                           <td style={{ padding: '0.75rem 0.85rem', fontWeight: 600 }}>{b.targeted_count || 0}</td>
-                          <td style={{ padding: '0.75rem 0.85rem', color: '#16a37b', fontWeight: 700 }}>{b.delivered_count || b.sent_count || 0}</td>
+                          <td style={{ padding: '0.75rem 0.85rem', color: '#16a37b', fontWeight: 700 }}>
+                            {displayDelivered}
+                          </td>
                           <td style={{ padding: '0.75rem 0.85rem' }}>
                             <span style={{
-                              padding: '0.18rem 0.48rem',
+                              padding: '0.2rem 0.55rem',
                               borderRadius: '6px',
-                              fontSize: '0.74rem',
+                              fontSize: '0.75rem',
                               fontWeight: 800,
                               background: Number(ctr) > 0 ? 'rgba(245, 158, 11, 0.15)' : 'var(--paper-2)',
                               color: Number(ctr) > 0 ? '#d97706' : 'var(--muted)',
-                              border: '1px solid var(--line)'
+                              border: `1px solid ${Number(ctr) > 0 ? 'rgba(245, 158, 11, 0.3)' : 'var(--line)'}`
                             }}>
                               {ctr}% ({b.clicked_count || 0})
                             </span>
                           </td>
-                          <td style={{ padding: '0.75rem 0.85rem', fontSize: '0.78rem', color: 'var(--muted)' }}>
-                            {b.scheduled_at ? new Date(b.scheduled_at).toLocaleString() : 'Direct / Immediate'}
+                          <td style={{ padding: '0.75rem 0.85rem', color: 'var(--muted)', fontSize: '0.8rem' }}>
+                            {b.scheduled_at ? `Scheduled: ${new Date(b.scheduled_at).toLocaleString()}` : b.created_at ? new Date(b.created_at).toLocaleString() : '—'}
                           </td>
                           <td style={{ padding: '0.75rem 0.85rem', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                            {b.status !== 'sent' && b.status !== 'processing' && (
-                              <button
-                                onClick={() => handleTriggerBroadcastNow(b.id)}
-                                style={{
-                                  padding: '0.3rem 0.65rem',
-                                  borderRadius: '4px',
-                                  background: 'var(--gold-deep)',
-                                  color: '#fff',
-                                  border: 'none',
-                                  fontSize: '0.75rem',
-                                  fontWeight: 700,
-                                  cursor: 'pointer',
-                                  marginRight: '0.4rem'
-                                }}
-                                title="Send broadcast now"
-                              >
-                                <Send size={12} style={{ marginRight: '0.25rem', verticalAlign: 'middle' }} /> Send Now
-                              </button>
-                            )}
                             <button
                               onClick={() => handleOpenBroadcastLogs(b)}
                               style={{
-                                padding: '0.3rem 0.55rem',
-                                borderRadius: '4px',
+                                padding: '0.35rem 0.65rem',
+                                borderRadius: '6px',
                                 background: 'rgba(59, 130, 246, 0.1)',
                                 color: '#3b82f6',
-                                border: '1px solid rgba(59, 130, 246, 0.2)',
+                                border: '1px solid rgba(59, 130, 246, 0.25)',
                                 fontSize: '0.75rem',
                                 fontWeight: 600,
                                 cursor: 'pointer',
+                                marginRight: '0.4rem',
                                 display: 'inline-flex',
                                 alignItems: 'center',
-                                gap: '0.25rem',
-                                marginRight: '0.4rem'
+                                gap: '0.25rem'
                               }}
                               title="View Delivery Logs"
                             >
@@ -1872,18 +1904,18 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                             <button
                               onClick={() => handleEditBroadcast(b)}
                               style={{
-                                padding: '0.3rem 0.55rem',
-                                borderRadius: '4px',
-                                background: 'var(--paper-2)',
-                                color: 'var(--ink)',
-                                border: '1px solid var(--line)',
+                                padding: '0.35rem 0.65rem',
+                                borderRadius: '6px',
+                                background: 'rgba(224, 168, 46, 0.1)',
+                                color: 'var(--gold-deep)',
+                                border: '1px solid rgba(224, 168, 46, 0.25)',
                                 fontSize: '0.75rem',
                                 fontWeight: 600,
                                 cursor: 'pointer',
+                                marginRight: '0.4rem',
                                 display: 'inline-flex',
                                 alignItems: 'center',
-                                gap: '0.25rem',
-                                marginRight: '0.4rem'
+                                gap: '0.25rem'
                               }}
                               title="Edit Broadcast"
                             >
@@ -1892,11 +1924,11 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                             <button
                               onClick={() => handleDeleteBroadcast(b.id, b.name)}
                               style={{
-                                padding: '0.3rem 0.55rem',
-                                borderRadius: '4px',
+                                padding: '0.35rem 0.65rem',
+                                borderRadius: '6px',
                                 background: 'rgba(239, 68, 68, 0.1)',
                                 color: '#ef4444',
-                                border: '1px solid rgba(239, 68, 68, 0.2)',
+                                border: '1px solid rgba(239, 68, 68, 0.25)',
                                 fontSize: '0.75rem',
                                 fontWeight: 600,
                                 cursor: 'pointer',
@@ -1924,8 +1956,8 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
       {/* SUBTAB 4: TEMPLATES MANAGER */}
       {/* ========================================================================= */}
       {activeSubTab === 'templates' && (
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-          <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)', padding: '1.25rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', width: '100%', marginBottom: '2.5rem' }}>
+          <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', width: '100%', borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)', padding: '1.25rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem', flexShrink: 0 }}>
               <div>
                 <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700 }}>Meta WhatsApp &amp; Email Template Manager</h3>
@@ -1948,7 +1980,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                         showToast(data.error || 'Failed to sync templates from Meta.', 'error');
                       }
                     } catch (err) {
-                      showToast('Network error syncing templates from Meta.', 'error');
+                      showToast('Error syncing templates from Meta Cloud API', 'error');
                     } finally {
                       setIsSyncingMetaTemplates(false);
                     }
@@ -1958,33 +1990,34 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '0.4rem',
-                    padding: '0.5rem 1.1rem',
+                    padding: '0.5rem 0.9rem',
                     borderRadius: '6px',
                     background: 'var(--paper-2)',
                     color: 'var(--ink)',
                     border: '1px solid var(--line)',
-                    fontWeight: 700,
-                    fontSize: '0.86rem',
+                    fontWeight: 600,
+                    fontSize: '0.84rem',
                     cursor: isSyncingMetaTemplates ? 'not-allowed' : 'pointer'
                   }}
                 >
                   <RefreshCw size={14} className={isSyncingMetaTemplates ? 'spin-slow' : ''} />
-                  {isSyncingMetaTemplates ? 'Syncing with Meta...' : 'Sync Meta Templates'}
+                  {isSyncingMetaTemplates ? 'Syncing...' : 'Sync Meta Templates'}
                 </button>
                 <button
                   onClick={() => {
+                    setEditingTemplateId(null);
                     setNewTemplateForm({
                       name: '',
                       type: 'whatsapp',
                       subject: '',
                       body: '',
                       metaTemplateName: '',
-                      mediaUrl: '',
                       category: 'MARKETING',
                       language: 'en_US',
                       headerFormat: 'NONE',
                       headerText: '',
                       headerSample: '',
+                      mediaUrl: '',
                       footerText: '',
                       bodySampleValues: {},
                       buttons: {
@@ -1992,6 +2025,9 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                         ctaUrlText: '',
                         ctaUrlValue: '',
                         ctaUrlSample: '',
+                        ctaUrl2Text: '',
+                        ctaUrl2Value: '',
+                        ctaUrl2Sample: '',
                         ctaPhoneText: '',
                         ctaPhoneValue: '',
                         quickReplies: ['Interested', 'Apply Now', 'Talk to Agent'],
@@ -2020,62 +2056,93 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
               </div>
             </div>
 
-            {/* Templates Grid */}
-            <div style={{ flex: 1, overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem', minHeight: 0 }}>
-              {templates.map(t => (
-                <div key={t.id} style={{ border: '1px solid var(--line)', borderRadius: '10px', background: 'var(--paper-2)', padding: '1.1rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.35rem' }}>
-                      <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>{t.name}</span>
-                      <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'center' }}>
-                        {t.status && (
-                          <span style={{
-                            padding: '0.12rem 0.45rem',
-                            borderRadius: '999px',
-                            fontSize: '0.7rem',
-                            fontWeight: 700,
-                            background: t.status === 'APPROVED' ? 'rgba(22, 163, 123, 0.15)' : t.status === 'PENDING' ? 'rgba(224, 168, 46, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                            color: t.status === 'APPROVED' ? '#16a37b' : t.status === 'PENDING' ? 'var(--gold-deep)' : '#ef4444'
-                          }}>
-                            {t.status}
-                          </span>
-                        )}
-                        <span style={{ padding: '0.12rem 0.45rem', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 700, background: t.type === 'whatsapp' ? 'rgba(37, 211, 102, 0.15)' : 'rgba(59, 130, 246, 0.15)', color: t.type === 'whatsapp' ? '#25D366' : '#3b82f6' }}>
-                          {t.type}
-                        </span>
-                      </div>
-                    </div>
-                    {t.meta_template_name && (
-                      <div style={{ fontSize: '0.75rem', color: 'var(--muted)', fontFamily: 'var(--font-mono)', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between' }}>
-                        <span>Meta: {t.meta_template_name}</span>
-                        {t.language && <span>Lang: {t.language}</span>}
-                      </div>
-                    )}
-                    <div style={{ fontSize: '0.82rem', background: 'var(--paper)', padding: '0.65rem', borderRadius: '6px', border: '1px solid var(--line)', maxHeight: '110px', overflowY: 'auto', whiteSpace: 'pre-wrap', color: 'var(--ink)' }}>
-                      {t.body}
-                    </div>
-                  </div>
-                  <div style={{ marginTop: '0.85rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>
-                      {t.created_at ? new Date(t.created_at).toLocaleDateString() : ''}
-                    </span>
-                    <button
-                      onClick={async () => {
-                        if (!window.confirm(`Delete template "${t.name}"?`)) return;
-                        const res = await fetch(`${API_URL}/campaigns/templates/${t.id}`, { method: 'DELETE', headers });
-                        const data = await res.json();
-                        if (data.success) {
-                          showToast('Template deleted.', 'info');
-                          fetchTemplates();
-                        }
-                      }}
-                      style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.2rem' }}
-                    >
-                      <Trash2 size={15} />
-                    </button>
-                  </div>
+            {/* Templates List */}
+            <div className="campaigns-table-wrapper">
+              {templates.length === 0 ? (
+                <div style={{ padding: '4rem 2rem', textAlign: 'center', color: 'var(--muted)' }}>
+                  <FileText size={36} style={{ color: 'var(--line)', marginBottom: '0.75rem' }} />
+                  <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>No templates registered.</div>
+                  <div style={{ fontSize: '0.8rem', marginTop: '0.25rem' }}>Click "+ Create Template" to register an approved Meta Cloud API template.</div>
                 </div>
-              ))}
+              ) : (
+                <table className="campaigns-table">
+                  <thead style={{ position: 'sticky', top: 0, background: 'var(--paper-2)', zIndex: 10 }}>
+                    <tr style={{ borderBottom: '1px solid var(--line)' }}>
+                      <th style={{ padding: '0.7rem 0.85rem', fontWeight: 700 }}>Template Name</th>
+                      <th style={{ padding: '0.7rem 0.85rem', fontWeight: 700 }}>Type</th>
+                      <th style={{ padding: '0.7rem 0.85rem', fontWeight: 700 }}>Meta Identifier</th>
+                      <th style={{ padding: '0.7rem 0.85rem', fontWeight: 700 }}>Language</th>
+                      <th style={{ padding: '0.7rem 0.85rem', fontWeight: 700 }}>Meta Status</th>
+                      <th style={{ padding: '0.7rem 0.85rem', fontWeight: 700 }}>Body Preview</th>
+                      <th style={{ padding: '0.7rem 0.85rem', fontWeight: 700, textAlign: 'right' }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {templates.map(t => {
+                      const status = metaStatuses[t.meta_template_name || t.name] || 'APPROVED';
+                      return (
+                        <tr key={t.id} style={{ borderBottom: '1px solid var(--line)' }} className="table-row-hover">
+                          <td style={{ padding: '0.75rem 0.85rem', fontWeight: 700 }}>{t.name}</td>
+                          <td style={{ padding: '0.75rem 0.85rem', textTransform: 'capitalize' }}>
+                            <span style={{
+                              padding: '0.2rem 0.55rem',
+                              borderRadius: '6px',
+                              fontSize: '0.74rem',
+                              fontWeight: 700,
+                              background: t.type === 'whatsapp' ? 'rgba(37, 211, 102, 0.12)' : 'rgba(139, 92, 246, 0.12)',
+                              color: t.type === 'whatsapp' ? '#25D366' : '#8b5cf6'
+                            }}>
+                              {t.type}
+                            </span>
+                          </td>
+                          <td style={{ padding: '0.75rem 0.85rem', fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: 'var(--muted)' }}>
+                            {t.meta_template_name || t.name}
+                          </td>
+                          <td style={{ padding: '0.75rem 0.85rem', fontSize: '0.8rem', color: 'var(--muted)' }}>
+                            {t.language || 'en_US'}
+                          </td>
+                          <td style={{ padding: '0.75rem 0.85rem' }}>
+                            <span style={{
+                              padding: '0.2rem 0.55rem',
+                              borderRadius: '999px',
+                              fontSize: '0.72rem',
+                              fontWeight: 700,
+                              background: status === 'APPROVED' ? 'rgba(22, 163, 123, 0.12)' : status === 'PENDING' ? 'rgba(224, 168, 46, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                              color: status === 'APPROVED' ? '#16a37b' : status === 'PENDING' ? 'var(--gold-deep)' : '#ef4444'
+                            }}>
+                              {status}
+                            </span>
+                          </td>
+                          <td style={{ padding: '0.75rem 0.85rem', fontSize: '0.8rem', color: 'var(--muted)', maxWidth: '300px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {t.body || '—'}
+                          </td>
+                          <td style={{ padding: '0.75rem 0.85rem', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                            <button
+                              onClick={() => handleDeleteTemplate(t.id, t.name)}
+                              style={{
+                                padding: '0.35rem 0.65rem',
+                                borderRadius: '6px',
+                                background: 'rgba(239, 68, 68, 0.1)',
+                                color: '#ef4444',
+                                border: '1px solid rgba(239, 68, 68, 0.25)',
+                                fontSize: '0.75rem',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.25rem'
+                              }}
+                              title="Delete Template"
+                            >
+                              <Trash2 size={13} /> Delete
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
         </div>
@@ -2085,252 +2152,144 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
       {/* SUBTAB 5: MULTI-SMTP GATEWAY SETTINGS */}
       {/* ========================================================================= */}
       {activeSubTab === 'settings' && (
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-          <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)', padding: '1.25rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', width: '100%', marginBottom: '2.5rem' }}>
+          <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', width: '100%', borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)', padding: '1.25rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem', flexShrink: 0 }}>
               <div>
                 <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <Mail size={20} style={{ color: 'var(--gold-deep)' }} />
                   Outbound SMTP Email Gateways &amp; Accounts
                 </h3>
-                <div style={{ color: 'var(--muted)', fontSize: '0.82rem', marginTop: '0.2rem' }}>
-                  Manage multiple SMTP host credentials with complete create, edit, test, delete, and default routing controls.
-                </div>
               </div>
-              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                <button
-                  onClick={fetchSmtpAccounts}
-                  disabled={isLoadingSmtpAccounts}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.4rem',
-                    padding: '0.5rem 0.9rem',
-                    borderRadius: '6px',
-                    background: 'var(--paper-2)',
-                    color: 'var(--ink)',
-                    border: '1px solid var(--line)',
-                    fontWeight: 600,
-                    fontSize: '0.84rem',
-                    cursor: isLoadingSmtpAccounts ? 'not-allowed' : 'pointer'
-                  }}
-                >
-                  <RefreshCw size={14} className={isLoadingSmtpAccounts ? 'spin-slow' : ''} />
-                  Refresh
-                </button>
-                <button
-                  onClick={handleOpenAddSmtpModal}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.4rem',
-                    padding: '0.5rem 1.1rem',
-                    borderRadius: '6px',
-                    background: 'var(--gold-deep)',
-                    color: '#fff',
-                    border: 'none',
-                    fontWeight: 700,
-                    fontSize: '0.86rem',
-                    cursor: 'pointer'
-                  }}
-                >
-                  <Plus size={15} /> + Add SMTP Account
-                </button>
-              </div>
+              <button
+                onClick={handleOpenAddSmtpModal}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  padding: '0.5rem 1.1rem',
+                  borderRadius: '6px',
+                  background: 'var(--gold-deep)',
+                  color: '#fff',
+                  border: 'none',
+                  fontWeight: 700,
+                  fontSize: '0.86rem',
+                  cursor: 'pointer'
+                }}
+              >
+                <Plus size={15} /> + Add SMTP Account
+              </button>
             </div>
 
             {/* SMTP Accounts Grid */}
-            <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+            <div>
               {isLoadingSmtpAccounts ? (
                 <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--muted)' }}>
                   <RefreshCw size={24} className="spin-slow" style={{ color: 'var(--gold-deep)', marginBottom: '0.5rem' }} />
                   <div>Loading configured SMTP accounts...</div>
                 </div>
               ) : smtpAccounts.length === 0 ? (
-                <div style={{ padding: '3.5rem', textAlign: 'center', background: 'var(--paper-2)', borderRadius: '12px', border: '1px dashed var(--line)' }}>
-                  <Mail size={36} style={{ color: 'var(--muted)', marginBottom: '0.75rem', opacity: 0.7 }} />
-                  <h4 style={{ margin: '0 0 0.4rem 0', fontWeight: 700 }}>No Outbound SMTP Accounts Configured</h4>
-                  <p style={{ margin: '0 0 1.25rem 0', color: 'var(--muted)', fontSize: '0.85rem' }}>Add your first SMTP email gateway (e.g. Gmail, Titan, Outlook, AWS SES) to send broadcasts.</p>
-                  <button
-                    onClick={handleOpenAddSmtpModal}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '0.4rem',
-                      padding: '0.6rem 1.25rem',
-                      borderRadius: '8px',
-                      background: 'var(--gold-deep)',
-                      color: '#fff',
-                      border: 'none',
-                      fontWeight: 700,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <Plus size={16} /> + Add SMTP Account
-                  </button>
+                <div style={{ padding: '3rem', textAlign: 'center' }}>
+                  <Mail size={32} style={{ color: 'var(--muted)', marginBottom: '0.5rem' }} />
+                  <div>No SMTP accounts configured. Add one to send email broadcasts.</div>
                 </div>
               ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1rem' }}>
-                  {smtpAccounts.map(account => {
-                    const isTestingThis = testingSmtpAccountId === account.id;
-                    return (
-                      <div
-                        key={account.id}
-                        style={{
-                          border: account.is_default ? '2px solid var(--gold-deep)' : '1px solid var(--line)',
-                          borderRadius: '12px',
-                          background: 'var(--paper-2)',
-                          padding: '1.25rem',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          justifyContent: 'space-between',
-                          boxShadow: account.is_default ? '0 4px 15px rgba(224, 168, 46, 0.12)' : 'none'
-                        }}
-                      >
+                  {smtpAccounts.map(account => (
+                    <div key={account.id} style={{ border: '1px solid var(--line)', borderRadius: '10px', background: 'var(--paper-2)', padding: '1rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
                         <div>
-                          {/* Account Header */}
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
-                            <div>
-                              <div style={{ fontWeight: 800, fontSize: '1.02rem', color: 'var(--ink)' }}>{account.name}</div>
-                              <div style={{ fontSize: '0.75rem', color: 'var(--muted)', fontFamily: 'var(--font-mono)', marginTop: '0.15rem' }}>
-                                ID: {account.id}
-                              </div>
-                            </div>
-                            <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
-                              {account.is_default && (
-                                <span style={{
-                                  padding: '0.2rem 0.6rem',
-                                  borderRadius: '999px',
-                                  fontSize: '0.7rem',
-                                  fontWeight: 800,
-                                  background: 'rgba(224, 168, 46, 0.18)',
-                                  color: 'var(--gold-deep)',
-                                  border: '1px solid rgba(224, 168, 46, 0.4)'
-                                }}>
-                                  ★ DEFAULT
-                                </span>
-                              )}
-                              <span style={{
-                                padding: '0.2rem 0.5rem',
-                                borderRadius: '999px',
-                                fontSize: '0.7rem',
-                                fontWeight: 700,
-                                background: account.secure ? 'rgba(22, 163, 123, 0.12)' : 'rgba(59, 130, 246, 0.12)',
-                                color: account.secure ? '#16a37b' : '#3b82f6'
-                              }}>
-                                {account.secure ? 'SSL (465)' : 'TLS (587)'}
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* Account Details Box */}
-                          <div style={{ background: 'var(--paper)', borderRadius: '8px', border: '1px solid var(--line)', padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.4rem', fontSize: '0.82rem' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                              <span style={{ color: 'var(--muted)' }}>From Name:</span>
-                              <strong>{account.from_name || 'FinMantra'}</strong>
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                              <span style={{ color: 'var(--muted)' }}>From Email:</span>
-                              <strong style={{ color: 'var(--ink)' }}>{account.from_email}</strong>
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                              <span style={{ color: 'var(--muted)' }}>Host / Server:</span>
-                              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>{account.host}:{account.port}</span>
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                              <span style={{ color: 'var(--muted)' }}>Username:</span>
-                              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>{account.username}</span>
-                            </div>
+                          <div style={{ fontWeight: 800, fontSize: '0.95rem' }}>{account.name}</div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--muted)', fontFamily: 'var(--font-mono)', marginTop: '0.15rem' }}>
+                            ID: {account.id}
                           </div>
                         </div>
-
-                        {/* Action Buttons */}
-                        <div style={{ marginTop: '1rem', paddingTop: '0.85rem', borderTop: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-                          <div style={{ display: 'flex', gap: '0.4rem' }}>
-                            <button
-                              type="button"
-                              onClick={() => handleTestSpecificSmtp(account)}
-                              disabled={isTestingThis}
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '0.35rem',
-                                padding: '0.4rem 0.75rem',
-                                borderRadius: '6px',
-                                background: 'var(--paper)',
-                                color: 'var(--ink)',
-                                border: '1px solid var(--line)',
-                                fontSize: '0.78rem',
-                                fontWeight: 700,
-                                cursor: isTestingThis ? 'not-allowed' : 'pointer'
-                              }}
-                            >
-                              {isTestingThis ? <RefreshCw size={13} className="spin-slow" /> : <Zap size={13} style={{ color: 'var(--gold-deep)' }} />}
-                              {isTestingThis ? 'Testing...' : 'Test Connection'}
-                            </button>
-                            {!account.is_default && (
-                              <button
-                                type="button"
-                                onClick={() => handleSetDefaultSmtpAccount(account.id, account.name)}
-                                style={{
-                                  padding: '0.4rem 0.65rem',
-                                  borderRadius: '6px',
-                                  background: 'var(--paper)',
-                                  color: 'var(--muted)',
-                                  border: '1px solid var(--line)',
-                                  fontSize: '0.78rem',
-                                  fontWeight: 600,
-                                  cursor: 'pointer'
-                                }}
-                              >
-                                Set Default
-                              </button>
-                            )}
-                          </div>
-                          <div style={{ display: 'flex', gap: '0.35rem' }}>
-                            <button
-                              type="button"
-                              onClick={() => handleOpenEditSmtpModal(account)}
-                              style={{
-                                padding: '0.4rem 0.65rem',
-                                borderRadius: '6px',
-                                background: 'var(--paper)',
-                                color: 'var(--ink)',
-                                border: '1px solid var(--line)',
-                                fontSize: '0.78rem',
-                                fontWeight: 700,
-                                cursor: 'pointer',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '0.3rem'
-                              }}
-                            >
-                              <Edit2 size={13} /> Edit
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteSmtpAccount(account.id, account.name)}
-                              style={{
-                                padding: '0.4rem 0.65rem',
-                                borderRadius: '6px',
-                                background: 'rgba(239, 68, 68, 0.08)',
-                                color: '#ef4444',
-                                border: '1px solid rgba(239, 68, 68, 0.25)',
-                                fontSize: '0.78rem',
-                                fontWeight: 700,
-                                cursor: 'pointer',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '0.3rem'
-                              }}
-                            >
-                              <Trash2 size={13} /> Delete
-                            </button>
-                          </div>
+                        <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                          {account.is_default && (
+                            <span style={{ padding: '0.2rem 0.55rem', borderRadius: '999px', background: 'rgba(224, 168, 46, 0.15)', color: 'var(--gold-deep)', fontSize: '0.72rem', fontWeight: 800 }}>
+                              ★ DEFAULT SENDER
+                            </span>
+                          )}
                         </div>
                       </div>
-                    );
-                  })}
+
+                      {/* Details */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.84rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span style={{ color: 'var(--muted)' }}>Host / Server:</span>
+                          <span style={{ fontWeight: 600 }}>{account.host}:{account.port}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span style={{ color: 'var(--muted)' }}>From Name:</span>
+                          <span style={{ fontWeight: 600 }}>{account.from_name || account.fromName || 'FinMantra'}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span style={{ color: 'var(--muted)' }}>From Email:</span>
+                          <span style={{ fontWeight: 600, color: 'var(--gold-deep)' }}>{account.from_email || account.fromEmail}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span style={{ color: 'var(--muted)' }}>Username:</span>
+                          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>{account.username}</span>
+                        </div>
+                      </div>
+
+                      {/* Buttons */}
+                      <div style={{ marginTop: '1rem', paddingTop: '0.85rem', borderTop: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', gap: '0.4rem' }}>
+                          <button
+                            type="button"
+                            onClick={() => handleTestSpecificSmtp(account)}
+                            style={{
+                              padding: '0.4rem 0.65rem',
+                              borderRadius: '6px',
+                              background: 'var(--paper)',
+                              color: 'var(--ink)',
+                              border: '1px solid var(--line)',
+                              fontSize: '0.78rem',
+                              fontWeight: 700,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            Test Connection
+                          </button>
+                          {!account.is_default && (
+                            <button
+                              type="button"
+                              onClick={() => handleSetDefaultSmtp(account.id)}
+                              style={{
+                                padding: '0.4rem 0.65rem',
+                                borderRadius: '6px',
+                                background: 'rgba(224, 168, 46, 0.1)',
+                                color: 'var(--gold-deep)',
+                                border: '1px solid rgba(224, 168, 46, 0.25)',
+                                fontSize: '0.78rem',
+                                fontWeight: 700,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              Set as Default
+                            </button>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.35rem' }}>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditSmtp(account)}
+                            style={{ padding: '0.4rem', border: 'none', background: 'none', color: '#3b82f6', cursor: 'pointer' }}
+                          >
+                            <Edit2 size={16} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteSmtp(account.id, account.name)}
+                            style={{ padding: '0.4rem', border: 'none', background: 'none', color: '#ef4444', cursor: 'pointer' }}
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
@@ -2342,7 +2301,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
       {/* SUBTAB 6: DEVELOPER GUIDE */}
       {/* ========================================================================= */}
       {activeSubTab === 'guide' && (
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflowY: 'auto' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', width: '100%', marginBottom: '2.5rem' }}>
           <div className="glass-panel" style={{ maxWidth: '720px', width: '100%', borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)', padding: '1.5rem', boxSizing: 'border-box' }}>
             <h3 style={{ margin: '0 0 0.75rem 0', fontSize: '1.2rem', fontWeight: 700 }}>FinMantra Campaign Architecture Guide</h3>
             <p style={{ color: 'var(--muted)', fontSize: '0.88rem', lineHeight: 1.6 }}>
