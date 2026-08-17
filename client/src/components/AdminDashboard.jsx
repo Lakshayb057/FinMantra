@@ -3257,7 +3257,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
           playsInline 
           className="login-bg-video"
         >
-          <source src="/give_me_the_video_by_removing.mp4" type="video/mp4" />
+          <source src="/Final_3.mp4" type="video/mp4" />
         </video>
 
         {/* Left Side - Login Form */}
