@@ -8030,7 +8030,9 @@ app.get('/api/campaigns/analytics/dashboard', authenticateToken, async (req, res
 app.get('/api/contact-center/details', async (req, res) => {
   try {
     const id = req.query.id || req.query.master_id;
-    const broadcastId = req.query.brodcast_id || req.query.broadcast_id;
+    const broadcastId = req.query.brodcast_id || req.query.broadcast_id || req.query.b;
+    const channel = req.query.channel || 'all';
+
     if (!id) {
       return res.status(400).json({ success: false, error: 'Missing contact ID.' });
     }
@@ -8041,7 +8043,12 @@ app.get('/api/contact-center/details', async (req, res) => {
     let broadcast = null;
     if (broadcastId) {
       broadcast = await db.getCampaignBroadcastById(broadcastId);
+      // Record click & CTR metrics for this broadcast and lead
+      await db.runQuery('UPDATE campaign_broadcasts SET clicked_count = COALESCE(clicked_count, 0) + 1 WHERE id = $1', [broadcastId]).catch(() => {});
+      const clickChannel = channel === 'email' || broadcast?.channel === 'email' ? 'email' : 'whatsapp';
+      await db.incrementMasterLeadMetric(lead.id, clickChannel, 'clicked').catch(() => {});
     }
+
     res.json({
       success: true,
       lead: {
@@ -8061,16 +8068,40 @@ app.get('/api/contact-center/details', async (req, res) => {
   }
 });
 
-app.post('/api/contact-center/optout', async (req, res) => {
+app.post(['/api/contact-center/optout', '/api/c/unsubscribe'], async (req, res) => {
   try {
-    const { id, whatsapp_optin, email_optin, reason, broadcast_id } = req.body;
+    const { id, whatsapp_optin, email_optin, reason, broadcast_id, channel } = req.body;
     if (!id) {
       return res.status(400).json({ success: false, error: 'Missing contact ID.' });
     }
-    const updated = await db.updateMasterLeadOptin(id, { whatsapp_optin, email_optin, reason });
+
+    let finalWaOptin = whatsapp_optin;
+    let finalEmailOptin = email_optin;
+
+    if (channel === 'whatsapp') {
+      finalWaOptin = false;
+    } else if (channel === 'email') {
+      finalEmailOptin = false;
+    } else if (channel === 'all') {
+      finalWaOptin = false;
+      finalEmailOptin = false;
+    }
+
+    const updated = await db.updateMasterLeadOptin(id, {
+      whatsapp_optin: finalWaOptin,
+      email_optin: finalEmailOptin,
+      reason: reason || 'Unsubscribed'
+    });
+
     if (!updated) {
       return res.status(404).json({ success: false, error: 'Contact profile not found.' });
     }
+
+    // Log broadcast click & optout if broadcast_id is supplied
+    if (broadcast_id) {
+      await db.runQuery('UPDATE campaign_broadcasts SET clicked_count = COALESCE(clicked_count, 0) + 1 WHERE id = $1', [broadcast_id]).catch(() => {});
+    }
+
     res.json({
       success: true,
       message: 'Your notification preferences have been saved successfully.',
@@ -8085,11 +8116,34 @@ app.post('/api/contact-center/optout', async (req, res) => {
   }
 });
 
-// Click & CTR Tracking Route
-app.get('/api/c/t/:broadcastId/:masterLeadId', async (req, res) => {
+// Admin toggle opt-in route for Master Data Center table
+app.post('/api/campaigns/master-leads/:id/toggle-optin', authenticateToken, async (req, res) => {
   try {
-    const { broadcastId, masterLeadId } = req.params;
-    const targetUrl = req.query.url || 'https://thefinmantra.com';
+    const { id } = req.params;
+    const { channel, optin } = req.body; // channel: 'whatsapp' | 'email', optin: boolean
+
+    const lead = await db.getMasterLeadById(id);
+    if (!lead) {
+      return res.status(404).json({ success: false, error: 'Lead not found.' });
+    }
+
+    const payload = {};
+    if (channel === 'whatsapp') payload.whatsapp_optin = Boolean(optin);
+    if (channel === 'email') payload.email_optin = Boolean(optin);
+
+    const updated = await db.updateMasterLeadOptin(id, payload);
+    res.json({ success: true, lead: updated });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Click & CTR Tracking Route (Universal)
+app.get(['/api/c/t/:broadcastId/:masterLeadId', '/api/c/t'], async (req, res) => {
+  try {
+    const broadcastId = req.params.broadcastId || req.query.b || req.query.broadcast_id;
+    const masterLeadId = req.params.masterLeadId || req.query.l || req.query.id || req.query.master_id;
+    const targetUrl = req.query.url || req.query.redirect || 'https://thefinmantra.com';
     const channel = req.query.channel || 'whatsapp';
 
     if (broadcastId) {

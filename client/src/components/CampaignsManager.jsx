@@ -524,23 +524,29 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
     showToast('Exporting master data with delivery rates & CTR...', 'info');
   };
 
-  const handleDeleteMasterLead = async (leadId) => {
-    if (!window.confirm('Delete this contact permanently from Master Data Center?')) return;
+  const handleToggleMasterLeadOptin = async (leadId, channel, currentStatus) => {
     try {
-      const res = await fetch(`${API_URL}/campaigns/master/leads/${leadId}`, {
-        method: 'DELETE',
-        headers
+      const newStatus = !currentStatus;
+      const res = await fetch(`${API_URL}/campaigns/master-leads/${leadId}/toggle-optin`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ channel, optin: newStatus })
       });
       const data = await res.json();
       if (data.success) {
-        showToast('Contact removed from Master Data Center.', 'info');
-        fetchMasterLeads();
-        fetchMasterFilterOptions();
-      } else {
-        showToast(data.error || 'Failed to delete contact.', 'error');
+        setMasterContacts(prev => prev.map(c => {
+          if (c.id === leadId) {
+            return {
+              ...c,
+              [channel === 'whatsapp' ? 'whatsapp_optin' : 'email_optin']: newStatus
+            };
+          }
+          return c;
+        }));
+        showToast(`${channel === 'whatsapp' ? 'WhatsApp' : 'Email'} status updated to ${newStatus ? 'Opted-In' : 'Opted-Out'}.`, 'success');
       }
     } catch (err) {
-      showToast('Network error while deleting contact.', 'error');
+      showToast('Failed to update opt-in status.', 'error');
     }
   };
 
@@ -1110,94 +1116,106 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
 
           {/* Top KPI Metric Cards */}
           {dashboardAnalytics && (
-            <div className="campaigns-kpi-grid">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(185px, 1fr))', gap: '0.85rem', marginBottom: '1.5rem' }}>
               {/* Broadcasts Count */}
-              <div className="glass-panel" style={{ padding: '1.1rem', borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--muted)', fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase' }}>
+              <div className="glass-panel" style={{ padding: '1.15rem 1.25rem', borderRadius: '12px', border: '1px solid var(--line)', borderTop: '3.5px solid var(--gold-deep)', background: 'var(--paper)', boxShadow: '0 4px 16px rgba(0,0,0,0.03)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'var(--muted)', fontSize: '0.76rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                   <span>Total Broadcasts</span>
-                  <Zap size={16} style={{ color: 'var(--gold-deep)' }} />
+                  <div style={{ width: '28px', height: '28px', borderRadius: '7px', background: 'rgba(224, 168, 46, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Zap size={15} style={{ color: 'var(--gold-deep)' }} />
+                  </div>
                 </div>
-                <div style={{ fontSize: '1.6rem', fontWeight: 800, marginTop: '0.4rem', color: 'var(--ink)' }}>
+                <div style={{ fontSize: '1.75rem', fontWeight: 900, marginTop: '0.45rem', color: 'var(--ink)', fontFamily: 'var(--font-heading)' }}>
                   {dashboardAnalytics.kpis.total_broadcasts || 0}
                 </div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--muted)', marginTop: '0.25rem' }}>
-                  {dashboardAnalytics.kpis.wa_broadcasts || 0} WA • {dashboardAnalytics.kpis.email_broadcasts || 0} Email • {dashboardAnalytics.kpis.hybrid_broadcasts || 0} Hybrid
+                <div style={{ fontSize: '0.74rem', color: 'var(--muted)', marginTop: '0.35rem', fontWeight: 600 }}>
+                  <span style={{ color: '#25D366' }}>{dashboardAnalytics.kpis.wa_broadcasts || 0} WA</span> • <span style={{ color: '#8b5cf6' }}>{dashboardAnalytics.kpis.email_broadcasts || 0} Email</span> • <span style={{ color: 'var(--gold-deep)' }}>{dashboardAnalytics.kpis.hybrid_broadcasts || 0} Hybrid</span>
                 </div>
               </div>
 
               {/* Total Targeted */}
-              <div className="glass-panel" style={{ padding: '1.1rem', borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--muted)', fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase' }}>
-                  <span>Targeted Recipients</span>
-                  <Users size={16} style={{ color: '#3b82f6' }} />
+              <div className="glass-panel" style={{ padding: '1.15rem 1.25rem', borderRadius: '12px', border: '1px solid var(--line)', borderTop: '3.5px solid #3b82f6', background: 'var(--paper)', boxShadow: '0 4px 16px rgba(0,0,0,0.03)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'var(--muted)', fontSize: '0.76rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  <span>Targeted Leads</span>
+                  <div style={{ width: '28px', height: '28px', borderRadius: '7px', background: 'rgba(59, 130, 246, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Users size={15} style={{ color: '#3b82f6' }} />
+                  </div>
                 </div>
-                <div style={{ fontSize: '1.6rem', fontWeight: 800, marginTop: '0.4rem', color: 'var(--ink)' }}>
+                <div style={{ fontSize: '1.75rem', fontWeight: 900, marginTop: '0.45rem', color: 'var(--ink)', fontFamily: 'var(--font-heading)' }}>
                   {(dashboardAnalytics.kpis.total_targeted || 0).toLocaleString()}
                 </div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--muted)', marginTop: '0.25rem' }}>
-                  {(dashboardAnalytics.masterStats.total_master_contacts || 0).toLocaleString()} Unique Master Leads
+                <div style={{ fontSize: '0.74rem', color: '#3b82f6', marginTop: '0.35rem', fontWeight: 700 }}>
+                  {(dashboardAnalytics.masterStats.total_master_contacts || 0).toLocaleString()} Unique Master Contacts
                 </div>
               </div>
 
               {/* WhatsApp Delivery Rate */}
-              <div className="glass-panel" style={{ padding: '1.1rem', borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--muted)', fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase' }}>
+              <div className="glass-panel" style={{ padding: '1.15rem 1.25rem', borderRadius: '12px', border: '1px solid var(--line)', borderTop: '3.5px solid #10b981', background: 'var(--paper)', boxShadow: '0 4px 16px rgba(0,0,0,0.03)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'var(--muted)', fontSize: '0.76rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                   <span>WA Delivery Rate</span>
-                  <CheckCheck size={16} style={{ color: '#25D366' }} />
+                  <div style={{ width: '28px', height: '28px', borderRadius: '7px', background: 'rgba(16, 185, 129, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <CheckCheck size={15} style={{ color: '#10b981' }} />
+                  </div>
                 </div>
-                <div style={{ fontSize: '1.6rem', fontWeight: 800, marginTop: '0.4rem', color: '#25D366' }}>
+                <div style={{ fontSize: '1.75rem', fontWeight: 900, marginTop: '0.45rem', color: '#10b981', fontFamily: 'var(--font-heading)' }}>
                   {dashboardAnalytics.masterStats.sum_wa_sent > 0 
                     ? `${((dashboardAnalytics.masterStats.sum_wa_delivered / dashboardAnalytics.masterStats.sum_wa_sent) * 100).toFixed(1)}%` 
                     : '100%'}
                 </div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--muted)', marginTop: '0.25rem' }}>
+                <div style={{ fontSize: '0.74rem', color: 'var(--muted)', marginTop: '0.35rem', fontWeight: 600 }}>
                   {dashboardAnalytics.masterStats.sum_wa_delivered} delivered of {dashboardAnalytics.masterStats.sum_wa_sent} sent
                 </div>
               </div>
 
               {/* WhatsApp CTR */}
-              <div className="glass-panel" style={{ padding: '1.1rem', borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--muted)', fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase' }}>
-                  <span>WhatsApp Unique CTR</span>
-                  <TrendingUp size={16} style={{ color: 'var(--gold-deep)' }} />
+              <div className="glass-panel" style={{ padding: '1.15rem 1.25rem', borderRadius: '12px', border: '1px solid var(--line)', borderTop: '3.5px solid #f59e0b', background: 'var(--paper)', boxShadow: '0 4px 16px rgba(0,0,0,0.03)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'var(--muted)', fontSize: '0.76rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  <span>WhatsApp CTR</span>
+                  <div style={{ width: '28px', height: '28px', borderRadius: '7px', background: 'rgba(245, 158, 11, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <TrendingUp size={15} style={{ color: '#f59e0b' }} />
+                  </div>
                 </div>
-                <div style={{ fontSize: '1.6rem', fontWeight: 800, marginTop: '0.4rem', color: 'var(--gold-deep)' }}>
+                <div style={{ fontSize: '1.75rem', fontWeight: 900, marginTop: '0.45rem', color: '#f59e0b', fontFamily: 'var(--font-heading)' }}>
                   {dashboardAnalytics.masterStats.sum_wa_delivered > 0 
                     ? `${((dashboardAnalytics.masterStats.sum_wa_clicked / dashboardAnalytics.masterStats.sum_wa_delivered) * 100).toFixed(1)}%` 
                     : '0.0%'}
                 </div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--muted)', marginTop: '0.25rem' }}>
-                  {dashboardAnalytics.masterStats.sum_wa_clicked} unique link clicks
+                <div style={{ fontSize: '0.74rem', color: '#f59e0b', marginTop: '0.35rem', fontWeight: 700 }}>
+                  {dashboardAnalytics.masterStats.sum_wa_clicked || 0} unique link clicks
                 </div>
               </div>
 
               {/* Email Delivery Rate */}
-              <div className="glass-panel" style={{ padding: '1.1rem', borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--muted)', fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase' }}>
+              <div className="glass-panel" style={{ padding: '1.15rem 1.25rem', borderRadius: '12px', border: '1px solid var(--line)', borderTop: '3.5px solid #8b5cf6', background: 'var(--paper)', boxShadow: '0 4px 16px rgba(0,0,0,0.03)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'var(--muted)', fontSize: '0.76rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                   <span>Email Delivery Rate</span>
-                  <Mail size={16} style={{ color: '#8b5cf6' }} />
+                  <div style={{ width: '28px', height: '28px', borderRadius: '7px', background: 'rgba(139, 92, 246, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Mail size={15} style={{ color: '#8b5cf6' }} />
+                  </div>
                 </div>
-                <div style={{ fontSize: '1.6rem', fontWeight: 800, marginTop: '0.4rem', color: '#8b5cf6' }}>
+                <div style={{ fontSize: '1.75rem', fontWeight: 900, marginTop: '0.45rem', color: '#8b5cf6', fontFamily: 'var(--font-heading)' }}>
                   {dashboardAnalytics.masterStats.sum_email_sent > 0 
                     ? `${((dashboardAnalytics.masterStats.sum_email_delivered / dashboardAnalytics.masterStats.sum_email_sent) * 100).toFixed(1)}%` 
                     : '100%'}
                 </div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--muted)', marginTop: '0.25rem' }}>
+                <div style={{ fontSize: '0.74rem', color: 'var(--muted)', marginTop: '0.35rem', fontWeight: 600 }}>
                   {dashboardAnalytics.masterStats.sum_email_delivered} delivered of {dashboardAnalytics.masterStats.sum_email_sent} sent
                 </div>
               </div>
 
-              {/* Unsubscribe / Opt-outs */}
-              <div className="glass-panel" style={{ padding: '1.1rem', borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--muted)', fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase' }}>
+              {/* Opt-out Rate */}
+              <div className="glass-panel" style={{ padding: '1.15rem 1.25rem', borderRadius: '12px', border: '1px solid var(--line)', borderTop: '3.5px solid #ef4444', background: 'var(--paper)', boxShadow: '0 4px 16px rgba(0,0,0,0.03)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'var(--muted)', fontSize: '0.76rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                   <span>Opt-out Rate</span>
-                  <ShieldCheck size={16} style={{ color: '#ef4444' }} />
+                  <div style={{ width: '28px', height: '28px', borderRadius: '7px', background: 'rgba(239, 68, 68, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <ShieldCheck size={15} style={{ color: '#ef4444' }} />
+                  </div>
                 </div>
-                <div style={{ fontSize: '1.6rem', fontWeight: 800, marginTop: '0.4rem', color: '#ef4444' }}>
+                <div style={{ fontSize: '1.75rem', fontWeight: 900, marginTop: '0.45rem', color: '#ef4444', fontFamily: 'var(--font-heading)' }}>
                   {(dashboardAnalytics.masterStats.wa_optout_count || 0) + (dashboardAnalytics.masterStats.email_optout_count || 0)}
                 </div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--muted)', marginTop: '0.25rem' }}>
-                  {dashboardAnalytics.masterStats.wa_optout_count || 0} WA opt-outs • {dashboardAnalytics.masterStats.email_optout_count || 0} Email opt-outs
+                <div style={{ fontSize: '0.74rem', color: 'var(--muted)', marginTop: '0.35rem', fontWeight: 600 }}>
+                  <span style={{ color: '#ef4444' }}>{dashboardAnalytics.masterStats.wa_optout_count || 0} WA</span> • <span style={{ color: '#ef4444' }}>{dashboardAnalytics.masterStats.email_optout_count || 0} Email</span> opt-outs
                 </div>
               </div>
             </div>
@@ -1314,8 +1332,20 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                           </span>
                         </td>
                         <td style={{ padding: '0.65rem 0.75rem', fontWeight: 600 }}>{b.targeted_count || 0}</td>
-                        <td style={{ padding: '0.65rem 0.75rem', color: '#16a37b', fontWeight: 600 }}>{b.delivered_count || b.sent_count || 0}</td>
-                        <td style={{ padding: '0.65rem 0.75rem', color: 'var(--gold-deep)', fontWeight: 700 }}>{ctr}%</td>
+                        <td style={{ padding: '0.65rem 0.75rem', color: '#16a37b', fontWeight: 700 }}>{b.delivered_count || b.sent_count || 0}</td>
+                        <td style={{ padding: '0.65rem 0.75rem' }}>
+                          <span style={{
+                            padding: '0.18rem 0.48rem',
+                            borderRadius: '6px',
+                            fontSize: '0.74rem',
+                            fontWeight: 800,
+                            background: Number(ctr) > 0 ? 'rgba(245, 158, 11, 0.15)' : 'var(--paper-2)',
+                            color: Number(ctr) > 0 ? '#d97706' : 'var(--muted)',
+                            border: '1px solid var(--line)'
+                          }}>
+                            {ctr}% ({b.clicked_count || 0})
+                          </span>
+                        </td>
                         <td style={{ padding: '0.65rem 0.75rem', color: 'var(--muted)', fontSize: '0.78rem' }}>
                           {b.created_at ? new Date(b.created_at).toLocaleDateString() : '—'}
                         </td>
@@ -1599,29 +1629,70 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                           <td style={{ padding: '0.65rem 0.75rem', fontFamily: 'var(--font-mono)' }}>{c.contact}</td>
                           <td style={{ padding: '0.65rem 0.75rem' }}>{c.mail || '—'}</td>
                           <td style={{ padding: '0.65rem 0.75rem' }}>
-                            {c.whatsapp_optin !== false ? (
-                              <span style={{ padding: '0.15rem 0.45rem', borderRadius: '4px', background: 'rgba(22, 163, 123, 0.12)', color: '#16a37b', fontSize: '0.72rem', fontWeight: 700 }}>Opted-in</span>
-                            ) : (
-                              <span style={{ padding: '0.15rem 0.45rem', borderRadius: '4px', background: 'rgba(239, 68, 68, 0.12)', color: '#ef4444', fontSize: '0.72rem', fontWeight: 700 }}>Opted-out</span>
-                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleToggleMasterLeadOptin(c.id, 'whatsapp', c.whatsapp_optin !== false)}
+                              style={{
+                                border: 'none',
+                                cursor: 'pointer',
+                                padding: '0.2rem 0.55rem',
+                                borderRadius: '6px',
+                                background: c.whatsapp_optin !== false ? 'rgba(22, 163, 123, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                                color: c.whatsapp_optin !== false ? '#16a37b' : '#ef4444',
+                                fontSize: '0.74rem',
+                                fontWeight: 700,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.25rem'
+                              }}
+                              title="Click to toggle WhatsApp Opt-in status"
+                            >
+                              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: c.whatsapp_optin !== false ? '#16a37b' : '#ef4444' }} />
+                              {c.whatsapp_optin !== false ? 'Opted-in' : 'Opted-out'}
+                            </button>
                           </td>
                           <td style={{ padding: '0.65rem 0.75rem' }}>
-                            {c.email_optin !== false ? (
-                              <span style={{ padding: '0.15rem 0.45rem', borderRadius: '4px', background: 'rgba(22, 163, 123, 0.12)', color: '#16a37b', fontSize: '0.72rem', fontWeight: 700 }}>Opted-in</span>
-                            ) : (
-                              <span style={{ padding: '0.15rem 0.45rem', borderRadius: '4px', background: 'rgba(239, 68, 68, 0.12)', color: '#ef4444', fontSize: '0.72rem', fontWeight: 700 }}>Opted-out</span>
-                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleToggleMasterLeadOptin(c.id, 'email', c.email_optin !== false)}
+                              style={{
+                                border: 'none',
+                                cursor: 'pointer',
+                                padding: '0.2rem 0.55rem',
+                                borderRadius: '6px',
+                                background: c.email_optin !== false ? 'rgba(22, 163, 123, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                                color: c.email_optin !== false ? '#16a37b' : '#ef4444',
+                                fontSize: '0.74rem',
+                                fontWeight: 700,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.25rem'
+                              }}
+                              title="Click to toggle Email Opt-in status"
+                            >
+                              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: c.email_optin !== false ? '#16a37b' : '#ef4444' }} />
+                              {c.email_optin !== false ? 'Opted-in' : 'Opted-out'}
+                            </button>
                           </td>
                           <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.78rem' }}>
-                            <span style={{ color: '#25D366', fontWeight: 600 }}>Del: {waDel}{waDel !== '—' ? '%' : ''}</span> • <span style={{ color: 'var(--gold-deep)', fontWeight: 600 }}>CTR: {waCtr}%</span>
+                            <span style={{ color: '#25D366', fontWeight: 700 }}>Del: {waDel}{waDel !== '—' ? '%' : ''}</span> • <span style={{ color: 'var(--gold-deep)', fontWeight: 700 }}>CTR: {waCtr}%</span>
                           </td>
                           <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.78rem' }}>
-                            <span style={{ color: '#3b82f6', fontWeight: 600 }}>Del: {emDel}{emDel !== '—' ? '%' : ''}</span> • <span style={{ color: 'var(--gold-deep)', fontWeight: 600 }}>CTR: {emCtr}%</span>
+                            <span style={{ color: '#3b82f6', fontWeight: 700 }}>Del: {emDel}{emDel !== '—' ? '%' : ''}</span> • <span style={{ color: 'var(--gold-deep)', fontWeight: 700 }}>CTR: {emCtr}%</span>
                           </td>
                           <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.78rem', color: 'var(--muted)' }}>
                             {c.last_broadcast_name || '—'}
                           </td>
-                          <td style={{ padding: '0.65rem 0.75rem', textAlign: 'right' }}>
+                          <td style={{ padding: '0.65rem 0.75rem', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                            <a
+                              href={`/unsubscribe?id=${encodeURIComponent(c.finmantra_id || c.id)}&channel=whatsapp`}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{ color: 'var(--gold-deep)', textDecoration: 'none', marginRight: '0.6rem', fontSize: '0.75rem', fontWeight: 600 }}
+                              title="Open 1-Click Unsubscribe Page"
+                            >
+                              Unsub Link
+                            </a>
                             <button
                               onClick={() => handleDeleteMasterLead(c.id)}
                               style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.2rem' }}
@@ -1755,8 +1826,20 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                             </span>
                           </td>
                           <td style={{ padding: '0.75rem 0.85rem', fontWeight: 600 }}>{b.targeted_count || 0}</td>
-                          <td style={{ padding: '0.75rem 0.85rem', color: '#16a37b', fontWeight: 600 }}>{b.delivered_count || b.sent_count || 0}</td>
-                          <td style={{ padding: '0.75rem 0.85rem', color: 'var(--gold-deep)', fontWeight: 700 }}>{ctr}%</td>
+                          <td style={{ padding: '0.75rem 0.85rem', color: '#16a37b', fontWeight: 700 }}>{b.delivered_count || b.sent_count || 0}</td>
+                          <td style={{ padding: '0.75rem 0.85rem' }}>
+                            <span style={{
+                              padding: '0.18rem 0.48rem',
+                              borderRadius: '6px',
+                              fontSize: '0.74rem',
+                              fontWeight: 800,
+                              background: Number(ctr) > 0 ? 'rgba(245, 158, 11, 0.15)' : 'var(--paper-2)',
+                              color: Number(ctr) > 0 ? '#d97706' : 'var(--muted)',
+                              border: '1px solid var(--line)'
+                            }}>
+                              {ctr}% ({b.clicked_count || 0})
+                            </span>
+                          </td>
                           <td style={{ padding: '0.75rem 0.85rem', fontSize: '0.78rem', color: 'var(--muted)' }}>
                             {b.scheduled_at ? new Date(b.scheduled_at).toLocaleString() : 'Direct / Immediate'}
                           </td>
