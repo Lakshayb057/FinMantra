@@ -2261,6 +2261,149 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                         ];
                       }
 
+                      if (t.type === 'email') {
+                        return (
+                          <div key={t.id} className="wa-template-card">
+                            {/* Email Top App Bar */}
+                            <div className="email-card-app-bar">
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+                                  <Mail size={15} />
+                                </div>
+                                <div>
+                                  <div style={{ fontWeight: 800, fontSize: '0.88rem' }}>
+                                    FinMantra Email Service
+                                  </div>
+                                  <div style={{ fontSize: '0.7rem', opacity: 0.85, fontFamily: 'var(--font-mono)' }}>
+                                    {t.name}
+                                  </div>
+                                </div>
+                              </div>
+                              <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                                <span style={{
+                                  padding: '0.15rem 0.45rem',
+                                  borderRadius: '4px',
+                                  fontSize: '0.66rem',
+                                  fontWeight: 800,
+                                  background: 'rgba(255, 255, 255, 0.2)',
+                                  color: '#ffffff'
+                                }}>
+                                  {t.category || 'MARKETING'}
+                                </span>
+                                <span style={{
+                                  padding: '0.15rem 0.45rem',
+                                  borderRadius: '999px',
+                                  fontSize: '0.66rem',
+                                  fontWeight: 800,
+                                  background: '#16a37b',
+                                  color: '#ffffff'
+                                }}>
+                                  READY
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Email Preview Canvas */}
+                            <div className="email-preview-canvas">
+                              <div className="email-preview-box">
+                                <div className="email-subject-line">
+                                  <span style={{ color: 'var(--muted)', fontSize: '0.74rem', fontWeight: 600, display: 'block', textTransform: 'uppercase' }}>Subject:</span>
+                                  {t.subject || '(No Subject Line)'}
+                                </div>
+                                <div style={{ whiteSpace: 'pre-wrap', maxHeight: '160px', overflowY: 'auto', fontSize: '0.82rem', color: 'var(--ink)' }}>
+                                  {(() => {
+                                    const text = t.body || '';
+                                    const parts = text.split(/(\{[a-zA-Z0-9_]+\})/g);
+                                    return parts.map((part, pIdx) => {
+                                      if (/^\{[a-zA-Z0-9_]+\}$/.test(part)) {
+                                        return <span key={pIdx} className="wa-chat-var-tag">{part}</span>;
+                                      }
+                                      return part;
+                                    });
+                                  })()}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Card Footer Actions */}
+                            <div className="wa-template-card-footer">
+                              <div style={{ display: 'flex', gap: '0.4rem' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleEditTemplate(t)}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.3rem',
+                                    padding: '0.4rem 0.75rem',
+                                    borderRadius: '6px',
+                                    background: 'var(--paper)',
+                                    color: 'var(--ink)',
+                                    border: '1px solid var(--line)',
+                                    fontSize: '0.78rem',
+                                    fontWeight: 700,
+                                    cursor: 'pointer'
+                                  }}
+                                  title="Edit Template"
+                                >
+                                  <Edit2 size={13} style={{ color: 'var(--gold-deep)' }} /> Edit
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteTemplate(t.id, t.name)}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.25rem',
+                                    padding: '0.4rem 0.65rem',
+                                    borderRadius: '6px',
+                                    background: 'rgba(239, 68, 68, 0.08)',
+                                    color: '#ef4444',
+                                    border: '1px solid rgba(239, 68, 68, 0.25)',
+                                    fontSize: '0.78rem',
+                                    fontWeight: 700,
+                                    cursor: 'pointer'
+                                  }}
+                                  title="Delete Template"
+                                >
+                                  <Trash2 size={13} /> Delete
+                                </button>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setBroadcastForm(prev => ({
+                                    ...prev,
+                                    channel: 'email',
+                                    email_subject: t.subject || '',
+                                    email_body: t.body || ''
+                                  }));
+                                  setBroadcastWizardStep(1);
+                                  setShowNewBroadcastModal(true);
+                                }}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.35rem',
+                                  padding: '0.4rem 0.85rem',
+                                  borderRadius: '6px',
+                                  background: 'rgba(139, 92, 246, 0.12)',
+                                  color: '#8b5cf6',
+                                  border: '1px solid rgba(139, 92, 246, 0.3)',
+                                  fontSize: '0.78rem',
+                                  fontWeight: 800,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                <Send size={13} /> Use in Broadcast
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      }
+
                       return (
                         <div key={t.id} className="wa-template-card">
                           {/* WhatsApp Top App Bar */}
@@ -3009,6 +3152,34 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                   {/* Email Subject & Body */}
                   {(broadcastForm.channel === 'email' || broadcastForm.channel === 'both') && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                      {/* Email Template Selector */}
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.4rem' }}>
+                          Load from Saved Email Template (Optional)
+                        </label>
+                        <select
+                          onChange={(e) => {
+                            const chosenId = e.target.value;
+                            const t = templates.find(item => item.id === chosenId || item.name === chosenId);
+                            if (t) {
+                              setBroadcastForm(prev => ({
+                                ...prev,
+                                email_subject: t.subject || prev.email_subject || '',
+                                email_body: t.body || prev.email_body || ''
+                              }));
+                            }
+                          }}
+                          style={{ width: '100%', padding: '0.65rem 0.8rem', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.88rem', boxSizing: 'border-box' }}
+                        >
+                          <option value="">-- Choose a pre-made Email Template or compose below --</option>
+                          {templates.filter(t => t.type === 'email').map(t => (
+                            <option key={t.id} value={t.id}>
+                              {t.name} — {t.subject || 'No Subject'}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
                       {/* Dynamic Tag Quick Inserter */}
                       <div style={{ background: 'var(--paper-2)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--line)' }}>
                         <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: '0.4rem' }}>
