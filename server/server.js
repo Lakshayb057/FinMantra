@@ -6408,7 +6408,10 @@ async function checkAndRunScheduledBroadcasts() {
         let emailError = null;
         let waError = null;
 
-        // Perform dynamic replacements for {name}, {contact}, {mail}, {address}, {id}, {finmantra_id}, {campaign_data_id}
+        const isUatEnv = process.env.PORT === '5001' || process.env.NODE_ENV === 'uat' || !process.env.NODE_ENV;
+        const baseAppUrl = process.env.BASE_APP_URL || (isUatEnv ? 'https://uat.thefinmantra.com' : 'https://thefinmantra.com');
+
+        // Perform dynamic replacements for {name}, {contact}, {mail}, {address}, {id}, {finmantra_id}, {campaign_data_id}, {unsubscribe_url}, {contact_center_url}
         const replacePlaceholders = (text) => {
           if (!text) return '';
           return text
@@ -6417,7 +6420,10 @@ async function checkAndRunScheduledBroadcasts() {
             .replace(/{mail}/gi, lead.mail || '')
             .replace(/{address}/gi, lead.address || '')
             .replace(/{finmantra_id}/gi, lead.finmantra_id || '')
-            .replace(/{id}/gi, lead.campaign_data_id || lead.finmantra_id || lead.id || '');
+            .replace(/{campaign_data_id}/gi, lead.campaign_data_id || '')
+            .replace(/{id}/gi, lead.campaign_data_id || lead.finmantra_id || lead.id || '')
+            .replace(/{unsubscribe_url}/gi, `${baseAppUrl}/unsubscribe?utm_channel=email&utm_id=${encodeURIComponent(lead.finmantra_id || lead.id)}&utm_brodcast_id=${encodeURIComponent(b.id)}`)
+            .replace(/{contact_center_url}/gi, `${baseAppUrl}/contact-center?utm_id=${encodeURIComponent(lead.finmantra_id || lead.id)}&utm_brodcast_id=${encodeURIComponent(b.id)}`);
         };
 
         // --- EMAIL CHANNEL ---
@@ -6431,9 +6437,10 @@ async function checkAndRunScheduledBroadcasts() {
             let body = replacePlaceholders(b.email_body || '');
             
             // Append unsubscribe footer if not already present
-            const unSubUrl = `https://thefinmantra.com/contact-center?id=${encodeURIComponent(lead.finmantra_id || lead.id)}&brodcast_id=${encodeURIComponent(b.id)}`;
-            if (!body.includes('/contact-center')) {
-              body += `<br/><hr/><div style="font-size:11px;color:#888;margin-top:15px;">To manage notification preferences or unsubscribe, <a href="${unSubUrl}" style="color:#e0a82e;">click here to visit the FinMantra Contact Center</a>.</div>`;
+            const unSubUrl = `${baseAppUrl}/unsubscribe?utm_channel=email&utm_id=${encodeURIComponent(lead.finmantra_id || lead.id)}&utm_brodcast_id=${encodeURIComponent(b.id)}`;
+            const contactCenterUrl = `${baseAppUrl}/contact-center?utm_id=${encodeURIComponent(lead.finmantra_id || lead.id)}&utm_brodcast_id=${encodeURIComponent(b.id)}`;
+            if (!body.includes('/contact-center') && !body.includes('/unsubscribe')) {
+              body += `<br/><hr/><div style="font-size:11px;color:#888;margin-top:15px;">To manage notification preferences, <a href="${contactCenterUrl}" style="color:#e0a82e;">visit Contact Center</a> • <a href="${unSubUrl}" style="color:#ef4444;">Unsubscribe</a>.</div>`;
             }
 
             if (transporter) {
