@@ -462,6 +462,29 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
     }
   };
 
+  const handleSetDefaultSmtp = handleSetDefaultSmtpAccount;
+  const handleOpenEditSmtp = handleOpenEditSmtpModal;
+  const handleDeleteSmtp = handleDeleteSmtpAccount;
+
+  const handleDeleteTemplate = async (id, name) => {
+    if (!window.confirm(`Delete template "${name || id}" permanently?`)) return;
+    try {
+      const res = await fetch(`${API_URL}/campaigns/templates/${id}`, {
+        method: 'DELETE',
+        headers
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast('Template deleted successfully.', 'success');
+        fetchTemplates();
+      } else {
+        showToast(data.error || 'Failed to delete template.', 'error');
+      }
+    } catch (err) {
+      showToast('Network error deleting template.', 'error');
+    }
+  };
+
   const handleTestSpecificSmtp = async (account) => {
     setTestingSmtpAccountId(account.id);
     try {
@@ -578,6 +601,30 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
       showToast('Network error during bulk delete.', 'error');
     }
   };
+
+  const handleDeleteMasterSingle = async (leadId, label) => {
+    if (!window.confirm(`Delete contact "${label || leadId}" permanently from Master Data Center?`)) return;
+    try {
+      const res = await fetch(`${API_URL}/campaigns/master/leads/delete-bulk`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ leadIds: [leadId] })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast('Contact deleted successfully.', 'success');
+        fetchMasterLeads();
+        fetchMasterFilterOptions();
+      } else {
+        showToast(data.error || 'Failed to delete contact.', 'error');
+      }
+    } catch (err) {
+      showToast('Network error deleting contact.', 'error');
+    }
+  };
+
+  const handleDeleteMasterLead = handleDeleteMasterSingle;
+  const handleExportMasterCsv = handleExportMasterData;
 
   // Download Sample Broadcast Template with FMCB00001 ID column
   const handleDownloadSampleTemplate = () => {
