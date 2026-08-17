@@ -500,13 +500,24 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
     }
     const exactDbComponents = [];
     const hFormat = String(templateDbObj.header_format || 'NONE').toUpperCase();
-    if (hFormat !== 'NONE') {
+    if (['IMAGE', 'VIDEO', 'DOCUMENT'].includes(hFormat)) {
       exactDbComponents.push(createHeaderComp(defaultHeaderImg, hFormat.toLowerCase()));
+    } else if (hFormat === 'TEXT' && templateDbObj.header_text && templateDbObj.header_text.includes('{{1}}')) {
+      exactDbComponents.push({
+        type: 'header',
+        parameters: [{ type: 'text', text: cleanParams[0] || 'Valued Customer' }]
+      });
     }
-    exactDbComponents.push({
-      type: 'body',
-      parameters: cleanParams.map(p => ({ type: 'text', text: String(p) }))
-    });
+
+    const bodyVarMatches = [...(templateDbObj.body || '').matchAll(/\{\{(\d+)\}\}/g)];
+    const expectedVarCount = bodyVarMatches.length > 0 ? Math.max(...bodyVarMatches.map(m => parseInt(m[1], 10))) : cleanParams.length;
+    if (expectedVarCount > 0) {
+      exactDbComponents.push({
+        type: 'body',
+        parameters: cleanParams.slice(0, expectedVarCount).map(p => ({ type: 'text', text: String(p) }))
+      });
+    }
+
     if (dbButtons && dbButtons.buttonType === 'CTA') {
       if (dbButtons.ctaUrlValue && dbButtons.ctaUrlValue.includes('{{1}}')) {
         exactDbComponents.push({
