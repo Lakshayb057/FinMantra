@@ -3747,11 +3747,14 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                         <input
                           type="text"
                           maxLength={60}
-                          placeholder="Header text (e.g. Hello {{1}}, Welcome)"
+                          placeholder="Header text (e.g. Application Update) - No emojis or * permitted"
                           value={newTemplateForm.headerText}
                           onChange={(e) => setNewTemplateForm({ ...newTemplateForm, headerText: e.target.value })}
                           style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.84rem', boxSizing: 'border-box' }}
                         />
+                        <div style={{ fontSize: '0.7rem', color: 'var(--muted)', marginTop: '0.2rem' }}>
+                          ⚠️ Note: Meta strictly disallows emojis, asterisks (*), and line breaks in Text Headers.
+                        </div>
                         {newTemplateForm.headerText.includes('{{1}}') && (
                           <input
                             type="text"
