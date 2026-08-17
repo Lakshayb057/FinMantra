@@ -26,6 +26,8 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
   // Templates Manager state
   const [templates, setTemplates] = useState([]);
   const [metaStatuses, setMetaStatuses] = useState({});
+  const [templateViewMode, setTemplateViewMode] = useState('chat'); // 'chat' | 'table'
+  const [templateSearch, setTemplateSearch] = useState('');
   const [isSyncingMeta, setIsSyncingMeta] = useState(false);
   const [showCreateTemplateModal, setShowCreateTemplateModal] = useState(false);
   const [templateTargetPhoneId, setTemplateTargetPhoneId] = useState('');
@@ -2005,12 +2007,86 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
       {activeSubTab === 'templates' && (
         <div style={{ display: 'flex', flexDirection: 'column', width: '100%', marginBottom: '2.5rem' }}>
           <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', width: '100%', borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)', padding: '1.25rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem', flexShrink: 0 }}>
+            {/* Top Toolbar */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem', flexShrink: 0 }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700 }}>Meta WhatsApp &amp; Email Template Manager</h3>
-                <div style={{ color: 'var(--muted)', fontSize: '0.82rem' }}>Templates registered with Meta Cloud API and verified under business accounts.</div>
+                <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <MessageSquare size={20} style={{ color: '#25D366' }} />
+                  Meta WhatsApp &amp; Email Template Studio
+                </h3>
+                <div style={{ color: 'var(--muted)', fontSize: '0.82rem', marginTop: '0.2rem' }}>
+                  Preview authentic WhatsApp chat bubble designs, manage Cloud API templates, and launch instant broadcasts.
+                </div>
               </div>
-              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+
+              {/* View Switcher & Action Buttons */}
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                {/* Search Box */}
+                <div style={{ position: 'relative', width: '220px' }}>
+                  <Search size={14} style={{ position: 'absolute', left: '0.65rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} />
+                  <input
+                    type="text"
+                    placeholder="Search templates..."
+                    value={templateSearch}
+                    onChange={(e) => setTemplateSearch(e.target.value)}
+                    style={{
+                      width: '100%',
+                      background: 'var(--paper-2)',
+                      border: '1px solid var(--line)',
+                      borderRadius: '6px',
+                      padding: '0.4rem 0.6rem 0.4rem 2rem',
+                      fontSize: '0.82rem',
+                      color: 'var(--ink)',
+                      outline: 'none',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+
+                {/* View Mode Toggle */}
+                <div style={{ display: 'inline-flex', background: 'var(--paper-2)', borderRadius: '6px', border: '1px solid var(--line)', padding: '2px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setTemplateViewMode('chat')}
+                    style={{
+                      padding: '0.35rem 0.7rem',
+                      fontSize: '0.78rem',
+                      fontWeight: 700,
+                      borderRadius: '4px',
+                      border: 'none',
+                      cursor: 'pointer',
+                      background: templateViewMode === 'chat' ? 'var(--paper)' : 'transparent',
+                      color: templateViewMode === 'chat' ? 'var(--gold-deep)' : 'var(--muted)',
+                      boxShadow: templateViewMode === 'chat' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.3rem'
+                    }}
+                  >
+                    <Smartphone size={13} /> Chat Cards
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTemplateViewMode('table')}
+                    style={{
+                      padding: '0.35rem 0.7rem',
+                      fontSize: '0.78rem',
+                      fontWeight: 700,
+                      borderRadius: '4px',
+                      border: 'none',
+                      cursor: 'pointer',
+                      background: templateViewMode === 'table' ? 'var(--paper)' : 'transparent',
+                      color: templateViewMode === 'table' ? 'var(--gold-deep)' : 'var(--muted)',
+                      boxShadow: templateViewMode === 'table' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.3rem'
+                    }}
+                  >
+                    <FileText size={13} /> Table View
+                  </button>
+                </div>
+
                 <button
                   onClick={async () => {
                     setIsSyncingMetaTemplates(true);
@@ -2037,19 +2113,20 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '0.4rem',
-                    padding: '0.5rem 0.9rem',
+                    padding: '0.45rem 0.85rem',
                     borderRadius: '6px',
                     background: 'var(--paper-2)',
                     color: 'var(--ink)',
                     border: '1px solid var(--line)',
                     fontWeight: 600,
-                    fontSize: '0.84rem',
+                    fontSize: '0.82rem',
                     cursor: isSyncingMetaTemplates ? 'not-allowed' : 'pointer'
                   }}
                 >
-                  <RefreshCw size={14} className={isSyncingMetaTemplates ? 'spin-slow' : ''} />
-                  {isSyncingMetaTemplates ? 'Syncing...' : 'Sync Meta Templates'}
+                  <RefreshCw size={13} className={isSyncingMetaTemplates ? 'spin-slow' : ''} />
+                  {isSyncingMetaTemplates ? 'Syncing...' : 'Sync Meta'}
                 </button>
+
                 <button
                   onClick={() => {
                     setEditingTemplateId(null);
@@ -2059,7 +2136,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                       subject: '',
                       body: '',
                       metaTemplateName: '',
-                      category: 'MARKETING',
+                      category: 'UTILITY',
                       language: 'en_US',
                       headerFormat: 'NONE',
                       headerText: '',
@@ -2088,13 +2165,13 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '0.4rem',
-                    padding: '0.5rem 1.1rem',
+                    padding: '0.45rem 1rem',
                     borderRadius: '6px',
                     background: 'var(--gold-deep)',
                     color: '#fff',
                     border: 'none',
                     fontWeight: 700,
-                    fontSize: '0.86rem',
+                    fontSize: '0.84rem',
                     cursor: 'pointer'
                   }}
                 >
@@ -2103,94 +2180,343 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
               </div>
             </div>
 
-            {/* Templates List */}
-            <div className="campaigns-table-wrapper">
-              {templates.length === 0 ? (
-                <div style={{ padding: '4rem 2rem', textAlign: 'center', color: 'var(--muted)' }}>
-                  <FileText size={36} style={{ color: 'var(--line)', marginBottom: '0.75rem' }} />
-                  <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>No templates registered.</div>
-                  <div style={{ fontSize: '0.8rem', marginTop: '0.25rem' }}>Click "+ Create Template" to register an approved Meta Cloud API template.</div>
-                </div>
-              ) : (
-                <table className="campaigns-table">
-                  <thead style={{ position: 'sticky', top: 0, background: 'var(--paper-2)', zIndex: 10 }}>
-                    <tr style={{ borderBottom: '1px solid var(--line)' }}>
-                      <th style={{ padding: '0.7rem 0.85rem', fontWeight: 700 }}>Template Name</th>
-                      <th style={{ padding: '0.7rem 0.85rem', fontWeight: 700 }}>Type</th>
-                      <th style={{ padding: '0.7rem 0.85rem', fontWeight: 700 }}>Meta Identifier</th>
-                      <th style={{ padding: '0.7rem 0.85rem', fontWeight: 700 }}>Language</th>
-                      <th style={{ padding: '0.7rem 0.85rem', fontWeight: 700 }}>Meta Status</th>
-                      <th style={{ padding: '0.7rem 0.85rem', fontWeight: 700 }}>Body Preview</th>
-                      <th style={{ padding: '0.7rem 0.85rem', fontWeight: 700, textAlign: 'right' }}>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {templates.map(t => {
+            {/* Templates Content */}
+            {(() => {
+              const filteredTemplates = templates.filter(t => {
+                if (!templateSearch) return true;
+                const q = templateSearch.toLowerCase();
+                return (
+                  (t.name && t.name.toLowerCase().includes(q)) ||
+                  (t.meta_template_name && t.meta_template_name.toLowerCase().includes(q)) ||
+                  (t.body && t.body.toLowerCase().includes(q)) ||
+                  (t.category && t.category.toLowerCase().includes(q))
+                );
+              });
+
+              if (filteredTemplates.length === 0) {
+                return (
+                  <div style={{ padding: '4rem 2rem', textAlign: 'center', color: 'var(--muted)' }}>
+                    <MessageSquare size={36} style={{ color: 'var(--line)', marginBottom: '0.75rem' }} />
+                    <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>
+                      {templates.length === 0 ? 'No templates registered yet.' : 'No templates match your search.'}
+                    </div>
+                    <div style={{ fontSize: '0.8rem', marginTop: '0.25rem' }}>
+                      Click "+ Create Template" or "Sync Meta" to import your WhatsApp templates.
+                    </div>
+                  </div>
+                );
+              }
+
+              {/* View 1: WhatsApp Chat Theme Grid */}
+              if (templateViewMode === 'chat') {
+                return (
+                  <div className="wa-template-grid">
+                    {filteredTemplates.map(t => {
                       const status = metaStatuses[t.meta_template_name || t.name] || 'APPROVED';
+                      const isUtility = (t.category || '').toUpperCase() === 'UTILITY';
+
+                      // Extract / Parse Buttons
+                      let parsedBtns = [];
+                      if (Array.isArray(t.buttons)) {
+                        parsedBtns = t.buttons;
+                      } else if (typeof t.buttons === 'string') {
+                        try { parsedBtns = JSON.parse(t.buttons); } catch(e){}
+                      } else if (t.buttons && typeof t.buttons === 'object') {
+                        if (t.buttons.ctaUrlText) parsedBtns.push({ text: t.buttons.ctaUrlText, url: t.buttons.ctaUrlValue, type: 'URL' });
+                        if (t.buttons.ctaUrl2Text) parsedBtns.push({ text: t.buttons.ctaUrl2Text, url: t.buttons.ctaUrl2Value, type: 'URL' });
+                        if (t.buttons.ctaPhoneText) parsedBtns.push({ text: t.buttons.ctaPhoneText, phone_number: t.buttons.ctaPhoneValue, type: 'PHONE' });
+                        if (Array.isArray(t.buttons.quickReplies)) {
+                          t.buttons.quickReplies.filter(Boolean).forEach(qr => parsedBtns.push({ text: qr, type: 'QUICK_REPLY' }));
+                        }
+                      }
+
+                      // Default fallbacks for interactive previews
+                      if (parsedBtns.length === 0 && t.type === 'whatsapp') {
+                        parsedBtns = [
+                          { text: '🌐 View Status / Preferences', type: 'URL' },
+                          { text: '🛡️ Unsubscribe', type: 'URL' }
+                        ];
+                      }
+
                       return (
-                        <tr key={t.id} style={{ borderBottom: '1px solid var(--line)' }} className="table-row-hover">
-                          <td style={{ padding: '0.75rem 0.85rem', fontWeight: 700 }}>{t.name}</td>
-                          <td style={{ padding: '0.75rem 0.85rem', textTransform: 'capitalize' }}>
-                            <span style={{
-                              padding: '0.2rem 0.55rem',
-                              borderRadius: '6px',
-                              fontSize: '0.74rem',
-                              fontWeight: 700,
-                              background: t.type === 'whatsapp' ? 'rgba(37, 211, 102, 0.12)' : 'rgba(139, 92, 246, 0.12)',
-                              color: t.type === 'whatsapp' ? '#25D366' : '#8b5cf6'
-                            }}>
-                              {t.type}
-                            </span>
-                          </td>
-                          <td style={{ padding: '0.75rem 0.85rem', fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: 'var(--muted)' }}>
-                            {t.meta_template_name || t.name}
-                          </td>
-                          <td style={{ padding: '0.75rem 0.85rem', fontSize: '0.8rem', color: 'var(--muted)' }}>
-                            {t.language || 'en_US'}
-                          </td>
-                          <td style={{ padding: '0.75rem 0.85rem' }}>
-                            <span style={{
-                              padding: '0.2rem 0.55rem',
-                              borderRadius: '999px',
-                              fontSize: '0.72rem',
-                              fontWeight: 700,
-                              background: status === 'APPROVED' ? 'rgba(22, 163, 123, 0.12)' : status === 'PENDING' ? 'rgba(224, 168, 46, 0.12)' : 'rgba(239, 68, 68, 0.12)',
-                              color: status === 'APPROVED' ? '#16a37b' : status === 'PENDING' ? 'var(--gold-deep)' : '#ef4444'
-                            }}>
-                              {status}
-                            </span>
-                          </td>
-                          <td style={{ padding: '0.75rem 0.85rem', fontSize: '0.8rem', color: 'var(--muted)', maxWidth: '300px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {t.body || '—'}
-                          </td>
-                          <td style={{ padding: '0.75rem 0.85rem', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                        <div key={t.id} className="wa-template-card">
+                          {/* Card Top Information */}
+                          <div className="wa-template-card-header">
+                            <div>
+                              <div style={{ fontWeight: 800, fontSize: '0.92rem', color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                <span style={{ color: t.type === 'whatsapp' ? '#25D366' : '#8b5cf6' }}>●</span>
+                                {t.name}
+                              </div>
+                              <div style={{ fontSize: '0.72rem', color: 'var(--muted)', fontFamily: 'var(--font-mono)', marginTop: '0.1rem' }}>
+                                {t.meta_template_name || t.name} • {t.language || 'en_US'}
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                              <span style={{
+                                padding: '0.15rem 0.45rem',
+                                borderRadius: '4px',
+                                fontSize: '0.68rem',
+                                fontWeight: 800,
+                                background: isUtility ? 'rgba(59, 130, 246, 0.12)' : 'rgba(245, 158, 11, 0.12)',
+                                color: isUtility ? '#3b82f6' : '#d97706'
+                              }}>
+                                {t.category || 'MARKETING'}
+                              </span>
+                              <span style={{
+                                padding: '0.15rem 0.45rem',
+                                borderRadius: '999px',
+                                fontSize: '0.68rem',
+                                fontWeight: 800,
+                                background: status === 'APPROVED' ? 'rgba(22, 163, 123, 0.12)' : status === 'PENDING' ? 'rgba(224, 168, 46, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                                color: status === 'APPROVED' ? '#16a37b' : status === 'PENDING' ? 'var(--gold-deep)' : '#ef4444'
+                              }}>
+                                {status}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* WhatsApp Chat Canvas */}
+                          <div className="wa-chat-canvas">
+                            <div className="wa-chat-bubble">
+                              {/* Header (if present) */}
+                              {t.header_text && (
+                                <div className="wa-chat-header-text">
+                                  {t.header_text}
+                                </div>
+                              )}
+                              {t.header_format && t.header_format !== 'NONE' && t.header_format !== 'TEXT' && (
+                                <div style={{
+                                  background: 'rgba(0,0,0,0.06)',
+                                  borderRadius: '6px',
+                                  padding: '0.6rem',
+                                  textAlign: 'center',
+                                  marginBottom: '0.5rem',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 700,
+                                  color: 'var(--muted)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: '0.35rem'
+                                }}>
+                                  {t.header_format === 'IMAGE' ? '🖼️ [Header Image]' : t.header_format === 'VIDEO' ? '🎥 [Header Video]' : '📄 [Header Document]'}
+                                </div>
+                              )}
+
+                              {/* Body with formatting */}
+                              <div className="wa-chat-body-text">
+                                {(() => {
+                                  const text = t.body || '';
+                                  const parts = text.split(/(\{\{\d+\}\}|\{[a-zA-Z0-9_]+\}|\*[^*]+\*|_[^_]+_)/g);
+                                  return parts.map((part, pIdx) => {
+                                    if (/^\{\{\d+\}\}$|^\{[a-zA-Z0-9_]+\}$/.test(part)) {
+                                      return <span key={pIdx} className="wa-chat-var-tag">{part}</span>;
+                                    }
+                                    if (part.startsWith('*') && part.endsWith('*') && part.length > 2) {
+                                      return <strong key={pIdx}>{part.slice(1, -1)}</strong>;
+                                    }
+                                    if (part.startsWith('_') && part.endsWith('_') && part.length > 2) {
+                                      return <em key={pIdx}>{part.slice(1, -1)}</em>;
+                                    }
+                                    return part;
+                                  });
+                                })()}
+                              </div>
+
+                              {/* Footer (if present) */}
+                              {t.footer_text && (
+                                <div className="wa-chat-footer-text">
+                                  {t.footer_text}
+                                </div>
+                              )}
+
+                              {/* Timestamp & Double Ticks */}
+                              <div className="wa-chat-time-stamp">
+                                <span>10:45 AM</span>
+                                <span style={{ color: '#53bdeb', fontWeight: 900 }}>✓✓</span>
+                              </div>
+
+                              {/* Interactive CTA Buttons */}
+                              {parsedBtns.length > 0 && (
+                                <div className="wa-chat-btn-row">
+                                  {parsedBtns.map((btn, bIdx) => (
+                                    <div key={bIdx} className="wa-chat-btn-pill">
+                                      {btn.type === 'PHONE' || btn.phone_number ? '📞' : btn.type === 'QUICK_REPLY' ? '⚡' : '🔗'}
+                                      <span>{btn.text || btn.url || 'Action Link'}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Card Footer Actions */}
+                          <div className="wa-template-card-footer">
+                            <button
+                              onClick={() => {
+                                setBroadcastForm(prev => ({
+                                  ...prev,
+                                  whatsapp_template: t.meta_template_name || t.name,
+                                  channel: t.type === 'email' ? 'email' : 'whatsapp'
+                                }));
+                                setBroadcastWizardStep(1);
+                                setShowNewBroadcastModal(true);
+                              }}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.35rem',
+                                padding: '0.4rem 0.75rem',
+                                borderRadius: '6px',
+                                background: 'rgba(224, 168, 46, 0.1)',
+                                color: 'var(--gold-deep)',
+                                border: '1px solid rgba(224, 168, 46, 0.25)',
+                                fontSize: '0.78rem',
+                                fontWeight: 700,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <Send size={13} /> Use in Broadcast
+                            </button>
+
                             <button
                               onClick={() => handleDeleteTemplate(t.id, t.name)}
                               style={{
-                                padding: '0.35rem 0.65rem',
-                                borderRadius: '6px',
-                                background: 'rgba(239, 68, 68, 0.1)',
-                                color: '#ef4444',
-                                border: '1px solid rgba(239, 68, 68, 0.25)',
-                                fontSize: '0.75rem',
-                                fontWeight: 600,
-                                cursor: 'pointer',
                                 display: 'inline-flex',
                                 alignItems: 'center',
-                                gap: '0.25rem'
+                                gap: '0.25rem',
+                                padding: '0.4rem 0.65rem',
+                                borderRadius: '6px',
+                                background: 'rgba(239, 68, 68, 0.08)',
+                                color: '#ef4444',
+                                border: '1px solid rgba(239, 68, 68, 0.25)',
+                                fontSize: '0.78rem',
+                                fontWeight: 700,
+                                cursor: 'pointer'
                               }}
                               title="Delete Template"
                             >
                               <Trash2 size={13} /> Delete
                             </button>
-                          </td>
-                        </tr>
+                          </div>
+                        </div>
                       );
                     })}
-                  </tbody>
-                </table>
-              )}
-            </div>
+                  </div>
+                );
+              }
+
+              {/* View 2: Table View */}
+              return (
+                <div className="campaigns-table-wrapper">
+                  <table className="campaigns-table">
+                    <thead style={{ position: 'sticky', top: 0, background: 'var(--paper-2)', zIndex: 10 }}>
+                      <tr style={{ borderBottom: '1px solid var(--line)' }}>
+                        <th style={{ padding: '0.7rem 0.85rem', fontWeight: 700 }}>Template Name</th>
+                        <th style={{ padding: '0.7rem 0.85rem', fontWeight: 700 }}>Type</th>
+                        <th style={{ padding: '0.7rem 0.85rem', fontWeight: 700 }}>Category</th>
+                        <th style={{ padding: '0.7rem 0.85rem', fontWeight: 700 }}>Meta Identifier</th>
+                        <th style={{ padding: '0.7rem 0.85rem', fontWeight: 700 }}>Language</th>
+                        <th style={{ padding: '0.7rem 0.85rem', fontWeight: 700 }}>Status</th>
+                        <th style={{ padding: '0.7rem 0.85rem', fontWeight: 700 }}>Body Text</th>
+                        <th style={{ padding: '0.7rem 0.85rem', fontWeight: 700, textAlign: 'right' }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredTemplates.map(t => {
+                        const status = metaStatuses[t.meta_template_name || t.name] || 'APPROVED';
+                        return (
+                          <tr key={t.id} style={{ borderBottom: '1px solid var(--line)' }} className="table-row-hover">
+                            <td style={{ padding: '0.75rem 0.85rem', fontWeight: 700 }}>{t.name}</td>
+                            <td style={{ padding: '0.75rem 0.85rem', textTransform: 'capitalize' }}>
+                              <span style={{
+                                padding: '0.2rem 0.55rem',
+                                borderRadius: '6px',
+                                fontSize: '0.74rem',
+                                fontWeight: 700,
+                                background: t.type === 'whatsapp' ? 'rgba(37, 211, 102, 0.12)' : 'rgba(139, 92, 246, 0.12)',
+                                color: t.type === 'whatsapp' ? '#25D366' : '#8b5cf6'
+                              }}>
+                                {t.type}
+                              </span>
+                            </td>
+                            <td style={{ padding: '0.75rem 0.85rem', fontSize: '0.78rem', fontWeight: 700, color: 'var(--muted)' }}>
+                              {t.category || 'MARKETING'}
+                            </td>
+                            <td style={{ padding: '0.75rem 0.85rem', fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: 'var(--muted)' }}>
+                              {t.meta_template_name || t.name}
+                            </td>
+                            <td style={{ padding: '0.75rem 0.85rem', fontSize: '0.8rem', color: 'var(--muted)' }}>
+                              {t.language || 'en_US'}
+                            </td>
+                            <td style={{ padding: '0.75rem 0.85rem' }}>
+                              <span style={{
+                                padding: '0.2rem 0.55rem',
+                                borderRadius: '999px',
+                                fontSize: '0.72rem',
+                                fontWeight: 700,
+                                background: status === 'APPROVED' ? 'rgba(22, 163, 123, 0.12)' : status === 'PENDING' ? 'rgba(224, 168, 46, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                                color: status === 'APPROVED' ? '#16a37b' : status === 'PENDING' ? 'var(--gold-deep)' : '#ef4444'
+                              }}>
+                                {status}
+                              </span>
+                            </td>
+                            <td style={{ padding: '0.75rem 0.85rem', fontSize: '0.8rem', color: 'var(--muted)', maxWidth: '280px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {t.body || '—'}
+                            </td>
+                            <td style={{ padding: '0.75rem 0.85rem', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                              <button
+                                onClick={() => {
+                                  setBroadcastForm(prev => ({
+                                    ...prev,
+                                    whatsapp_template: t.meta_template_name || t.name,
+                                    channel: t.type === 'email' ? 'email' : 'whatsapp'
+                                  }));
+                                  setBroadcastWizardStep(1);
+                                  setShowNewBroadcastModal(true);
+                                }}
+                                style={{
+                                  padding: '0.35rem 0.65rem',
+                                  borderRadius: '6px',
+                                  background: 'rgba(224, 168, 46, 0.1)',
+                                  color: 'var(--gold-deep)',
+                                  border: '1px solid rgba(224, 168, 46, 0.25)',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 600,
+                                  cursor: 'pointer',
+                                  marginRight: '0.4rem'
+                                }}
+                              >
+                                Use
+                              </button>
+                              <button
+                                onClick={() => handleDeleteTemplate(t.id, t.name)}
+                                style={{
+                                  padding: '0.35rem 0.65rem',
+                                  borderRadius: '6px',
+                                  background: 'rgba(239, 68, 68, 0.1)',
+                                  color: '#ef4444',
+                                  border: '1px solid rgba(239, 68, 68, 0.25)',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 600,
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.25rem'
+                                }}
+                                title="Delete Template"
+                              >
+                                <Trash2 size={13} /> Delete
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}
