@@ -695,8 +695,8 @@ export default function PublicLanding({ navigateTo, utmParams }) {
         if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
           age--;
         }
-        if (age < 18) {
-          newErrors.dob = 'Minimum age required is 18 years.';
+        if (age < 21) {
+          newErrors.dob = 'Minimum age required is 21 years.';
         }
       }
 

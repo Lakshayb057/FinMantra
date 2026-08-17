@@ -9,7 +9,7 @@ export default function ContactPage({ navigateTo }) {
     {
       icon: '📧',
       title: 'Email',
-      detail: 'support@thefinmantra.com',
+      detail: 'info@chaosglobal.net',
       sub: 'We typically respond within 24 hours',
     },
     {
@@ -224,7 +224,7 @@ export default function ContactPage({ navigateTo }) {
             fontWeight: 700,
             color: 'var(--gold-deep)',
           }}>
-            partnerships@thefinmantra.com
+            info@chaosglobal.net
           </p>
         </div>
       </section>

@@ -388,8 +388,8 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
         if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dobDate.getDate())) {
           age--;
         }
-        if (isNaN(age) || age < 18) {
-          errorText = 'You must be at least 18 years old to apply.';
+        if (isNaN(age) || age < 21) {
+          errorText = 'You must be at least 21 years old to apply.';
         } else if (age > 75) {
           errorText = 'Age limit for application is 75 years.';
         }
@@ -540,7 +540,7 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
           let age = today.getFullYear() - dobDate.getFullYear();
           const monthDiff = today.getMonth() - dobDate.getMonth();
           if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dobDate.getDate())) age--;
-          if (isNaN(age) || age < 18) fieldError = 'You must be at least 18 years old to apply.';
+          if (isNaN(age) || age < 21) fieldError = 'You must be at least 21 years old to apply.';
           else if (age > 75) fieldError = 'Age limit for application is 75 years.';
         }
       } else if (field === 'mother_name') {
@@ -1684,7 +1684,7 @@ export default function SbiQdeLanding({ navigateTo, utmParams }) {
                            value={formData.dob}
                            onChange={handleInputChange}
                          />
-                         <span className="err">{errors.dob || 'Valid Date of Birth is required (Age 18+).'}</span>
+                         <span className="err">{errors.dob || 'Valid Date of Birth is required (Age 21+).'}</span>
                        </div>
 
                        {/* 4. Mother's Name */}

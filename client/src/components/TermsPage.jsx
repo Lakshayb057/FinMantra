@@ -161,7 +161,7 @@ export default function TermsPage({ navigateTo }) {
             <p style={paragraphStyle}>By using our platform, you agree to:</p>
             <ul style={listStyle}>
               <li style={listItemStyle}>Provide accurate and truthful information in all forms and applications.</li>
-              <li style={listItemStyle}>Be at least 18 years of age to use our services.</li>
+              <li style={listItemStyle}>Be at least 21 years of age to use our services.</li>
               <li style={listItemStyle}>Not use our platform for any unlawful, fraudulent, or unauthorised purpose.</li>
               <li style={listItemStyle}>Not attempt to interfere with or disrupt the operation of our Website.</li>
             </ul>
@@ -265,7 +265,7 @@ export default function TermsPage({ navigateTo }) {
                 <strong style={{ color: 'var(--ink)' }}>Chaos Design Pvt. Ltd.</strong>
               </p>
               <p style={{ ...paragraphStyle, marginBottom: 0 }}>
-                Email: <strong style={{ color: 'var(--gold-deep)' }}>support@thefinmantra.com</strong>
+                Email: <strong style={{ color: 'var(--gold-deep)' }}>info@chaosglobal.net</strong>
               </p>
             </div>
           </div>

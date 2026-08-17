@@ -1197,8 +1197,8 @@ FM2026G2800079,APP10002,DVRPA5807A,IMTIYAZ AHMED,9785197812,SBI,DECLINE,Declined
         if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
           age--;
         }
-        if (age < 18) {
-          errorText = 'Minimum age required is 18 years.';
+        if (age < 21) {
+          errorText = 'Minimum age required is 21 years.';
         }
       } else {
         errorText = 'This field is required';
@@ -1421,8 +1421,8 @@ FM2026G2800079,APP10002,DVRPA5807A,IMTIYAZ AHMED,9785197812,SBI,DECLINE,Declined
           if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
             age--;
           }
-          if (age < 18) {
-            errorText = 'Minimum age required is 18 years.';
+          if (age < 21) {
+            errorText = 'Minimum age required is 21 years.';
           }
         } else {
           errorText = 'This field is required';

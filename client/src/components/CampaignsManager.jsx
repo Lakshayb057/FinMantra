@@ -3150,7 +3150,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                           type="email"
                           value={broadcastForm.sender_email}
                           onChange={(e) => setBroadcastForm({ ...broadcastForm, sender_email: e.target.value })}
-                          placeholder="e.g. offers@thefinmantra.com"
+                          placeholder="e.g. info@chaosglobal.net"
                           style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.88rem', boxSizing: 'border-box' }}
                         />
                       </div>
@@ -3974,7 +3974,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                     </div>
 
                     <div style={{ padding: '0.85rem 1rem', borderBottom: '1px solid var(--line)', fontSize: '0.78rem', color: 'var(--muted)', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-                      <div><strong style={{ color: 'var(--ink)' }}>From:</strong> FinMantra Official &lt;notifications@thefinmantra.com&gt;</div>
+                      <div><strong style={{ color: 'var(--ink)' }}>From:</strong> FinMantra Official &lt;info@chaosglobal.net&gt;</div>
                       <div><strong style={{ color: 'var(--ink)' }}>To:</strong> Rahul Sharma &lt;lead@customer.com&gt;</div>
                       <div><strong style={{ color: 'var(--ink)' }}>Subject:</strong> <span style={{ color: '#4f46e5', fontWeight: 700 }}>{newTemplateForm.subject || '(Subject line)'}</span></div>
                     </div>

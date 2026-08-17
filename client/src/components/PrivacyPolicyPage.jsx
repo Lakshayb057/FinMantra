@@ -216,7 +216,7 @@ export default function PrivacyPolicyPage({ navigateTo }) {
             <h2 style={sectionHeadingStyle}>Your Rights</h2>
             <p style={paragraphStyle}>
               You may request access to, correction of, or deletion of your personal data by contacting us at{' '}
-              <strong style={{ color: 'var(--gold-deep)' }}>support@thefinmantra.com</strong>.
+              <strong style={{ color: 'var(--gold-deep)' }}>info@chaosglobal.net</strong>.
             </p>
           </div>
 
@@ -257,7 +257,7 @@ export default function PrivacyPolicyPage({ navigateTo }) {
                 <strong style={{ color: 'var(--ink)' }}>Chaos Design Pvt. Ltd.</strong>
               </p>
               <p style={{ ...paragraphStyle, marginBottom: 0 }}>
-                Email: <strong style={{ color: 'var(--gold-deep)' }}>support@thefinmantra.com</strong>
+                Email: <strong style={{ color: 'var(--gold-deep)' }}>info@chaosglobal.net</strong>
               </p>
             </div>
           </div>

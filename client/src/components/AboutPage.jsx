@@ -16,7 +16,7 @@ export default function AboutPage({ navigateTo }) {
     { label: 'Legal Entity', value: 'Chaos Design Pvt. Ltd.' },
     { label: 'Brand Name', value: 'FinMantra' },
     { label: 'Website', value: 'thefinmantra.com' },
-    { label: 'Email', value: 'support@thefinmantra.com' },
+    { label: 'Email', value: 'info@chaosglobal.net' },
     { label: 'Industry', value: 'Financial Services Technology (FinTech)' },
   ];
 
