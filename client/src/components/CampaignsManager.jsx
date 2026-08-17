@@ -21,6 +21,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
   const [dashFilterBroadcastName, setDashFilterBroadcastName] = useState('');
   const [dashFilterMetaWaNo, setDashFilterMetaWaNo] = useState('');
   const [dashFilterSenderEmail, setDashFilterSenderEmail] = useState('');
+  const [dashRecentSearch, setDashRecentSearch] = useState('');
 
   // Templates Manager state
   const [templates, setTemplates] = useState([]);
@@ -883,13 +884,13 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
   return (
     <div className="campaigns-container">
       {/* Top Header / Actions Bar */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '1rem', flexShrink: 0 }}>
+      <div className="campaigns-header">
         <div>
-          <h2 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 800, letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <h2 className="campaigns-header-title">
             <Zap size={22} style={{ color: 'var(--gold-deep)' }} />
             OmniChannel Campaigns &amp; Broadcast Center
           </h2>
-          <p style={{ margin: '0.25rem 0 0 0', color: 'var(--muted)', fontSize: '0.85rem' }}>
+          <p className="campaigns-header-desc">
             Direct Meta WhatsApp &amp; SMTP broadcast dispatch, unified master repository, and real-time delivery analytics.
           </p>
         </div>
@@ -899,115 +900,49 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
       <div className="campaigns-subnav">
         <button
           onClick={() => setActiveSubTab('communication_dashboard')}
-          style={{
-            padding: '0.5rem 1rem',
-            borderRadius: '8px',
-            border: 'none',
-            fontSize: '0.86rem',
-            fontWeight: 700,
-            cursor: 'pointer',
-            background: activeSubTab === 'communication_dashboard' ? 'var(--gold-deep)' : 'transparent',
-            color: activeSubTab === 'communication_dashboard' ? '#fff' : 'var(--muted)',
-            transition: 'all 0.2s ease',
-            whiteSpace: 'nowrap'
-          }}
+          className={activeSubTab === 'communication_dashboard' ? 'active' : ''}
         >
-          <BarChart3 size={15} style={{ marginRight: '0.45rem', verticalAlign: 'middle' }} />
+          <BarChart3 size={15} />
           Communication Dashboard
         </button>
 
         <button
           onClick={() => setActiveSubTab('master_data')}
-          style={{
-            padding: '0.5rem 1rem',
-            borderRadius: '8px',
-            border: 'none',
-            fontSize: '0.86rem',
-            fontWeight: 700,
-            cursor: 'pointer',
-            background: activeSubTab === 'master_data' ? 'var(--gold-deep)' : 'transparent',
-            color: activeSubTab === 'master_data' ? '#fff' : 'var(--muted)',
-            transition: 'all 0.2s ease',
-            whiteSpace: 'nowrap'
-          }}
+          className={activeSubTab === 'master_data' ? 'active' : ''}
         >
-          <Database size={15} style={{ marginRight: '0.45rem', verticalAlign: 'middle' }} />
+          <Database size={15} />
           Master Data Center
         </button>
 
         <button
           onClick={() => setActiveSubTab('broadcast')}
-          style={{
-            padding: '0.5rem 1rem',
-            borderRadius: '8px',
-            border: 'none',
-            fontSize: '0.86rem',
-            fontWeight: 700,
-            cursor: 'pointer',
-            background: activeSubTab === 'broadcast' ? 'var(--gold-deep)' : 'transparent',
-            color: activeSubTab === 'broadcast' ? '#fff' : 'var(--muted)',
-            transition: 'all 0.2s ease',
-            whiteSpace: 'nowrap'
-          }}
+          className={activeSubTab === 'broadcast' ? 'active' : ''}
         >
-          <MessageSquare size={15} style={{ marginRight: '0.45rem', verticalAlign: 'middle' }} />
+          <MessageSquare size={15} />
           Broadcast Campaigns
         </button>
 
         <button
           onClick={() => setActiveSubTab('templates')}
-          style={{
-            padding: '0.5rem 1rem',
-            borderRadius: '8px',
-            border: 'none',
-            fontSize: '0.86rem',
-            fontWeight: 700,
-            cursor: 'pointer',
-            background: activeSubTab === 'templates' ? 'var(--gold-deep)' : 'transparent',
-            color: activeSubTab === 'templates' ? '#fff' : 'var(--muted)',
-            transition: 'all 0.2s ease',
-            whiteSpace: 'nowrap'
-          }}
+          className={activeSubTab === 'templates' ? 'active' : ''}
         >
-          <FileText size={15} style={{ marginRight: '0.45rem', verticalAlign: 'middle' }} />
+          <FileText size={15} />
           Templates Manager
         </button>
 
         <button
           onClick={() => setActiveSubTab('settings')}
-          style={{
-            padding: '0.5rem 1rem',
-            borderRadius: '8px',
-            border: 'none',
-            fontSize: '0.86rem',
-            fontWeight: 700,
-            cursor: 'pointer',
-            background: activeSubTab === 'settings' ? 'var(--gold-deep)' : 'transparent',
-            color: activeSubTab === 'settings' ? '#fff' : 'var(--muted)',
-            transition: 'all 0.2s ease',
-            whiteSpace: 'nowrap'
-          }}
+          className={activeSubTab === 'settings' ? 'active' : ''}
         >
-          <SettingsIcon size={15} style={{ marginRight: '0.45rem', verticalAlign: 'middle' }} />
+          <SettingsIcon size={15} />
           SMTP Gateway Settings
         </button>
 
         <button
           onClick={() => setActiveSubTab('guide')}
-          style={{
-            padding: '0.5rem 1rem',
-            borderRadius: '8px',
-            border: 'none',
-            fontSize: '0.86rem',
-            fontWeight: 700,
-            cursor: 'pointer',
-            background: activeSubTab === 'guide' ? 'var(--gold-deep)' : 'transparent',
-            color: activeSubTab === 'guide' ? '#fff' : 'var(--muted)',
-            transition: 'all 0.2s ease',
-            whiteSpace: 'nowrap'
-          }}
+          className={activeSubTab === 'guide' ? 'active' : ''}
         >
-          <HelpCircle size={15} style={{ marginRight: '0.45rem', verticalAlign: 'middle' }} />
+          <HelpCircle size={15} />
           Developer Guide
         </button>
       </div>
@@ -1027,7 +962,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                 type="date"
                 value={dashFilterDateFrom}
                 onChange={(e) => setDashFilterDateFrom(e.target.value)}
-                style={{ width: '100%', padding: '0.4rem 0.6rem', fontSize: '0.82rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
+                style={{ width: '100%', padding: '0.45rem 0.6rem', fontSize: '0.82rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
               />
             </div>
 
@@ -1039,7 +974,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                 type="date"
                 value={dashFilterDateTo}
                 onChange={(e) => setDashFilterDateTo(e.target.value)}
-                style={{ width: '100%', padding: '0.4rem 0.6rem', fontSize: '0.82rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
+                style={{ width: '100%', padding: '0.45rem 0.6rem', fontSize: '0.82rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
               />
             </div>
 
@@ -1050,7 +985,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
               <select
                 value={dashFilterBroadcastName}
                 onChange={(e) => setDashFilterBroadcastName(e.target.value)}
-                style={{ width: '100%', padding: '0.4rem 0.6rem', fontSize: '0.82rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
+                style={{ width: '100%', padding: '0.45rem 0.6rem', fontSize: '0.82rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
               >
                 <option value="">All Broadcasts</option>
                 {masterFilterOptions.broadcastNames.map(name => (
@@ -1066,7 +1001,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
               <select
                 value={dashFilterMetaWaNo}
                 onChange={(e) => setDashFilterMetaWaNo(e.target.value)}
-                style={{ width: '100%', padding: '0.4rem 0.6rem', fontSize: '0.82rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
+                style={{ width: '100%', padding: '0.45rem 0.6rem', fontSize: '0.82rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
               >
                 <option value="">All WhatsApp Numbers</option>
                 {masterFilterOptions.metaWhatsappNos.map(no => (
@@ -1082,7 +1017,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
               <select
                 value={dashFilterSenderEmail}
                 onChange={(e) => setDashFilterSenderEmail(e.target.value)}
-                style={{ width: '100%', padding: '0.4rem 0.6rem', fontSize: '0.82rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
+                style={{ width: '100%', padding: '0.45rem 0.6rem', fontSize: '0.82rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
               >
                 <option value="">All Sender Emails</option>
                 {masterFilterOptions.senderEmails.map(em => (
@@ -1102,14 +1037,14 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                 }}
                 style={{
                   width: '100%',
-                  padding: '0.45rem',
+                  padding: '0.48rem',
                   fontSize: '0.82rem',
                   borderRadius: '6px',
                   border: '1px solid var(--line)',
                   background: 'var(--paper)',
                   color: 'var(--muted)',
                   cursor: 'pointer',
-                  fontWeight: 600
+                  fontWeight: 700
                 }}
               >
                 Reset Filters
@@ -1119,105 +1054,105 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
 
           {/* Top KPI Metric Cards */}
           {dashboardAnalytics && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(185px, 1fr))', gap: '0.85rem', marginBottom: '1.5rem' }}>
+            <div className="campaigns-kpi-grid">
               {/* Broadcasts Count */}
-              <div className="glass-panel" style={{ padding: '1.15rem 1.25rem', borderRadius: '12px', border: '1px solid var(--line)', borderTop: '3.5px solid var(--gold-deep)', background: 'var(--paper)', boxShadow: '0 4px 16px rgba(0,0,0,0.03)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'var(--muted)', fontSize: '0.76rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              <div className="campaigns-kpi-card" style={{ borderTop: '3.5px solid var(--gold-deep)' }}>
+                <div className="campaigns-kpi-title">
                   <span>Total Broadcasts</span>
-                  <div style={{ width: '28px', height: '28px', borderRadius: '7px', background: 'rgba(224, 168, 46, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Zap size={15} style={{ color: 'var(--gold-deep)' }} />
+                  <div className="campaigns-kpi-icon-pill" style={{ background: 'rgba(224, 168, 46, 0.12)', color: 'var(--gold-deep)' }}>
+                    <Zap size={15} />
                   </div>
                 </div>
-                <div style={{ fontSize: '1.75rem', fontWeight: 900, marginTop: '0.45rem', color: 'var(--ink)', fontFamily: 'var(--font-heading)' }}>
+                <div className="campaigns-kpi-value" style={{ color: 'var(--ink)' }}>
                   {dashboardAnalytics.kpis.total_broadcasts || 0}
                 </div>
-                <div style={{ fontSize: '0.74rem', color: 'var(--muted)', marginTop: '0.35rem', fontWeight: 600 }}>
+                <div className="campaigns-kpi-subtext">
                   <span style={{ color: '#25D366' }}>{dashboardAnalytics.kpis.wa_broadcasts || 0} WA</span> • <span style={{ color: '#8b5cf6' }}>{dashboardAnalytics.kpis.email_broadcasts || 0} Email</span> • <span style={{ color: 'var(--gold-deep)' }}>{dashboardAnalytics.kpis.hybrid_broadcasts || 0} Hybrid</span>
                 </div>
               </div>
 
               {/* Total Targeted */}
-              <div className="glass-panel" style={{ padding: '1.15rem 1.25rem', borderRadius: '12px', border: '1px solid var(--line)', borderTop: '3.5px solid #3b82f6', background: 'var(--paper)', boxShadow: '0 4px 16px rgba(0,0,0,0.03)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'var(--muted)', fontSize: '0.76rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              <div className="campaigns-kpi-card" style={{ borderTop: '3.5px solid #3b82f6' }}>
+                <div className="campaigns-kpi-title">
                   <span>Targeted Leads</span>
-                  <div style={{ width: '28px', height: '28px', borderRadius: '7px', background: 'rgba(59, 130, 246, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Users size={15} style={{ color: '#3b82f6' }} />
+                  <div className="campaigns-kpi-icon-pill" style={{ background: 'rgba(59, 130, 246, 0.12)', color: '#3b82f6' }}>
+                    <Users size={15} />
                   </div>
                 </div>
-                <div style={{ fontSize: '1.75rem', fontWeight: 900, marginTop: '0.45rem', color: 'var(--ink)', fontFamily: 'var(--font-heading)' }}>
+                <div className="campaigns-kpi-value" style={{ color: '#3b82f6' }}>
                   {(dashboardAnalytics.kpis.total_targeted || 0).toLocaleString()}
                 </div>
-                <div style={{ fontSize: '0.74rem', color: '#3b82f6', marginTop: '0.35rem', fontWeight: 700 }}>
+                <div className="campaigns-kpi-subtext" style={{ color: '#3b82f6', fontWeight: 700 }}>
                   {(dashboardAnalytics.masterStats.total_master_contacts || 0).toLocaleString()} Unique Master Contacts
                 </div>
               </div>
 
               {/* WhatsApp Delivery Rate */}
-              <div className="glass-panel" style={{ padding: '1.15rem 1.25rem', borderRadius: '12px', border: '1px solid var(--line)', borderTop: '3.5px solid #10b981', background: 'var(--paper)', boxShadow: '0 4px 16px rgba(0,0,0,0.03)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'var(--muted)', fontSize: '0.76rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              <div className="campaigns-kpi-card" style={{ borderTop: '3.5px solid #10b981' }}>
+                <div className="campaigns-kpi-title">
                   <span>WA Delivery Rate</span>
-                  <div style={{ width: '28px', height: '28px', borderRadius: '7px', background: 'rgba(16, 185, 129, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <CheckCheck size={15} style={{ color: '#10b981' }} />
+                  <div className="campaigns-kpi-icon-pill" style={{ background: 'rgba(16, 185, 129, 0.12)', color: '#10b981' }}>
+                    <CheckCheck size={15} />
                   </div>
                 </div>
-                <div style={{ fontSize: '1.75rem', fontWeight: 900, marginTop: '0.45rem', color: '#10b981', fontFamily: 'var(--font-heading)' }}>
+                <div className="campaigns-kpi-value" style={{ color: '#10b981' }}>
                   {dashboardAnalytics.masterStats.sum_wa_sent > 0 
                     ? `${((dashboardAnalytics.masterStats.sum_wa_delivered / dashboardAnalytics.masterStats.sum_wa_sent) * 100).toFixed(1)}%` 
                     : '100%'}
                 </div>
-                <div style={{ fontSize: '0.74rem', color: 'var(--muted)', marginTop: '0.35rem', fontWeight: 600 }}>
+                <div className="campaigns-kpi-subtext">
                   {dashboardAnalytics.masterStats.sum_wa_delivered} delivered of {dashboardAnalytics.masterStats.sum_wa_sent} sent
                 </div>
               </div>
 
               {/* WhatsApp CTR */}
-              <div className="glass-panel" style={{ padding: '1.15rem 1.25rem', borderRadius: '12px', border: '1px solid var(--line)', borderTop: '3.5px solid #f59e0b', background: 'var(--paper)', boxShadow: '0 4px 16px rgba(0,0,0,0.03)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'var(--muted)', fontSize: '0.76rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              <div className="campaigns-kpi-card" style={{ borderTop: '3.5px solid #f59e0b' }}>
+                <div className="campaigns-kpi-title">
                   <span>WhatsApp CTR</span>
-                  <div style={{ width: '28px', height: '28px', borderRadius: '7px', background: 'rgba(245, 158, 11, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <TrendingUp size={15} style={{ color: '#f59e0b' }} />
+                  <div className="campaigns-kpi-icon-pill" style={{ background: 'rgba(245, 158, 11, 0.12)', color: '#f59e0b' }}>
+                    <TrendingUp size={15} />
                   </div>
                 </div>
-                <div style={{ fontSize: '1.75rem', fontWeight: 900, marginTop: '0.45rem', color: '#f59e0b', fontFamily: 'var(--font-heading)' }}>
+                <div className="campaigns-kpi-value" style={{ color: '#f59e0b' }}>
                   {dashboardAnalytics.masterStats.sum_wa_delivered > 0 
                     ? `${((dashboardAnalytics.masterStats.sum_wa_clicked / dashboardAnalytics.masterStats.sum_wa_delivered) * 100).toFixed(1)}%` 
                     : '0.0%'}
                 </div>
-                <div style={{ fontSize: '0.74rem', color: '#f59e0b', marginTop: '0.35rem', fontWeight: 700 }}>
+                <div className="campaigns-kpi-subtext" style={{ color: '#f59e0b', fontWeight: 700 }}>
                   {dashboardAnalytics.masterStats.sum_wa_clicked || 0} unique link clicks
                 </div>
               </div>
 
               {/* Email Delivery Rate */}
-              <div className="glass-panel" style={{ padding: '1.15rem 1.25rem', borderRadius: '12px', border: '1px solid var(--line)', borderTop: '3.5px solid #8b5cf6', background: 'var(--paper)', boxShadow: '0 4px 16px rgba(0,0,0,0.03)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'var(--muted)', fontSize: '0.76rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              <div className="campaigns-kpi-card" style={{ borderTop: '3.5px solid #8b5cf6' }}>
+                <div className="campaigns-kpi-title">
                   <span>Email Delivery Rate</span>
-                  <div style={{ width: '28px', height: '28px', borderRadius: '7px', background: 'rgba(139, 92, 246, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Mail size={15} style={{ color: '#8b5cf6' }} />
+                  <div className="campaigns-kpi-icon-pill" style={{ background: 'rgba(139, 92, 246, 0.12)', color: '#8b5cf6' }}>
+                    <Mail size={15} />
                   </div>
                 </div>
-                <div style={{ fontSize: '1.75rem', fontWeight: 900, marginTop: '0.45rem', color: '#8b5cf6', fontFamily: 'var(--font-heading)' }}>
+                <div className="campaigns-kpi-value" style={{ color: '#8b5cf6' }}>
                   {dashboardAnalytics.masterStats.sum_email_sent > 0 
                     ? `${((dashboardAnalytics.masterStats.sum_email_delivered / dashboardAnalytics.masterStats.sum_email_sent) * 100).toFixed(1)}%` 
                     : '100%'}
                 </div>
-                <div style={{ fontSize: '0.74rem', color: 'var(--muted)', marginTop: '0.35rem', fontWeight: 600 }}>
+                <div className="campaigns-kpi-subtext">
                   {dashboardAnalytics.masterStats.sum_email_delivered} delivered of {dashboardAnalytics.masterStats.sum_email_sent} sent
                 </div>
               </div>
 
               {/* Opt-out Rate */}
-              <div className="glass-panel" style={{ padding: '1.15rem 1.25rem', borderRadius: '12px', border: '1px solid var(--line)', borderTop: '3.5px solid #ef4444', background: 'var(--paper)', boxShadow: '0 4px 16px rgba(0,0,0,0.03)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'var(--muted)', fontSize: '0.76rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              <div className="campaigns-kpi-card" style={{ borderTop: '3.5px solid #ef4444' }}>
+                <div className="campaigns-kpi-title">
                   <span>Opt-out Rate</span>
-                  <div style={{ width: '28px', height: '28px', borderRadius: '7px', background: 'rgba(239, 68, 68, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <ShieldCheck size={15} style={{ color: '#ef4444' }} />
+                  <div className="campaigns-kpi-icon-pill" style={{ background: 'rgba(239, 68, 68, 0.12)', color: '#ef4444' }}>
+                    <ShieldCheck size={15} />
                   </div>
                 </div>
-                <div style={{ fontSize: '1.75rem', fontWeight: 900, marginTop: '0.45rem', color: '#ef4444', fontFamily: 'var(--font-heading)' }}>
+                <div className="campaigns-kpi-value" style={{ color: '#ef4444' }}>
                   {(dashboardAnalytics.masterStats.wa_optout_count || 0) + (dashboardAnalytics.masterStats.email_optout_count || 0)}
                 </div>
-                <div style={{ fontSize: '0.74rem', color: 'var(--muted)', marginTop: '0.35rem', fontWeight: 600 }}>
+                <div className="campaigns-kpi-subtext">
                   <span style={{ color: '#ef4444' }}>{dashboardAnalytics.masterStats.wa_optout_count || 0} WA</span> • <span style={{ color: '#ef4444' }}>{dashboardAnalytics.masterStats.email_optout_count || 0} Email</span> opt-outs
                 </div>
               </div>
@@ -1225,11 +1160,11 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
           )}
 
           {/* Active Sender Health and Status */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+          <div className="campaigns-sender-grid">
             {/* Meta WhatsApp Phone Numbers with Quality Ratings */}
             <div className="glass-panel" style={{ padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                <h3 style={{ margin: 0, fontSize: '0.96rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
                   <MessageSquare size={16} style={{ color: '#25D366' }} /> Meta WhatsApp Sender Health
                 </h3>
                 <button onClick={fetchMetaPhoneNumbers} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }} title="Refresh Phone Numbers">
@@ -1244,7 +1179,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
                   {metaPhoneNumbers.map(p => (
-                    <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.65rem 0.85rem', borderRadius: '8px', background: 'var(--paper-2)', border: '1px solid var(--line)' }}>
+                    <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.65rem 0.85rem', borderRadius: '8px', background: 'var(--paper-2)', border: '1px solid var(--line)', flexWrap: 'wrap', gap: '0.5rem' }}>
                       <div>
                         <div style={{ fontWeight: 700, fontSize: '0.88rem' }}>{p.display_phone_number} ({p.verified_name || 'Business'})</div>
                         <div style={{ fontSize: '0.72rem', color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>Phone ID: {p.id}</div>
@@ -1261,115 +1196,163 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
             {/* Email Gateway Sender Info */}
             <div className="glass-panel" style={{ padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                <h3 style={{ margin: 0, fontSize: '0.96rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
                   <Mail size={16} style={{ color: '#3b82f6' }} /> SMTP Sender Gateway
                 </h3>
-                <button onClick={() => setActiveSubTab('settings')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gold-deep)', fontSize: '0.78rem', fontWeight: 600 }}>
-                  Configure
+                <button onClick={() => setActiveSubTab('settings')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gold-deep)', fontSize: '0.78rem', fontWeight: 700 }}>
+                  Configure &rarr;
                 </button>
               </div>
 
               <div style={{ background: 'var(--paper-2)', padding: '0.85rem', borderRadius: '8px', border: '1px solid var(--line)', fontSize: '0.85rem' }}>
                 <div style={{ marginBottom: '0.4rem' }}>
-                  <strong>Host:</strong> {smtpSettings.host || 'smtp.titan.email (Configured)'}
+                  <strong>Host:</strong> {smtpSettings.host || 'smtp.gmail.com'}
                 </div>
                 <div style={{ marginBottom: '0.4rem' }}>
                   <strong>From Name:</strong> {smtpSettings.fromName || 'FinMantra'}
                 </div>
                 <div>
-                  <strong>From Email:</strong> {smtpSettings.fromEmail || 'no-reply@finmantra.com'}
+                  <strong>From Email:</strong> {smtpSettings.fromEmail || 'lakshayb057@gmail.com'}
                 </div>
               </div>
             </div>
           </div>
 
           {/* Recent Broadcasts Overview Table */}
-          <div className="glass-panel" style={{ padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)', flex: 1, minHeight: 0 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>Recent Broadcast Campaigns &amp; Delivery Stats</h3>
-              <button onClick={() => setActiveSubTab('broadcast')} style={{ background: 'none', border: 'none', color: 'var(--gold-deep)', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer' }}>
-                View All Broadcasts &rarr;
-              </button>
+          <div className="glass-panel" style={{ padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                  <TrendingUp size={17} style={{ color: 'var(--gold-deep)' }} />
+                  Recent Broadcast Campaigns &amp; Delivery Stats
+                </h3>
+                <span style={{ padding: '0.2rem 0.6rem', borderRadius: '999px', background: 'rgba(224, 168, 46, 0.12)', color: 'var(--gold-deep)', fontSize: '0.74rem', fontWeight: 800 }}>
+                  {broadcasts.length} Total
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <div style={{ position: 'relative', width: '200px' }}>
+                  <Search size={14} style={{ position: 'absolute', left: '0.6rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} />
+                  <input
+                    type="text"
+                    placeholder="Search recent..."
+                    value={dashRecentSearch}
+                    onChange={(e) => setDashRecentSearch(e.target.value)}
+                    style={{ width: '100%', padding: '0.35rem 0.55rem 0.35rem 1.8rem', fontSize: '0.78rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', boxSizing: 'border-box' }}
+                  />
+                </div>
+                <button onClick={() => setActiveSubTab('broadcast')} style={{ background: 'none', border: 'none', color: 'var(--gold-deep)', fontSize: '0.84rem', fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                  View All Broadcasts &rarr;
+                </button>
+              </div>
             </div>
 
             <div className="campaigns-table-wrapper">
               <table className="campaigns-table">
                 <thead>
-                  <tr style={{ borderBottom: '1px solid var(--line)', color: 'var(--muted)', fontSize: '0.75rem', textTransform: 'uppercase' }}>
-                    <th style={{ padding: '0.6rem 0.75rem' }}>Broadcast Name</th>
-                    <th style={{ padding: '0.6rem 0.75rem' }}>Channel</th>
-                    <th style={{ padding: '0.6rem 0.75rem' }}>Sender</th>
-                    <th style={{ padding: '0.6rem 0.75rem' }}>Status</th>
-                    <th style={{ padding: '0.6rem 0.75rem' }}>Targeted</th>
-                    <th style={{ padding: '0.6rem 0.75rem' }}>Delivered</th>
-                    <th style={{ padding: '0.6rem 0.75rem' }}>CTR</th>
-                    <th style={{ padding: '0.6rem 0.75rem' }}>Date</th>
-                    <th style={{ padding: '0.6rem 0.75rem', textAlign: 'right' }}>Actions</th>
+                  <tr>
+                    <th>Broadcast Name</th>
+                    <th>Channel</th>
+                    <th>Sender</th>
+                    <th>Status</th>
+                    <th>Targeted</th>
+                    <th>Delivered</th>
+                    <th>CTR</th>
+                    <th>Date</th>
+                    <th style={{ textAlign: 'right' }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {broadcasts.slice(0, 10).map(b => {
-                    const ctr = b.delivered_count > 0 ? ((b.clicked_count / b.delivered_count) * 100).toFixed(1) : '0.0';
+                  {broadcasts
+                    .filter(b => !dashRecentSearch || (b.name && b.name.toLowerCase().includes(dashRecentSearch.toLowerCase())) || (b.channel && b.channel.toLowerCase().includes(dashRecentSearch.toLowerCase())))
+                    .slice(0, 10).map(b => {
+                    const displayDelivered = b.channel === 'both' 
+                      ? (b.targeted_count && b.targeted_count <= b.delivered_count ? b.targeted_count : Math.ceil((b.delivered_count || 0) / 2))
+                      : (b.delivered_count || b.sent_count || 0);
+                    
+                    const effDelivered = displayDelivered > 0 ? displayDelivered : (b.delivered_count || 1);
+                    const ctr = effDelivered > 0 ? ((Math.min(b.clicked_count || 0, effDelivered) / effDelivered) * 100).toFixed(1) : '0.0';
                     return (
-                      <tr key={b.id} style={{ borderBottom: '1px solid var(--line)' }} className="table-row-hover">
-                        <td style={{ padding: '0.65rem 0.75rem', fontWeight: 700 }}>{b.name}</td>
-                        <td style={{ padding: '0.65rem 0.75rem', textTransform: 'capitalize' }}>{b.channel}</td>
-                        <td style={{ padding: '0.65rem 0.75rem', fontSize: '0.78rem', color: 'var(--muted)' }}>
+                      <tr key={b.id} className="table-row-hover">
+                        <td style={{ fontWeight: 800, color: 'var(--ink)' }}>{b.name}</td>
+                        <td>
+                          <span style={{
+                            padding: '0.2rem 0.55rem',
+                            borderRadius: '6px',
+                            fontSize: '0.74rem',
+                            fontWeight: 700,
+                            textTransform: 'capitalize',
+                            background: b.channel === 'whatsapp' ? 'rgba(37, 211, 102, 0.12)' : b.channel === 'email' ? 'rgba(139, 92, 246, 0.12)' : 'rgba(224, 168, 46, 0.12)',
+                            color: b.channel === 'whatsapp' ? '#25D366' : b.channel === 'email' ? '#8b5cf6' : 'var(--gold-deep)',
+                            border: `1px solid ${b.channel === 'whatsapp' ? 'rgba(37, 211, 102, 0.25)' : b.channel === 'email' ? 'rgba(139, 92, 246, 0.25)' : 'rgba(224, 168, 46, 0.25)'}`
+                          }}>
+                            {b.channel}
+                          </span>
+                        </td>
+                        <td style={{ fontSize: '0.78rem', color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>
                           {b.meta_phone_number || b.sender_email || 'Default'}
                         </td>
-                        <td style={{ padding: '0.65rem 0.75rem' }}>
+                        <td>
                           <span 
                             onClick={() => handleOpenBroadcastLogs(b)}
                             style={{
                               padding: '0.2rem 0.55rem',
                               borderRadius: '999px',
                               fontSize: '0.72rem',
-                              fontWeight: 700,
+                              fontWeight: 800,
                               background: b.status === 'sent' ? 'rgba(22, 163, 123, 0.12)' : b.status === 'processing' ? 'rgba(59, 130, 246, 0.12)' : b.status === 'failed' ? 'rgba(239, 68, 68, 0.12)' : 'rgba(224, 168, 46, 0.12)',
                               color: b.status === 'sent' ? '#16a37b' : b.status === 'processing' ? '#3b82f6' : b.status === 'failed' ? '#ef4444' : 'var(--gold-deep)',
-                              cursor: 'pointer'
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.3rem'
                             }}
                             title="Click to view detailed delivery logs"
                           >
+                            <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: b.status === 'sent' ? '#16a37b' : b.status === 'processing' ? '#3b82f6' : b.status === 'failed' ? '#ef4444' : 'var(--gold-deep)' }} />
                             {b.status}
                           </span>
                         </td>
-                        <td style={{ padding: '0.65rem 0.75rem', fontWeight: 600 }}>{b.targeted_count || 0}</td>
-                        <td style={{ padding: '0.65rem 0.75rem', color: '#16a37b', fontWeight: 700 }}>{b.delivered_count || b.sent_count || 0}</td>
-                        <td style={{ padding: '0.65rem 0.75rem' }}>
+                        <td style={{ fontWeight: 700, color: 'var(--ink)' }}>{b.targeted_count || 0}</td>
+                        <td style={{ color: '#16a37b', fontWeight: 800 }}>
+                          {displayDelivered}
+                          {b.channel === 'both' && <span style={{ fontSize: '0.7rem', color: 'var(--muted)', marginLeft: '0.3rem' }}>(WA+Email)</span>}
+                        </td>
+                        <td>
                           <span style={{
-                            padding: '0.18rem 0.48rem',
+                            padding: '0.18rem 0.5rem',
                             borderRadius: '6px',
                             fontSize: '0.74rem',
                             fontWeight: 800,
                             background: Number(ctr) > 0 ? 'rgba(245, 158, 11, 0.15)' : 'var(--paper-2)',
                             color: Number(ctr) > 0 ? '#d97706' : 'var(--muted)',
-                            border: '1px solid var(--line)'
+                            border: `1px solid ${Number(ctr) > 0 ? 'rgba(245, 158, 11, 0.3)' : 'var(--line)'}`
                           }}>
                             {ctr}% ({b.clicked_count || 0})
                           </span>
                         </td>
-                        <td style={{ padding: '0.65rem 0.75rem', color: 'var(--muted)', fontSize: '0.78rem' }}>
+                        <td style={{ color: 'var(--muted)', fontSize: '0.78rem' }}>
                           {b.created_at ? new Date(b.created_at).toLocaleDateString() : '—'}
                         </td>
-                        <td style={{ padding: '0.65rem 0.75rem', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                        <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                           <button
                             onClick={() => handleOpenBroadcastLogs(b)}
-                            style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '0.2rem', marginRight: '0.4rem' }}
+                            style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '0.3rem', marginRight: '0.3rem' }}
                             title="View Delivery Logs"
                           >
                             <FileText size={15} />
                           </button>
                           <button
                             onClick={() => handleEditBroadcast(b)}
-                            style={{ background: 'none', border: 'none', color: 'var(--gold-deep)', cursor: 'pointer', padding: '0.2rem', marginRight: '0.4rem' }}
+                            style={{ background: 'none', border: 'none', color: 'var(--gold-deep)', cursor: 'pointer', padding: '0.3rem', marginRight: '0.3rem' }}
                             title="Edit Broadcast"
                           >
                             <Edit2 size={15} />
                           </button>
                           <button
                             onClick={() => handleDeleteBroadcast(b.id, b.name)}
-                            style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.2rem' }}
+                            style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.3rem' }}
                             title="Delete Broadcast"
                           >
                             <Trash2 size={15} />
