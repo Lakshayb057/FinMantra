@@ -6873,6 +6873,8 @@ const registerMetaTemplate = async ({ apiKey, wabaId, phoneId, name, category, l
     if (buttons) {
       try {
         let btnObj = typeof buttons === 'string' ? JSON.parse(buttons) : buttons;
+        if (btnObj.buttonType === 'CTA') {
+          const buttonsArray = [];
           if (btnObj.ctaUrlText && btnObj.ctaUrlValue) {
             const btn = {
               type: 'URL',
