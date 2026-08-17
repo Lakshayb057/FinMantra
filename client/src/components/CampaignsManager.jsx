@@ -3888,12 +3888,12 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                     {/* 5. Buttons */}
                     <div>
                       <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '0.4rem', textTransform: 'uppercase', color: 'var(--muted)' }}>
-                        5. Interactive Buttons
+                        5. Interactive Buttons (CTA URLs, Unsubscribe & Phone)
                       </label>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '0.4rem', marginBottom: '0.65rem' }}>
                         {[
                           { id: 'NONE', label: 'None' },
-                          { id: 'CTA', label: '🔗 CTA Link' },
+                          { id: 'CTA', label: '🔗 CTA Links' },
                           { id: 'QUICK_REPLIES', label: '💬 Replies' },
                           { id: 'OTP', label: '🔑 OTP' }
                         ].map(bt => {
@@ -3921,23 +3921,121 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                       </div>
 
                       {newTemplateForm.buttons.buttonType === 'CTA' && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                          <div className="campaigns-grid-2col">
-                            <input
-                              type="text"
-                              placeholder="Button 1 Text (e.g. View Offers)"
-                              value={newTemplateForm.buttons.ctaUrlText}
-                              onChange={(e) => setNewTemplateForm(p => ({ ...p, buttons: { ...p.buttons, ctaUrlText: e.target.value } }))}
-                              style={{ width: '100%', padding: '0.45rem 0.65rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.82rem', boxSizing: 'border-box' }}
-                            />
-                            <input
-                              type="text"
-                              placeholder="Button 1 URL (e.g. https://thefinmantra.com/contact-center)"
-                              value={newTemplateForm.buttons.ctaUrlValue}
-                              onChange={(e) => setNewTemplateForm(p => ({ ...p, buttons: { ...p.buttons, ctaUrlValue: e.target.value } }))}
-                              style={{ width: '100%', padding: '0.45rem 0.65rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.82rem', boxSizing: 'border-box' }}
-                            />
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', background: 'var(--paper)', padding: '0.85rem', borderRadius: '8px', border: '1px solid var(--line)' }}>
+                          {/* Button 1 (Primary Action URL) */}
+                          <div>
+                            <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--gold-deep)', marginBottom: '0.35rem', display: 'flex', justifyContent: 'space-between' }}>
+                              <span>Button 1: Website Link / Action</span>
+                              <span style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>Static or Dynamic</span>
+                            </div>
+                            <div className="campaigns-grid-2col" style={{ gap: '0.4rem' }}>
+                              <input
+                                type="text"
+                                placeholder="Button 1 Label (e.g. 👉 Complete Application)"
+                                value={newTemplateForm.buttons.ctaUrlText}
+                                onChange={(e) => setNewTemplateForm(p => ({ ...p, buttons: { ...p.buttons, ctaUrlText: e.target.value } }))}
+                                style={{ width: '100%', padding: '0.45rem 0.65rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.82rem', boxSizing: 'border-box' }}
+                              />
+                              <input
+                                type="text"
+                                placeholder="Button 1 URL (e.g. https://thefinmantra.com/simplyclick_sbi)"
+                                value={newTemplateForm.buttons.ctaUrlValue}
+                                onChange={(e) => setNewTemplateForm(p => ({ ...p, buttons: { ...p.buttons, ctaUrlValue: e.target.value } }))}
+                                style={{ width: '100%', padding: '0.45rem 0.65rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.82rem', boxSizing: 'border-box' }}
+                              />
+                            </div>
+                            {newTemplateForm.buttons.ctaUrlValue.includes('{{1}}') && (
+                              <div style={{ marginTop: '0.35rem' }}>
+                                <input
+                                  type="text"
+                                  placeholder="Sample Value for {{1}} in URL (e.g. 9876543210)"
+                                  value={newTemplateForm.buttons.ctaUrlSample || ''}
+                                  onChange={(e) => setNewTemplateForm(p => ({ ...p, buttons: { ...p.buttons, ctaUrlSample: e.target.value } }))}
+                                  style={{ width: '100%', padding: '0.35rem 0.6rem', borderRadius: '6px', border: '1px dashed #25D366', background: 'rgba(37,211,102,0.05)', color: 'var(--ink)', fontSize: '0.78rem', boxSizing: 'border-box' }}
+                                />
+                              </div>
+                            )}
                           </div>
+
+                          {/* Button 2 (Secondary URL / Unsubscribe / Preferences) */}
+                          <div style={{ paddingTop: '0.65rem', borderTop: '1px solid var(--line)' }}>
+                            <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#ef4444', marginBottom: '0.35rem', display: 'flex', justifyContent: 'space-between' }}>
+                              <span>Button 2: Preferences / Unsubscribe URL</span>
+                              <span style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>Recommended for Utility</span>
+                            </div>
+                            <div className="campaigns-grid-2col" style={{ gap: '0.4rem' }}>
+                              <input
+                                type="text"
+                                placeholder="Button 2 Label (e.g. ⚙️ Preferences / Opt-out)"
+                                value={newTemplateForm.buttons.ctaUrl2Text || ''}
+                                onChange={(e) => setNewTemplateForm(p => ({ ...p, buttons: { ...p.buttons, ctaUrl2Text: e.target.value } }))}
+                                style={{ width: '100%', padding: '0.45rem 0.65rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.82rem', boxSizing: 'border-box' }}
+                              />
+                              <input
+                                type="text"
+                                placeholder="Button 2 URL (e.g. https://thefinmantra.com/contact-center?id={{1}})"
+                                value={newTemplateForm.buttons.ctaUrl2Value || ''}
+                                onChange={(e) => setNewTemplateForm(p => ({ ...p, buttons: { ...p.buttons, ctaUrl2Value: e.target.value } }))}
+                                style={{ width: '100%', padding: '0.45rem 0.65rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.82rem', boxSizing: 'border-box' }}
+                              />
+                            </div>
+                            {newTemplateForm.buttons.ctaUrl2Value && newTemplateForm.buttons.ctaUrl2Value.includes('{{1}}') && (
+                              <div style={{ marginTop: '0.35rem' }}>
+                                <input
+                                  type="text"
+                                  placeholder="Sample Value for {{1}} in URL 2 (e.g. 9876543210)"
+                                  value={newTemplateForm.buttons.ctaUrl2Sample || ''}
+                                  onChange={(e) => setNewTemplateForm(p => ({ ...p, buttons: { ...p.buttons, ctaUrl2Sample: e.target.value } }))}
+                                  style={{ width: '100%', padding: '0.35rem 0.6rem', borderRadius: '6px', border: '1px dashed #ef4444', background: 'rgba(239,68,68,0.05)', color: 'var(--ink)', fontSize: '0.78rem', boxSizing: 'border-box' }}
+                                />
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Button 3 (Phone Call CTA - Optional) */}
+                          <div style={{ paddingTop: '0.65rem', borderTop: '1px solid var(--line)' }}>
+                            <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--ink)', marginBottom: '0.35rem', display: 'flex', justifyContent: 'space-between' }}>
+                              <span>Button 3: Call Phone Number (Optional)</span>
+                            </div>
+                            <div className="campaigns-grid-2col" style={{ gap: '0.4rem' }}>
+                              <input
+                                type="text"
+                                placeholder="Call Button Label (e.g. 📞 Call Support)"
+                                value={newTemplateForm.buttons.ctaPhoneText || ''}
+                                onChange={(e) => setNewTemplateForm(p => ({ ...p, buttons: { ...p.buttons, ctaPhoneText: e.target.value } }))}
+                                style={{ width: '100%', padding: '0.45rem 0.65rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.82rem', boxSizing: 'border-box' }}
+                              />
+                              <input
+                                type="tel"
+                                placeholder="Phone (e.g. +918209689014)"
+                                value={newTemplateForm.buttons.ctaPhoneValue || ''}
+                                onChange={(e) => setNewTemplateForm(p => ({ ...p, buttons: { ...p.buttons, ctaPhoneValue: e.target.value } }))}
+                                style={{ width: '100%', padding: '0.45rem 0.65rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.82rem', boxSizing: 'border-box' }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {newTemplateForm.buttons.buttonType === 'QUICK_REPLIES' && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', background: 'var(--paper)', padding: '0.85rem', borderRadius: '8px', border: '1px solid var(--line)' }}>
+                          <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--ink)', marginBottom: '0.2rem' }}>
+                            Quick Reply Options (Up to 3):
+                          </div>
+                          {[0, 1, 2].map(qrIdx => (
+                            <input
+                              key={qrIdx}
+                              type="text"
+                              placeholder={`Reply ${qrIdx + 1} (e.g. ${qrIdx === 0 ? 'Interested' : qrIdx === 1 ? 'Apply Now' : 'Stop'})`}
+                              value={newTemplateForm.buttons.quickReplies?.[qrIdx] || ''}
+                              onChange={(e) => {
+                                const updated = [...(newTemplateForm.buttons.quickReplies || [])];
+                                updated[qrIdx] = e.target.value;
+                                setNewTemplateForm(p => ({ ...p, buttons: { ...p.buttons, quickReplies: updated } }));
+                              }}
+                              style={{ width: '100%', padding: '0.45rem 0.65rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.82rem', boxSizing: 'border-box' }}
+                            />
+                          ))}
                         </div>
                       )}
                     </div>
@@ -4026,7 +4124,8 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                         color: '#e9edef',
                         overflow: 'hidden',
                         boxShadow: '0 2px 5px rgba(0,0,0,0.3)',
-                        maxWidth: '92%'
+                        width: '100%',
+                        boxSizing: 'border-box'
                       }}>
                         {newTemplateForm.headerFormat === 'TEXT' && newTemplateForm.headerText && (
                           <div style={{ padding: '0.65rem 0.75rem 0.25rem 0.75rem', fontWeight: 800, fontSize: '0.92rem', color: '#e9edef' }}>
@@ -4049,6 +4148,37 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                           <CheckCheck size={12} style={{ color: '#53bdeb' }} />
                         </div>
                       </div>
+
+                      {/* Live Interactive CTA Buttons below message */}
+                      {newTemplateForm.buttons.buttonType === 'CTA' && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', width: '100%' }}>
+                          {newTemplateForm.buttons.ctaUrlText && (
+                            <div style={{ background: '#202c33', borderRadius: '8px', padding: '0.45rem', textAlign: 'center', color: '#00a884', fontSize: '0.8rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem', boxShadow: '0 1px 3px rgba(0,0,0,0.3)' }}>
+                              <span>🔗</span> <span>{newTemplateForm.buttons.ctaUrlText}</span>
+                            </div>
+                          )}
+                          {newTemplateForm.buttons.ctaUrl2Text && (
+                            <div style={{ background: '#202c33', borderRadius: '8px', padding: '0.45rem', textAlign: 'center', color: '#00a884', fontSize: '0.8rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem', boxShadow: '0 1px 3px rgba(0,0,0,0.3)' }}>
+                              <span>🔗</span> <span>{newTemplateForm.buttons.ctaUrl2Text}</span>
+                            </div>
+                          )}
+                          {newTemplateForm.buttons.ctaPhoneText && (
+                            <div style={{ background: '#202c33', borderRadius: '8px', padding: '0.45rem', textAlign: 'center', color: '#00a884', fontSize: '0.8rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem', boxShadow: '0 1px 3px rgba(0,0,0,0.3)' }}>
+                              <span>📞</span> <span>{newTemplateForm.buttons.ctaPhoneText}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {newTemplateForm.buttons.buttonType === 'QUICK_REPLIES' && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', width: '100%' }}>
+                          {(newTemplateForm.buttons.quickReplies || []).filter(Boolean).map((qr, idx) => (
+                            <div key={idx} style={{ background: '#202c33', borderRadius: '8px', padding: '0.45rem', textAlign: 'center', color: '#00a884', fontSize: '0.8rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem', boxShadow: '0 1px 3px rgba(0,0,0,0.3)' }}>
+                              <span>💬</span> <span>{qr}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
