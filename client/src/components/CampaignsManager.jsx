@@ -2617,12 +2617,81 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
 
                   {/* Email Subject & Body */}
                   {(broadcastForm.channel === 'email' || broadcastForm.channel === 'both') && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                      {/* Dynamic Tag Quick Inserter */}
+                      <div style={{ background: 'var(--paper-2)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--line)' }}>
+                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: '0.4rem' }}>
+                          ⚡ Click to Insert Dynamic Lead Data / Tracking URLs:
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                          {[
+                            { tag: '{name}', label: '👤 Name' },
+                            { tag: '{finmantra_id}', label: '🆔 Master ID' },
+                            { tag: '{unsubscribe_url}', label: '🛡️ {unsubscribe_url}' },
+                            { tag: '{contact_center_url}', label: '🌐 {contact_center_url}' },
+                            { tag: '{contact}', label: '📞 Contact' },
+                            { tag: '{mail}', label: '✉️ Email' }
+                          ].map(item => (
+                            <button
+                              key={item.tag}
+                              type="button"
+                              onClick={() => {
+                                setBroadcastForm(p => ({
+                                  ...p,
+                                  email_body: (p.email_body || '') + (p.email_body?.endsWith(' ') || !p.email_body ? '' : ' ') + item.tag
+                                }));
+                              }}
+                              style={{
+                                padding: '0.25rem 0.6rem',
+                                borderRadius: '5px',
+                                border: '1px solid var(--line)',
+                                background: 'var(--paper)',
+                                color: 'var(--ink)',
+                                fontSize: '0.76rem',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.2rem'
+                              }}
+                            >
+                              {item.label}
+                            </button>
+                          ))}
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const footerHtml = `\n\n<hr style="border:none;border-top:1px solid #e2e8f0;margin:25px 0;"/><div style="font-size:12px;color:#888;text-align:center;line-height:1.5;">To manage notification preferences, <a href="{contact_center_url}" style="color:#e0a82e;text-decoration:none;font-weight:bold;">visit Contact Center</a> • <a href="{unsubscribe_url}" style="color:#ef4444;text-decoration:none;font-weight:bold;">Unsubscribe from Emails</a></div>`;
+                              setBroadcastForm(p => ({
+                                ...p,
+                                email_body: (p.email_body || '') + footerHtml
+                              }));
+                            }}
+                            style={{
+                              padding: '0.25rem 0.65rem',
+                              borderRadius: '5px',
+                              border: '1px solid #ef4444',
+                              background: 'rgba(239, 68, 68, 0.1)',
+                              color: '#ef4444',
+                              fontSize: '0.76rem',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.25rem'
+                            }}
+                          >
+                            + Attach Unsubscribe Footer
+                          </button>
+                        </div>
+                      </div>
+
                       <div>
                         <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.3rem' }}>Email Subject Line</label>
                         <input
                           type="text"
-                          placeholder="e.g. Exclusive Credit Card Eligibility for {name}"
+                          placeholder="e.g. Exclusive Credit Card Eligibility for {name} (Ref: {finmantra_id})"
                           value={broadcastForm.email_subject}
                           onChange={(e) => setBroadcastForm({ ...broadcastForm, email_subject: e.target.value })}
                           style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.88rem', boxSizing: 'border-box' }}
@@ -2631,11 +2700,11 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                       <div>
                         <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.3rem' }}>Email HTML / Text Body</label>
                         <textarea
-                          rows={4}
-                          placeholder="Dear {name}, here is your customized pre-approved offer..."
+                          rows={6}
+                          placeholder="Dear {name}, here is your customized pre-approved offer. Click here to review: {contact_center_url}"
                           value={broadcastForm.email_body}
                           onChange={(e) => setBroadcastForm({ ...broadcastForm, email_body: e.target.value })}
-                          style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.88rem', boxSizing: 'border-box' }}
+                          style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.88rem', boxSizing: 'border-box', fontFamily: 'monospace' }}
                         />
                       </div>
                     </div>
