@@ -4116,7 +4116,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       </aside>
 
       {/* MAIN CONTENT AREA */}
-      <main className={`admin-main-content ${['leads', 'cards', 'agents', 'locations', 'settings'].includes(activeTab) ? 'desktop-no-scroll-content' : ''}`} style={{ flex: 1, padding: '1rem 1.5rem', minWidth: 0, display: 'flex', flexDirection: 'column', boxSizing: 'border-box', overflowY: 'auto' }}>
+      <main className={`admin-main-content ${['leads', 'cards', 'agents', 'locations', 'settings', 'campaigns'].includes(activeTab) ? 'desktop-no-scroll-content' : ''}`} style={{ flex: 1, padding: '1rem 1.5rem', minWidth: 0, display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }}>
         {/* Top Header Strip inside Main Content */}
         {activeTab !== 'campaigns' && (
           <div className="admin-header-bar" style={{ 
@@ -9104,12 +9104,14 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
 
           {/* CAMPAIGNS & BROADCASTS MANAGEMENT DASHBOARD */}
           {activeTab === 'campaigns' && (
-            <CampaignsManager
-              theme={theme}
-              API_URL={API_URL}
-              token={token}
-              showToast={showToast}
-            />
+            <div className="desktop-split-container" style={{ flex: 1, height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              <CampaignsManager
+                theme={theme}
+                API_URL={API_URL}
+                token={token}
+                showToast={showToast}
+              />
+            </div>
           )}
 
       {/* Create Custom Audience Modal */}

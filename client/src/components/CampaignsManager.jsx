@@ -1019,7 +1019,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
   };
 
   return (
-    <div className="campaigns-container">
+    <div className="campaigns-container" style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, overflow: 'hidden' }}>
       {/* Top Header / Actions Bar */}
       <div className="campaigns-header">
         <div>
@@ -1088,7 +1088,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
       {/* SUBTAB 1: COMMUNICATION DASHBOARD */}
       {/* ========================================================================= */}
       {activeSubTab === 'communication_dashboard' && (
-        <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflowY: 'auto', overflowX: 'hidden', paddingRight: '0.25rem', paddingBottom: '2rem' }}>
           {/* Dashboard Filter Bar */}
           <div className="campaigns-filter-grid">
             <div>
@@ -1470,8 +1470,8 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
       {/* SUBTAB 2: MASTER DATA CENTER */}
       {/* ========================================================================= */}
       {activeSubTab === 'master_data' && (
-        <div style={{ display: 'flex', flexDirection: 'column', width: '100%', marginBottom: '2.5rem' }}>
-          <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', width: '100%', borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)', padding: '1.25rem' }}>
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', height: '100%' }}>
+          <div className="glass-panel" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)', padding: '1rem 1.25rem', overflow: 'hidden' }}>
             {/* Top Filter Controls & Export */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', gap: '0.75rem', flexWrap: 'wrap', flexShrink: 0 }}>
               {/* Search Box */}
@@ -1643,7 +1643,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
             </div>
 
             {/* Master Contacts Table */}
-            <div className="campaigns-table-wrapper" style={{ maxHeight: 'min(55vh, 480px)', minHeight: '260px', overflowY: 'auto', overflowX: 'auto', border: '1px solid var(--line)', borderRadius: '8px' }}>
+            <div className="campaigns-table-wrapper" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'auto', border: '1px solid var(--line)', borderRadius: '8px', marginBottom: '0.4rem' }}>
               {isLoadingMaster ? (
                 <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--muted)' }}>
                   <RefreshCw size={28} className="spin-slow" style={{ color: 'var(--gold-deep)', marginBottom: '0.75rem' }} />
@@ -1852,9 +1852,9 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
       {/* SUBTAB 3: BROADCAST CAMPAIGNS */}
       {/* ========================================================================= */}
       {activeSubTab === 'broadcast' && (
-        <div style={{ display: 'flex', flexDirection: 'column', width: '100%', marginBottom: '2.5rem' }}>
-          <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', width: '100%', borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)', padding: '1.25rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem', flexShrink: 0 }}>
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', height: '100%' }}>
+          <div className="glass-panel" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)', padding: '1rem 1.25rem', overflow: 'hidden' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem', flexShrink: 0 }}>
               <div>
                 <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700 }}>All Broadcast Campaigns</h3>
                 <div style={{ color: 'var(--muted)', fontSize: '0.82rem' }}>Manage scheduled dispatches, track deliverability, and trigger immediate sends.</div>
@@ -1883,7 +1883,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
             </div>
 
             {/* Broadcasts List */}
-            <div className="campaigns-table-wrapper" style={{ maxHeight: 'min(55vh, 480px)', minHeight: '260px', overflowY: 'auto', overflowX: 'auto', border: '1px solid var(--line)', borderRadius: '8px' }}>
+            <div className="campaigns-table-wrapper" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'auto', border: '1px solid var(--line)', borderRadius: '8px' }}>
               {isLoadingBroadcasts ? (
                 <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--muted)' }}>
                   <RefreshCw size={28} className="spin-slow" style={{ color: 'var(--gold-deep)', marginBottom: '0.75rem' }} />
