@@ -380,7 +380,7 @@ function getFallbackText(isOtpAuth, parameters, settings) {
 // In-memory template strategy cache to eliminate trial-and-error HTTP round-trips
 const templateStrategyCache = new Map();
 
-async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOtpAuth = false, mediaUrl = null, preferredLang = null, senderPhoneId = null) {
+async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOtpAuth = false, mediaUrl = null, preferredLang = null, senderPhoneId = null, customAccessToken = null, passedTemplateDbObj = null, broadcastId = null, leadId = null) {
   const settings = await db.getSettings();
   const gateway = settings.whatsapp_gateway || 'meta';
 
@@ -425,22 +425,26 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
   // Resolve template metadata from DB if mediaUrl or preferredLang not provided
   let effectiveMediaUrl = mediaUrl;
   let resolvedLang = preferredLang;
-  let templateDbObj = null;
-  try {
-    const tplDb = await db.runQuery(
-      'SELECT * FROM campaign_templates WHERE LOWER(name) = LOWER($1) OR LOWER(meta_template_name) = LOWER($1) LIMIT 1',
-      [templateName]
-    );
-    if (tplDb.rows && tplDb.rows.length > 0) {
-      templateDbObj = tplDb.rows[0];
-      if (!effectiveMediaUrl && templateDbObj.media_url) {
-        effectiveMediaUrl = templateDbObj.media_url;
+  let templateDbObj = passedTemplateDbObj || null;
+  if (!templateDbObj) {
+    try {
+      const tplDb = await db.runQuery(
+        'SELECT * FROM campaign_templates WHERE LOWER(name) = LOWER($1) OR LOWER(meta_template_name) = LOWER($1) LIMIT 1',
+        [templateName]
+      );
+      if (tplDb.rows && tplDb.rows.length > 0) {
+        templateDbObj = tplDb.rows[0];
       }
-      if (!resolvedLang && templateDbObj.language) {
-        resolvedLang = templateDbObj.language;
-      }
+    } catch (e) {}
+  }
+  if (templateDbObj) {
+    if (!effectiveMediaUrl && templateDbObj.media_url) {
+      effectiveMediaUrl = templateDbObj.media_url;
     }
-  } catch (e) {}
+    if (!resolvedLang && templateDbObj.language) {
+      resolvedLang = templateDbObj.language;
+    }
+  }
 
   const configuredLang = getSettingVal(settings, 'wa_template_language', 'WA_TEMPLATE_LANGUAGE', 'en_US');
   
@@ -490,7 +494,12 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
     clean10Phone = clean10Phone.substring(2);
   }
 
-  const safeButtonParam = clean10Phone || formattedPhone || String(cleanParams[0] || '1').replace(/[^a-zA-Z0-9_-]/g, '_');
+  const baseContactParam = clean10Phone || leadId || formattedPhone || String(cleanParams[0] || '1').replace(/[^a-zA-Z0-9_-]/g, '_');
+  
+  // Combine Contact ID + Broadcast ID for multi-campaign attribution
+  const safeButtonParam = broadcastId 
+    ? `${baseContactParam}&utm_brodcast_id=${encodeURIComponent(broadcastId)}`
+    : baseContactParam;
 
   // Build list of candidate component payloads to guarantee delivery across all template variations
   const componentStrategies = [];
@@ -6726,7 +6735,9 @@ async function checkAndRunScheduledBroadcasts() {
                   templateLanguage,
                   phoneIdToUse,
                   null,
-                  templateObj
+                  templateObj,
+                  b.id,
+                  lead.finmantra_id || lead.id
                 );
               } else {
                 const gateway = settings.whatsapp_gateway || 'baileys';
