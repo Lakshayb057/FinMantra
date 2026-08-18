@@ -187,16 +187,18 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
   // Reload master leads when master filters change
   useEffect(() => {
     if (activeSubTab === 'master_data') {
+      fetchMasterFilterOptions();
       fetchMasterLeads();
     }
-  }, [masterPage, masterFilterBroadcastName, masterFilterDateFrom, masterFilterDateTo, masterFilterMetaWaNo, masterFilterSenderEmail]);
+  }, [activeSubTab, masterPage, masterSearch, masterFilterBroadcastName, masterFilterDateFrom, masterFilterDateTo, masterFilterMetaWaNo, masterFilterSenderEmail]);
 
   // Reload communication analytics when dashboard filters change
   useEffect(() => {
     if (activeSubTab === 'communication_dashboard') {
+      fetchMasterFilterOptions();
       fetchCommunicationAnalytics();
     }
-  }, [dashFilterDateFrom, dashFilterDateTo, dashFilterBroadcastName, dashFilterMetaWaNo, dashFilterSenderEmail]);
+  }, [activeSubTab, dashFilterDateFrom, dashFilterDateTo, dashFilterBroadcastName, dashFilterMetaWaNo, dashFilterSenderEmail]);
 
   // --- API CALLS ---
 
@@ -1294,152 +1296,173 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
             </div>
           )}
           {/* Recent Broadcasts Overview Table */}
-          <div className="glass-panel" style={{ padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)', display: 'flex', flexDirection: 'column', width: '100%', boxSizing: 'border-box', marginBottom: '2.5rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                  <TrendingUp size={17} style={{ color: 'var(--gold-deep)' }} />
-                  Recent Broadcast Campaigns &amp; Delivery Stats
-                </h3>
-                <span style={{ padding: '0.2rem 0.6rem', borderRadius: '999px', background: 'rgba(224, 168, 46, 0.12)', color: 'var(--gold-deep)', fontSize: '0.74rem', fontWeight: 800 }}>
-                  {broadcasts.length} Total
-                </span>
-              </div>
+          {(() => {
+            const rawList = (dashboardAnalytics?.recentBroadcasts && dashboardAnalytics.recentBroadcasts.length > 0) 
+              ? dashboardAnalytics.recentBroadcasts 
+              : broadcasts;
+            const filteredRecent = rawList.filter(b => 
+              !dashRecentSearch || 
+              (b.name && b.name.toLowerCase().includes(dashRecentSearch.toLowerCase())) || 
+              (b.channel && b.channel.toLowerCase().includes(dashRecentSearch.toLowerCase())) ||
+              (b.meta_phone_number && b.meta_phone_number.includes(dashRecentSearch)) ||
+              (b.sender_email && b.sender_email.toLowerCase().includes(dashRecentSearch.toLowerCase()))
+            );
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <div style={{ position: 'relative', width: '200px' }}>
-                  <Search size={14} style={{ position: 'absolute', left: '0.6rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} />
-                  <input
-                    type="text"
-                    placeholder="Search recent..."
-                    value={dashRecentSearch}
-                    onChange={(e) => setDashRecentSearch(e.target.value)}
-                    style={{ width: '100%', padding: '0.35rem 0.55rem 0.35rem 1.8rem', fontSize: '0.78rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', boxSizing: 'border-box' }}
-                  />
+            return (
+              <div className="glass-panel" style={{ padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--paper)', display: 'flex', flexDirection: 'column', width: '100%', boxSizing: 'border-box', marginBottom: '2.5rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                    <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                      <TrendingUp size={17} style={{ color: 'var(--gold-deep)' }} />
+                      Recent Broadcast Campaigns &amp; Delivery Stats
+                    </h3>
+                    <span style={{ padding: '0.2rem 0.6rem', borderRadius: '999px', background: 'rgba(224, 168, 46, 0.12)', color: 'var(--gold-deep)', fontSize: '0.74rem', fontWeight: 800 }}>
+                      {filteredRecent.length} Total
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <div style={{ position: 'relative', width: '220px' }}>
+                      <Search size={14} style={{ position: 'absolute', left: '0.6rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} />
+                      <input
+                        type="text"
+                        placeholder="Search broadcast name / sender..."
+                        value={dashRecentSearch}
+                        onChange={(e) => setDashRecentSearch(e.target.value)}
+                        style={{ width: '100%', padding: '0.35rem 0.55rem 0.35rem 1.8rem', fontSize: '0.78rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', boxSizing: 'border-box' }}
+                      />
+                    </div>
+                    <button onClick={() => setActiveSubTab('broadcast')} style={{ background: 'none', border: 'none', color: 'var(--gold-deep)', fontSize: '0.84rem', fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                      View All Broadcasts &rarr;
+                    </button>
+                  </div>
                 </div>
-                <button onClick={() => setActiveSubTab('broadcast')} style={{ background: 'none', border: 'none', color: 'var(--gold-deep)', fontSize: '0.84rem', fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                  View All Broadcasts &rarr;
-                </button>
-              </div>
-            </div>
 
-            <div className="campaigns-table-wrapper">
-              <table className="campaigns-table">
-                <thead>
-                  <tr>
-                    <th>Broadcast Name</th>
-                    <th>Channel</th>
-                    <th>Sender</th>
-                    <th>Status</th>
-                    <th>Targeted</th>
-                    <th>Delivered</th>
-                    <th>CTR</th>
-                    <th>Date</th>
-                    <th style={{ textAlign: 'right' }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {broadcasts
-                    .filter(b => !dashRecentSearch || (b.name && b.name.toLowerCase().includes(dashRecentSearch.toLowerCase())) || (b.channel && b.channel.toLowerCase().includes(dashRecentSearch.toLowerCase())))
-                    .slice(0, 10).map(b => {
-                    const displayDelivered = b.channel === 'both' 
-                      ? (b.targeted_count && b.targeted_count <= b.delivered_count ? b.targeted_count : Math.ceil((b.delivered_count || 0) / 2))
-                      : (b.delivered_count || b.sent_count || 0);
-                    
-                    const effDelivered = displayDelivered > 0 ? displayDelivered : (b.delivered_count || 1);
-                    const ctr = effDelivered > 0 ? ((Math.min(b.clicked_count || 0, effDelivered) / effDelivered) * 100).toFixed(1) : '0.0';
-                    return (
-                      <tr key={b.id} className="table-row-hover">
-                        <td style={{ fontWeight: 800, color: 'var(--ink)' }}>{b.name}</td>
-                        <td>
-                          <span style={{
-                            padding: '0.2rem 0.55rem',
-                            borderRadius: '6px',
-                            fontSize: '0.74rem',
-                            fontWeight: 700,
-                            textTransform: 'capitalize',
-                            background: b.channel === 'whatsapp' ? 'rgba(37, 211, 102, 0.12)' : b.channel === 'email' ? 'rgba(139, 92, 246, 0.12)' : 'rgba(224, 168, 46, 0.12)',
-                            color: b.channel === 'whatsapp' ? '#25D366' : b.channel === 'email' ? '#8b5cf6' : 'var(--gold-deep)',
-                            border: `1px solid ${b.channel === 'whatsapp' ? 'rgba(37, 211, 102, 0.25)' : b.channel === 'email' ? 'rgba(139, 92, 246, 0.25)' : 'rgba(224, 168, 46, 0.25)'}`
-                          }}>
-                            {b.channel}
-                          </span>
-                        </td>
-                        <td style={{ fontSize: '0.78rem', color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>
-                          {b.meta_phone_number || b.sender_email || 'Default'}
-                        </td>
-                        <td>
-                          <span 
-                            onClick={() => handleOpenBroadcastLogs(b)}
-                            style={{
-                              padding: '0.2rem 0.55rem',
-                              borderRadius: '999px',
-                              fontSize: '0.72rem',
-                              fontWeight: 800,
-                              background: b.status === 'sent' ? 'rgba(22, 163, 123, 0.12)' : b.status === 'processing' ? 'rgba(59, 130, 246, 0.12)' : b.status === 'failed' ? 'rgba(239, 68, 68, 0.12)' : 'rgba(224, 168, 46, 0.12)',
-                              color: b.status === 'sent' ? '#16a37b' : b.status === 'processing' ? '#3b82f6' : b.status === 'failed' ? '#ef4444' : 'var(--gold-deep)',
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '0.3rem'
-                            }}
-                            title="Click to view detailed delivery logs"
-                          >
-                            <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: b.status === 'sent' ? '#16a37b' : b.status === 'processing' ? '#3b82f6' : b.status === 'failed' ? '#ef4444' : 'var(--gold-deep)' }} />
-                            {b.status}
-                          </span>
-                        </td>
-                        <td style={{ fontWeight: 700, color: 'var(--ink)' }}>{b.targeted_count || 0}</td>
-                        <td style={{ color: '#16a37b', fontWeight: 800 }}>
-                          {displayDelivered}
-                          {b.channel === 'both' && <span style={{ fontSize: '0.7rem', color: 'var(--muted)', marginLeft: '0.3rem' }}>(WA+Email)</span>}
-                        </td>
-                        <td>
-                          <span style={{
-                            padding: '0.18rem 0.5rem',
-                            borderRadius: '6px',
-                            fontSize: '0.74rem',
-                            fontWeight: 800,
-                            background: Number(ctr) > 0 ? 'rgba(245, 158, 11, 0.15)' : 'var(--paper-2)',
-                            color: Number(ctr) > 0 ? '#d97706' : 'var(--muted)',
-                            border: `1px solid ${Number(ctr) > 0 ? 'rgba(245, 158, 11, 0.3)' : 'var(--line)'}`
-                          }}>
-                            {ctr}% ({b.clicked_count || 0})
-                          </span>
-                        </td>
-                        <td style={{ color: 'var(--muted)', fontSize: '0.78rem' }}>
-                          {b.created_at ? new Date(b.created_at).toLocaleDateString() : '—'}
-                        </td>
-                        <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                          <button
-                            onClick={() => handleOpenBroadcastLogs(b)}
-                            style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '0.3rem', marginRight: '0.3rem' }}
-                            title="View Delivery Logs"
-                          >
-                            <FileText size={15} />
-                          </button>
-                          <button
-                            onClick={() => handleEditBroadcast(b)}
-                            style={{ background: 'none', border: 'none', color: 'var(--gold-deep)', cursor: 'pointer', padding: '0.3rem', marginRight: '0.3rem' }}
-                            title="Edit Broadcast"
-                          >
-                            <Edit2 size={15} />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteBroadcast(b.id, b.name)}
-                            style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.3rem' }}
-                            title="Delete Broadcast"
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        </td>
+                <div className="campaigns-table-wrapper" style={{ maxHeight: '380px', overflowY: 'auto', overflowX: 'auto', border: '1px solid var(--line)', borderRadius: '8px' }}>
+                  <table className="campaigns-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead style={{ position: 'sticky', top: 0, background: 'var(--paper-2)', zIndex: 5, boxShadow: '0 1px 2px rgba(0,0,0,0.06)' }}>
+                      <tr>
+                        <th>Broadcast Name</th>
+                        <th>Channel</th>
+                        <th>Sender</th>
+                        <th>Status</th>
+                        <th>Targeted</th>
+                        <th>Delivered</th>
+                        <th>CTR</th>
+                        <th>Date</th>
+                        <th style={{ textAlign: 'right' }}>Actions</th>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                    </thead>
+                    <tbody>
+                      {filteredRecent.length === 0 ? (
+                        <tr>
+                          <td colSpan={9} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--muted)' }}>
+                            No broadcast campaigns match your active search / filters.
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredRecent.map(b => {
+                          const displayDelivered = b.channel === 'both' 
+                            ? (b.targeted_count && b.targeted_count <= b.delivered_count ? b.targeted_count : Math.ceil((b.delivered_count || 0) / 2))
+                            : (b.delivered_count || b.sent_count || 0);
+                          
+                          const effDelivered = displayDelivered > 0 ? displayDelivered : (b.delivered_count || 1);
+                          const ctr = effDelivered > 0 ? ((Math.min(b.clicked_count || 0, effDelivered) / effDelivered) * 100).toFixed(1) : '0.0';
+                          return (
+                            <tr key={b.id} className="table-row-hover">
+                              <td style={{ fontWeight: 800, color: 'var(--ink)' }}>{b.name}</td>
+                              <td>
+                                <span style={{
+                                  padding: '0.2rem 0.55rem',
+                                  borderRadius: '6px',
+                                  fontSize: '0.74rem',
+                                  fontWeight: 700,
+                                  textTransform: 'capitalize',
+                                  background: b.channel === 'whatsapp' ? 'rgba(37, 211, 102, 0.12)' : b.channel === 'email' ? 'rgba(139, 92, 246, 0.12)' : 'rgba(224, 168, 46, 0.12)',
+                                  color: b.channel === 'whatsapp' ? '#25D366' : b.channel === 'email' ? '#8b5cf6' : 'var(--gold-deep)',
+                                  border: `1px solid ${b.channel === 'whatsapp' ? 'rgba(37, 211, 102, 0.25)' : b.channel === 'email' ? 'rgba(139, 92, 246, 0.25)' : 'rgba(224, 168, 46, 0.25)'}`
+                                }}>
+                                  {b.channel}
+                                </span>
+                              </td>
+                              <td style={{ fontSize: '0.78rem', color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>
+                                {b.meta_phone_number || b.sender_email || 'Default'}
+                              </td>
+                              <td>
+                                <span 
+                                  onClick={() => handleOpenBroadcastLogs(b)}
+                                  style={{
+                                    padding: '0.2rem 0.55rem',
+                                    borderRadius: '999px',
+                                    fontSize: '0.72rem',
+                                    fontWeight: 800,
+                                    background: b.status === 'sent' ? 'rgba(22, 163, 123, 0.12)' : b.status === 'processing' ? 'rgba(59, 130, 246, 0.12)' : b.status === 'failed' ? 'rgba(239, 68, 68, 0.12)' : 'rgba(224, 168, 46, 0.12)',
+                                    color: b.status === 'sent' ? '#16a37b' : b.status === 'processing' ? '#3b82f6' : b.status === 'failed' ? '#ef4444' : 'var(--gold-deep)',
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.3rem'
+                                  }}
+                                  title="Click to view detailed delivery logs"
+                                >
+                                  <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: b.status === 'sent' ? '#16a37b' : b.status === 'processing' ? '#3b82f6' : b.status === 'failed' ? '#ef4444' : 'var(--gold-deep)' }} />
+                                  {b.status}
+                                </span>
+                              </td>
+                              <td style={{ fontWeight: 700, color: 'var(--ink)' }}>{b.targeted_count || 0}</td>
+                              <td style={{ color: '#16a37b', fontWeight: 800 }}>
+                                {displayDelivered}
+                                {b.channel === 'both' && <span style={{ fontSize: '0.7rem', color: 'var(--muted)', marginLeft: '0.3rem' }}>(WA+Email)</span>}
+                              </td>
+                              <td>
+                                <span style={{
+                                  padding: '0.18rem 0.5rem',
+                                  borderRadius: '6px',
+                                  fontSize: '0.74rem',
+                                  fontWeight: 800,
+                                  background: Number(ctr) > 0 ? 'rgba(245, 158, 11, 0.15)' : 'var(--paper-2)',
+                                  color: Number(ctr) > 0 ? '#d97706' : 'var(--muted)',
+                                  border: `1px solid ${Number(ctr) > 0 ? 'rgba(245, 158, 11, 0.3)' : 'var(--line)'}`
+                                }}>
+                                  {ctr}% ({b.clicked_count || 0})
+                                </span>
+                              </td>
+                              <td style={{ color: 'var(--muted)', fontSize: '0.78rem' }}>
+                                {b.created_at ? new Date(b.created_at).toLocaleDateString() : '—'}
+                              </td>
+                              <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                                <button
+                                  onClick={() => handleOpenBroadcastLogs(b)}
+                                  style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '0.3rem', marginRight: '0.3rem' }}
+                                  title="View Delivery Logs"
+                                >
+                                  <FileText size={15} />
+                                </button>
+                                <button
+                                  onClick={() => handleEditBroadcast(b)}
+                                  style={{ background: 'none', border: 'none', color: 'var(--gold-deep)', cursor: 'pointer', padding: '0.3rem', marginRight: '0.3rem' }}
+                                  title="Edit Broadcast"
+                                >
+                                  <Edit2 size={15} />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteBroadcast(b.id, b.name)}
+                                  style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.3rem' }}
+                                  title="Delete Broadcast"
+                                >
+                                  <Trash2 size={15} />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -1620,7 +1643,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
             </div>
 
             {/* Master Contacts Table */}
-            <div className="campaigns-table-wrapper">
+            <div className="campaigns-table-wrapper" style={{ maxHeight: '560px', overflowY: 'auto', overflowX: 'auto', border: '1px solid var(--line)', borderRadius: '8px' }}>
               {isLoadingMaster ? (
                 <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--muted)' }}>
                   <RefreshCw size={28} className="spin-slow" style={{ color: 'var(--gold-deep)', marginBottom: '0.75rem' }} />
@@ -1633,8 +1656,8 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                   <div style={{ fontSize: '0.8rem', marginTop: '0.25rem' }}>Contacts will appear here automatically when uploaded via broadcasts.</div>
                 </div>
               ) : (
-                <table className="campaigns-table">
-                  <thead style={{ position: 'sticky', top: 0, background: 'var(--paper-2)', zIndex: 10 }}>
+                <table className="campaigns-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead style={{ position: 'sticky', top: 0, background: 'var(--paper-2)', zIndex: 10, boxShadow: '0 1px 2px rgba(0,0,0,0.06)' }}>
                     <tr style={{ borderBottom: '1px solid var(--line)' }}>
                       <th style={{ width: '40px', padding: '0.65rem 0.5rem', textAlign: 'center' }}>
                         <input

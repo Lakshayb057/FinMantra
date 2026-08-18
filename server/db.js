@@ -3286,29 +3286,47 @@ const db = {
 
     if (broadcastName && broadcastName.trim()) {
       params.push(broadcastName.trim());
-      whereClauses.push(`last_broadcast_name = $${params.length}`);
+      const pIdx = params.length;
+      whereClauses.push(`(
+        LOWER(last_broadcast_name) = LOWER($${pIdx}) 
+        OR last_broadcast_id IN (SELECT id FROM campaign_broadcasts WHERE LOWER(name) = LOWER($${pIdx}))
+        OR id IN (
+          SELECT lead_id FROM campaign_broadcast_logs 
+          WHERE broadcast_id IN (SELECT id FROM campaign_broadcasts WHERE LOWER(name) = LOWER($${pIdx}))
+        )
+      )`);
     }
 
     if (broadcastDateFrom) {
       params.push(new Date(broadcastDateFrom).toISOString());
-      whereClauses.push(`last_broadcast_date >= $${params.length}`);
+      const pIdx = params.length;
+      whereClauses.push(`(last_broadcast_date >= $${pIdx} OR created_at >= $${pIdx})`);
     }
 
     if (broadcastDateTo) {
       const toDate = new Date(broadcastDateTo);
       toDate.setHours(23, 59, 59, 999);
       params.push(toDate.toISOString());
-      whereClauses.push(`last_broadcast_date <= $${params.length}`);
+      const pIdx = params.length;
+      whereClauses.push(`(last_broadcast_date <= $${pIdx} OR created_at <= $${pIdx})`);
     }
 
     if (metaWhatsappNo && metaWhatsappNo.trim()) {
       params.push(metaWhatsappNo.trim());
-      whereClauses.push(`meta_whatsapp_no = $${params.length}`);
+      const pIdx = params.length;
+      whereClauses.push(`(
+        meta_whatsapp_no = $${pIdx} 
+        OR last_broadcast_id IN (SELECT id FROM campaign_broadcasts WHERE meta_phone_number = $${pIdx} OR meta_phone_number_id = $${pIdx})
+      )`);
     }
 
     if (senderEmail && senderEmail.trim()) {
       params.push(senderEmail.trim().toLowerCase());
-      whereClauses.push(`LOWER(sender_email) = $${params.length}`);
+      const pIdx = params.length;
+      whereClauses.push(`(
+        LOWER(sender_email) = $${pIdx} 
+        OR last_broadcast_id IN (SELECT id FROM campaign_broadcasts WHERE LOWER(sender_email) = $${pIdx})
+      )`);
     }
 
     if (optinWhatsapp !== '' && optinWhatsapp !== undefined && optinWhatsapp !== null) {
@@ -3357,15 +3375,33 @@ const db = {
 
   async getMasterFilterOptions() {
     const [bcNamesRes, waNosRes, emailsRes] = await Promise.all([
-      pool.query(`SELECT DISTINCT last_broadcast_name FROM campaign_master_leads WHERE last_broadcast_name IS NOT NULL AND last_broadcast_name != '' ORDER BY last_broadcast_name`),
-      pool.query(`SELECT DISTINCT meta_whatsapp_no FROM campaign_master_leads WHERE meta_whatsapp_no IS NOT NULL AND meta_whatsapp_no != '' ORDER BY meta_whatsapp_no`),
-      pool.query(`SELECT DISTINCT sender_email FROM campaign_master_leads WHERE sender_email IS NOT NULL AND sender_email != '' ORDER BY sender_email`)
+      pool.query(`
+        SELECT DISTINCT name FROM (
+          SELECT name FROM campaign_broadcasts WHERE name IS NOT NULL AND TRIM(name) != ''
+          UNION
+          SELECT last_broadcast_name as name FROM campaign_master_leads WHERE last_broadcast_name IS NOT NULL AND TRIM(last_broadcast_name) != ''
+        ) t ORDER BY name ASC
+      `),
+      pool.query(`
+        SELECT DISTINCT no FROM (
+          SELECT meta_phone_number as no FROM campaign_broadcasts WHERE meta_phone_number IS NOT NULL AND TRIM(meta_phone_number) != ''
+          UNION
+          SELECT meta_whatsapp_no as no FROM campaign_master_leads WHERE meta_whatsapp_no IS NOT NULL AND TRIM(meta_whatsapp_no) != ''
+        ) t ORDER BY no ASC
+      `),
+      pool.query(`
+        SELECT DISTINCT email FROM (
+          SELECT sender_email as email FROM campaign_broadcasts WHERE sender_email IS NOT NULL AND TRIM(sender_email) != ''
+          UNION
+          SELECT sender_email as email FROM campaign_master_leads WHERE sender_email IS NOT NULL AND TRIM(sender_email) != ''
+        ) t ORDER BY email ASC
+      `)
     ]);
 
     return {
-      broadcastNames: bcNamesRes.rows.map(r => r.last_broadcast_name),
-      metaWhatsappNos: waNosRes.rows.map(r => r.meta_whatsapp_no),
-    senderEmails: emailsRes.rows.map(r => r.sender_email)
+      broadcastNames: bcNamesRes.rows.map(r => r.name).filter(Boolean),
+      metaWhatsappNos: waNosRes.rows.map(r => r.no).filter(Boolean),
+      senderEmails: emailsRes.rows.map(r => r.email).filter(Boolean)
     };
   },
 
@@ -3673,6 +3709,53 @@ const db = {
     );
     const kpis = kpiRes.rows[0] || {};
 
+    // Filter master stats if any broadcast filter is applied
+    let masterWhere = [];
+    let masterParams = [];
+
+    if (broadcastName && broadcastName.trim()) {
+      masterParams.push(broadcastName.trim());
+      const pIdx = masterParams.length;
+      masterWhere.push(`(
+        LOWER(last_broadcast_name) = LOWER($${pIdx}) 
+        OR last_broadcast_id IN (SELECT id FROM campaign_broadcasts WHERE LOWER(name) = LOWER($${pIdx}))
+      )`);
+    }
+
+    if (dateFrom) {
+      masterParams.push(new Date(dateFrom).toISOString());
+      const pIdx = masterParams.length;
+      masterWhere.push(`(last_broadcast_date >= $${pIdx} OR created_at >= $${pIdx})`);
+    }
+
+    if (dateTo) {
+      const toDate = new Date(dateTo);
+      toDate.setHours(23, 59, 59, 999);
+      masterParams.push(toDate.toISOString());
+      const pIdx = masterParams.length;
+      masterWhere.push(`(last_broadcast_date <= $${pIdx} OR created_at <= $${pIdx})`);
+    }
+
+    if (metaWhatsappNo && metaWhatsappNo.trim()) {
+      masterParams.push(metaWhatsappNo.trim());
+      const pIdx = masterParams.length;
+      masterWhere.push(`(
+        meta_whatsapp_no = $${pIdx} 
+        OR last_broadcast_id IN (SELECT id FROM campaign_broadcasts WHERE meta_phone_number = $${pIdx} OR meta_phone_number_id = $${pIdx})
+      )`);
+    }
+
+    if (senderEmail && senderEmail.trim()) {
+      masterParams.push(senderEmail.trim().toLowerCase());
+      const pIdx = masterParams.length;
+      masterWhere.push(`(
+        LOWER(sender_email) = $${pIdx} 
+        OR last_broadcast_id IN (SELECT id FROM campaign_broadcasts WHERE LOWER(sender_email) = $${pIdx})
+      )`);
+    }
+
+    const masterWhereSql = masterWhere.length > 0 ? `WHERE ${masterWhere.join(' AND ')}` : '';
+
     // Aggregate Master Leads Analytics
     const masterStatsRes = await pool.query(
       `SELECT 
@@ -3689,7 +3772,9 @@ const db = {
          COALESCE(SUM(email_delivered_count), 0)::int as sum_email_delivered,
          COALESCE(SUM(email_read_count), 0)::int as sum_email_read,
          COALESCE(SUM(email_clicked_count), 0)::int as sum_email_clicked
-       FROM campaign_master_leads`
+       FROM campaign_master_leads
+       ${masterWhereSql}`,
+      masterParams
     );
     const masterStats = masterStatsRes.rows[0] || {};
 
@@ -3698,7 +3783,7 @@ const db = {
       `SELECT * FROM campaign_broadcasts 
        ${bcWhereSql} 
        ORDER BY created_at DESC 
-       LIMIT 50`,
+       LIMIT 100`,
       bcParams
     );
 
