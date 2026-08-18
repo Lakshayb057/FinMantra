@@ -59,8 +59,8 @@ export default function ContactCenterPage({ navigateTo }) {
 
     try {
       const params = new URLSearchParams(window.location.search);
-      const id = params.get('id') || params.get('master_id');
-      const broadcastId = params.get('brodcast_id') || params.get('broadcast_id');
+      const id = lead?.id || lead?.finmantra_id || lead?.contact || params.get('id') || params.get('master_id') || params.get('lead_id') || params.get('utm_id') || params.get('uid');
+      const broadcastId = broadcast?.id || params.get('brodcast_id') || params.get('broadcast_id') || params.get('b') || params.get('utm_brodcast_id') || params.get('utm_broadcast_id') || params.get('bc_id');
       const API_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.port === '5173') ? 'http://localhost:5000/api' : '/api';
 
       const res = await fetch(`${API_URL}/contact-center/optout`, {

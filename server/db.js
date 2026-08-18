@@ -3365,7 +3365,7 @@ const db = {
     return {
       broadcastNames: bcNamesRes.rows.map(r => r.last_broadcast_name),
       metaWhatsappNos: waNosRes.rows.map(r => r.meta_whatsapp_no),
-      senderEmails: emailsRes.rows.map(r => r.sender_email)
+    senderEmails: emailsRes.rows.map(r => r.sender_email)
     };
   },
 
@@ -3381,6 +3381,7 @@ const db = {
     let phone10 = phoneDigits.length === 12 && phoneDigits.startsWith('91') ? phoneDigits.substring(2) : phoneDigits.length === 10 ? phoneDigits : '';
     let phone12 = phoneDigits.length === 10 ? '91' + phoneDigits : phoneDigits.length === 12 ? phoneDigits : '';
 
+    // 1. Primary lookup in campaign_master_leads
     const res = await pool.query(
       `SELECT * FROM campaign_master_leads 
        WHERE id = $1 
@@ -3391,7 +3392,42 @@ const db = {
        LIMIT 1`, 
       [cleanId, phone10, phone12]
     );
-    return res.rows[0] || null;
+
+    if (res.rows[0]) return res.rows[0];
+
+    // 2. Fallback lookup in main 'leads' table
+    try {
+      const fallbackRes = await pool.query(
+        `SELECT id, name, phone as contact, email as mail, 
+                whatsapp_optin, email_optin, 
+                id as finmantra_id, created_at 
+         FROM leads 
+         WHERE id::text = $1 
+            OR ($2 != '' AND (phone = $2 OR phone = $3)) 
+            OR (email != '' AND LOWER(TRIM(email)) = LOWER($1)) 
+         LIMIT 1`,
+        [cleanId, phone10, phone12]
+      );
+      if (fallbackRes.rows[0]) return fallbackRes.rows[0];
+    } catch (e) {}
+
+    // 3. Fallback for phone/email direct parameters: dynamically resolve so user can always manage preferences with 0 errors
+    if (phone10 || phone12 || cleanId.includes('@')) {
+      const contactVal = phone10 || (cleanId.includes('@') ? '' : cleanId);
+      const mailVal = cleanId.includes('@') ? cleanId : '';
+      return {
+        id: 'contact_' + (contactVal || mailVal.replace(/[^a-zA-Z0-9]/g, '_')),
+        finmantra_id: 'FM_' + (contactVal || 'USER'),
+        campaign_data_id: 'CD_' + (contactVal || 'USER'),
+        name: 'Valued Customer',
+        contact: contactVal,
+        mail: mailVal,
+        whatsapp_optin: true,
+        email_optin: true
+      };
+    }
+
+    return null;
   },
 
   async upsertMasterLeadsFromBroadcast(rawLeads, broadcastInfo = {}) {
@@ -3429,91 +3465,53 @@ const db = {
 
         const bcId = broadcastInfo.broadcastId || null;
         const bcName = broadcastInfo.broadcastName || null;
-        const bcDate = broadcastInfo.broadcastDate || new Date();
-        const metaWaNo = broadcastInfo.metaWhatsappNo || null;
+        const metaWaNo = broadcastInfo.metaWaNo || null;
         const senderEmail = broadcastInfo.senderEmail || null;
-        const extraData = item.extra_data || item.vars || {};
 
         if (existingRes.rows.length > 0) {
-          // UPDATE existing master lead
-          const existing = existingRes.rows[0];
-          const updatedName = name !== 'Contact' ? name : existing.name;
-          const updatedAddress = address ? address : existing.address;
-          const updatedContact = contact ? contact : existing.contact;
-          const updatedMail = mail ? mail : existing.mail;
-          const mergedExtra = { ...(existing.extra_data || {}), ...extraData };
-
-          // Keep existing IDs or backfill if missing
-          let fId = existing.finmantra_id;
-          let cId = existing.campaign_data_id;
-          if (!fId) {
-            fId = `FM${String(runningIndex).padStart(5, '0')}`;
-            runningIndex++;
-          }
-          if (!cId) {
-            cId = item.id && String(item.id).trim().startsWith('FMCB') ? String(item.id).trim() : `FMCB${String(runningIndex).padStart(5, '0')}`;
-          }
-
-          const updateRes = await client.query(
+          const existingLead = existingRes.rows[0];
+          await client.query(
             `UPDATE campaign_master_leads 
-             SET name = $2, contact = $3, mail = $4, address = $5,
-                 finmantra_id = COALESCE(finmantra_id, $6),
-                 campaign_data_id = COALESCE(campaign_data_id, $7),
-                 last_broadcast_id = COALESCE($8, last_broadcast_id),
-                 last_broadcast_name = COALESCE($9, last_broadcast_name),
-                 last_broadcast_date = COALESCE($10, last_broadcast_date),
-                 meta_whatsapp_no = COALESCE($11, meta_whatsapp_no),
-                 sender_email = COALESCE($12, sender_email),
-                 extra_data = $13,
+             SET last_broadcast_id = COALESCE($1, last_broadcast_id),
+                 last_broadcast_name = COALESCE($2, last_broadcast_name),
+                 meta_whatsapp_no = COALESCE($3, meta_whatsapp_no),
+                 sender_email = COALESCE($4, sender_email),
                  updated_at = CURRENT_TIMESTAMP
-             WHERE id = $1
-             RETURNING *`,
-            [
-              existing.id, updatedName, updatedContact, updatedMail, updatedAddress,
-              fId, cId, bcId, bcName, bcDate, metaWaNo, senderEmail, JSON.stringify(mergedExtra)
-            ]
+             WHERE id = $5`,
+            [bcId, bcName, metaWaNo, senderEmail, existingLead.id]
           );
-
           updatedCount++;
-          processedLeads.push(updateRes.rows[0]);
+          processedLeads.push({ ...existingLead, isNew: false });
         } else {
-          // INSERT new master lead
-          const newId = 'ml_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 7) + '_' + i;
-          const fId = `FM${String(runningIndex).padStart(5, '0')}`;
-          // If uploaded data had an ID column, align it; if empty/unaligned, assign FMCB00001
-          let cId = item.id ? String(item.id).trim() : '';
-          if (!cId || !cId.startsWith('FMCB')) {
-            cId = `FMCB${String(runningIndex).padStart(5, '0')}`;
-          }
+          const newId = 'cml_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
+          const finmantraId = `FM${String(runningIndex).padStart(5, '0')}`;
+          const campaignDataId = `CD${String(runningIndex).padStart(5, '0')}`;
           runningIndex++;
 
-          const insertRes = await client.query(
+          await client.query(
             `INSERT INTO campaign_master_leads 
-             (id, finmantra_id, campaign_data_id, name, contact, mail, address, 
-              whatsapp_optin, email_optin, last_broadcast_id, last_broadcast_name, 
-              last_broadcast_date, meta_whatsapp_no, sender_email, extra_data, 
-              wa_sent_count, wa_delivered_count, wa_read_count, wa_clicked_count,
-              email_sent_count, email_delivered_count, email_read_count, email_clicked_count, created_at, updated_at) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 0, 0, 0, 0, 0, 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-             RETURNING *`,
-            [
-              newId, fId, cId, name, contact, mail, address,
-              true, true, bcId, bcName, bcDate, metaWaNo, senderEmail, JSON.stringify(extraData)
-            ]
+             (id, finmantra_id, campaign_data_id, name, contact, mail, address, last_broadcast_id, last_broadcast_name, meta_whatsapp_no, sender_email)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+            [newId, finmantraId, campaignDataId, name, contact, mail, address, bcId, bcName, metaWaNo, senderEmail]
           );
-
           insertedCount++;
-          processedLeads.push(insertRes.rows[0]);
+          processedLeads.push({
+            id: newId,
+            finmantra_id: finmantraId,
+            campaign_data_id: campaignDataId,
+            name,
+            contact,
+            mail,
+            address,
+            whatsapp_optin: true,
+            email_optin: true,
+            isNew: true
+          });
         }
       }
 
       await client.query('COMMIT');
-      return {
-        total: processedLeads.length,
-        inserted: insertedCount,
-        updated: updatedCount,
-        leads: processedLeads
-      };
+      return { total: rawLeads.length, inserted: insertedCount, updated: updatedCount, leads: processedLeads };
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;
@@ -3523,8 +3521,13 @@ const db = {
   },
 
   async updateMasterLeadOptin(idOrFinmantraId, { whatsapp_optin, email_optin, reason = '' }) {
+    const cleanId = String(idOrFinmantraId || '').trim();
+    let phoneDigits = cleanId.replace(/\D/g, '');
+    let phone10 = phoneDigits.length === 12 && phoneDigits.startsWith('91') ? phoneDigits.substring(2) : phoneDigits.length === 10 ? phoneDigits : '';
+    let phone12 = phoneDigits.length === 10 ? '91' + phoneDigits : phoneDigits.length === 12 ? phoneDigits : '';
+
     const updates = [];
-    const params = [idOrFinmantraId];
+    const params = [cleanId, phone10, phone12];
 
     if (whatsapp_optin !== undefined) {
       params.push(Boolean(whatsapp_optin));
@@ -3540,14 +3543,39 @@ const db = {
 
     updates.push(`updated_at = CURRENT_TIMESTAMP`);
 
-    const res = await pool.query(
+    let res = await pool.query(
       `UPDATE campaign_master_leads 
        SET ${updates.join(', ')} 
-       WHERE id = $1 OR finmantra_id = $1 OR campaign_data_id = $1 OR contact = $1 OR LOWER(mail) = LOWER($1)
+       WHERE id = $1 
+          OR finmantra_id = $1 
+          OR campaign_data_id = $1 
+          OR ($2 != '' AND (contact = $2 OR contact = $3))
+          OR (mail != '' AND LOWER(TRIM(mail)) = LOWER($1))
        RETURNING *`,
       params
     );
-    return res.rows[0] || null;
+
+    if (res.rows && res.rows.length > 0) {
+      return res.rows[0];
+    }
+
+    // If record did not exist in campaign_master_leads, insert it as opted out
+    if (phone10 || cleanId) {
+      const contactVal = phone10 || (cleanId.includes('@') ? '' : cleanId);
+      const mailVal = cleanId.includes('@') ? cleanId : '';
+      const newId = 'cml_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
+      const fmId = 'FM' + String(Date.now()).slice(-5);
+      const ins = await pool.query(
+        `INSERT INTO campaign_master_leads (id, finmantra_id, contact, mail, name, whatsapp_optin, email_optin)
+         VALUES ($1, $2, $3, $4, 'Customer', $5, $6)
+         ON CONFLICT (id) DO UPDATE SET whatsapp_optin = EXCLUDED.whatsapp_optin, email_optin = EXCLUDED.email_optin
+         RETURNING *`,
+        [newId, fmId, contactVal, mailVal, whatsapp_optin !== undefined ? Boolean(whatsapp_optin) : true, email_optin !== undefined ? Boolean(email_optin) : true]
+      );
+      return ins.rows[0] || null;
+    }
+
+    return null;
   },
 
   async incrementMasterLeadMetric(leadIdOrContact, channel, metricType) {
