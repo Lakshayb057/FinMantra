@@ -4116,7 +4116,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       </aside>
 
       {/* MAIN CONTENT AREA */}
-      <main className={`admin-main-content ${['leads', 'cards', 'agents', 'locations', 'settings', 'campaigns'].includes(activeTab) ? 'desktop-no-scroll-content' : ''}`} style={{ flex: 1, padding: '1rem 1.5rem', minWidth: 0, display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }}>
+      <main className={`admin-main-content ${['leads', 'cards', 'agents', 'locations', 'settings'].includes(activeTab) ? 'desktop-no-scroll-content' : ''}`} style={{ flex: 1, padding: '1rem 1.5rem', minWidth: 0, display: 'flex', flexDirection: 'column', boxSizing: 'border-box', overflowY: 'auto' }}>
         {/* Top Header Strip inside Main Content */}
         {activeTab !== 'campaigns' && (
           <div className="admin-header-bar" style={{ 
