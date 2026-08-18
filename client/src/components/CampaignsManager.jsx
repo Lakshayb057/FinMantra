@@ -1883,7 +1883,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
             </div>
 
             {/* Broadcasts List */}
-            <div className="campaigns-table-wrapper">
+            <div className="campaigns-table-wrapper" style={{ maxHeight: '600px', overflowY: 'auto', overflowX: 'auto', border: '1px solid var(--line)', borderRadius: '8px' }}>
               {isLoadingBroadcasts ? (
                 <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--muted)' }}>
                   <RefreshCw size={28} className="spin-slow" style={{ color: 'var(--gold-deep)', marginBottom: '0.75rem' }} />
@@ -1896,8 +1896,8 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                   <div style={{ fontSize: '0.8rem', marginTop: '0.25rem' }}>Click "+ Create Broadcast" to launch a direct Meta WhatsApp or SMTP campaign.</div>
                 </div>
               ) : (
-                <table className="campaigns-table">
-                  <thead style={{ position: 'sticky', top: 0, background: 'var(--paper-2)', zIndex: 10 }}>
+                <table className="campaigns-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead style={{ position: 'sticky', top: 0, background: 'var(--paper-2)', zIndex: 10, boxShadow: '0 1px 2px rgba(0,0,0,0.06)' }}>
                     <tr style={{ borderBottom: '1px solid var(--line)' }}>
                       <th style={{ padding: '0.7rem 0.85rem', fontWeight: 700 }}>Broadcast Name</th>
                       <th style={{ padding: '0.7rem 0.85rem', fontWeight: 700 }}>Channel</th>
