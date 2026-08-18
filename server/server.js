@@ -484,7 +484,13 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
     return s;
   });
 
-  const safeButtonParam = formattedPhone || String(cleanParams[0] || '1').replace(/[^a-zA-Z0-9_-]/g, '_');
+  // Clean 10-digit phone number without country code prefix for URL buttons
+  let clean10Phone = toPhone.trim().replace(/\D/g, '');
+  if (clean10Phone.length === 12 && clean10Phone.startsWith('91')) {
+    clean10Phone = clean10Phone.substring(2);
+  }
+
+  const safeButtonParam = clean10Phone || formattedPhone || String(cleanParams[0] || '1').replace(/[^a-zA-Z0-9_-]/g, '_');
 
   // Build list of candidate component payloads to guarantee delivery across all template variations
   const componentStrategies = [];
