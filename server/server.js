@@ -7068,6 +7068,55 @@ const registerMetaTemplate = async ({ apiKey, wabaId, phoneId, name, category, l
       return (clean || fallback).substring(0, 25);
     };
 
+    // Helper to sanitize dynamic Meta button URLs (ensuring {{1}} is at the end of query/path)
+    const sanitizeMetaButtonUrl = (rawUrl, rawSample) => {
+      if (!rawUrl) return { url: '', example: null };
+      let url = String(rawUrl).trim().replace(/[\r\n\t\s]+/g, '');
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        url = 'https://' + url;
+      }
+      
+      const hasVar = url.includes('{{1}}') || url.includes('{{2}}') || url.includes('{unsubscribe_url}') || url.includes('{id}');
+      if (!hasVar) {
+        return { url, example: null };
+      }
+
+      // Normalize variable syntax to {{1}}
+      let cleanUrl = url.replace(/\{\{\d+\}\}/g, '{{1}}').replace(/\{[a-zA-Z0-9_]+\}/g, '{{1}}');
+      
+      // If query parameters follow {{1}} (e.g. ?id={{1}}&utm_channel=whatsapp), reorder so {{1}} is the final parameter
+      if (cleanUrl.includes('{{1}}')) {
+        const parts = cleanUrl.split('{{1}}');
+        if (parts.length === 2 && parts[1].trim()) {
+          const before = parts[0];
+          const after = parts[1].trim();
+          if (after.startsWith('&')) {
+            const afterParams = after.substring(1);
+            const paramNameMatch = before.match(/[?&]([^?&=]+)=$/);
+            const paramName = paramNameMatch ? paramNameMatch[1] : 'utm_id';
+            const beforeBase = before.replace(/[?&][^?&=]+=$/, '');
+            const sep = beforeBase.includes('?') ? '&' : '?';
+            cleanUrl = `${beforeBase}${sep}${afterParams}&${paramName}={{1}}`;
+          }
+        }
+      }
+
+      let sample = String(rawSample || 'FM00001').trim();
+      if (sample.startsWith('http://') || sample.startsWith('https://')) {
+        try {
+          const parsedUrl = new URL(sample);
+          sample = parsedUrl.searchParams.get('utm_id') || parsedUrl.searchParams.get('id') || 'FM00001';
+        } catch(e) {
+          sample = 'FM00001';
+        }
+      }
+
+      return {
+        url: cleanUrl,
+        example: [sample || 'FM00001']
+      };
+    };
+
     // 4. BUTTONS COMPONENT (Optional)
     if (buttons) {
       try {
@@ -7075,24 +7124,26 @@ const registerMetaTemplate = async ({ apiKey, wabaId, phoneId, name, category, l
         if (btnObj.buttonType === 'CTA') {
           const buttonsArray = [];
           if (btnObj.ctaUrlText && btnObj.ctaUrlValue) {
+            const urlParsed = sanitizeMetaButtonUrl(btnObj.ctaUrlValue, btnObj.ctaUrlSample);
             const btn = {
               type: 'URL',
               text: sanitizeBtnText(btnObj.ctaUrlText, 'Complete Application'),
-              url: btnObj.ctaUrlValue.trim()
+              url: urlParsed.url
             };
-            if (btnObj.ctaUrlValue.includes('{{1}}') || btnObj.ctaUrlValue.includes('{{2}}')) {
-              btn.example = [btnObj.ctaUrlSample && btnObj.ctaUrlSample.trim() ? btnObj.ctaUrlSample.trim() : "FM00001"];
+            if (urlParsed.example) {
+              btn.example = urlParsed.example;
             }
             buttonsArray.push(btn);
           }
           if (btnObj.ctaUrl2Text && btnObj.ctaUrl2Value) {
+            const urlParsed2 = sanitizeMetaButtonUrl(btnObj.ctaUrl2Value, btnObj.ctaUrl2Sample);
             const btn2 = {
               type: 'URL',
               text: sanitizeBtnText(btnObj.ctaUrl2Text, 'Preferences'),
-              url: btnObj.ctaUrl2Value.trim()
+              url: urlParsed2.url
             };
-            if (btnObj.ctaUrl2Value.includes('{{1}}') || btnObj.ctaUrl2Value.includes('{{2}}')) {
-              btn2.example = [btnObj.ctaUrl2Sample && btnObj.ctaUrl2Sample.trim() ? btnObj.ctaUrl2Sample.trim() : "FM00001"];
+            if (urlParsed2.example) {
+              btn2.example = urlParsed2.example;
             }
             buttonsArray.push(btn2);
           }
