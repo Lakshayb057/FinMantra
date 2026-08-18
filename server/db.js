@@ -3631,11 +3631,21 @@ const db = {
     const targetCol = columnMap[`${channel}_${metricType}`];
     if (!targetCol) return;
 
+    const rawStr = String(leadIdOrContact || '').trim();
+    const phoneDigits = rawStr.replace(/\D/g, '');
+    const phone10 = phoneDigits.length === 12 && phoneDigits.startsWith('91') ? phoneDigits.substring(2) : phoneDigits.length === 10 ? phoneDigits : '';
+    const phone12 = phoneDigits.length === 10 ? '91' + phoneDigits : phoneDigits.length === 12 ? phoneDigits : '';
+
     await pool.query(
       `UPDATE campaign_master_leads 
        SET ${targetCol} = COALESCE(${targetCol}, 0) + 1, updated_at = CURRENT_TIMESTAMP 
-       WHERE id = $1 OR contact = $1 OR LOWER(mail) = LOWER($1) OR finmantra_id = $1`,
-      [leadIdOrContact]
+       WHERE id = $1 
+          OR finmantra_id = $1 
+          OR campaign_data_id = $1
+          OR contact = $1 
+          OR ($2 != '' AND (contact = $2 OR contact = $3))
+          OR (mail != '' AND LOWER(TRIM(mail)) = LOWER($1))`,
+      [rawStr, phone10, phone12]
     );
   },
 

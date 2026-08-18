@@ -6724,7 +6724,9 @@ async function checkAndRunScheduledBroadcasts() {
                   false,
                   b.media_url || templateObj?.media_url || null,
                   templateLanguage,
-                  phoneIdToUse
+                  phoneIdToUse,
+                  null,
+                  templateObj
                 );
               } else {
                 const gateway = settings.whatsapp_gateway || 'baileys';
@@ -8516,6 +8518,8 @@ app.post(['/api/campaigns/track-click', '/api/c/track-click'], async (req, res) 
     const lId = lead_id || leadId || id || req.query.id || req.query.l;
     const ch = channel || req.query.channel || 'whatsapp';
 
+    console.log(`[CTR Tracking Beacon] Received click tracking ping for ID: "${lId}", Broadcast: "${bcId}", Channel: "${ch}"`);
+
     let lead = null;
     if (lId) {
       lead = await db.getMasterLeadById(lId);
@@ -8527,12 +8531,47 @@ app.post(['/api/campaigns/track-click', '/api/c/track-click'], async (req, res) 
       }
     }
 
+    // Fallback: If bcId is still missing, lookup most recent broadcast that messaged this lead
+    if (!bcId && lead) {
+      try {
+        const logRes = await db.runQuery(
+          `SELECT broadcast_id FROM campaign_logs 
+           WHERE (recipient_phone = $1 OR recipient_phone = $2 OR recipient_email = $3) 
+           ORDER BY created_at DESC LIMIT 1`,
+          [lead.contact, lead.contact?.replace(/^91/, ''), lead.mail]
+        );
+        if (logRes.rows[0]?.broadcast_id) {
+          bcId = logRes.rows[0].broadcast_id;
+        }
+      } catch (e) {}
+    }
+
+    // Fallback: If still missing, attribute to most recent sent broadcast
+    if (!bcId) {
+      try {
+        const latestBc = await db.runQuery(`SELECT id FROM campaign_broadcasts WHERE status = 'sent' ORDER BY created_at DESC LIMIT 1`);
+        if (latestBc.rows[0]?.id) {
+          bcId = latestBc.rows[0].id;
+        }
+      } catch (e) {}
+    }
+
     if (bcId) {
       await db.runQuery('UPDATE campaign_broadcasts SET clicked_count = COALESCE(clicked_count, 0) + 1 WHERE id = $1', [bcId]).catch(() => {});
+      console.log(`[CTR Tracked] Successfully incremented clicked_count for broadcast: ${bcId}`);
     }
+
+    // Notify connected admin dashboard clients in real-time
+    try {
+      broadcast({
+        type: 'CAMPAIGN_UPDATED',
+        data: { broadcastId: bcId, leadId: lead?.id, clicked: true }
+      });
+    } catch (e) {}
 
     res.json({ success: true, broadcastId: bcId, leadId: lead?.id });
   } catch (err) {
+    console.error('[CTR Tracking Error]', err.message);
     res.json({ success: false, error: err.message });
   }
 });
