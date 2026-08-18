@@ -245,54 +245,59 @@ export default function App() {
   };
 
   // Route Dispatcher
+  // Route Dispatcher
   const renderView = () => {
-    const rawPath = currentPath || (typeof window !== 'undefined' ? window.location.pathname : '/');
-    const cleanPath = rawPath.split('?')[0].replace(/\/+$/, '') || '/';
-    const pathParts = cleanPath.split('/');
+    const rawPath = String(currentPath || (typeof window !== 'undefined' ? window.location.pathname : '/')).toLowerCase();
+    const cleanPath = rawPath.split('?')[0].split('#')[0].replace(/\/+$/, '') || '/';
+    const pathParts = cleanPath.split('/').filter(Boolean);
 
-    if (pathParts[1] === 'refer') {
-      const activeParts = pathParts.filter(Boolean);
-      const urn = activeParts[activeParts.length - 1];
-      return <ReferralRedirect urn={urn} />;
-    }
-    if (pathParts[1] === 'kiwi') {
-      return <KiwiLanding navigateTo={navigateTo} utmParams={utmParams} />;
-    }
-    if (pathParts[1] === 'simplyclick_sbi') {
-      return <SimplyClickSbi navigateTo={navigateTo} utmParams={utmParams} />;
-    }
-    if (pathParts[1] === 'scapia') {
-      return <ScapiaLanding navigateTo={navigateTo} utmParams={utmParams} />;
-    }
-    if (pathParts[1] === 'sbi_qde') {
-      return <SbiQdeLanding navigateTo={navigateTo} utmParams={utmParams} />;
-    }
-    if (cleanPath === '/agent' || pathParts[1] === 'agent') {
-      return <AgentPortal navigateTo={navigateTo} theme={theme} toggleTheme={toggleTheme} />;
-    }
-    if (cleanPath === '/admin' || pathParts[1] === 'admin') {
-      return <AdminDashboard navigateTo={navigateTo} theme={theme} toggleTheme={toggleTheme} />;
-    }
-    if (cleanPath === '/about' || pathParts[1] === 'about') {
-      return <AboutPage navigateTo={navigateTo} />;
-    }
-    if (cleanPath === '/contact' || pathParts[1] === 'contact') {
-      return <ContactPage navigateTo={navigateTo} />;
-    }
-    if (cleanPath === '/contact-center' || pathParts[1] === 'contact-center') {
-      return <ContactCenterPage navigateTo={navigateTo} />;
-    }
-    if (cleanPath === '/unsubscribe' || pathParts[1] === 'unsubscribe') {
+    if (cleanPath === '/unsubscribe' || pathParts.includes('unsubscribe') || rawPath.includes('/unsubscribe')) {
       return <UnsubscribePage navigateTo={navigateTo} />;
     }
-    if (cleanPath === '/privacy-policy' || pathParts[1] === 'privacy-policy') {
+    if (cleanPath === '/contact-center' || pathParts.includes('contact-center') || rawPath.includes('/contact-center')) {
+      return <ContactCenterPage navigateTo={navigateTo} />;
+    }
+    if (pathParts[0] === 'refer') {
+      const urn = pathParts[pathParts.length - 1];
+      return <ReferralRedirect urn={urn} />;
+    }
+    if (pathParts[0] === 'kiwi') {
+      return <KiwiLanding navigateTo={navigateTo} utmParams={utmParams} />;
+    }
+    if (pathParts[0] === 'simplyclick_sbi') {
+      return <SimplyClickSbi navigateTo={navigateTo} utmParams={utmParams} />;
+    }
+    if (pathParts[0] === 'scapia') {
+      return <ScapiaLanding navigateTo={navigateTo} utmParams={utmParams} />;
+    }
+    if (pathParts[0] === 'sbi_qde') {
+      return <SbiQdeLanding navigateTo={navigateTo} utmParams={utmParams} />;
+    }
+    if (cleanPath === '/agent' || pathParts.includes('agent')) {
+      return <AgentPortal navigateTo={navigateTo} theme={theme} toggleTheme={toggleTheme} />;
+    }
+    if (cleanPath === '/admin' || pathParts.includes('admin')) {
+      return <AdminDashboard navigateTo={navigateTo} theme={theme} toggleTheme={toggleTheme} />;
+    }
+    if (cleanPath === '/about' || pathParts.includes('about')) {
+      return <AboutPage navigateTo={navigateTo} />;
+    }
+    if (cleanPath === '/contact' || pathParts.includes('contact')) {
+      return <ContactPage navigateTo={navigateTo} />;
+    }
+    if (cleanPath === '/privacy-policy' || pathParts.includes('privacy-policy')) {
       return <PrivacyPolicyPage navigateTo={navigateTo} />;
     }
-    if (cleanPath === '/terms' || pathParts[1] === 'terms') {
+    if (cleanPath === '/terms' || pathParts.includes('terms')) {
       return <TermsPage navigateTo={navigateTo} />;
     }
     return <PublicLanding navigateTo={navigateTo} utmParams={utmParams} />;
   };
+
+  const isStandalonePage = currentPath === '/admin' || currentPath === '/agent' || 
+    currentPath.startsWith('/kiwi') || currentPath.startsWith('/simplyclick_sbi') || 
+    currentPath.startsWith('/scapia') || currentPath.startsWith('/sbi_qde') || 
+    currentPath.startsWith('/unsubscribe') || currentPath.startsWith('/contact-center');
 
   return (
     <div className="app-container">
@@ -307,8 +312,8 @@ export default function App() {
         </div>
       )}
 
-      {/* Header / Navbar - Hide on admin, agent portals, kiwi, and sbi pages to avoid duplicates */}
-      {currentPath !== '/admin' && currentPath !== '/agent' && !currentPath.startsWith('/kiwi') && !currentPath.startsWith('/simplyclick_sbi') && !currentPath.startsWith('/scapia') && !currentPath.startsWith('/sbi_qde') && (
+      {/* Header / Navbar - Hide on standalone pages */}
+      {!isStandalonePage && (
         <header className="navbar">
           <div className="nav-logo" onClick={() => navigateTo('/')} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}>
             <img src="/logo.jpg" alt="FinMantra Logo" style={{ height: '44px', width: '44px', borderRadius: '10px', objectFit: 'cover', boxShadow: '0 3px 10px rgba(224, 168, 46, 0.3)' }} />
