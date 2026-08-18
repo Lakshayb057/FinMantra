@@ -7076,13 +7076,13 @@ const registerMetaTemplate = async ({ apiKey, wabaId, phoneId, name, category, l
         url = 'https://' + url;
       }
       
-      const hasVar = url.includes('{{1}}') || url.includes('{{2}}') || url.includes('{unsubscribe_url}') || url.includes('{id}');
+      const hasVar = url.includes('{');
       if (!hasVar) {
         return { url, example: null };
       }
 
-      // Normalize variable syntax to {{1}}
-      let cleanUrl = url.replace(/\{\{\d+\}\}/g, '{{1}}').replace(/\{[a-zA-Z0-9_]+\}/g, '{{1}}');
+      // Normalize any {tag}, {{tag}}, or {{{tag}}} syntax strictly into exact {{1}}
+      let cleanUrl = url.replace(/\{+[a-zA-Z0-9_]+\}+/g, '{{1}}');
       
       // If query parameters follow {{1}} (e.g. ?id={{1}}&utm_channel=whatsapp), reorder so {{1}} is the final parameter
       if (cleanUrl.includes('{{1}}')) {
@@ -7101,19 +7101,19 @@ const registerMetaTemplate = async ({ apiKey, wabaId, phoneId, name, category, l
         }
       }
 
-      let sample = String(rawSample || 'FM00001').trim();
+      let sample = String(rawSample || '9876543210').trim();
       if (sample.startsWith('http://') || sample.startsWith('https://')) {
         try {
           const parsedUrl = new URL(sample);
-          sample = parsedUrl.searchParams.get('utm_id') || parsedUrl.searchParams.get('id') || 'FM00001';
+          sample = parsedUrl.searchParams.get('utm_id') || parsedUrl.searchParams.get('id') || '9876543210';
         } catch(e) {
-          sample = 'FM00001';
+          sample = '9876543210';
         }
       }
 
       return {
         url: cleanUrl,
-        example: [sample || 'FM00001']
+        example: [sample || '9876543210']
       };
     };
 
