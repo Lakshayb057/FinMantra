@@ -8508,6 +8508,114 @@ app.get(['/api/c/t/:broadcastId/:masterLeadId', '/api/c/t'], async (req, res) =>
   }
 });
 
+// Link Click & CTR Tracking Beacon
+app.post(['/api/campaigns/track-click', '/api/c/track-click'], async (req, res) => {
+  try {
+    const { broadcast_id, broadcastId, lead_id, leadId, id, channel } = req.body || {};
+    const bcId = broadcast_id || broadcastId || req.query.broadcast_id || req.query.b;
+    const lId = lead_id || leadId || id || req.query.id || req.query.l;
+    const ch = channel || req.query.channel || 'whatsapp';
+
+    if (bcId) {
+      await db.runQuery('UPDATE campaign_broadcasts SET clicked_count = COALESCE(clicked_count, 0) + 1 WHERE id = $1', [bcId]).catch(() => {});
+    }
+    if (lId) {
+      await db.incrementMasterLeadMetric(lId, ch, 'clicked').catch(() => {});
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.json({ success: false, error: err.message });
+  }
+});
+
+// Meta Cloud API Webhook: Verification Challenge (GET)
+app.get(['/api/whatsapp/webhook', '/webhook'], (req, res) => {
+  const mode = req.query['hub.mode'];
+  const token = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
+
+  if (mode === 'subscribe') {
+    console.log('[Meta Webhook Verified] Verification challenge accepted.');
+    return res.status(200).send(challenge);
+  }
+  return res.sendStatus(403);
+});
+
+// Meta Cloud API Webhook: Inbound Delivery, Read, and Button Click Events (POST)
+app.post(['/api/whatsapp/webhook', '/webhook'], async (req, res) => {
+  res.sendStatus(200); // Immediate 200 acknowledgment to Meta
+
+  try {
+    const body = req.body;
+    if (body.object !== 'whatsapp_business_account' || !body.entry) return;
+
+    for (const entry of body.entry) {
+      for (const change of entry.changes || []) {
+        const val = change.value;
+        if (!val) continue;
+
+        // 1. Delivery & Read Status Updates from Meta
+        if (val.statuses && Array.isArray(val.statuses)) {
+          for (const st of val.statuses) {
+            const recipientPhone = st.recipient_id;
+            const statusType = st.status; // 'sent' | 'delivered' | 'read' | 'failed'
+
+            const lead = await db.getMasterLeadById(recipientPhone);
+            if (lead) {
+              if (statusType === 'delivered') {
+                await db.incrementMasterLeadMetric(lead.id, 'whatsapp', 'delivered').catch(() => {});
+                if (lead.last_broadcast_id) {
+                  await db.runQuery('UPDATE campaign_broadcasts SET delivered_count = COALESCE(delivered_count, 0) + 1 WHERE id = $1', [lead.last_broadcast_id]).catch(() => {});
+                }
+              } else if (statusType === 'read') {
+                await db.incrementMasterLeadMetric(lead.id, 'whatsapp', 'read').catch(() => {});
+                if (lead.last_broadcast_id) {
+                  await db.runQuery('UPDATE campaign_broadcasts SET read_count = COALESCE(read_count, 0) + 1 WHERE id = $1', [lead.last_broadcast_id]).catch(() => {});
+                }
+              } else if (statusType === 'failed') {
+                if (lead.last_broadcast_id) {
+                  await db.runQuery('UPDATE campaign_broadcasts SET failed_count = COALESCE(failed_count, 0) + 1 WHERE id = $1', [lead.last_broadcast_id]).catch(() => {});
+                }
+              }
+            }
+          }
+        }
+
+        // 2. Inbound Interactive Button Click or Message Replies
+        if (val.messages && Array.isArray(val.messages)) {
+          for (const msg of val.messages) {
+            const senderPhone = msg.from;
+            const lead = await db.getMasterLeadById(senderPhone);
+
+            // Button Click / Interactive Reply Detection (CTR event)
+            if (msg.type === 'interactive' || msg.type === 'button') {
+              if (lead) {
+                await db.incrementMasterLeadMetric(lead.id, 'whatsapp', 'clicked').catch(() => {});
+                if (lead.last_broadcast_id) {
+                  await db.runQuery('UPDATE campaign_broadcasts SET clicked_count = COALESCE(clicked_count, 0) + 1 WHERE id = $1', [lead.last_broadcast_id]).catch(() => {});
+                }
+              }
+            }
+
+            // Keyword Opt-out Detection (e.g. STOP / UNSUBSCRIBE)
+            if (msg.type === 'text' && msg.text && msg.text.body) {
+              const textContent = msg.text.body.trim().toUpperCase();
+              if (['STOP', 'UNSUBSCRIBE', 'OPTOUT', 'OPT-OUT'].includes(textContent)) {
+                if (lead) {
+                  await db.updateMasterLeadOptin(lead.id, { whatsapp_optin: false, reason: 'Replied STOP via WhatsApp' }).catch(() => {});
+                  console.log(`[WhatsApp Opt-out] Contact ${senderPhone} unsubscribed via STOP reply.`);
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[Meta Webhook Processing Error]:', err.message);
+  }
+});
+
 // Update / Edit a broadcast
 app.put(['/api/campaigns/:id/broadcasts/:broadcastId', '/api/campaigns/broadcasts/:broadcastId'], authenticateToken, async (req, res) => {
   try {

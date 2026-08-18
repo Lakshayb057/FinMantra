@@ -237,6 +237,25 @@ export default function App() {
 
     setUtmParams(mergedParams);
     sessionStorage.setItem('finmantra_utm', JSON.stringify(mergedParams));
+
+    // Automatic Broadcast Click & CTR Tracking
+    const broadcastId = searchParams.get('utm_brodcast_id') || searchParams.get('utm_broadcast_id') || searchParams.get('brodcast_id') || searchParams.get('broadcast_id') || searchParams.get('b');
+    const contactId = searchParams.get('utm_id') || searchParams.get('master_id') || searchParams.get('lead_id') || searchParams.get('id') || searchParams.get('l');
+    const clickChannel = searchParams.get('utm_channel') || searchParams.get('channel') || 'whatsapp';
+
+    if (broadcastId || contactId) {
+      const API_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.port === '5173') ? 'http://localhost:5000/api' : '/api';
+      fetch(`${API_URL}/campaigns/track-click`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          broadcast_id: broadcastId,
+          id: contactId,
+          channel: clickChannel,
+          url: window.location.pathname
+        })
+      }).catch(() => {});
+    }
   }, []);
 
   const navigateTo = (path) => {
@@ -244,7 +263,6 @@ export default function App() {
     setCurrentPath(path);
   };
 
-  // Route Dispatcher
   // Route Dispatcher
   const renderView = () => {
     const rawPath = String(currentPath || (typeof window !== 'undefined' ? window.location.pathname : '/')).toLowerCase();
