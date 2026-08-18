@@ -3375,7 +3375,22 @@ const db = {
   },
 
   async getMasterLeadById(id) {
-    const res = await pool.query('SELECT * FROM campaign_master_leads WHERE id = $1 OR finmantra_id = $1 OR campaign_data_id = $1 LIMIT 1', [id]);
+    if (!id) return null;
+    const cleanId = String(id).trim();
+    let phoneDigits = cleanId.replace(/\D/g, '');
+    let phone10 = phoneDigits.length === 12 && phoneDigits.startsWith('91') ? phoneDigits.substring(2) : phoneDigits.length === 10 ? phoneDigits : '';
+    let phone12 = phoneDigits.length === 10 ? '91' + phoneDigits : phoneDigits.length === 12 ? phoneDigits : '';
+
+    const res = await pool.query(
+      `SELECT * FROM campaign_master_leads 
+       WHERE id = $1 
+          OR finmantra_id = $1 
+          OR campaign_data_id = $1
+          OR ($2 != '' AND (contact = $2 OR contact = $3))
+          OR (mail != '' AND LOWER(TRIM(mail)) = LOWER($1))
+       LIMIT 1`, 
+      [cleanId, phone10, phone12]
+    );
     return res.rows[0] || null;
   },
 
