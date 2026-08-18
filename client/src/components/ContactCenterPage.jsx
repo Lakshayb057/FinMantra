@@ -34,9 +34,34 @@ export default function ContactCenterPage({ navigateTo }) {
 
         if (data.success && data.lead) {
           setLead(data.lead);
-          setWhatsappOptin(data.lead.whatsapp_optin);
-          setEmailOptin(data.lead.email_optin);
           setBroadcast(data.broadcast);
+
+          const shouldAutoOptout = params.get('optout') === '1' || targetChannel === 'whatsapp' || targetChannel === 'email' || targetChannel === 'all';
+          if (shouldAutoOptout) {
+            const newWa = targetChannel === 'email' ? data.lead.whatsapp_optin : false;
+            const newEmail = targetChannel === 'whatsapp' ? data.lead.email_optin : false;
+            setWhatsappOptin(newWa);
+            setEmailOptin(newEmail);
+
+            // Auto-persist 1-click opt-out
+            fetch(`${API_URL}/contact-center/optout`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                id: data.lead.id || id,
+                broadcast_id: broadcastId,
+                whatsapp_optin: newWa,
+                email_optin: newEmail,
+                channel: targetChannel,
+                reason: '1-Click Unsubscribe from notification link'
+              })
+            }).then(() => {
+              setSaveSuccess(true);
+            }).catch(() => {});
+          } else {
+            setWhatsappOptin(data.lead.whatsapp_optin);
+            setEmailOptin(data.lead.email_optin);
+          }
         } else {
           setError(data.error || 'Contact profile not found.');
         }
