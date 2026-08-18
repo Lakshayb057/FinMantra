@@ -238,10 +238,10 @@ export default function App() {
     setUtmParams(mergedParams);
     sessionStorage.setItem('finmantra_utm', JSON.stringify(mergedParams));
 
-    // Automatic Broadcast Click & CTR Tracking
-    const broadcastId = searchParams.get('utm_brodcast_id') || searchParams.get('utm_broadcast_id') || searchParams.get('brodcast_id') || searchParams.get('broadcast_id') || searchParams.get('b');
-    const contactId = searchParams.get('utm_id') || searchParams.get('master_id') || searchParams.get('lead_id') || searchParams.get('id') || searchParams.get('l');
-    const clickChannel = searchParams.get('utm_channel') || searchParams.get('channel') || 'whatsapp';
+    // Automatic Broadcast Click & CTR Tracking (Universal across ALL pages & campaigns)
+    const broadcastId = searchParams.get('utm_brodcast_id') || searchParams.get('utm_broadcast_id') || searchParams.get('brodcast_id') || searchParams.get('broadcast_id') || searchParams.get('b') || searchParams.get('bc_id') || searchParams.get('campaign_id');
+    const contactId = searchParams.get('utm_id') || searchParams.get('master_id') || searchParams.get('lead_id') || searchParams.get('id') || searchParams.get('l') || searchParams.get('uid') || searchParams.get('phone') || searchParams.get('mobile') || searchParams.get('contact') || searchParams.get('email');
+    const clickChannel = searchParams.get('utm_channel') || searchParams.get('channel') || searchParams.get('ch') || (searchParams.get('email') ? 'email' : 'whatsapp');
 
     if (broadcastId || contactId) {
       const API_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.port === '5173') ? 'http://localhost:5000/api' : '/api';
