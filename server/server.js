@@ -8512,17 +8512,26 @@ app.get(['/api/c/t/:broadcastId/:masterLeadId', '/api/c/t'], async (req, res) =>
 app.post(['/api/campaigns/track-click', '/api/c/track-click'], async (req, res) => {
   try {
     const { broadcast_id, broadcastId, lead_id, leadId, id, channel } = req.body || {};
-    const bcId = broadcast_id || broadcastId || req.query.broadcast_id || req.query.b;
+    let bcId = broadcast_id || broadcastId || req.query.broadcast_id || req.query.b;
     const lId = lead_id || leadId || id || req.query.id || req.query.l;
     const ch = channel || req.query.channel || 'whatsapp';
+
+    let lead = null;
+    if (lId) {
+      lead = await db.getMasterLeadById(lId);
+      if (lead) {
+        await db.incrementMasterLeadMetric(lead.id, ch, 'clicked').catch(() => {});
+        if (!bcId && lead.last_broadcast_id) {
+          bcId = lead.last_broadcast_id;
+        }
+      }
+    }
 
     if (bcId) {
       await db.runQuery('UPDATE campaign_broadcasts SET clicked_count = COALESCE(clicked_count, 0) + 1 WHERE id = $1', [bcId]).catch(() => {});
     }
-    if (lId) {
-      await db.incrementMasterLeadMetric(lId, ch, 'clicked').catch(() => {});
-    }
-    res.json({ success: true });
+
+    res.json({ success: true, broadcastId: bcId, leadId: lead?.id });
   } catch (err) {
     res.json({ success: false, error: err.message });
   }

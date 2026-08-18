@@ -64,6 +64,40 @@ export default function SimplyClickSbi({ navigateTo, utmParams }) {
     };
     loadSettings();
     loadCards();
+
+    // Auto-detect lead and trigger CTR tracking + prefill
+    const searchParams = new URLSearchParams(window.location.search);
+    const id = searchParams.get('id') || searchParams.get('utm_id') || searchParams.get('master_id') || searchParams.get('lead_id') || searchParams.get('uid');
+    const broadcastId = searchParams.get('utm_brodcast_id') || searchParams.get('utm_broadcast_id') || searchParams.get('brodcast_id') || searchParams.get('broadcast_id') || searchParams.get('b');
+
+    if (id || broadcastId) {
+      fetch(`${API_URL}/campaigns/track-click`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          broadcast_id: broadcastId,
+          id,
+          channel: 'whatsapp',
+          url: window.location.pathname
+        })
+      }).catch(() => {});
+
+      if (id) {
+        fetch(`${API_URL}/contact-center/details?id=${encodeURIComponent(id)}${broadcastId ? `&broadcast_id=${encodeURIComponent(broadcastId)}` : ''}`)
+          .then(r => r.json())
+          .then(data => {
+            if (data.success && data.lead) {
+              setFormData(prev => ({
+                ...prev,
+                name: prev.name || (data.lead.name && data.lead.name !== 'Valued Customer' ? data.lead.name : ''),
+                mobile: prev.mobile || (data.lead.contact ? data.lead.contact.replace(/\D/g, '').slice(-10) : ''),
+                email: prev.email || (data.lead.mail && !data.lead.mail.includes('*') ? data.lead.mail : '')
+              }));
+            }
+          })
+          .catch(() => {});
+      }
+    }
   }, []);
 
   // OTP Timer countdown
