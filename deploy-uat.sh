@@ -26,6 +26,8 @@ cd /home/ubuntu
 if [ -d "finmantra-uat" ]; then
     echo "Directory exists. Pulling latest code from uat branch..."
     cd finmantra-uat
+    git reset --hard HEAD
+    git clean -fd
     git fetch origin
     git checkout uat
     git pull origin uat
