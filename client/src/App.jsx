@@ -248,14 +248,18 @@ export default function App() {
 
     // Parse composite contact and broadcast tokens
     if (contactId && typeof contactId === 'string') {
-      if (contactId.includes('_bc_')) {
+      if (contactId.includes('&utm_brodcast_id=')) {
+        const parts = contactId.split('&utm_brodcast_id=');
+        contactId = parts[0];
+        if (!broadcastId) broadcastId = decodeURIComponent(parts[1]);
+      } else if (contactId.includes('&broadcast_id=')) {
+        const parts = contactId.split('&broadcast_id=');
+        contactId = parts[0];
+        if (!broadcastId) broadcastId = decodeURIComponent(parts[1]);
+      } else if (contactId.includes('_bc_')) {
         const parts = contactId.split('_bc_');
         contactId = parts[0];
         if (!broadcastId) broadcastId = 'bc_' + parts[1];
-      } else if (contactId.includes('&utm_brodcast_id=')) {
-        const parts = contactId.split('&utm_brodcast_id=');
-        contactId = parts[0];
-        if (!broadcastId) broadcastId = parts[1];
       }
     }
 

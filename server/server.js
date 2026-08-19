@@ -6662,7 +6662,9 @@ async function checkAndRunScheduledBroadcasts() {
             lead.id,
             'email',
             emailSuccess ? 'sent' : 'failed',
-            emailError
+            emailError,
+            lead.contact || '',
+            lead.mail || ''
           ).catch(err => console.error('[Email Log Warn]:', err.message));
         }
 
@@ -6770,7 +6772,9 @@ async function checkAndRunScheduledBroadcasts() {
             lead.id,
             'whatsapp',
             waSuccess ? 'sent' : 'failed',
-            waError
+            waError,
+            lead.contact || '',
+            lead.mail || ''
           ).catch(err => console.error('[WhatsApp Log Warn]:', err.message));
         }
 
@@ -8400,27 +8404,83 @@ app.get('/api/campaigns/analytics/dashboard', authenticateToken, async (req, res
   }
 });
 
+// Robust Broadcast & Contact ID Extractor for Exact Multi-Campaign CTR Attribution
+function extractBroadcastAndContactId(reqBody = {}, reqQuery = {}, reqParams = {}) {
+  let bcId = reqBody?.broadcast_id || reqBody?.broadcastId || reqBody?.brodcast_id || reqBody?.b || reqBody?.bc_id ||
+             reqQuery?.broadcast_id || reqQuery?.broadcastId || reqQuery?.brodcast_id || reqQuery?.utm_brodcast_id || reqQuery?.utm_broadcast_id || reqQuery?.b || reqQuery?.bc_id ||
+             reqParams?.broadcastId || '';
+             
+  let contactId = reqBody?.id || reqBody?.lead_id || reqBody?.leadId || reqBody?.master_id || reqBody?.uid ||
+                  reqQuery?.id || reqQuery?.utm_id || reqQuery?.lead_id || reqQuery?.master_id || reqQuery?.uid || reqQuery?.l || reqQuery?.phone || reqQuery?.contact ||
+                  reqParams?.masterLeadId || '';
+
+  // Parse composite tokens (e.g. "9876543210&utm_brodcast_id=bc_123" or "FMCB00001_bc_123" or "cml_123_bc_456")
+  if (contactId && typeof contactId === 'string') {
+    if (contactId.includes('&utm_brodcast_id=')) {
+      const parts = contactId.split('&utm_brodcast_id=');
+      contactId = parts[0];
+      if (!bcId) bcId = decodeURIComponent(parts[1]);
+    } else if (contactId.includes('&broadcast_id=')) {
+      const parts = contactId.split('&broadcast_id=');
+      contactId = parts[0];
+      if (!bcId) bcId = decodeURIComponent(parts[1]);
+    } else if (contactId.includes('_bc_')) {
+      const parts = contactId.split('_bc_');
+      contactId = parts[0];
+      if (!bcId) bcId = 'bc_' + parts[1];
+    }
+  }
+
+  if (bcId && typeof bcId === 'string' && bcId.includes('&')) {
+    bcId = bcId.split('&')[0];
+  }
+
+  return { broadcastId: bcId ? String(bcId).trim() : null, contactId: contactId ? String(contactId).trim() : null };
+}
+
 // Public Contact Center Unsubscribe & Preference API
 app.get('/api/contact-center/details', async (req, res) => {
   try {
-    const id = req.query.id || req.query.master_id || req.query.lead_id || req.query.utm_id || req.query.uid;
-    const broadcastId = req.query.brodcast_id || req.query.broadcast_id || req.query.b || req.query.utm_brodcast_id || req.query.utm_broadcast_id || req.query.bc_id;
+    const { broadcastId, contactId } = extractBroadcastAndContactId(req.body, req.query, req.params);
     const channel = req.query.channel || req.query.utm_channel || req.query.ch || 'all';
 
-    if (!id) {
+    if (!contactId) {
       return res.status(400).json({ success: false, error: 'Missing contact ID.' });
     }
-    const lead = await db.getMasterLeadById(id);
+    const lead = await db.getMasterLeadById(contactId);
     if (!lead) {
       return res.status(404).json({ success: false, error: 'Contact profile not found in master records.' });
     }
+    
     let broadcast = null;
-    if (broadcastId) {
-      broadcast = await db.getCampaignBroadcastById(broadcastId);
-      // Record click & CTR metrics for this broadcast and lead
-      await db.runQuery('UPDATE campaign_broadcasts SET clicked_count = COALESCE(clicked_count, 0) + 1 WHERE id = $1', [broadcastId]).catch(() => {});
+    let effectiveBcId = broadcastId;
+
+    // If bcId was not explicitly passed, lookup the exact broadcast that messaged this contact
+    if (!effectiveBcId) {
+      try {
+        const logRes = await db.runQuery(
+          `SELECT broadcast_id FROM campaign_logs 
+           WHERE (recipient_phone = $1 OR recipient_phone = $2 OR recipient_email = $3 OR campaign_lead_id = $4) 
+           ORDER BY sent_at DESC LIMIT 1`,
+          [lead.contact, lead.contact?.replace(/^91/, ''), lead.mail, lead.id]
+        );
+        if (logRes.rows[0]?.broadcast_id) {
+          effectiveBcId = logRes.rows[0].broadcast_id;
+        }
+      } catch (e) {}
+    }
+
+    if (!effectiveBcId && lead.last_broadcast_id) {
+      effectiveBcId = lead.last_broadcast_id;
+    }
+
+    if (effectiveBcId) {
+      broadcast = await db.getCampaignBroadcastById(effectiveBcId);
+      // Record click & CTR metrics for this exact broadcast
+      await db.runQuery('UPDATE campaign_broadcasts SET clicked_count = COALESCE(clicked_count, 0) + 1 WHERE id = $1', [effectiveBcId]).catch(() => {});
       const clickChannel = channel === 'email' || broadcast?.channel === 'email' ? 'email' : 'whatsapp';
       await db.incrementMasterLeadMetric(lead.id, clickChannel, 'clicked').catch(() => {});
+      broadcast_ws({ type: 'BROADCAST_UPDATED' });
     }
 
     res.json({
@@ -8444,10 +8504,9 @@ app.get('/api/contact-center/details', async (req, res) => {
 
 app.post(['/api/contact-center/optout', '/api/c/unsubscribe'], async (req, res) => {
   try {
-    const id = req.body.id || req.body.master_id || req.body.lead_id || req.body.utm_id || req.body.uid;
-    const broadcast_id = req.body.broadcast_id || req.body.brodcast_id || req.body.b || req.body.utm_brodcast_id || req.body.utm_broadcast_id;
+    const { broadcastId, contactId } = extractBroadcastAndContactId(req.body, req.query, req.params);
     const { whatsapp_optin, email_optin, reason, channel } = req.body;
-    if (!id) {
+    if (!contactId) {
       return res.status(400).json({ success: false, error: 'Missing contact ID.' });
     }
 
@@ -8463,7 +8522,7 @@ app.post(['/api/contact-center/optout', '/api/c/unsubscribe'], async (req, res) 
       finalEmailOptin = false;
     }
 
-    const updated = await db.updateMasterLeadOptin(id, {
+    const updated = await db.updateMasterLeadOptin(contactId, {
       whatsapp_optin: finalWaOptin,
       email_optin: finalEmailOptin,
       reason: reason || 'Unsubscribed'
@@ -8474,9 +8533,12 @@ app.post(['/api/contact-center/optout', '/api/c/unsubscribe'], async (req, res) 
     }
 
     // Log broadcast click & optout if broadcast_id is supplied
-    if (broadcast_id) {
-      await db.runQuery('UPDATE campaign_broadcasts SET clicked_count = COALESCE(clicked_count, 0) + 1 WHERE id = $1', [broadcast_id]).catch(() => {});
+    if (broadcastId) {
+      await db.runQuery('UPDATE campaign_broadcasts SET clicked_count = COALESCE(clicked_count, 0) + 1 WHERE id = $1', [broadcastId]).catch(() => {});
     }
+
+    broadcast_ws({ type: 'MASTER_DATA_UPDATED' });
+    broadcast_ws({ type: 'BROADCAST_UPDATED' });
 
     res.json({
       success: true,
@@ -8515,55 +8577,29 @@ app.post('/api/campaigns/master-leads/:id/toggle-optin', authenticateToken, asyn
   }
 });
 
-// Click & CTR Tracking Route (Universal)
+// Click & CTR Tracking Route (Universal Redirect)
 app.get(['/api/c/t/:broadcastId/:masterLeadId', '/api/c/t'], async (req, res) => {
   try {
-    const broadcastId = req.params.broadcastId || req.query.b || req.query.broadcast_id;
-    const masterLeadId = req.params.masterLeadId || req.query.l || req.query.id || req.query.master_id;
+    const { broadcastId, contactId } = extractBroadcastAndContactId(req.body, req.query, req.params);
     const targetUrl = req.query.url || req.query.redirect || 'https://thefinmantra.com';
     const channel = req.query.channel || 'whatsapp';
 
-    if (broadcastId) {
-      await db.runQuery('UPDATE campaign_broadcasts SET clicked_count = COALESCE(clicked_count, 0) + 1 WHERE id = $1', [broadcastId]).catch(() => {});
-    }
-    if (masterLeadId) {
-      await db.incrementMasterLeadMetric(masterLeadId, channel, 'clicked').catch(() => {});
-    }
-    res.redirect(targetUrl);
-  } catch (e) {
-    res.redirect('https://thefinmantra.com');
-  }
-});
-
-// Link Click & CTR Tracking Beacon
-app.post(['/api/campaigns/track-click', '/api/c/track-click'], async (req, res) => {
-  try {
-    const { broadcast_id, broadcastId, lead_id, leadId, id, channel } = req.body || {};
-    let bcId = broadcast_id || broadcastId || req.query.broadcast_id || req.query.b;
-    const lId = lead_id || leadId || id || req.query.id || req.query.l;
-    const ch = channel || req.query.channel || 'whatsapp';
-
-    console.log(`[CTR Tracking Beacon] Received click tracking ping for ID: "${lId}", Broadcast: "${bcId}", Channel: "${ch}"`);
-
+    let bcId = broadcastId;
     let lead = null;
-    if (lId) {
-      lead = await db.getMasterLeadById(lId);
+    if (contactId) {
+      lead = await db.getMasterLeadById(contactId);
       if (lead) {
-        await db.incrementMasterLeadMetric(lead.id, ch, 'clicked').catch(() => {});
-        if (!bcId && lead.last_broadcast_id) {
-          bcId = lead.last_broadcast_id;
-        }
+        await db.incrementMasterLeadMetric(lead.id, channel, 'clicked').catch(() => {});
       }
     }
 
-    // Fallback: If bcId is still missing, lookup most recent broadcast that messaged this lead
     if (!bcId && lead) {
       try {
         const logRes = await db.runQuery(
           `SELECT broadcast_id FROM campaign_logs 
-           WHERE (recipient_phone = $1 OR recipient_phone = $2 OR recipient_email = $3) 
-           ORDER BY created_at DESC LIMIT 1`,
-          [lead.contact, lead.contact?.replace(/^91/, ''), lead.mail]
+           WHERE (recipient_phone = $1 OR recipient_phone = $2 OR recipient_email = $3 OR campaign_lead_id = $4) 
+           ORDER BY sent_at DESC LIMIT 1`,
+          [lead.contact, lead.contact?.replace(/^91/, ''), lead.mail, lead.id]
         );
         if (logRes.rows[0]?.broadcast_id) {
           bcId = logRes.rows[0].broadcast_id;
@@ -8571,14 +8607,56 @@ app.post(['/api/campaigns/track-click', '/api/c/track-click'], async (req, res) 
       } catch (e) {}
     }
 
-    // Fallback: If still missing, attribute to most recent sent broadcast
-    if (!bcId) {
+    if (!bcId && lead?.last_broadcast_id) {
+      bcId = lead.last_broadcast_id;
+    }
+
+    if (bcId) {
+      await db.runQuery('UPDATE campaign_broadcasts SET clicked_count = COALESCE(clicked_count, 0) + 1 WHERE id = $1', [bcId]).catch(() => {});
+    }
+
+    broadcast_ws({ type: 'BROADCAST_UPDATED' });
+    res.redirect(targetUrl);
+  } catch (e) {
+    res.redirect('https://thefinmantra.com');
+  }
+});
+
+// Link Click & CTR Tracking Beacon (POST)
+app.post(['/api/campaigns/track-click', '/api/c/track-click'], async (req, res) => {
+  try {
+    const { broadcastId, contactId } = extractBroadcastAndContactId(req.body, req.query, req.params);
+    let bcId = broadcastId;
+    const ch = req.body?.channel || req.query?.channel || 'whatsapp';
+
+    console.log(`[CTR Tracking Beacon] Received click tracking ping for ID: "${contactId}", Broadcast: "${bcId}", Channel: "${ch}"`);
+
+    let lead = null;
+    if (contactId) {
+      lead = await db.getMasterLeadById(contactId);
+      if (lead) {
+        await db.incrementMasterLeadMetric(lead.id, ch, 'clicked').catch(() => {});
+      }
+    }
+
+    // Fallback: If bcId is missing, check campaign_logs to find the exact broadcast that targeted this contact
+    if (!bcId && lead) {
       try {
-        const latestBc = await db.runQuery(`SELECT id FROM campaign_broadcasts WHERE status = 'sent' ORDER BY created_at DESC LIMIT 1`);
-        if (latestBc.rows[0]?.id) {
-          bcId = latestBc.rows[0].id;
+        const logRes = await db.runQuery(
+          `SELECT broadcast_id FROM campaign_logs 
+           WHERE (recipient_phone = $1 OR recipient_phone = $2 OR recipient_email = $3 OR campaign_lead_id = $4) 
+           ORDER BY sent_at DESC LIMIT 1`,
+          [lead.contact, lead.contact?.replace(/^91/, ''), lead.mail, lead.id]
+        );
+        if (logRes.rows[0]?.broadcast_id) {
+          bcId = logRes.rows[0].broadcast_id;
         }
       } catch (e) {}
+    }
+
+    // If still missing, fallback to lead's last broadcast
+    if (!bcId && lead?.last_broadcast_id) {
+      bcId = lead.last_broadcast_id;
     }
 
     if (bcId) {
@@ -8589,9 +8667,10 @@ app.post(['/api/campaigns/track-click', '/api/c/track-click'], async (req, res) 
     // Notify connected admin dashboard clients in real-time
     try {
       broadcast({
-        type: 'CAMPAIGN_UPDATED',
+        type: 'BROADCAST_UPDATED',
         data: { broadcastId: bcId, leadId: lead?.id, clicked: true }
       });
+      broadcast({ type: 'MASTER_DATA_UPDATED' });
     } catch (e) {}
 
     res.json({ success: true, broadcastId: bcId, leadId: lead?.id });
@@ -8664,8 +8743,38 @@ app.post(['/api/whatsapp/webhook', '/webhook'], async (req, res) => {
             if (msg.type === 'interactive' || msg.type === 'button') {
               if (lead) {
                 await db.incrementMasterLeadMetric(lead.id, 'whatsapp', 'clicked').catch(() => {});
-                if (lead.last_broadcast_id) {
-                  await db.runQuery('UPDATE campaign_broadcasts SET clicked_count = COALESCE(clicked_count, 0) + 1 WHERE id = $1', [lead.last_broadcast_id]).catch(() => {});
+                
+                let targetBcId = null;
+                // 1. Check if payload contains broadcast ID
+                const payloadStr = msg.button?.payload || msg.interactive?.button_reply?.id || msg.interactive?.list_reply?.id || '';
+                if (payloadStr && typeof payloadStr === 'string' && (payloadStr.startsWith('bc_') || payloadStr.includes('_bc_'))) {
+                  const m = payloadStr.match(/(bc_[a-zA-Z0-9]+)/);
+                  if (m && m[1]) targetBcId = m[1];
+                }
+
+                // 2. Query campaign_logs for the exact broadcast that sent to this contact
+                if (!targetBcId) {
+                  try {
+                    const logRes = await db.runQuery(
+                      `SELECT broadcast_id FROM campaign_logs 
+                       WHERE (recipient_phone = $1 OR recipient_phone = $2 OR campaign_lead_id = $3) 
+                       ORDER BY sent_at DESC LIMIT 1`,
+                      [senderPhone, senderPhone.replace(/^91/, ''), lead.id]
+                    );
+                    if (logRes.rows[0]?.broadcast_id) {
+                      targetBcId = logRes.rows[0].broadcast_id;
+                    }
+                  } catch (e) {}
+                }
+
+                if (!targetBcId && lead.last_broadcast_id) {
+                  targetBcId = lead.last_broadcast_id;
+                }
+
+                if (targetBcId) {
+                  await db.runQuery('UPDATE campaign_broadcasts SET clicked_count = COALESCE(clicked_count, 0) + 1 WHERE id = $1', [targetBcId]).catch(() => {});
+                  broadcast({ type: 'BROADCAST_UPDATED' });
+                  broadcast({ type: 'MASTER_DATA_UPDATED' });
                 }
               }
             }

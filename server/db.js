@@ -503,6 +503,11 @@ async function initPgSchema() {
     await safeQuery("ALTER TABLE campaign_templates ADD COLUMN IF NOT EXISTS language VARCHAR(50) DEFAULT 'en_US'");
     await safeQuery("ALTER TABLE campaign_templates ADD COLUMN IF NOT EXISTS category VARCHAR(50) DEFAULT 'MARKETING'");
     await safeQuery("ALTER TABLE campaign_logs DROP CONSTRAINT IF EXISTS campaign_logs_campaign_lead_id_fkey");
+    await safeQuery("ALTER TABLE campaign_logs ADD COLUMN IF NOT EXISTS recipient_phone VARCHAR(50)");
+    await safeQuery("ALTER TABLE campaign_logs ADD COLUMN IF NOT EXISTS recipient_email VARCHAR(255)");
+    await safeQuery("CREATE INDEX IF NOT EXISTS idx_campaign_logs_bc_phone ON campaign_logs (broadcast_id, recipient_phone)");
+    await safeQuery("CREATE INDEX IF NOT EXISTS idx_campaign_logs_phone ON campaign_logs (recipient_phone)");
+    await safeQuery("CREATE INDEX IF NOT EXISTS idx_campaign_logs_email ON campaign_logs (recipient_email)");
     await safeQuery("ALTER TABLE campaign_broadcasts ADD COLUMN IF NOT EXISTS smtp_account_id VARCHAR(50)");
 
     await safeQuery(`
@@ -3203,23 +3208,23 @@ const db = {
     return res.rows;
   },
 
-  async logCampaignBroadcastDelivery(id, broadcastId, campaignLeadId, channel, status, errorMessage) {
+  async logCampaignBroadcastDelivery(id, broadcastId, campaignLeadId, channel, status, errorMessage, recipientPhone = '', recipientEmail = '') {
     try {
       const res = await pool.query(
-        `INSERT INTO campaign_logs (id, broadcast_id, campaign_lead_id, channel, status, error_message) 
-         VALUES ($1, $2, $3, $4, $5, $6) 
+        `INSERT INTO campaign_logs (id, broadcast_id, campaign_lead_id, channel, status, error_message, recipient_phone, recipient_email) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) 
          RETURNING *`,
-        [id, broadcastId, campaignLeadId, channel, status, errorMessage]
+        [id, broadcastId, campaignLeadId, channel, status, errorMessage, recipientPhone, recipientEmail]
       );
       return res.rows[0];
     } catch (err) {
       console.error('[logCampaignBroadcastDelivery] Warning on insert:', err.message);
       try {
         const fallback = await pool.query(
-          `INSERT INTO campaign_logs (id, broadcast_id, channel, status, error_message) 
-           VALUES ($1, $2, $3, $4, $5) 
+          `INSERT INTO campaign_logs (id, broadcast_id, channel, status, error_message, recipient_phone, recipient_email) 
+           VALUES ($1, $2, $3, $4, $5, $6, $7) 
            RETURNING *`,
-          [id, broadcastId, channel, status, (errorMessage || '') + (campaignLeadId ? ` (Lead: ${campaignLeadId})` : '')]
+          [id, broadcastId, channel, status, (errorMessage || '') + (campaignLeadId ? ` (Lead: ${campaignLeadId})` : ''), recipientPhone, recipientEmail]
         );
         return fallback.rows[0];
       } catch (e) {
@@ -3299,7 +3304,15 @@ const db = {
         LOWER(last_broadcast_name) = LOWER($${pIdx}) 
         OR last_broadcast_id IN (SELECT id FROM campaign_broadcasts WHERE LOWER(name) = LOWER($${pIdx}))
         OR id IN (
-          SELECT lead_id FROM campaign_broadcast_logs 
+          SELECT campaign_lead_id FROM campaign_logs 
+          WHERE broadcast_id IN (SELECT id FROM campaign_broadcasts WHERE LOWER(name) = LOWER($${pIdx}))
+        )
+        OR contact IN (
+          SELECT recipient_phone FROM campaign_logs 
+          WHERE broadcast_id IN (SELECT id FROM campaign_broadcasts WHERE LOWER(name) = LOWER($${pIdx}))
+        )
+        OR mail IN (
+          SELECT recipient_email FROM campaign_logs 
           WHERE broadcast_id IN (SELECT id FROM campaign_broadcasts WHERE LOWER(name) = LOWER($${pIdx}))
         )
       )`);
@@ -3420,7 +3433,17 @@ const db = {
 
   async getMasterLeadById(id) {
     if (!id) return null;
-    const cleanId = String(id).trim();
+    let cleanId = String(id).trim();
+    
+    // Strip compound broadcast tokens if present
+    if (cleanId.includes('&utm_brodcast_id=')) {
+      cleanId = cleanId.split('&utm_brodcast_id=')[0];
+    } else if (cleanId.includes('&broadcast_id=')) {
+      cleanId = cleanId.split('&broadcast_id=')[0];
+    } else if (cleanId.includes('_bc_')) {
+      cleanId = cleanId.split('_bc_')[0];
+    }
+
     let phoneDigits = cleanId.replace(/\D/g, '');
     let phone10 = phoneDigits.length === 12 && phoneDigits.startsWith('91') ? phoneDigits.substring(2) : phoneDigits.length === 10 ? phoneDigits : '';
     let phone12 = phoneDigits.length === 10 ? '91' + phoneDigits : phoneDigits.length === 12 ? phoneDigits : '';
