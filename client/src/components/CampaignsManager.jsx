@@ -2,8 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Users, Mail, MessageSquare, Plus, Trash2, Search, Upload, RefreshCw, X, Check,
   AlertCircle, AlertTriangle, Download, FileSpreadsheet, Play, Settings as SettingsIcon, HelpCircle, Info, Zap, Database, FileText,
-  Clock, Edit2, Edit3, Lock, BarChart3, TrendingUp, Filter, Eye, CheckCircle2, XCircle, ChevronRight, Calendar, PhoneCall,
-  Share2, ArrowUpRight, ShieldCheck, CheckCheck, Send, Smartphone
+  Clock, Edit2, Edit3, Lock, BarChart3, TrendingUp, Filter, Eye, EyeOff, CheckCircle2, XCircle, ChevronRight, Calendar, PhoneCall,
+  Share2, ArrowUpRight, ShieldCheck, CheckCheck, Send, Smartphone, Globe, Server
 } from 'lucide-react';
 
 export default function CampaignsManager({ theme, API_URL, token, showToast, wsTimestamp }) {
@@ -174,16 +174,27 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
   const [isSavingSmtpAccount, setIsSavingSmtpAccount] = useState(false);
   const [testingSmtpAccountId, setTestingSmtpAccountId] = useState(null);
   const [isTestingModalSmtp, setIsTestingModalSmtp] = useState(false);
+  const [isVerifyingSesEmail, setIsVerifyingSesEmail] = useState(false);
+  const [showSesSecret, setShowSesSecret] = useState(false);
+  const [sesQuota, setSesQuota] = useState(null);
+  const [isLoadingSesQuota, setIsLoadingSesQuota] = useState(false);
   const [smtpAccountForm, setSmtpAccountForm] = useState({
+    providerType: 'aws_ses', // 'aws_ses' | 'smtp'
     name: '',
     host: 'smtp.gmail.com',
     port: '465',
     username: '',
     password: '',
     secure: 'true',
-    fromName: 'FinMantra',
+    fromName: 'FinMantra Official',
     fromEmail: '',
-    isDefault: false
+    isDefault: false,
+    awsAccessKeyId: '',
+    awsSecretAccessKey: '',
+    awsRegion: 'ap-south-1',
+    awsSessionToken: '',
+    configurationSet: '',
+    testRecipient: ''
   });
 
   // Legacy single SMTP Settings state
@@ -427,47 +438,76 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
     }
   };
 
-  const handleOpenAddSmtpModal = () => {
+  const handleOpenAddSmtpModal = (type = 'aws_ses') => {
     setEditingSmtpAccount(null);
+    setShowSesSecret(false);
     setSmtpAccountForm({
-      name: '',
+      providerType: type,
+      name: type === 'aws_ses' ? 'AWS SES Gateway' : 'Standard SMTP Gateway',
       host: 'smtp.gmail.com',
       port: '465',
       username: '',
       password: '',
       secure: 'true',
-      fromName: 'FinMantra',
+      fromName: 'FinMantra Official',
       fromEmail: '',
-      isDefault: smtpAccounts.length === 0
+      isDefault: smtpAccounts.length === 0,
+      awsAccessKeyId: '',
+      awsSecretAccessKey: '',
+      awsRegion: 'ap-south-1',
+      awsSessionToken: '',
+      configurationSet: '',
+      testRecipient: ''
     });
     setShowSmtpModal(true);
   };
 
   const handleOpenEditSmtpModal = (account) => {
     setEditingSmtpAccount(account);
+    setShowSesSecret(false);
     setSmtpAccountForm({
+      providerType: account.provider_type || (account.aws_access_key_id ? 'aws_ses' : 'smtp'),
       name: account.name || '',
       host: account.host || '',
       port: String(account.port || '465'),
       username: account.username || '',
       password: '', // blank to preserve
       secure: String(account.secure ?? 'true'),
-      fromName: account.from_name || 'FinMantra',
-      fromEmail: account.from_email || '',
-      isDefault: !!account.is_default
+      fromName: account.from_name || account.fromName || 'FinMantra',
+      fromEmail: account.from_email || account.fromEmail || '',
+      isDefault: !!account.is_default,
+      awsAccessKeyId: account.aws_access_key_id || '',
+      awsSecretAccessKey: '', // blank to preserve
+      awsRegion: account.aws_region || 'ap-south-1',
+      awsSessionToken: account.aws_session_token || '',
+      configurationSet: account.configuration_set || '',
+      testRecipient: account.from_email || account.fromEmail || ''
     });
     setShowSmtpModal(true);
   };
 
   const handleSaveSmtpAccountModal = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
-    if (!smtpAccountForm.name.trim() || !smtpAccountForm.host.trim() || !smtpAccountForm.username.trim() || !smtpAccountForm.fromEmail.trim()) {
-      showToast('Please fill all mandatory fields (Name, Host, Username, From Email).', 'error');
-      return;
-    }
-    if (!editingSmtpAccount && !smtpAccountForm.password.trim()) {
-      showToast('Password is required for new SMTP account.', 'error');
-      return;
+    const isSes = smtpAccountForm.providerType === 'aws_ses';
+
+    if (isSes) {
+      if (!smtpAccountForm.name.trim() || !smtpAccountForm.awsAccessKeyId.trim() || !smtpAccountForm.fromEmail.trim()) {
+        showToast('Please fill all mandatory fields (Name, AWS Access Key ID, and Sender Email).', 'error');
+        return;
+      }
+      if (!editingSmtpAccount && !smtpAccountForm.awsSecretAccessKey.trim()) {
+        showToast('AWS Secret Access Key is required for new AWS SES account.', 'error');
+        return;
+      }
+    } else {
+      if (!smtpAccountForm.name.trim() || !smtpAccountForm.host.trim() || !smtpAccountForm.username.trim() || !smtpAccountForm.fromEmail.trim()) {
+        showToast('Please fill all mandatory fields (Name, Host, Username, From Email).', 'error');
+        return;
+      }
+      if (!editingSmtpAccount && !smtpAccountForm.password.trim()) {
+        showToast('Password is required for new SMTP account.', 'error');
+        return;
+      }
     }
 
     setIsSavingSmtpAccount(true);
@@ -484,14 +524,14 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
       });
       const data = await res.json();
       if (data.success) {
-        showToast(`SMTP account "${smtpAccountForm.name}" saved successfully!`, 'success');
+        showToast(`${isSes ? 'AWS SES' : 'SMTP'} account "${smtpAccountForm.name}" saved successfully!`, 'success');
         setShowSmtpModal(false);
         fetchSmtpAccounts();
       } else {
-        showToast(data.error || 'Failed to save SMTP account.', 'error');
+        showToast(data.error || 'Failed to save account.', 'error');
       }
     } catch (err) {
-      showToast('Network error saving SMTP account.', 'error');
+      showToast('Network error saving account.', 'error');
     } finally {
       setIsSavingSmtpAccount(false);
     }
@@ -642,20 +682,22 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
 
   const handleTestSpecificSmtp = async (account) => {
     setTestingSmtpAccountId(account.id);
+    const isSes = account.provider_type === 'aws_ses' || !!account.aws_access_key_id;
     try {
-      const res = await fetch(`${API_URL}/settings/test-smtp`, {
+      const endpoint = isSes ? `${API_URL}/settings/test-ses` : `${API_URL}/settings/test-smtp`;
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers,
         body: JSON.stringify({ accountId: account.id })
       });
       const data = await res.json();
       if (data.success) {
-        showToast(data.message || 'SMTP Connection Verified Successfully!', 'success');
+        showToast(data.message || `${isSes ? 'AWS SES' : 'SMTP'} connection verified!`, 'success');
       } else {
-        showToast(data.error || 'SMTP Connection Test Failed.', 'error');
+        showToast(data.error || `${isSes ? 'AWS SES' : 'SMTP'} connection test failed.`, 'error');
       }
     } catch (err) {
-      showToast('Network error while testing SMTP connection.', 'error');
+      showToast(`Network error testing ${isSes ? 'AWS SES' : 'SMTP'} connection.`, 'error');
     } finally {
       setTestingSmtpAccountId(null);
     }
@@ -663,32 +705,102 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
 
   const handleTestModalSmtp = async () => {
     setIsTestingModalSmtp(true);
+    const isSes = smtpAccountForm.providerType === 'aws_ses';
     try {
-      const res = await fetch(`${API_URL}/settings/test-smtp`, {
+      const endpoint = isSes ? `${API_URL}/settings/test-ses` : `${API_URL}/settings/test-smtp`;
+      const payload = isSes
+        ? {
+            accountId: editingSmtpAccount && !smtpAccountForm.awsSecretAccessKey ? editingSmtpAccount.id : undefined,
+            region: smtpAccountForm.awsRegion,
+            accessKeyId: smtpAccountForm.awsAccessKeyId,
+            secretAccessKey: smtpAccountForm.awsSecretAccessKey,
+            fromName: smtpAccountForm.fromName,
+            fromEmail: smtpAccountForm.fromEmail,
+            testRecipient: smtpAccountForm.testRecipient || smtpAccountForm.fromEmail
+          }
+        : {
+            accountId: editingSmtpAccount && !smtpAccountForm.password ? editingSmtpAccount.id : undefined,
+            host: smtpAccountForm.host,
+            port: smtpAccountForm.port,
+            user: smtpAccountForm.username,
+            pass: smtpAccountForm.password,
+            secure: smtpAccountForm.secure,
+            fromName: smtpAccountForm.fromName,
+            fromEmail: smtpAccountForm.fromEmail,
+            testRecipient: smtpAccountForm.testRecipient || smtpAccountForm.fromEmail || smtpAccountForm.username
+          };
+
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(data.message || `${isSes ? 'AWS SES' : 'SMTP'} connection verified!`, 'success');
+      } else {
+        showToast(data.error || `${isSes ? 'AWS SES' : 'SMTP'} test failed.`, 'error');
+      }
+    } catch (err) {
+      showToast(`Network error testing ${isSes ? 'AWS SES' : 'SMTP'} connection.`, 'error');
+    } finally {
+      setIsTestingModalSmtp(false);
+    }
+  };
+
+  const handleVerifySesIdentity = async () => {
+    const targetEmail = smtpAccountForm.testRecipient || smtpAccountForm.fromEmail;
+    if (!targetEmail) {
+      showToast('Please enter an email address to verify.', 'error');
+      return;
+    }
+    setIsVerifyingSesEmail(true);
+    try {
+      const res = await fetch(`${API_URL}/settings/verify-ses-identity`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
-          accountId: editingSmtpAccount && !smtpAccountForm.password ? editingSmtpAccount.id : undefined,
-          host: smtpAccountForm.host,
-          port: smtpAccountForm.port,
-          user: smtpAccountForm.username,
-          pass: smtpAccountForm.password,
-          secure: smtpAccountForm.secure,
-          fromName: smtpAccountForm.fromName,
-          fromEmail: smtpAccountForm.fromEmail,
-          testRecipient: smtpAccountForm.fromEmail || smtpAccountForm.username
+          email: targetEmail,
+          accountId: editingSmtpAccount && !smtpAccountForm.awsSecretAccessKey ? editingSmtpAccount.id : undefined,
+          region: smtpAccountForm.awsRegion,
+          accessKeyId: smtpAccountForm.awsAccessKeyId,
+          secretAccessKey: smtpAccountForm.awsSecretAccessKey
         })
       });
       const data = await res.json();
       if (data.success) {
-        showToast(data.message || 'SMTP Connection Verified Successfully!', 'success');
+        showToast(data.message || `Verification email sent to ${targetEmail}!`, 'success');
       } else {
-        showToast(data.error || 'SMTP Connection Test Failed.', 'error');
+        showToast(data.error || 'Failed to trigger AWS SES verification.', 'error');
       }
     } catch (err) {
-      showToast('Network error while testing SMTP connection.', 'error');
+      showToast('Network error triggering verification.', 'error');
     } finally {
-      setIsTestingModalSmtp(false);
+      setIsVerifyingSesEmail(false);
+    }
+  };
+
+  const handleCheckSesQuota = async () => {
+    setIsLoadingSesQuota(true);
+    try {
+      const query = new URLSearchParams({
+        accountId: editingSmtpAccount && !smtpAccountForm.awsSecretAccessKey ? editingSmtpAccount.id : '',
+        region: smtpAccountForm.awsRegion,
+        accessKeyId: smtpAccountForm.awsAccessKeyId,
+        secretAccessKey: smtpAccountForm.awsSecretAccessKey
+      });
+      const res = await fetch(`${API_URL}/settings/ses-quota?${query}`, { headers });
+      const data = await res.json();
+      if (data.success && data.quota) {
+        setSesQuota(data.quota);
+        showToast(`AWS SES Quota: ${data.quota.sentLast24Hours || 0} / ${data.quota.max24HourSend || 0} emails used (Rate: ${data.quota.maxSendRate || 0}/sec)`, 'info');
+      } else {
+        showToast(data.error || 'Failed to fetch SES quota.', 'error');
+      }
+    } catch (err) {
+      showToast('Network error fetching SES quota.', 'error');
+    } finally {
+      setIsLoadingSesQuota(false);
     }
   };
 
@@ -2918,7 +3030,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
       )}
 
       {/* ========================================================================= */}
-      {/* SUBTAB 5: MULTI-SMTP GATEWAY SETTINGS */}
+      {/* SUBTAB 5: MULTI-PROVIDER EMAIL GATEWAY SETTINGS (AWS SES & SMTP) */}
       {/* ========================================================================= */}
       {activeSubTab === 'settings' && (
         <div style={{ display: 'flex', flexDirection: 'column', width: '100%', marginBottom: '2.5rem' }}>
@@ -2927,138 +3039,211 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
               <div>
                 <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <Mail size={20} style={{ color: 'var(--gold-deep)' }} />
-                  Outbound SMTP Email Gateways &amp; Accounts
+                  Email Gateways &amp; Sender Accounts (AWS SES &amp; SMTP)
                 </h3>
+                <div style={{ fontSize: '0.8rem', color: 'var(--muted)', marginTop: '0.2rem' }}>
+                  Link custom domains and Gmail accounts using high-throughput Amazon Simple Email Service (SES) or standard SMTP.
+                </div>
               </div>
-              <button
-                onClick={handleOpenAddSmtpModal}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.4rem',
-                  padding: '0.5rem 1.1rem',
-                  borderRadius: '6px',
-                  background: 'var(--gold-deep)',
-                  color: '#fff',
-                  border: 'none',
-                  fontWeight: 700,
-                  fontSize: '0.86rem',
-                  cursor: 'pointer'
-                }}
-              >
-                <Plus size={15} /> + Add SMTP Account
-              </button>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => handleOpenAddSmtpModal('aws_ses')}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    padding: '0.5rem 1.1rem',
+                    borderRadius: '6px',
+                    background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                    color: '#fff',
+                    border: 'none',
+                    fontWeight: 700,
+                    fontSize: '0.86rem',
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 6px rgba(217, 119, 6, 0.25)'
+                  }}
+                >
+                  <Plus size={15} /> + Add AWS SES Gateway
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleOpenAddSmtpModal('smtp')}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    padding: '0.5rem 1.1rem',
+                    borderRadius: '6px',
+                    background: 'var(--paper-2)',
+                    color: 'var(--ink)',
+                    border: '1px solid var(--line)',
+                    fontWeight: 700,
+                    fontSize: '0.86rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <Plus size={15} /> + Add SMTP Gateway
+                </button>
+              </div>
             </div>
 
-            {/* SMTP Accounts Grid */}
+            {/* Email Gateway Accounts Grid */}
             <div>
               {isLoadingSmtpAccounts ? (
                 <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--muted)' }}>
                   <RefreshCw size={24} className="spin-slow" style={{ color: 'var(--gold-deep)', marginBottom: '0.5rem' }} />
-                  <div>Loading configured SMTP accounts...</div>
+                  <div>Loading configured email gateways...</div>
                 </div>
               ) : smtpAccounts.length === 0 ? (
                 <div style={{ padding: '3rem', textAlign: 'center' }}>
                   <Mail size={32} style={{ color: 'var(--muted)', marginBottom: '0.5rem' }} />
-                  <div>No SMTP accounts configured. Add one to send email broadcasts.</div>
+                  <div style={{ fontWeight: 700, fontSize: '0.95rem', marginTop: '0.5rem' }}>No Email Gateways Configured</div>
+                  <div style={{ fontSize: '0.82rem', color: 'var(--muted)', marginTop: '0.25rem' }}>Add AWS SES (recommended) or an SMTP account to broadcast campaign emails.</div>
                 </div>
               ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1rem' }}>
-                  {smtpAccounts.map(account => (
-                    <div key={account.id} style={{ border: '1px solid var(--line)', borderRadius: '10px', background: 'var(--paper-2)', padding: '1rem' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '1rem' }}>
+                  {smtpAccounts.map(account => {
+                    const isSes = account.provider_type === 'aws_ses' || !!account.aws_access_key_id;
+                    return (
+                      <div key={account.id} style={{ border: '1px solid var(--line)', borderRadius: '10px', background: 'var(--paper-2)', padding: '1.1rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                         <div>
-                          <div style={{ fontWeight: 800, fontSize: '0.95rem' }}>{account.name}</div>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--muted)', fontFamily: 'var(--font-mono)', marginTop: '0.15rem' }}>
-                            ID: {account.id}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.85rem' }}>
+                            <div>
+                              <div style={{ fontWeight: 800, fontSize: '0.96rem' }}>{account.name}</div>
+                              <div style={{ fontSize: '0.74rem', color: 'var(--muted)', fontFamily: 'var(--font-mono)', marginTop: '0.15rem' }}>
+                                ID: {account.id}
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                              <span style={{
+                                padding: '0.18rem 0.55rem',
+                                borderRadius: '6px',
+                                fontSize: '0.72rem',
+                                fontWeight: 800,
+                                background: isSes ? 'rgba(245, 158, 11, 0.15)' : 'rgba(139, 92, 246, 0.15)',
+                                color: isSes ? '#d97706' : '#8b5cf6',
+                                border: `1px solid ${isSes ? 'rgba(245, 158, 11, 0.3)' : 'rgba(139, 92, 246, 0.3)'}`
+                              }}>
+                                {isSes ? '⚡ AWS SES' : '📧 SMTP'}
+                              </span>
+                              {account.is_default && (
+                                <span style={{ padding: '0.18rem 0.55rem', borderRadius: '999px', background: 'rgba(22, 163, 123, 0.15)', color: '#16a37b', fontSize: '0.72rem', fontWeight: 800, border: '1px solid rgba(22, 163, 123, 0.3)' }}>
+                                  ★ DEFAULT
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Details */}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', fontSize: '0.84rem' }}>
+                            {isSes ? (
+                              <>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                  <span style={{ color: 'var(--muted)' }}>AWS Region:</span>
+                                  <span style={{ fontWeight: 600, fontFamily: 'var(--font-mono)' }}>{account.aws_region || 'ap-south-1'}</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                  <span style={{ color: 'var(--muted)' }}>Sender Email:</span>
+                                  <span style={{ fontWeight: 700, color: 'var(--gold-deep)' }}>{account.from_email || account.fromEmail}</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                  <span style={{ color: 'var(--muted)' }}>Sender Display Name:</span>
+                                  <span style={{ fontWeight: 600 }}>{account.from_name || account.fromName || 'FinMantra'}</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                  <span style={{ color: 'var(--muted)' }}>Access Key ID:</span>
+                                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem' }}>{account.aws_access_key_id ? `${account.aws_access_key_id.substring(0, 8)}••••` : '—'}</span>
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                  <span style={{ color: 'var(--muted)' }}>Host / Server:</span>
+                                  <span style={{ fontWeight: 600 }}>{account.host}:{account.port}</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                  <span style={{ color: 'var(--muted)' }}>From Email:</span>
+                                  <span style={{ fontWeight: 700, color: 'var(--gold-deep)' }}>{account.from_email || account.fromEmail}</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                  <span style={{ color: 'var(--muted)' }}>Sender Name:</span>
+                                  <span style={{ fontWeight: 600 }}>{account.from_name || account.fromName || 'FinMantra'}</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                  <span style={{ color: 'var(--muted)' }}>Username:</span>
+                                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>{account.username}</span>
+                                </div>
+                              </>
+                            )}
                           </div>
                         </div>
-                        <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
-                          {account.is_default && (
-                            <span style={{ padding: '0.2rem 0.55rem', borderRadius: '999px', background: 'rgba(224, 168, 46, 0.15)', color: 'var(--gold-deep)', fontSize: '0.72rem', fontWeight: 800 }}>
-                              ★ DEFAULT SENDER
-                            </span>
-                          )}
-                        </div>
-                      </div>
 
-                      {/* Details */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.84rem' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <span style={{ color: 'var(--muted)' }}>Host / Server:</span>
-                          <span style={{ fontWeight: 600 }}>{account.host}:{account.port}</span>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <span style={{ color: 'var(--muted)' }}>From Name:</span>
-                          <span style={{ fontWeight: 600 }}>{account.from_name || account.fromName || 'FinMantra'}</span>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <span style={{ color: 'var(--muted)' }}>From Email:</span>
-                          <span style={{ fontWeight: 600, color: 'var(--gold-deep)' }}>{account.from_email || account.fromEmail}</span>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <span style={{ color: 'var(--muted)' }}>Username:</span>
-                          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>{account.username}</span>
-                        </div>
-                      </div>
-
-                      {/* Buttons */}
-                      <div style={{ marginTop: '1rem', paddingTop: '0.85rem', borderTop: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div style={{ display: 'flex', gap: '0.4rem' }}>
-                          <button
-                            type="button"
-                            onClick={() => handleTestSpecificSmtp(account)}
-                            style={{
-                              padding: '0.4rem 0.65rem',
-                              borderRadius: '6px',
-                              background: 'var(--paper)',
-                              color: 'var(--ink)',
-                              border: '1px solid var(--line)',
-                              fontSize: '0.78rem',
-                              fontWeight: 700,
-                              cursor: 'pointer'
-                            }}
-                          >
-                            Test Connection
-                          </button>
-                          {!account.is_default && (
+                        {/* Card Actions */}
+                        <div style={{ marginTop: '1rem', paddingTop: '0.85rem', borderTop: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div style={{ display: 'flex', gap: '0.4rem' }}>
                             <button
                               type="button"
-                              onClick={() => handleSetDefaultSmtp(account.id)}
+                              onClick={() => handleTestSpecificSmtp(account)}
+                              disabled={testingSmtpAccountId === account.id}
                               style={{
-                                padding: '0.4rem 0.65rem',
+                                padding: '0.4rem 0.75rem',
                                 borderRadius: '6px',
-                                background: 'rgba(224, 168, 46, 0.1)',
-                                color: 'var(--gold-deep)',
-                                border: '1px solid rgba(224, 168, 46, 0.25)',
+                                background: 'var(--paper)',
+                                color: 'var(--ink)',
+                                border: '1px solid var(--line)',
                                 fontSize: '0.78rem',
                                 fontWeight: 700,
-                                cursor: 'pointer'
+                                cursor: testingSmtpAccountId === account.id ? 'not-allowed' : 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.3rem'
                               }}
                             >
-                              Set as Default
+                              {testingSmtpAccountId === account.id ? <RefreshCw size={13} className="spin-slow" /> : <Zap size={13} style={{ color: isSes ? '#d97706' : '#8b5cf6' }} />}
+                              {testingSmtpAccountId === account.id ? 'Testing...' : 'Test Connection'}
                             </button>
-                          )}
-                        </div>
-                        <div style={{ display: 'flex', gap: '0.35rem' }}>
-                          <button
-                            type="button"
-                            onClick={() => handleOpenEditSmtp(account)}
-                            style={{ padding: '0.4rem', border: 'none', background: 'none', color: '#3b82f6', cursor: 'pointer' }}
-                          >
-                            <Edit2 size={16} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteSmtp(account.id, account.name)}
-                            style={{ padding: '0.4rem', border: 'none', background: 'none', color: '#ef4444', cursor: 'pointer' }}
-                          >
-                            <Trash2 size={16} />
-                          </button>
+                            {!account.is_default && (
+                              <button
+                                type="button"
+                                onClick={() => handleSetDefaultSmtp(account.id, account.name)}
+                                style={{
+                                  padding: '0.4rem 0.65rem',
+                                  borderRadius: '6px',
+                                  background: 'rgba(224, 168, 46, 0.1)',
+                                  color: 'var(--gold-deep)',
+                                  border: '1px solid rgba(224, 168, 46, 0.25)',
+                                  fontSize: '0.78rem',
+                                  fontWeight: 700,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                Set Default
+                              </button>
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', gap: '0.35rem' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditSmtp(account)}
+                              style={{ padding: '0.4rem', border: 'none', background: 'none', color: '#3b82f6', cursor: 'pointer' }}
+                              title="Edit Gateway"
+                            >
+                              <Edit2 size={16} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteSmtp(account.id, account.name)}
+                              style={{ padding: '0.4rem', border: 'none', background: 'none', color: '#ef4444', cursor: 'pointer' }}
+                              title="Delete Gateway"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -3233,12 +3418,12 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
                     </div>
                   )}
 
-                  {/* If Email: Outbound SMTP Account & Sender Email */}
+                  {/* If Email: Outbound Gateway Account (AWS SES or SMTP) & Sender Email */}
                   {(broadcastForm.channel === 'email' || broadcastForm.channel === 'both') && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
                       <div>
                         <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.4rem' }}>
-                          Outbound SMTP Gateway Account (Sender Email)
+                          Outbound Email Gateway Account (AWS SES / SMTP)
                         </label>
                         {smtpAccounts.length > 0 ? (
                           <select
@@ -3254,16 +3439,20 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
                             }}
                             style={{ width: '100%', padding: '0.65rem 0.8rem', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.88rem', boxSizing: 'border-box' }}
                           >
-                            <option value="">System Default SMTP</option>
-                            {smtpAccounts.map(acc => (
-                              <option key={acc.id} value={acc.id}>
-                                {acc.name} ({acc.from_email}) {acc.is_default ? '★ [DEFAULT]' : ''}
-                              </option>
-                            ))}
+                            <option value="">System Default Gateway</option>
+                            {smtpAccounts.map(acc => {
+                              const isSes = acc.provider_type === 'aws_ses' || !!acc.aws_access_key_id;
+                              const pTag = isSes ? '⚡ [AWS SES]' : '📧 [SMTP]';
+                              return (
+                                <option key={acc.id} value={acc.id}>
+                                  {pTag} {acc.name} ({acc.from_email}) {acc.is_default ? '★ [DEFAULT]' : ''}
+                                </option>
+                              );
+                            })}
                           </select>
                         ) : (
                           <div style={{ padding: '0.75rem', background: 'rgba(224, 168, 46, 0.1)', border: '1px solid rgba(224, 168, 46, 0.3)', borderRadius: '8px', fontSize: '0.82rem' }}>
-                            Using default SMTP settings. Configure additional accounts in the SMTP Gateway Settings tab.
+                            Using default email gateway settings. Configure additional accounts in Email Gateway Settings.
                           </div>
                         )}
                       </div>
@@ -4492,19 +4681,24 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL 4: ADD / EDIT SMTP ACCOUNT MODAL */}
+      {/* MODAL 4: ADD / EDIT EMAIL GATEWAY ACCOUNT (AWS SES & SMTP) */}
       {/* ========================================================================= */}
       {showSmtpModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '1rem' }}>
-          <div style={{ background: 'var(--paper)', border: '1px solid var(--line)', borderRadius: '16px', maxWidth: '580px', width: '100%', maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 50px rgba(0,0,0,0.3)', overflow: 'hidden' }}>
+          <div style={{ background: 'var(--paper)', border: '1px solid var(--line)', borderRadius: '16px', maxWidth: '620px', width: '100%', maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 50px rgba(0,0,0,0.35)', overflow: 'hidden' }}>
+            {/* Modal Header */}
             <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
               <div>
                 <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
                   <Mail size={18} style={{ color: 'var(--gold-deep)' }} />
-                  {editingSmtpAccount ? 'Edit SMTP Gateway Account' : 'Add New SMTP Gateway Account'}
+                  {editingSmtpAccount 
+                    ? `Edit ${smtpAccountForm.providerType === 'aws_ses' ? 'AWS SES' : 'SMTP'} Gateway`
+                    : 'Add Outbound Email Gateway'}
                 </h3>
                 <div style={{ fontSize: '0.78rem', color: 'var(--muted)', marginTop: '0.15rem' }}>
-                  {editingSmtpAccount ? `Editing account ${editingSmtpAccount.name}` : 'Configure custom host credentials for outbound email broadcasts.'}
+                  {editingSmtpAccount 
+                    ? `Editing account: ${editingSmtpAccount.name}` 
+                    : 'Configure Amazon SES credentials or custom SMTP for campaign email broadcasts.'}
                 </div>
               </div>
               <button onClick={() => setShowSmtpModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}>
@@ -4513,14 +4707,70 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
             </div>
 
             <form onSubmit={handleSaveSmtpAccountModal} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-              <div style={{ padding: '1.5rem', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+              <div style={{ padding: '1.5rem', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                
+                {/* Provider Type Selector Tabs */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.4rem' }}>
+                    Email Delivery Provider
+                  </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
+                    <div
+                      onClick={() => setSmtpAccountForm({ ...smtpAccountForm, providerType: 'aws_ses' })}
+                      style={{
+                        padding: '0.75rem 0.9rem',
+                        borderRadius: '8px',
+                        border: smtpAccountForm.providerType === 'aws_ses' ? '2px solid #f59e0b' : '1px solid var(--line)',
+                        background: smtpAccountForm.providerType === 'aws_ses' ? 'rgba(245, 158, 11, 0.08)' : 'var(--paper-2)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.6rem',
+                        transition: 'all 0.2s ease'
+                      }}
+                    >
+                      <div style={{ width: '28px', height: '28px', borderRadius: '6px', background: 'rgba(245, 158, 11, 0.15)', color: '#d97706', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '0.85rem' }}>
+                        ⚡
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 800, fontSize: '0.86rem', color: smtpAccountForm.providerType === 'aws_ses' ? '#d97706' : 'var(--ink)' }}>AWS SES</div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>Amazon Simple Email Service</div>
+                      </div>
+                    </div>
+
+                    <div
+                      onClick={() => setSmtpAccountForm({ ...smtpAccountForm, providerType: 'smtp' })}
+                      style={{
+                        padding: '0.75rem 0.9rem',
+                        borderRadius: '8px',
+                        border: smtpAccountForm.providerType === 'smtp' ? '2px solid #8b5cf6' : '1px solid var(--line)',
+                        background: smtpAccountForm.providerType === 'smtp' ? 'rgba(139, 92, 246, 0.08)' : 'var(--paper-2)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.6rem',
+                        transition: 'all 0.2s ease'
+                      }}
+                    >
+                      <div style={{ width: '28px', height: '28px', borderRadius: '6px', background: 'rgba(139, 92, 246, 0.15)', color: '#8b5cf6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '0.85rem' }}>
+                        📧
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 800, fontSize: '0.86rem', color: smtpAccountForm.providerType === 'smtp' ? '#8b5cf6' : 'var(--ink)' }}>Standard SMTP</div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>Gmail / Hostinger / Custom</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Account Name */}
                 <div>
                   <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.3rem' }}>
                     Account Display Name <span style={{ color: '#ef4444' }}>*</span>
                   </label>
                   <input
                     type="text"
-                    placeholder="e.g. FinMantra Primary Gmail"
+                    placeholder={smtpAccountForm.providerType === 'aws_ses' ? 'e.g. AWS SES Production (thefinmantra.com)' : 'e.g. FinMantra Primary Gmail'}
                     value={smtpAccountForm.name}
                     onChange={(e) => setSmtpAccountForm({ ...smtpAccountForm, name: e.target.value })}
                     required
@@ -4528,103 +4778,290 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
                   />
                 </div>
 
-                <div className="campaigns-grid-2col">
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.3rem' }}>
-                      SMTP Host <span style={{ color: '#ef4444' }}>*</span>
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. smtp.gmail.com"
-                      value={smtpAccountForm.host}
-                      onChange={(e) => setSmtpAccountForm({ ...smtpAccountForm, host: e.target.value })}
-                      required
-                      style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.88rem', boxSizing: 'border-box' }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.3rem' }}>
-                      SMTP Port &amp; Encryption
-                    </label>
-                    <div style={{ display: 'flex', gap: '0.4rem' }}>
+                {/* PROVIDER SPECIFIC FIELDS */}
+                {smtpAccountForm.providerType === 'aws_ses' ? (
+                  <>
+                    {/* AWS Region & Access Key ID */}
+                    <div className="campaigns-grid-2col">
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.3rem' }}>
+                          AWS Region <span style={{ color: '#ef4444' }}>*</span>
+                        </label>
+                        <select
+                          value={smtpAccountForm.awsRegion}
+                          onChange={(e) => setSmtpAccountForm({ ...smtpAccountForm, awsRegion: e.target.value })}
+                          style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.84rem' }}
+                        >
+                          <option value="ap-south-1">Asia Pacific (Mumbai) [ap-south-1]</option>
+                          <option value="us-east-1">US East (N. Virginia) [us-east-1]</option>
+                          <option value="us-east-2">US East (Ohio) [us-east-2]</option>
+                          <option value="us-west-2">US West (Oregon) [us-west-2]</option>
+                          <option value="eu-west-1">Europe (Ireland) [eu-west-1]</option>
+                          <option value="eu-central-1">Europe (Frankfurt) [eu-central-1]</option>
+                          <option value="ap-southeast-1">Asia Pacific (Singapore) [ap-southeast-1]</option>
+                          <option value="ap-northeast-1">Asia Pacific (Tokyo) [ap-northeast-1]</option>
+                          <option value="ap-southeast-2">Asia Pacific (Sydney) [ap-southeast-2]</option>
+                          <option value="ca-central-1">Canada (Central) [ca-central-1]</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.3rem' }}>
+                          AWS Access Key ID <span style={{ color: '#ef4444' }}>*</span>
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. AKIAIOSFODNN7EXAMPLE"
+                          value={smtpAccountForm.awsAccessKeyId}
+                          onChange={(e) => setSmtpAccountForm({ ...smtpAccountForm, awsAccessKeyId: e.target.value })}
+                          required
+                          style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.85rem', fontFamily: 'var(--font-mono)', boxSizing: 'border-box' }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* AWS Secret Access Key */}
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
+                        <label style={{ fontSize: '0.82rem', fontWeight: 700 }}>
+                          AWS Secret Access Key {editingSmtpAccount ? '(Leave blank to keep unchanged)' : <span style={{ color: '#ef4444' }}>*</span>}
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setShowSesSecret(!showSesSecret)}
+                          style={{ background: 'none', border: 'none', color: 'var(--gold-deep)', fontSize: '0.75rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem', fontWeight: 600 }}
+                        >
+                          {showSesSecret ? <><EyeOff size={13} /> Hide Key</> : <><Eye size={13} /> Show Key</>}
+                        </button>
+                      </div>
+                      <input
+                        type={showSesSecret ? 'text' : 'password'}
+                        placeholder={editingSmtpAccount ? '•••••••••••••••••••••••••••••••• (Unchanged)' : 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY'}
+                        value={smtpAccountForm.awsSecretAccessKey}
+                        onChange={(e) => setSmtpAccountForm({ ...smtpAccountForm, awsSecretAccessKey: e.target.value })}
+                        required={!editingSmtpAccount}
+                        style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.85rem', fontFamily: 'var(--font-mono)', boxSizing: 'border-box' }}
+                      />
+                    </div>
+
+                    {/* Sender Email & From Name */}
+                    <div className="campaigns-grid-2col">
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.3rem' }}>
+                          Verified Sender Email <span style={{ color: '#ef4444' }}>*</span>
+                        </label>
+                        <input
+                          type="email"
+                          placeholder="e.g. support@thefinmantra.com"
+                          value={smtpAccountForm.fromEmail}
+                          onChange={(e) => setSmtpAccountForm({ ...smtpAccountForm, fromEmail: e.target.value })}
+                          required
+                          style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.88rem', boxSizing: 'border-box' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.3rem' }}>
+                          Sender Display Name
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="FinMantra Official"
+                          value={smtpAccountForm.fromName}
+                          onChange={(e) => setSmtpAccountForm({ ...smtpAccountForm, fromName: e.target.value })}
+                          style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.88rem', boxSizing: 'border-box' }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Configuration Set (Optional) */}
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.3rem' }}>
+                        Configuration Set (Optional)
+                      </label>
                       <input
                         type="text"
-                        placeholder="465"
-                        value={smtpAccountForm.port}
-                        onChange={(e) => setSmtpAccountForm({ ...smtpAccountForm, port: e.target.value })}
-                        style={{ width: '80px', padding: '0.55rem 0.5rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.88rem', textAlign: 'center' }}
+                        placeholder="e.g. FinMantra-Email-Tracking"
+                        value={smtpAccountForm.configurationSet}
+                        onChange={(e) => setSmtpAccountForm({ ...smtpAccountForm, configurationSet: e.target.value })}
+                        style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.88rem', boxSizing: 'border-box' }}
                       />
-                      <select
-                        value={smtpAccountForm.secure}
-                        onChange={(e) => setSmtpAccountForm({ ...smtpAccountForm, secure: e.target.value })}
-                        style={{ flex: 1, padding: '0.55rem 0.5rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.84rem' }}
-                      >
-                        <option value="true">SSL (465)</option>
-                        <option value="false">TLS / Plain (587)</option>
-                      </select>
                     </div>
-                  </div>
-                </div>
 
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.3rem' }}>
-                    SMTP Username / Login Email <span style={{ color: '#ef4444' }}>*</span>
-                  </label>
-                  <input
-                    type="text"
-                    autoComplete="username"
-                    placeholder="e.g. spikemarketingsolutions25@gmail.com"
-                    value={smtpAccountForm.username}
-                    onChange={(e) => setSmtpAccountForm({ ...smtpAccountForm, username: e.target.value })}
-                    required
-                    style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.88rem', boxSizing: 'border-box' }}
-                  />
-                </div>
+                    {/* Live Test & Identity Verification Box */}
+                    <div style={{ background: 'rgba(245, 158, 11, 0.05)', border: '1px dashed rgba(245, 158, 11, 0.35)', borderRadius: '10px', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ fontWeight: 800, fontSize: '0.84rem', color: '#d97706', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                          <Zap size={14} /> Live AWS SES Testing &amp; Gmail Verification
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleCheckSesQuota}
+                          disabled={isLoadingSesQuota}
+                          style={{ background: 'none', border: 'none', color: 'var(--ink)', fontSize: '0.74rem', cursor: 'pointer', textDecoration: 'underline', fontWeight: 600 }}
+                        >
+                          {isLoadingSesQuota ? 'Checking quota...' : 'Check 24h Quota'}
+                        </button>
+                      </div>
 
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.3rem' }}>
-                    SMTP Password / Google App Password {editingSmtpAccount ? '(Leave blank to keep unchanged)' : <span style={{ color: '#ef4444' }}>*</span>}
-                  </label>
-                  <input
-                    type="password"
-                    autoComplete="new-password"
-                    placeholder={editingSmtpAccount ? '•••••••••••• (Unchanged)' : '16-character App Password'}
-                    value={smtpAccountForm.password}
-                    onChange={(e) => setSmtpAccountForm({ ...smtpAccountForm, password: e.target.value })}
-                    required={!editingSmtpAccount}
-                    style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.88rem', boxSizing: 'border-box' }}
-                  />
-                </div>
+                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        <input
+                          type="email"
+                          placeholder="Recipient Gmail/Email to test delivery"
+                          value={smtpAccountForm.testRecipient}
+                          onChange={(e) => setSmtpAccountForm({ ...smtpAccountForm, testRecipient: e.target.value })}
+                          style={{ flex: 1, minWidth: '200px', padding: '0.45rem 0.65rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)', fontSize: '0.82rem' }}
+                        />
+                        <button
+                          type="button"
+                          onClick={handleTestModalSmtp}
+                          disabled={isTestingModalSmtp}
+                          style={{
+                            padding: '0.45rem 0.85rem',
+                            borderRadius: '6px',
+                            background: '#d97706',
+                            color: '#fff',
+                            border: 'none',
+                            fontSize: '0.78rem',
+                            fontWeight: 700,
+                            cursor: isTestingModalSmtp ? 'not-allowed' : 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.3rem'
+                          }}
+                        >
+                          {isTestingModalSmtp ? <RefreshCw size={12} className="spin-slow" /> : <Send size={12} />}
+                          {isTestingModalSmtp ? 'Sending Test...' : 'Send Test Email'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleVerifySesIdentity}
+                          disabled={isVerifyingSesEmail}
+                          style={{
+                            padding: '0.45rem 0.85rem',
+                            borderRadius: '6px',
+                            background: 'var(--paper)',
+                            color: 'var(--ink)',
+                            border: '1px solid var(--line)',
+                            fontSize: '0.78rem',
+                            fontWeight: 700,
+                            cursor: isVerifyingSesEmail ? 'not-allowed' : 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.3rem'
+                          }}
+                          title="Sends an AWS verification email to the address to authorize sending in Sandbox mode."
+                        >
+                          {isVerifyingSesEmail ? <RefreshCw size={12} className="spin-slow" /> : <ShieldCheck size={12} style={{ color: '#16a37b' }} />}
+                          {isVerifyingSesEmail ? 'Verifying...' : 'Verify in AWS'}
+                        </button>
+                      </div>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--muted)', lineHeight: 1.4 }}>
+                        💡 <strong>Tip:</strong> If your AWS SES account is in <em>Sandbox mode</em>, both sender and recipient emails must be verified. Click <em>"Verify in AWS"</em> to send an instant verification link to your Gmail!
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {/* Standard SMTP Fields */}
+                    <div className="campaigns-grid-2col">
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.3rem' }}>
+                          SMTP Host <span style={{ color: '#ef4444' }}>*</span>
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. smtp.gmail.com"
+                          value={smtpAccountForm.host}
+                          onChange={(e) => setSmtpAccountForm({ ...smtpAccountForm, host: e.target.value })}
+                          required
+                          style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.88rem', boxSizing: 'border-box' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.3rem' }}>
+                          SMTP Port &amp; Encryption
+                        </label>
+                        <div style={{ display: 'flex', gap: '0.4rem' }}>
+                          <input
+                            type="text"
+                            placeholder="465"
+                            value={smtpAccountForm.port}
+                            onChange={(e) => setSmtpAccountForm({ ...smtpAccountForm, port: e.target.value })}
+                            style={{ width: '80px', padding: '0.55rem 0.5rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.88rem', textAlign: 'center' }}
+                          />
+                          <select
+                            value={smtpAccountForm.secure}
+                            onChange={(e) => setSmtpAccountForm({ ...smtpAccountForm, secure: e.target.value })}
+                            style={{ flex: 1, padding: '0.55rem 0.5rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.84rem' }}
+                          >
+                            <option value="true">SSL (465)</option>
+                            <option value="false">TLS / Plain (587)</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
 
-                <div className="campaigns-grid-2col">
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.3rem' }}>
-                      From Name
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="FinMantra"
-                      value={smtpAccountForm.fromName}
-                      onChange={(e) => setSmtpAccountForm({ ...smtpAccountForm, fromName: e.target.value })}
-                      style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.88rem', boxSizing: 'border-box' }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.3rem' }}>
-                      From Email Address <span style={{ color: '#ef4444' }}>*</span>
-                    </label>
-                    <input
-                      type="email"
-                      placeholder="spikemarketingsolutions25@gmail.com"
-                      value={smtpAccountForm.fromEmail}
-                      onChange={(e) => setSmtpAccountForm({ ...smtpAccountForm, fromEmail: e.target.value })}
-                      required
-                      style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.88rem', boxSizing: 'border-box' }}
-                    />
-                  </div>
-                </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.3rem' }}>
+                        SMTP Username / Login Email <span style={{ color: '#ef4444' }}>*</span>
+                      </label>
+                      <input
+                        type="text"
+                        autoComplete="username"
+                        placeholder="e.g. spikemarketingsolutions25@gmail.com"
+                        value={smtpAccountForm.username}
+                        onChange={(e) => setSmtpAccountForm({ ...smtpAccountForm, username: e.target.value })}
+                        required
+                        style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.88rem', boxSizing: 'border-box' }}
+                      />
+                    </div>
 
-                <div style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.3rem' }}>
+                        SMTP Password / Google App Password {editingSmtpAccount ? '(Leave blank to keep unchanged)' : <span style={{ color: '#ef4444' }}>*</span>}
+                      </label>
+                      <input
+                        type="password"
+                        autoComplete="new-password"
+                        placeholder={editingSmtpAccount ? '•••••••••••• (Unchanged)' : '16-character App Password'}
+                        value={smtpAccountForm.password}
+                        onChange={(e) => setSmtpAccountForm({ ...smtpAccountForm, password: e.target.value })}
+                        required={!editingSmtpAccount}
+                        style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.88rem', boxSizing: 'border-box' }}
+                      />
+                    </div>
+
+                    <div className="campaigns-grid-2col">
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.3rem' }}>
+                          From Name
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="FinMantra"
+                          value={smtpAccountForm.fromName}
+                          onChange={(e) => setSmtpAccountForm({ ...smtpAccountForm, fromName: e.target.value })}
+                          style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.88rem', boxSizing: 'border-box' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.3rem' }}>
+                          From Email Address <span style={{ color: '#ef4444' }}>*</span>
+                        </label>
+                        <input
+                          type="email"
+                          placeholder="spikemarketingsolutions25@gmail.com"
+                          value={smtpAccountForm.fromEmail}
+                          onChange={(e) => setSmtpAccountForm({ ...smtpAccountForm, fromEmail: e.target.value })}
+                          required
+                          style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.88rem', boxSizing: 'border-box' }}
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Default Outbound Checkbox */}
+                <div style={{ marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <input
                     type="checkbox"
                     id="isDefaultSmtp"
@@ -4633,33 +5070,40 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
                     style={{ cursor: 'pointer', width: '16px', height: '16px' }}
                   />
                   <label htmlFor="isDefaultSmtp" style={{ fontSize: '0.84rem', fontWeight: 600, cursor: 'pointer' }}>
-                    Set as Primary Default Outbound SMTP Account
+                    Set as Primary Default Outbound Email Gateway
                   </label>
                 </div>
               </div>
 
+              {/* Modal Footer */}
               <div style={{ padding: '0.85rem 1.5rem', borderTop: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--paper-2)', flexShrink: 0 }}>
-                <button
-                  type="button"
-                  onClick={handleTestModalSmtp}
-                  disabled={isTestingModalSmtp}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.35rem',
-                    padding: '0.5rem 0.9rem',
-                    borderRadius: '6px',
-                    background: 'var(--paper)',
-                    color: 'var(--ink)',
-                    border: '1px solid var(--line)',
-                    fontSize: '0.84rem',
-                    fontWeight: 700,
-                    cursor: isTestingModalSmtp ? 'not-allowed' : 'pointer'
-                  }}
-                >
-                  {isTestingModalSmtp ? <RefreshCw size={14} className="spin-slow" /> : <Zap size={14} style={{ color: 'var(--gold-deep)' }} />}
-                  {isTestingModalSmtp ? 'Testing...' : 'Test Connection'}
-                </button>
+                {smtpAccountForm.providerType === 'smtp' ? (
+                  <button
+                    type="button"
+                    onClick={handleTestModalSmtp}
+                    disabled={isTestingModalSmtp}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.35rem',
+                      padding: '0.5rem 0.9rem',
+                      borderRadius: '6px',
+                      background: 'var(--paper)',
+                      color: 'var(--ink)',
+                      border: '1px solid var(--line)',
+                      fontSize: '0.84rem',
+                      fontWeight: 700,
+                      cursor: isTestingModalSmtp ? 'not-allowed' : 'pointer'
+                    }}
+                  >
+                    {isTestingModalSmtp ? <RefreshCw size={14} className="spin-slow" /> : <Zap size={14} style={{ color: 'var(--gold-deep)' }} />}
+                    {isTestingModalSmtp ? 'Testing...' : 'Test Connection'}
+                  </button>
+                ) : (
+                  <div style={{ fontSize: '0.76rem', color: 'var(--muted)' }}>
+                    AWS SES Gateway
+                  </div>
+                )}
 
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
                   <button
@@ -4675,7 +5119,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
                     style={{
                       padding: '0.5rem 1.25rem',
                       borderRadius: '6px',
-                      background: 'var(--gold-deep)',
+                      background: smtpAccountForm.providerType === 'aws_ses' ? '#d97706' : 'var(--gold-deep)',
                       color: '#fff',
                       border: 'none',
                       fontWeight: 700,
@@ -4683,7 +5127,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
                       cursor: isSavingSmtpAccount ? 'not-allowed' : 'pointer'
                     }}
                   >
-                    {isSavingSmtpAccount ? 'Saving...' : (editingSmtpAccount ? 'Update Account' : 'Save Account')}
+                    {isSavingSmtpAccount ? 'Saving...' : (editingSmtpAccount ? 'Update Gateway' : 'Save Gateway')}
                   </button>
                 </div>
               </div>

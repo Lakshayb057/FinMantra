@@ -8,6 +8,7 @@
     "dev": "node server.js"
   },
   "dependencies": {
+    "@aws-sdk/client-ses": "^3.1113.0",
     "@whiskeysockets/baileys": "^7.0.0-rc13",
     "bcryptjs": "^3.0.3",
     "compression": "^1.8.1",

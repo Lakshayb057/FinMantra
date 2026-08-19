@@ -527,6 +527,17 @@ async function initPgSchema() {
       )
     `);
 
+    await safeQuery("ALTER TABLE campaign_smtp_accounts ADD COLUMN IF NOT EXISTS provider_type VARCHAR(50) DEFAULT 'smtp'");
+    await safeQuery("ALTER TABLE campaign_smtp_accounts ADD COLUMN IF NOT EXISTS aws_access_key_id VARCHAR(255)");
+    await safeQuery("ALTER TABLE campaign_smtp_accounts ADD COLUMN IF NOT EXISTS aws_secret_access_key TEXT");
+    await safeQuery("ALTER TABLE campaign_smtp_accounts ADD COLUMN IF NOT EXISTS aws_region VARCHAR(100) DEFAULT 'ap-south-1'");
+    await safeQuery("ALTER TABLE campaign_smtp_accounts ADD COLUMN IF NOT EXISTS aws_session_token TEXT");
+    await safeQuery("ALTER TABLE campaign_smtp_accounts ADD COLUMN IF NOT EXISTS configuration_set VARCHAR(255)");
+    await safeQuery("ALTER TABLE campaign_smtp_accounts ALTER COLUMN host DROP NOT NULL");
+    await safeQuery("ALTER TABLE campaign_smtp_accounts ALTER COLUMN port DROP NOT NULL");
+    await safeQuery("ALTER TABLE campaign_smtp_accounts ALTER COLUMN username DROP NOT NULL");
+    await safeQuery("ALTER TABLE campaign_smtp_accounts ALTER COLUMN password DROP NOT NULL");
+
     await safeQuery("ALTER TABLE campaign_master_leads ADD COLUMN IF NOT EXISTS finmantra_id VARCHAR(50)");
     await safeQuery("ALTER TABLE campaign_master_leads ADD COLUMN IF NOT EXISTS campaign_data_id VARCHAR(50)");
     await safeQuery("ALTER TABLE campaign_master_leads ADD COLUMN IF NOT EXISTS whatsapp_optin BOOLEAN DEFAULT TRUE");
@@ -3093,8 +3104,8 @@ const db = {
     return anyRes.rows[0] || null;
   },
 
-  async createSmtpAccount({ id, name, host, port, username, password, secure, fromName, fromEmail, isDefault }) {
-    const aid = id || ('smtp_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6));
+  async createSmtpAccount({ id, name, host, port, username, password, secure, fromName, fromEmail, isDefault, providerType = 'smtp', awsAccessKeyId, awsSecretAccessKey, awsRegion = 'ap-south-1', awsSessionToken, configurationSet }) {
+    const aid = id || ((providerType === 'aws_ses' ? 'ses_' : 'smtp_') + Date.now().toString(36) + Math.random().toString(36).substring(2, 6));
     if (isDefault) {
       await pool.query('UPDATE campaign_smtp_accounts SET is_default = FALSE');
     } else {
@@ -3105,15 +3116,32 @@ const db = {
     }
     const res = await pool.query(
       `INSERT INTO campaign_smtp_accounts 
-       (id, name, host, port, username, password, secure, from_name, from_email, is_default)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       (id, name, host, port, username, password, secure, from_name, from_email, is_default, provider_type, aws_access_key_id, aws_secret_access_key, aws_region, aws_session_token, configuration_set)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
        RETURNING *`,
-      [aid, name, host, parseInt(port, 10) || 465, username, password, secure ?? true, fromName || 'FinMantra', fromEmail, !!isDefault]
+      [
+        aid,
+        name,
+        host || null,
+        port ? parseInt(port, 10) : 465,
+        username || null,
+        password || null,
+        secure ?? true,
+        fromName || 'FinMantra',
+        fromEmail,
+        !!isDefault,
+        providerType || 'smtp',
+        awsAccessKeyId || null,
+        awsSecretAccessKey || null,
+        awsRegion || 'ap-south-1',
+        awsSessionToken || null,
+        configurationSet || null
+      ]
     );
     return res.rows[0];
   },
 
-  async updateSmtpAccount(id, { name, host, port, username, password, secure, fromName, fromEmail, isDefault }) {
+  async updateSmtpAccount(id, { name, host, port, username, password, secure, fromName, fromEmail, isDefault, providerType, awsAccessKeyId, awsSecretAccessKey, awsRegion, awsSessionToken, configurationSet }) {
     if (isDefault) {
       await pool.query('UPDATE campaign_smtp_accounts SET is_default = FALSE WHERE id != $1', [id]);
     }
@@ -3128,10 +3156,33 @@ const db = {
            from_name = COALESCE($8, from_name),
            from_email = COALESCE($9, from_email),
            is_default = COALESCE($10, is_default),
+           provider_type = COALESCE($11, provider_type),
+           aws_access_key_id = COALESCE($12, aws_access_key_id),
+           aws_secret_access_key = CASE WHEN $13::text IS NOT NULL AND $13::text != '' THEN $13::text ELSE aws_secret_access_key END,
+           aws_region = COALESCE($14, aws_region),
+           aws_session_token = COALESCE($15, aws_session_token),
+           configuration_set = COALESCE($16, configuration_set),
            updated_at = CURRENT_TIMESTAMP
        WHERE id = $1
        RETURNING *`,
-      [id, name, host, port ? parseInt(port, 10) : null, username, password || null, secure, fromName, fromEmail, isDefault]
+      [
+        id,
+        name,
+        host || null,
+        port ? parseInt(port, 10) : null,
+        username || null,
+        password || null,
+        secure,
+        fromName,
+        fromEmail,
+        isDefault,
+        providerType || null,
+        awsAccessKeyId || null,
+        awsSecretAccessKey || null,
+        awsRegion || null,
+        awsSessionToken || null,
+        configurationSet || null
+      ]
     );
     return res.rows[0];
   },

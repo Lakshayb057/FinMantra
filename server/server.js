@@ -6271,6 +6271,13 @@ app.post('/api/whatsapp/flow-endpoint', async (req, res) => {
 // --- CAMPAIGNS & BROADCASTS API ENDPOINTS & SCHEDULER ---
 
 const nodemailer = require('nodemailer');
+const { 
+  SESClient, 
+  SendEmailCommand, 
+  VerifyEmailIdentityCommand, 
+  GetSendQuotaCommand, 
+  GetIdentityVerificationAttributesCommand 
+} = require('@aws-sdk/client-ses');
 
 // Dynamically create nodemailer transporter using Multi-SMTP Account or DB Settings
 async function getEmailTransporter(smtpAccountId = null) {
@@ -6336,7 +6343,115 @@ async function getEmailTransporter(smtpAccountId = null) {
   };
 }
 
-// SMTP Accounts Management Endpoints
+// Unified Email Dispatch Helper supporting AWS SES & Standard SMTP
+async function sendEmailMessage({
+  accountId = null,
+  to,
+  subject,
+  html,
+  text,
+  fromName,
+  fromEmail
+}) {
+  let account = null;
+  if (accountId) {
+    account = await db.getSmtpAccountById(accountId).catch(() => null);
+  }
+  if (!account) {
+    account = await db.getDefaultSmtpAccount().catch(() => null);
+  }
+
+  // 1. AWS SES Provider Dispatch
+  if (account && account.provider_type === 'aws_ses') {
+    const region = account.aws_region || 'ap-south-1';
+    const accessKeyId = account.aws_access_key_id || '';
+    const secretAccessKey = account.aws_secret_access_key || '';
+    const sessionToken = account.aws_session_token || undefined;
+    const finalFromName = fromName || account.from_name || 'FinMantra';
+    const finalFromEmail = fromEmail || account.from_email || 'support@thefinmantra.com';
+
+    if (!accessKeyId || !secretAccessKey) {
+      throw new Error(`AWS SES Account [${account.name}] is missing AWS Access Key ID or Secret Access Key.`);
+    }
+
+    const sesClient = new SESClient({
+      region,
+      credentials: {
+        accessKeyId: accessKeyId.trim(),
+        secretAccessKey: secretAccessKey.trim(),
+        ...(sessionToken ? { sessionToken: sessionToken.trim() } : {})
+      }
+    });
+
+    const toAddresses = Array.isArray(to) ? to : [to];
+    const sourceFormatted = `"${finalFromName}" <${finalFromEmail}>`;
+
+    const command = new SendEmailCommand({
+      Source: sourceFormatted,
+      Destination: {
+        ToAddresses: toAddresses
+      },
+      Message: {
+        Subject: {
+          Data: subject,
+          Charset: 'UTF-8'
+        },
+        Body: {
+          Html: html ? { Data: html, Charset: 'UTF-8' } : undefined,
+          Text: text ? { Data: text, Charset: 'UTF-8' } : html ? { Data: html.replace(/<[^>]+>/g, ' '), Charset: 'UTF-8' } : { Data: '', Charset: 'UTF-8' }
+        }
+      },
+      ConfigurationSetName: account.configuration_set || undefined
+    });
+
+    const sesResult = await sesClient.send(command);
+    console.log(`[AWS SES Dispatch Success] MessageId: ${sesResult.MessageId} to ${toAddresses.join(', ')}`);
+    return {
+      success: true,
+      provider: 'aws_ses',
+      messageId: sesResult.MessageId,
+      fromName: finalFromName,
+      fromEmail: finalFromEmail
+    };
+  }
+
+  // 2. Standard SMTP Dispatch (using nodemailer)
+  const transporterObj = await getEmailTransporter(account ? account.id : accountId);
+  if (!transporterObj) {
+    // Fallback simulation mode if no credentials configured
+    console.log(`[Email Dispatch Simulation] Sent to ${Array.isArray(to) ? to.join(', ') : to} with subject "${subject}"`);
+    return {
+      success: true,
+      provider: 'simulation',
+      messageId: 'sim_' + Date.now(),
+      fromName: fromName || 'FinMantra',
+      fromEmail: fromEmail || 'no-reply@thefinmantra.com'
+    };
+  }
+
+  const finalFromName = fromName || transporterObj.fromName || 'FinMantra';
+  const finalFromEmail = fromEmail || transporterObj.fromEmail;
+
+  const mailOptions = {
+    from: `"${finalFromName}" <${finalFromEmail}>`,
+    to,
+    subject,
+    html,
+    text: text || (html ? html.replace(/<[^>]+>/g, ' ') : '')
+  };
+
+  const info = await transporterObj.transporter.sendMail(mailOptions);
+  console.log(`[SMTP Dispatch Success] MessageId: ${info.messageId} to ${Array.isArray(to) ? to.join(', ') : to}`);
+  return {
+    success: true,
+    provider: 'smtp',
+    messageId: info.messageId,
+    fromName: finalFromName,
+    fromEmail: finalFromEmail
+  };
+}
+
+// SMTP & AWS SES Accounts Management Endpoints
 app.get('/api/settings/smtp-accounts', authenticateToken, async (req, res) => {
   try {
     let list = await db.getSmtpAccounts();
@@ -6360,7 +6475,8 @@ app.get('/api/settings/smtp-accounts', authenticateToken, async (req, res) => {
           secure: settings.campaign_smtp_secure === 'true' || parseInt(settings.campaign_smtp_port, 10) === 465,
           fromName: settings.campaign_smtp_from_name || 'FinMantra',
           fromEmail: settings.campaign_smtp_from_email || cUser,
-          isDefault: list.length === 0
+          isDefault: list.length === 0,
+          providerType: 'smtp'
         });
         existingUsers.add(cUser.toLowerCase());
       } catch (e) {
@@ -6383,7 +6499,8 @@ app.get('/api/settings/smtp-accounts', authenticateToken, async (req, res) => {
           secure: (settings.smtp_secure === 'true' || settings.smtp_secure === true || (parseInt(settings.smtp_port, 10) === 465)),
           fromName: settings.smtp_from_name || settings.email_sender || 'FinMantra System',
           fromEmail: settings.smtp_from || settings.email_sender || gUser,
-          isDefault: list.length === 0
+          isDefault: list.length === 0,
+          providerType: 'smtp'
         });
         existingUsers.add(gUser.toLowerCase());
       } catch (e) {
@@ -6396,7 +6513,8 @@ app.get('/api/settings/smtp-accounts', authenticateToken, async (req, res) => {
 
     const sanitized = list.map(acc => ({
       ...acc,
-      password: acc.password ? '••••••••••••' : ''
+      password: acc.password ? '••••••••••••' : '',
+      aws_secret_access_key: acc.aws_secret_access_key ? '••••••••••••' : ''
     }));
     res.json({ success: true, accounts: sanitized });
   } catch (err) {
@@ -6406,13 +6524,39 @@ app.get('/api/settings/smtp-accounts', authenticateToken, async (req, res) => {
 
 app.post('/api/settings/smtp-accounts', authenticateToken, async (req, res) => {
   try {
-    const { name, host, port, username, password, secure, fromName, fromEmail, isDefault } = req.body;
-    if (!name || !host || !username || !password || !fromEmail) {
-      return res.status(400).json({ success: false, error: 'Name, Host, Username, Password, and From Email are required.' });
+    const { 
+      name, 
+      host, 
+      port, 
+      username, 
+      password, 
+      secure, 
+      fromName, 
+      fromEmail, 
+      isDefault,
+      providerType,
+      awsAccessKeyId,
+      awsSecretAccessKey,
+      awsRegion,
+      awsSessionToken,
+      configurationSet
+    } = req.body;
+
+    const pType = providerType || 'smtp';
+
+    if (pType === 'aws_ses') {
+      if (!name || !awsAccessKeyId || !awsSecretAccessKey || !fromEmail) {
+        return res.status(400).json({ success: false, error: 'Name, AWS Access Key ID, Secret Access Key, and From Email are required for AWS SES.' });
+      }
+    } else {
+      if (!name || !host || !username || !password || !fromEmail) {
+        return res.status(400).json({ success: false, error: 'Name, Host, Username, Password, and From Email are required for SMTP.' });
+      }
     }
-    let cleanHost = String(host || '').trim().replace(/\s+/g, '.');
-    let cleanPass = String(password || '').trim();
-    if (cleanHost.includes('gmail')) {
+
+    let cleanHost = host ? String(host || '').trim().replace(/\s+/g, '.') : null;
+    let cleanPass = password ? String(password || '').trim() : null;
+    if (cleanHost && cleanHost.includes('gmail') && cleanPass) {
       cleanPass = cleanPass.replace(/\s+/g, '');
     }
 
@@ -6420,15 +6564,28 @@ app.post('/api/settings/smtp-accounts', authenticateToken, async (req, res) => {
       name: name.trim(),
       host: cleanHost,
       port: parseInt(port, 10) || 465,
-      username: username.trim(),
+      username: username ? username.trim() : null,
       password: cleanPass,
       secure: secure === true || secure === 'true' || parseInt(port, 10) === 465,
       fromName: fromName ? fromName.trim() : 'FinMantra',
       fromEmail: fromEmail.trim(),
-      isDefault: !!isDefault
+      isDefault: !!isDefault,
+      providerType: pType,
+      awsAccessKeyId: awsAccessKeyId ? awsAccessKeyId.trim() : null,
+      awsSecretAccessKey: awsSecretAccessKey ? awsSecretAccessKey.trim() : null,
+      awsRegion: awsRegion ? awsRegion.trim() : 'ap-south-1',
+      awsSessionToken: awsSessionToken ? awsSessionToken.trim() : null,
+      configurationSet: configurationSet ? configurationSet.trim() : null
     });
 
-    res.json({ success: true, account: { ...created, password: '••••••••••••' } });
+    res.json({ 
+      success: true, 
+      account: { 
+        ...created, 
+        password: created.password ? '••••••••••••' : '',
+        aws_secret_access_key: created.aws_secret_access_key ? '••••••••••••' : '' 
+      } 
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -6436,12 +6593,30 @@ app.post('/api/settings/smtp-accounts', authenticateToken, async (req, res) => {
 
 app.put('/api/settings/smtp-accounts/:id', authenticateToken, async (req, res) => {
   try {
-    const { name, host, port, username, password, secure, fromName, fromEmail, isDefault } = req.body;
+    const { 
+      name, 
+      host, 
+      port, 
+      username, 
+      password, 
+      secure, 
+      fromName, 
+      fromEmail, 
+      isDefault,
+      providerType,
+      awsAccessKeyId,
+      awsSecretAccessKey,
+      awsRegion,
+      awsSessionToken,
+      configurationSet
+    } = req.body;
+
     let cleanHost = host ? String(host).trim().replace(/\s+/g, '.') : undefined;
     let cleanPass = password && !password.includes('•') ? String(password).trim() : undefined;
     if (cleanHost && cleanHost.includes('gmail') && cleanPass) {
       cleanPass = cleanPass.replace(/\s+/g, '');
     }
+    let cleanAwsSecret = awsSecretAccessKey && !awsSecretAccessKey.includes('•') ? String(awsSecretAccessKey).trim() : undefined;
 
     const updated = await db.updateSmtpAccount(req.params.id, {
       name: name ? name.trim() : undefined,
@@ -6452,10 +6627,23 @@ app.put('/api/settings/smtp-accounts/:id', authenticateToken, async (req, res) =
       secure: secure !== undefined ? (secure === true || secure === 'true') : undefined,
       fromName: fromName ? fromName.trim() : undefined,
       fromEmail: fromEmail ? fromEmail.trim() : undefined,
-      isDefault
+      isDefault,
+      providerType,
+      awsAccessKeyId: awsAccessKeyId ? awsAccessKeyId.trim() : undefined,
+      awsSecretAccessKey: cleanAwsSecret,
+      awsRegion: awsRegion ? awsRegion.trim() : undefined,
+      awsSessionToken: awsSessionToken ? awsSessionToken.trim() : undefined,
+      configurationSet: configurationSet !== undefined ? configurationSet : undefined
     });
 
-    res.json({ success: true, account: { ...updated, password: '••••••••••••' } });
+    res.json({ 
+      success: true, 
+      account: { 
+        ...updated, 
+        password: updated.password ? '••••••••••••' : '',
+        aws_secret_access_key: updated.aws_secret_access_key ? '••••••••••••' : '' 
+      } 
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -6479,7 +6667,7 @@ app.post('/api/settings/smtp-accounts/:id/set-default', authenticateToken, async
   }
 });
 
-// Test SMTP Configuration Endpoint
+// Test Standard SMTP Configuration Endpoint
 app.post('/api/settings/test-smtp', authenticateToken, async (req, res) => {
   try {
     const { accountId, host, port, user, pass, secure, fromName, fromEmail, testRecipient } = req.body;
@@ -6548,6 +6736,194 @@ app.post('/api/settings/test-smtp', authenticateToken, async (req, res) => {
   }
 });
 
+// Test AWS SES Configuration Endpoint
+app.post('/api/settings/test-ses', authenticateToken, async (req, res) => {
+  try {
+    const { accountId, region, accessKeyId, secretAccessKey, fromName, fromEmail, testRecipient } = req.body;
+    let cleanRegion = region || 'ap-south-1';
+    let cleanAccessKey = accessKeyId;
+    let cleanSecretKey = secretAccessKey;
+    let cleanFromName = fromName || 'FinMantra';
+    let cleanFromEmail = fromEmail;
+
+    if (accountId) {
+      const acc = await db.getSmtpAccountById(accountId);
+      if (acc) {
+        cleanRegion = acc.aws_region || cleanRegion;
+        cleanAccessKey = acc.aws_access_key_id || cleanAccessKey;
+        cleanSecretKey = acc.aws_secret_access_key || cleanSecretKey;
+        cleanFromName = acc.from_name || cleanFromName;
+        cleanFromEmail = acc.from_email || cleanFromEmail;
+      }
+    }
+
+    if (!cleanAccessKey || !cleanSecretKey || !cleanFromEmail) {
+      return res.status(400).json({ success: false, error: 'AWS Access Key ID, Secret Access Key, and Sender Email are required.' });
+    }
+
+    const targetTo = testRecipient || cleanFromEmail;
+
+    const sesClient = new SESClient({
+      region: cleanRegion,
+      credentials: {
+        accessKeyId: cleanAccessKey.trim(),
+        secretAccessKey: cleanSecretKey.trim()
+      }
+    });
+
+    const command = new SendEmailCommand({
+      Source: `"${cleanFromName}" <${cleanFromEmail}>`,
+      Destination: {
+        ToAddresses: [targetTo]
+      },
+      Message: {
+        Subject: {
+          Data: 'FinMantra AWS SES Test Email - Connection Verified',
+          Charset: 'UTF-8'
+        },
+        Body: {
+          Html: {
+            Data: `
+              <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #eaeaea; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+                <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 24px; text-align: center; border-bottom: 3px solid #e0a82e;">
+                  <h1 style="color: #ffffff; margin: 0; font-size: 20px; font-weight: 800; letter-spacing: 0.5px;">FINMANTRA</h1>
+                  <p style="color: #e0a82e; margin: 5px 0 0 0; font-size: 13px; font-weight: 700; text-transform: uppercase;">AWS SES Gateway Verification</p>
+                </div>
+                <div style="padding: 28px 24px; color: #334155; line-height: 1.6;">
+                  <h2 style="color: #0f172a; margin-top: 0; font-size: 18px;">AWS SES Connection Successful! ✓</h2>
+                  <p style="font-size: 14px;">Your Amazon Simple Email Service (SES) configuration is authenticated and ready for broadcast delivery.</p>
+                  
+                  <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 20px 0; font-size: 13px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px; border-bottom: 1px dashed #cbd5e1; padding-bottom: 6px;">
+                      <strong style="color: #64748b;">AWS Region:</strong>
+                      <span style="font-family: monospace; font-weight: 700; color: #0f172a;">${cleanRegion}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px; border-bottom: 1px dashed #cbd5e1; padding-bottom: 6px;">
+                      <strong style="color: #64748b;">Verified Sender Email:</strong>
+                      <span style="font-family: monospace; font-weight: 700; color: #e0a82e;">${cleanFromEmail}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between;">
+                      <strong style="color: #64748b;">Delivered To Recipient:</strong>
+                      <span style="font-family: monospace; font-weight: 700; color: #16a37b;">${targetTo}</span>
+                    </div>
+                  </div>
+                  
+                  <p style="font-size: 12px; color: #64748b; margin-bottom: 0;">
+                    Note: If your AWS SES account is currently in Sandbox mode, destination recipients must also be verified identities.
+                  </p>
+                </div>
+                <div style="background: #f1f5f9; padding: 14px 24px; text-align: center; font-size: 11px; color: #94a3b8; border-top: 1px solid #e2e8f0;">
+                  Sent via FinMantra OmniChannel Broadcast Center • Amazon Web Services (SES)
+                </div>
+              </div>
+            `,
+            Charset: 'UTF-8'
+          }
+        }
+      }
+    });
+
+    const result = await sesClient.send(command);
+    res.json({
+      success: true,
+      messageId: result.MessageId,
+      message: `AWS SES test email successfully delivered to ${targetTo} (Message ID: ${result.MessageId})!`
+    });
+  } catch (err) {
+    console.error('[AWS SES Test Error]:', err);
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+// Verify Email Identity in AWS SES Endpoint
+app.post('/api/settings/verify-ses-identity', authenticateToken, async (req, res) => {
+  try {
+    const { email, region, accessKeyId, secretAccessKey, accountId } = req.body;
+    let cleanRegion = region || 'ap-south-1';
+    let cleanAccessKey = accessKeyId;
+    let cleanSecretKey = secretAccessKey;
+
+    if (accountId) {
+      const acc = await db.getSmtpAccountById(accountId);
+      if (acc) {
+        cleanRegion = acc.aws_region || cleanRegion;
+        cleanAccessKey = acc.aws_access_key_id || cleanAccessKey;
+        cleanSecretKey = acc.aws_secret_access_key || cleanSecretKey;
+      }
+    }
+
+    if (!email || !cleanAccessKey || !cleanSecretKey) {
+      return res.status(400).json({ success: false, error: 'Email, AWS Access Key ID, and Secret Access Key are required.' });
+    }
+
+    const sesClient = new SESClient({
+      region: cleanRegion,
+      credentials: {
+        accessKeyId: cleanAccessKey.trim(),
+        secretAccessKey: cleanSecretKey.trim()
+      }
+    });
+
+    const command = new VerifyEmailIdentityCommand({
+      EmailAddress: email.trim()
+    });
+
+    await sesClient.send(command);
+    res.json({
+      success: true,
+      message: `AWS SES verification request sent to ${email}. Please check your inbox and click the verification link!`
+    });
+  } catch (err) {
+    console.error('[AWS SES Verify Error]:', err);
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+// Check AWS SES Sending Quota & Rates
+app.get('/api/settings/ses-quota', authenticateToken, async (req, res) => {
+  try {
+    const { accountId, region, accessKeyId, secretAccessKey } = req.query;
+    let cleanRegion = region || 'ap-south-1';
+    let cleanAccessKey = accessKeyId;
+    let cleanSecretKey = secretAccessKey;
+
+    if (accountId) {
+      const acc = await db.getSmtpAccountById(accountId);
+      if (acc) {
+        cleanRegion = acc.aws_region || cleanRegion;
+        cleanAccessKey = acc.aws_access_key_id || cleanAccessKey;
+        cleanSecretKey = acc.aws_secret_access_key || cleanSecretKey;
+      }
+    }
+
+    if (!cleanAccessKey || !cleanSecretKey) {
+      return res.status(400).json({ success: false, error: 'AWS Access Key ID and Secret Access Key are required.' });
+    }
+
+    const sesClient = new SESClient({
+      region: cleanRegion,
+      credentials: {
+        accessKeyId: cleanAccessKey.trim(),
+        secretAccessKey: cleanSecretKey.trim()
+      }
+    });
+
+    const command = new GetSendQuotaCommand({});
+    const quota = await sesClient.send(command);
+    res.json({
+      success: true,
+      quota: {
+        max24HourSend: quota.Max24HourSend,
+        maxSendRate: quota.MaxSendRate,
+        sentLast24Hours: quota.SentLast24Hours,
+        remaining24Hours: (quota.Max24HourSend || 0) - (quota.SentLast24Hours || 0)
+      }
+    });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
 // Background scheduler function
 async function checkAndRunScheduledBroadcasts() {
   try {
@@ -6582,10 +6958,16 @@ async function checkAndRunScheduledBroadcasts() {
       let deliveredCount = 0;
       let failedCount = 0;
 
-      const emailConfig = await getEmailTransporter(b.smtp_account_id);
-      const transporter = emailConfig?.transporter || null;
-      const fromEmail = b.sender_email || emailConfig?.fromEmail || settings.campaign_smtp_from_email || 'no-reply@finmantra.com';
-      const fromName = emailConfig?.fromName || settings.campaign_smtp_from_name || 'FinMantra';
+      const emailAccountId = b.smtp_account_id || null;
+      let emailAccount = null;
+      if (emailAccountId) {
+        emailAccount = await db.getSmtpAccountById(emailAccountId).catch(() => null);
+      }
+      if (!emailAccount) {
+        emailAccount = await db.getDefaultSmtpAccount().catch(() => null);
+      }
+      const fromEmail = b.sender_email || emailAccount?.from_email || settings.campaign_smtp_from_email || 'no-reply@thefinmantra.com';
+      const fromName = emailAccount?.from_name || settings.campaign_smtp_from_name || 'FinMantra';
 
       for (const lead of leads) {
         let emailAttempted = false;
@@ -6630,28 +7012,22 @@ async function checkAndRunScheduledBroadcasts() {
               body += `<br/><hr/><div style="font-size:11px;color:#888;margin-top:15px;">To manage notification preferences, <a href="${contactCenterUrl}" style="color:#e0a82e;">visit Contact Center</a> • <a href="${unSubUrl}" style="color:#ef4444;">Unsubscribe</a>.</div>`;
             }
 
-            if (transporter) {
-              try {
-                await transporter.sendMail({
-                  from: `"${fromName}" <${fromEmail}>`,
-                  to: lead.mail,
-                  subject,
-                  html: body.replace(/\n/g, '<br/>')
-                });
-                emailSuccess = true;
-                await db.incrementMasterLeadMetric(lead.id, 'email', 'sent');
-                await db.incrementMasterLeadMetric(lead.id, 'email', 'delivered');
-                deliveredCount++;
-              } catch (err) {
-                emailSuccess = false;
-                emailError = err.message;
-              }
-            } else {
-              console.log(`[Email Dispatch Simulation] Sent to ${lead.mail} with subject "${subject}"`);
+            try {
+              await sendEmailMessage({
+                accountId: emailAccountId || (emailAccount ? emailAccount.id : null),
+                to: lead.mail,
+                subject,
+                html: body.replace(/\n/g, '<br/>'),
+                fromName,
+                fromEmail
+              });
               emailSuccess = true;
               await db.incrementMasterLeadMetric(lead.id, 'email', 'sent');
               await db.incrementMasterLeadMetric(lead.id, 'email', 'delivered');
               deliveredCount++;
+            } catch (err) {
+              emailSuccess = false;
+              emailError = err.message;
             }
           }
 
