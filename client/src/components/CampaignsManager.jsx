@@ -978,16 +978,50 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
     reader.readAsText(file);
   };
 
+  // Open Create New Broadcast Modal with auto-synced DB defaults
+  const handleOpenCreateBroadcast = (initialChannel = 'whatsapp', extraState = {}) => {
+    const defaultAcc = smtpAccounts.find(a => a.is_default) || smtpAccounts[0];
+    const defaultPhone = phoneNumbers.find(p => p.is_default) || phoneNumbers[0];
+    const defaultFromEmail = defaultAcc ? defaultAcc.from_email : (smtpSettings.fromEmail || '');
+
+    setEditingBroadcastId(null);
+    setBroadcastForm({
+      name: '',
+      channel: initialChannel,
+      meta_phone_number_id: defaultPhone ? defaultPhone.id : '',
+      meta_phone_number: defaultPhone ? defaultPhone.display_phone_number : '',
+      sender_email: defaultFromEmail,
+      smtp_account_id: defaultAcc ? defaultAcc.id : '',
+      whatsapp_template: '',
+      whatsapp_message: '',
+      email_subject: '',
+      email_body: '',
+      scheduled_at: '',
+      media_url: '',
+      ...extraState
+    });
+    setBroadcastUploadFile(null);
+    setBroadcastParsedLeads([]);
+    setBroadcastUploadStats(null);
+    setBroadcastUploadError('');
+    setBroadcastWizardStep(1);
+    setShowNewBroadcastModal(true);
+  };
+
   // Open Edit Broadcast Modal
   const handleEditBroadcast = (b) => {
+    const defaultAcc = smtpAccounts.find(a => a.is_default) || smtpAccounts[0];
+    const matchedAcc = smtpAccounts.find(a => a.id === b.smtp_account_id) || defaultAcc;
+    const resolvedSenderEmail = b.sender_email || (matchedAcc ? matchedAcc.from_email : '');
+
     setEditingBroadcastId(b.id);
     setBroadcastForm({
       name: b.name || '',
       channel: b.channel || 'whatsapp',
       meta_phone_number_id: b.meta_phone_number_id || '',
       meta_phone_number: b.meta_phone_number || '',
-      sender_email: b.sender_email || '',
-      smtp_account_id: b.smtp_account_id || '',
+      sender_email: resolvedSenderEmail,
+      smtp_account_id: b.smtp_account_id || (defaultAcc ? defaultAcc.id : ''),
       whatsapp_template: b.whatsapp_template || '',
       whatsapp_message: b.whatsapp_message || '',
       email_subject: b.email_subject || '',
@@ -997,6 +1031,8 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
     });
     setBroadcastUploadFile(null);
     setBroadcastParsedLeads([]);
+    setBroadcastUploadStats(null);
+    setBroadcastUploadError('');
     setBroadcastWizardStep(1);
     setShowNewBroadcastModal(true);
   };
@@ -2027,10 +2063,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
                 <div style={{ color: 'var(--muted)', fontSize: '0.82rem' }}>Manage scheduled dispatches, track deliverability, and trigger immediate sends.</div>
               </div>
               <button
-                onClick={() => {
-                  setBroadcastWizardStep(1);
-                  setShowNewBroadcastModal(true);
-                }}
+                onClick={() => handleOpenCreateBroadcast('whatsapp')}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -2629,13 +2662,11 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
                               <button
                                 type="button"
                                 onClick={() => {
-                                  setBroadcastForm(prev => ({
-                                    ...prev,
+                                  handleOpenCreateBroadcast('email', {
                                     whatsapp_template: t.meta_template_name || t.name,
-                                    channel: 'email'
-                                  }));
-                                  setBroadcastWizardStep(1);
-                                  setShowNewBroadcastModal(true);
+                                    email_subject: t.email_subject || t.name || '',
+                                    email_body: t.body || ''
+                                  });
                                 }}
                                 style={{
                                   display: 'inline-flex',
@@ -2840,13 +2871,11 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
                             <button
                               type="button"
                               onClick={() => {
-                                setBroadcastForm(prev => ({
-                                  ...prev,
+                                handleOpenCreateBroadcast(t.type === 'email' ? 'email' : 'whatsapp', {
                                   whatsapp_template: t.meta_template_name || t.name,
-                                  channel: t.type === 'email' ? 'email' : 'whatsapp'
-                                }));
-                                setBroadcastWizardStep(1);
-                                setShowNewBroadcastModal(true);
+                                  email_subject: t.email_subject || t.name || '',
+                                  email_body: t.body || ''
+                                });
                               }}
                               style={{
                                 display: 'inline-flex',
@@ -2974,13 +3003,11 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
                               <button
                                 type="button"
                                 onClick={() => {
-                                  setBroadcastForm(prev => ({
-                                    ...prev,
+                                  handleOpenCreateBroadcast(t.type === 'email' ? 'email' : 'whatsapp', {
                                     whatsapp_template: t.meta_template_name || t.name,
-                                    channel: t.type === 'email' ? 'email' : 'whatsapp'
-                                  }));
-                                  setBroadcastWizardStep(1);
-                                  setShowNewBroadcastModal(true);
+                                    email_subject: t.email_subject || t.name || '',
+                                    email_body: t.body || ''
+                                  });
                                 }}
                                 style={{
                                   padding: '0.35rem 0.65rem',
@@ -3346,7 +3373,16 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
                       {['whatsapp', 'email', 'both'].map(ch => (
                         <div
                           key={ch}
-                          onClick={() => setBroadcastForm({ ...broadcastForm, channel: ch })}
+                          onClick={() => {
+                            const defaultAcc = smtpAccounts.find(a => a.is_default) || smtpAccounts[0];
+                            const targetEmail = broadcastForm.sender_email || (defaultAcc ? defaultAcc.from_email : (smtpSettings.fromEmail || ''));
+                            setBroadcastForm({
+                              ...broadcastForm,
+                              channel: ch,
+                              sender_email: (ch === 'email' || ch === 'both') && !broadcastForm.sender_email ? targetEmail : broadcastForm.sender_email,
+                              smtp_account_id: (ch === 'email' || ch === 'both') && !broadcastForm.smtp_account_id && defaultAcc ? defaultAcc.id : broadcastForm.smtp_account_id
+                            });
+                          }}
                           style={{
                             padding: '0.85rem',
                             borderRadius: '10px',
@@ -3359,7 +3395,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
                         >
                           <div style={{ fontWeight: 700, fontSize: '0.9rem', textTransform: 'capitalize' }}>{ch}</div>
                           <div style={{ fontSize: '0.72rem', color: 'var(--muted)', marginTop: '0.2rem' }}>
-                            {ch === 'whatsapp' ? 'WhatsApp Direct' : ch === 'email' ? 'SMTP Mail' : 'WhatsApp + Email'}
+                            {ch === 'whatsapp' ? 'WhatsApp Direct' : ch === 'email' ? 'AWS SES / SMTP' : 'WhatsApp + Email'}
                           </div>
                         </div>
                       ))}
@@ -3386,7 +3422,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
                                 onClick={() => setBroadcastForm({
                                   ...broadcastForm,
                                   meta_phone_number_id: phone.id,
-                                  meta_phone_number: phone.display_phone_number || ''
+                                  meta_phone_number: phone.display_phone_number
                                 })}
                                 style={{
                                   display: 'flex',
@@ -3422,24 +3458,43 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
                   {(broadcastForm.channel === 'email' || broadcastForm.channel === 'both') && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
                       <div>
-                        <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.4rem' }}>
-                          Outbound Email Gateway Account (AWS SES / SMTP)
-                        </label>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                          <label style={{ fontSize: '0.85rem', fontWeight: 700, margin: 0 }}>
+                            Outbound Email Gateway Account (AWS SES / SMTP)
+                          </label>
+                          {(() => {
+                            const activeAcc = smtpAccounts.find(a => a.id === broadcastForm.smtp_account_id) || smtpAccounts.find(a => a.is_default) || smtpAccounts[0];
+                            if (activeAcc) {
+                              const isSes = activeAcc.provider_type === 'aws_ses' || !!activeAcc.aws_access_key_id;
+                              return (
+                                <span style={{ fontSize: '0.74rem', color: isSes ? '#f59e0b' : '#3b82f6', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                                  {isSes ? '⚡ AWS SES Active' : '📧 SMTP Active'}
+                                </span>
+                              );
+                            }
+                            return null;
+                          })()}
+                        </div>
                         {smtpAccounts.length > 0 ? (
                           <select
                             value={broadcastForm.smtp_account_id}
                             onChange={(e) => {
                               const aid = e.target.value;
                               const acc = smtpAccounts.find(a => a.id === aid);
-                              setBroadcastForm({
-                                ...broadcastForm,
+                              const defaultAcc = smtpAccounts.find(a => a.is_default) || smtpAccounts[0];
+                              const targetAcc = acc || defaultAcc;
+                              setBroadcastForm(prev => ({
+                                ...prev,
                                 smtp_account_id: aid,
-                                sender_email: acc ? acc.from_email : broadcastForm.sender_email
-                              });
+                                sender_email: targetAcc ? targetAcc.from_email : prev.sender_email
+                              }));
                             }}
                             style={{ width: '100%', padding: '0.65rem 0.8rem', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.88rem', boxSizing: 'border-box' }}
                           >
-                            <option value="">System Default Gateway</option>
+                            <option value="">System Default Gateway ({(() => {
+                              const def = smtpAccounts.find(a => a.is_default) || smtpAccounts[0];
+                              return def ? `${def.name} - ${def.from_email}` : 'Default';
+                            })()})</option>
                             {smtpAccounts.map(acc => {
                               const isSes = acc.provider_type === 'aws_ses' || !!acc.aws_access_key_id;
                               const pTag = isSes ? '⚡ [AWS SES]' : '📧 [SMTP]';
@@ -3458,16 +3513,41 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
                       </div>
 
                       <div>
-                        <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.4rem' }}>
-                          Custom From Email Override (Optional)
-                        </label>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                          <label style={{ fontSize: '0.85rem', fontWeight: 700, margin: 0 }}>
+                            Custom From Email Override (Optional)
+                          </label>
+                          {(() => {
+                            const activeAcc = smtpAccounts.find(a => a.id === broadcastForm.smtp_account_id) || smtpAccounts.find(a => a.is_default) || smtpAccounts[0];
+                            if (activeAcc && activeAcc.from_email) {
+                              return (
+                                <button
+                                  type="button"
+                                  onClick={() => setBroadcastForm(prev => ({ ...prev, sender_email: activeAcc.from_email }))}
+                                  style={{ background: 'none', border: 'none', color: 'var(--gold-deep)', fontSize: '0.74rem', cursor: 'pointer', fontWeight: 700, textDecoration: 'underline', padding: 0 }}
+                                  title="Reset to selected gateway email from database"
+                                >
+                                  Reset to Gateway Default ({activeAcc.from_email})
+                                </button>
+                              );
+                            }
+                            return null;
+                          })()}
+                        </div>
                         <input
                           type="email"
                           value={broadcastForm.sender_email}
                           onChange={(e) => setBroadcastForm({ ...broadcastForm, sender_email: e.target.value })}
-                          placeholder="e.g. info@chaosglobal.net"
+                          placeholder={(() => {
+                            const activeAcc = smtpAccounts.find(a => a.id === broadcastForm.smtp_account_id) || smtpAccounts.find(a => a.is_default) || smtpAccounts[0];
+                            return activeAcc ? activeAcc.from_email : 'e.g. support@thefinmantra.com';
+                          })()}
                           style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.88rem', boxSizing: 'border-box' }}
                         />
+                        <div style={{ fontSize: '0.74rem', color: 'var(--muted)', marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                          <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: '#10b981' }}></span>
+                          <span>Auto-synced with database gateway: <strong>{broadcastForm.sender_email || (smtpAccounts.find(a => a.id === broadcastForm.smtp_account_id) || smtpAccounts.find(a => a.is_default) || smtpAccounts[0])?.from_email || 'Default'}</strong></span>
+                        </div>
                       </div>
                     </div>
                   )}
