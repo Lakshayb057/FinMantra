@@ -6,8 +6,54 @@ import {
   Share2, ArrowUpRight, ShieldCheck, CheckCheck, Send, Smartphone
 } from 'lucide-react';
 
-export default function CampaignsManager({ theme, API_URL, token, showToast }) {
-  const [activeSubTab, setActiveSubTab] = useState('communication_dashboard'); // 'communication_dashboard' | 'master_data' | 'broadcast' | 'templates' | 'settings' | 'guide'
+export default function CampaignsManager({ theme, API_URL, token, showToast, wsTimestamp }) {
+  const getInitialCampaignSubTab = () => {
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      const urlCampaignTab = searchParams.get('campaign_tab');
+      if (urlCampaignTab && ['communication_dashboard', 'master_data', 'broadcast', 'templates', 'settings', 'guide'].includes(urlCampaignTab)) {
+        return urlCampaignTab;
+      }
+      const saved = localStorage.getItem('finmantra_campaign_subtab');
+      if (saved && ['communication_dashboard', 'master_data', 'broadcast', 'templates', 'settings', 'guide'].includes(saved)) {
+        return saved;
+      }
+    } catch (e) {}
+    return 'communication_dashboard';
+  };
+
+  const [activeSubTab, setActiveSubTabState] = useState(getInitialCampaignSubTab);
+
+  const setActiveSubTab = (newSubTab, pushHistory = true) => {
+    setActiveSubTabState(newSubTab);
+    localStorage.setItem('finmantra_campaign_subtab', newSubTab);
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      searchParams.set('tab', 'campaigns');
+      searchParams.set('campaign_tab', newSubTab);
+      const newUrl = `${window.location.pathname}?${searchParams.toString()}`;
+      if (pushHistory) {
+        window.history.pushState({ tab: 'campaigns', campaign_tab: newSubTab }, '', newUrl);
+      }
+      localStorage.setItem('finmantra_last_route', newUrl);
+    } catch (e) {}
+  };
+
+  useEffect(() => {
+    const handlePopState = () => {
+      try {
+        const searchParams = new URLSearchParams(window.location.search);
+        const urlCampaignTab = searchParams.get('campaign_tab');
+        if (urlCampaignTab && ['communication_dashboard', 'master_data', 'broadcast', 'templates', 'settings', 'guide'].includes(urlCampaignTab)) {
+          setActiveSubTabState(urlCampaignTab);
+          localStorage.setItem('finmantra_campaign_subtab', urlCampaignTab);
+        }
+      } catch (e) {}
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
   
   // Meta Phone Numbers (WhatsApp senders with quality ratings)
   const [metaPhoneNumbers, setMetaPhoneNumbers] = useState([]);
@@ -169,6 +215,18 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
     fetchGlobalSettings();
     fetchSmtpAccounts();
   }, []);
+
+  // Real-time synchronization triggered by WebSocket
+  useEffect(() => {
+    if (wsTimestamp) {
+      fetchBroadcasts(true);
+      fetchMasterLeads();
+      fetchMasterFilterOptions();
+      if (activeSubTab === 'communication_dashboard') {
+        fetchCommunicationAnalytics(true);
+      }
+    }
+  }, [wsTimestamp]);
 
   // Poll active broadcasts
   useEffect(() => {
@@ -716,7 +774,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
   const handleDeleteMasterLead = handleDeleteMasterSingle;
   const handleExportMasterCsv = handleExportMasterData;
 
-  // Download Sample Broadcast Template with FMCB00001 ID column
+  // Download Sample Broadcast Template without ID column (only name, contact, email, address + vars)
   const handleDownloadSampleTemplate = () => {
     // Detect custom template variables
     let extraCols = [];
@@ -732,9 +790,9 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
       }
     }
 
-    const headersList = ['id', 'name', 'contact', 'mail', 'address', ...extraCols];
-    const sampleRow = ['FMCB00001', 'Rahul Sharma', '919876543210', 'rahul.sharma@example.com', 'Mumbai, Maharashtra', ...extraCols.map((_, i) => `Value ${i + 1}`)];
-    const sampleRow2 = ['FMCB00002', 'Priya Patel', '919812345678', 'priya.patel@example.com', 'Ahmedabad, Gujarat', ...extraCols.map((_, i) => `Value ${i + 1}`)];
+    const headersList = ['name', 'contact', 'email', 'address', ...extraCols];
+    const sampleRow = ['Rahul Sharma', '919876543210', 'rahul.sharma@example.com', 'Mumbai, Maharashtra', ...extraCols.map((_, i) => `Value ${i + 1}`)];
+    const sampleRow2 = ['Priya Patel', '919812345678', 'priya.patel@example.com', 'Ahmedabad, Gujarat', ...extraCols.map((_, i) => `Value ${i + 1}`)];
 
     const csvContent = [
       headersList.map(h => `"${h}"`).join(','),
@@ -770,32 +828,22 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
         }
 
         const rawHeaders = lines[0].split(',').map(h => h.replace(/^["']|["']$/g, '').trim().toLowerCase());
-        const idIdx = rawHeaders.findIndex(h => h === 'id' || h === 'campaign id' || h === 'campaign_id');
         const nameIdx = rawHeaders.findIndex(h => h === 'name' || h === 'full name' || h === 'full_name');
         const contactIdx = rawHeaders.findIndex(h => h === 'contact' || h === 'phone' || h === 'mobile' || h === 'number');
         const mailIdx = rawHeaders.findIndex(h => h === 'mail' || h === 'email');
         const addressIdx = rawHeaders.findIndex(h => h === 'address' || h === 'city' || h === 'location');
 
         const parsed = [];
-        let autoIdCounter = 1;
 
         for (let i = 1; i < lines.length; i++) {
           const rowVals = lines[i].split(',').map(v => v.replace(/^["']|["']$/g, '').trim());
-          let rawId = idIdx !== -1 ? rowVals[idIdx] : '';
-          
-          // ID Logic: If empty, give it id as "FMCB00001" and so on
-          if (!rawId || !rawId.startsWith('FMCB')) {
-            rawId = `FMCB${String(autoIdCounter).padStart(5, '0')}`;
-          }
-          autoIdCounter++;
-
           const name = nameIdx !== -1 ? rowVals[nameIdx] : 'Customer';
           const rawContact = contactIdx !== -1 ? rowVals[contactIdx] : '';
           const contact = rawContact.replace(/\D/g, '');
           const mail = mailIdx !== -1 ? rowVals[mailIdx] : '';
           const address = addressIdx !== -1 ? rowVals[addressIdx] : '';
 
-          parsed.push({ id: rawId, name, contact, mail, address, rawRow: rowVals });
+          parsed.push({ name, contact, mail, address, rawRow: rowVals });
         }
 
         setBroadcastParsedLeads(parsed);
@@ -3027,9 +3075,9 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
               Whenever you launch a Broadcast Campaign, contacts are directly validated and merged into the Master Data Center. If a contact phone or email already exists, the record is updated with new metrics without creating duplicates.
             </p>
 
-            <h4 style={{ margin: '1.25rem 0 0.5rem 0', fontSize: '0.95rem', fontWeight: 700 }}>2. Sequential FinMantra IDs (FMCB00001)</h4>
+            <h4 style={{ margin: '1.25rem 0 0.5rem 0', fontSize: '0.95rem', fontWeight: 700 }}>2. Automatic URN Mapping &amp; Sequential FMCB IDs</h4>
             <p style={{ color: 'var(--muted)', fontSize: '0.85rem', lineHeight: 1.5 }}>
-              The download template includes an ID column pre-filled with <code>FMCB00001</code>. If any uploaded row has an empty ID, FinMantra automatically assigns consecutive IDs in the format <code>FMCB00001</code>, <code>FMCB00002</code>, etc.
+              The download template includes only <code>name</code>, <code>contact</code>, <code>email</code>, and <code>address</code> columns (no ID column required). When uploaded, FinMantra cross-checks each contact against the <strong>Leads Repository</strong>. If a match is found, it automatically maps the customer's official <strong>URN</strong> number as their ID. For unmatched contacts, FinMantra automatically assigns consecutive IDs in the format <code>FMCB00001</code>, <code>FMCB00002</code>, etc.
             </p>
 
             <h4 style={{ margin: '1.25rem 0 0.5rem 0', fontSize: '0.95rem', fontWeight: 700 }}>3. Public Unsubscribe &amp; Contact Center</h4>
@@ -3334,7 +3382,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast }) {
                   <div style={{ background: 'rgba(224, 168, 46, 0.08)', border: '1px solid rgba(224, 168, 46, 0.3)', borderRadius: '10px', padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
                     <div>
                       <div style={{ fontWeight: 700, fontSize: '0.92rem' }}>Download Pre-configured CSV Template</div>
-                      <div style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>Includes 'id' column initialized as 'FMCB00001' plus required parameters.</div>
+                      <div style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>Includes 'name', 'contact', 'email', 'address' plus required template parameters. (No ID column required)</div>
                     </div>
                     <button
                       type="button"

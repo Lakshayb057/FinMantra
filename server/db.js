@@ -3246,15 +3246,23 @@ const db = {
 
   // --- Master Data Center Helper Operations ---
   async getNextFinmantraId() {
-    const res = await pool.query("SELECT COUNT(*)::int as cnt FROM campaign_master_leads");
-    const count = (res.rows[0]?.cnt || 0) + 1;
-    return `FM${String(count).padStart(5, '0')}`;
+    return this.getNextCampaignDataId();
   },
 
   async getNextCampaignDataId() {
-    const res = await pool.query("SELECT COUNT(*)::int as cnt FROM campaign_master_leads");
-    const count = (res.rows[0]?.cnt || 0) + 1;
-    return `FMCB${String(count).padStart(5, '0')}`;
+    const res = await pool.query(`
+      SELECT finmantra_id, campaign_data_id FROM campaign_master_leads 
+      WHERE finmantra_id LIKE 'FMCB%' OR campaign_data_id LIKE 'FMCB%'
+    `);
+    let maxSeq = 0;
+    res.rows.forEach(r => {
+      const match1 = (r.finmantra_id || '').match(/FMCB(\d+)/i);
+      const match2 = (r.campaign_data_id || '').match(/FMCB(\d+)/i);
+      if (match1 && match1[1]) maxSeq = Math.max(maxSeq, parseInt(match1[1], 10));
+      if (match2 && match2[1]) maxSeq = Math.max(maxSeq, parseInt(match2[1], 10));
+    });
+    const nextSeq = maxSeq + 1;
+    return `FMCB${String(nextSeq).padStart(5, '0')}`;
   },
 
   async getMasterLeadsFiltered({
@@ -3434,11 +3442,12 @@ const db = {
     // 2. Fallback lookup in main 'leads' table
     try {
       const fallbackRes = await pool.query(
-        `SELECT id, name, phone as contact, email as mail, 
+        `SELECT id, urn, name as full_name, phone as contact, email as mail, 
                 whatsapp_optin, email_optin, 
-                id as finmantra_id, created_at 
+                COALESCE(urn, id::text) as finmantra_id, created_at 
          FROM leads 
          WHERE id::text = $1 
+            OR urn = $1
             OR ($2 != '' AND (phone = $2 OR phone = $3)) 
             OR (email != '' AND LOWER(TRIM(email)) = LOWER($1)) 
          LIMIT 1`,
@@ -3453,8 +3462,8 @@ const db = {
       const mailVal = cleanId.includes('@') ? cleanId : '';
       return {
         id: 'contact_' + (contactVal || mailVal.replace(/[^a-zA-Z0-9]/g, '_')),
-        finmantra_id: 'FM_' + (contactVal || 'USER'),
-        campaign_data_id: 'CD_' + (contactVal || 'USER'),
+        finmantra_id: 'FMCB_' + (contactVal || 'USER'),
+        campaign_data_id: 'FMCB_' + (contactVal || 'USER'),
         name: 'Valued Customer',
         contact: contactVal,
         mail: mailVal,
@@ -3473,9 +3482,18 @@ const db = {
     try {
       await client.query('BEGIN');
 
-      // Get current master leads count to generate sequential IDs
-      const countRes = await client.query("SELECT COUNT(*)::int as cnt FROM campaign_master_leads");
-      let runningIndex = (countRes.rows[0]?.cnt || 0) + 1;
+      // Fetch existing FMCB IDs to accurately sequence next unmapped FMCB numbers
+      const existingFmcbRes = await client.query(`
+        SELECT finmantra_id, campaign_data_id FROM campaign_master_leads 
+        WHERE finmantra_id LIKE 'FMCB%' OR campaign_data_id LIKE 'FMCB%'
+      `);
+      let maxFmcbSeq = 0;
+      existingFmcbRes.rows.forEach(r => {
+        const m1 = (r.finmantra_id || '').match(/FMCB(\d+)/i);
+        const m2 = (r.campaign_data_id || '').match(/FMCB(\d+)/i);
+        if (m1 && m1[1]) maxFmcbSeq = Math.max(maxFmcbSeq, parseInt(m1[1], 10));
+        if (m2 && m2[1]) maxFmcbSeq = Math.max(maxFmcbSeq, parseInt(m2[1], 10));
+      });
 
       let insertedCount = 0;
       let updatedCount = 0;
@@ -3483,21 +3501,58 @@ const db = {
 
       for (let i = 0; i < rawLeads.length; i++) {
         const item = rawLeads[i];
-        const contact = String(item.contact || item.phone || item.mobile || '').trim().replace(/\D/g, '');
+        const rawContactStr = String(item.contact || item.phone || item.mobile || '').trim();
+        const contactDigits = rawContactStr.replace(/\D/g, '');
+        const contact = contactDigits;
         const mail = String(item.mail || item.email || '').trim();
         const name = String(item.name || item.full_name || 'Contact').trim();
         const address = String(item.address || item.city || item.location || '').trim();
 
         if (!contact && !mail) continue; // Must have either contact or email
 
-        // Check if contact or email already exists in master leads
+        let contact10 = '';
+        let contact12 = '';
+        if (contactDigits.length === 10) {
+          contact10 = contactDigits;
+          contact12 = '91' + contactDigits;
+        } else if (contactDigits.length === 12 && contactDigits.startsWith('91')) {
+          contact10 = contactDigits.substring(2);
+          contact12 = contactDigits;
+        } else if (contactDigits.length > 10) {
+          contact10 = contactDigits.slice(-10);
+          contact12 = contactDigits;
+        } else {
+          contact10 = contactDigits;
+          contact12 = contactDigits;
+        }
+        const cleanMail = mail ? mail.toLowerCase().trim() : '';
+
+        // Check if contact or email already exists in campaign_master_leads
         const existingRes = await client.query(
           `SELECT * FROM campaign_master_leads 
-           WHERE (contact != '' AND contact = $1) 
-              OR (mail != '' AND LOWER(TRIM(mail)) = LOWER(TRIM($2))) 
+           WHERE (contact != '' AND (contact = $1 OR contact = $2 OR contact = $3)) 
+              OR (mail != '' AND LOWER(TRIM(mail)) = LOWER(TRIM($4))) 
            LIMIT 1`,
-          [contact || '__NONE__', mail || '__NONE__']
+          [contact || '__NONE__', contact10 || '__NONE__', contact12 || '__NONE__', cleanMail || '__NONE__']
         );
+
+        // Check Leads Repository (leads table) for matching contact or email to pick URN
+        const leadMatchRes = await client.query(
+          `SELECT urn, id, full_name FROM leads 
+           WHERE ($1 != '' AND (
+                  phone = $1 OR phone = $2 OR phone = $3 
+                  OR RIGHT(REGEXP_REPLACE(phone, '\\D', '', 'g'), 10) = $2
+                ))
+              OR ($4 != '' AND LOWER(TRIM(email)) = $4)
+           ORDER BY created_at DESC 
+           LIMIT 1`,
+          [contact || '', contact10 || '', contact12 || '', cleanMail || '']
+        );
+
+        let mappedUrn = null;
+        if (leadMatchRes.rows.length > 0 && leadMatchRes.rows[0].urn && String(leadMatchRes.rows[0].urn).trim() !== '') {
+          mappedUrn = String(leadMatchRes.rows[0].urn).trim();
+        }
 
         const bcId = broadcastInfo.broadcastId || null;
         const bcName = broadcastInfo.broadcastName || null;
@@ -3506,35 +3561,63 @@ const db = {
 
         if (existingRes.rows.length > 0) {
           const existingLead = existingRes.rows[0];
+          // If existing master lead did not have a URN, but we found a match in Leads Repository, upgrade ID to URN
+          let updatedFinmantraId = existingLead.finmantra_id;
+          let updatedCampaignDataId = existingLead.campaign_data_id;
+          
+          if (mappedUrn && (!updatedFinmantraId || !updatedFinmantraId.startsWith('FM') || updatedFinmantraId.startsWith('FMCB') || updatedFinmantraId.startsWith('CD'))) {
+            updatedFinmantraId = mappedUrn;
+            updatedCampaignDataId = mappedUrn;
+          } else if (!updatedFinmantraId) {
+            if (mappedUrn) {
+              updatedFinmantraId = mappedUrn;
+              updatedCampaignDataId = mappedUrn;
+            } else {
+              maxFmcbSeq++;
+              const genId = `FMCB${String(maxFmcbSeq).padStart(5, '0')}`;
+              updatedFinmantraId = genId;
+              updatedCampaignDataId = genId;
+            }
+          }
+
           await client.query(
             `UPDATE campaign_master_leads 
-             SET last_broadcast_id = COALESCE($1, last_broadcast_id),
-                 last_broadcast_name = COALESCE($2, last_broadcast_name),
-                 meta_whatsapp_no = COALESCE($3, meta_whatsapp_no),
-                 sender_email = COALESCE($4, sender_email),
+             SET finmantra_id = COALESCE($1, finmantra_id),
+                 campaign_data_id = COALESCE($2, campaign_data_id),
+                 name = CASE WHEN (name IS NULL OR name = '' OR name = 'Contact') AND $3 != '' THEN $3 ELSE name END,
+                 address = CASE WHEN (address IS NULL OR address = '') AND $4 != '' THEN $4 ELSE address END,
+                 last_broadcast_id = COALESCE($5, last_broadcast_id),
+                 last_broadcast_name = COALESCE($6, last_broadcast_name),
+                 meta_whatsapp_no = COALESCE($7, meta_whatsapp_no),
+                 sender_email = COALESCE($8, sender_email),
                  updated_at = CURRENT_TIMESTAMP
-             WHERE id = $5`,
-            [bcId, bcName, metaWaNo, senderEmail, existingLead.id]
+             WHERE id = $9`,
+            [updatedFinmantraId, updatedCampaignDataId, name, address, bcId, bcName, metaWaNo, senderEmail, existingLead.id]
           );
           updatedCount++;
-          processedLeads.push({ ...existingLead, isNew: false });
+          processedLeads.push({ ...existingLead, finmantra_id: updatedFinmantraId, campaign_data_id: updatedCampaignDataId, isNew: false });
         } else {
           const newId = 'cml_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
-          const finmantraId = `FM${String(runningIndex).padStart(5, '0')}`;
-          const campaignDataId = `CD${String(runningIndex).padStart(5, '0')}`;
-          runningIndex++;
+          let assignedFinmantraId = '';
+          if (mappedUrn) {
+            assignedFinmantraId = mappedUrn;
+          } else {
+            maxFmcbSeq++;
+            assignedFinmantraId = `FMCB${String(maxFmcbSeq).padStart(5, '0')}`;
+          }
+          const assignedCampaignDataId = assignedFinmantraId;
 
           await client.query(
             `INSERT INTO campaign_master_leads 
              (id, finmantra_id, campaign_data_id, name, contact, mail, address, last_broadcast_id, last_broadcast_name, meta_whatsapp_no, sender_email)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-            [newId, finmantraId, campaignDataId, name, contact, mail, address, bcId, bcName, metaWaNo, senderEmail]
+            [newId, assignedFinmantraId, assignedCampaignDataId, name, contact, mail, address, bcId, bcName, metaWaNo, senderEmail]
           );
           insertedCount++;
           processedLeads.push({
             id: newId,
-            finmantra_id: finmantraId,
-            campaign_data_id: campaignDataId,
+            finmantra_id: assignedFinmantraId,
+            campaign_data_id: assignedCampaignDataId,
             name,
             contact,
             mail,

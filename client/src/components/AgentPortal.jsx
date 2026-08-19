@@ -849,7 +849,7 @@ FM2026G2800079,APP10002,DVRPA5807A,IMTIYAZ AHMED,9785197812,SBI,DECLINE,Declined
     const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = isLocal 
       ? `ws://${window.location.hostname}:5000` 
-      : `${wsProto}//${window.location.host}/api/ws`;
+      : `${wsProto}//${window.location.host}/ws`;
     let socket;
     let reconnectDelay = 5000;
 

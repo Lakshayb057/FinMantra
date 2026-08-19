@@ -77,6 +77,9 @@ export default function App() {
   useEffect(() => {
     const handleLocationChange = () => {
       setCurrentPath(window.location.pathname);
+      try {
+        localStorage.setItem('finmantra_last_route', window.location.pathname + window.location.search);
+      } catch (e) {}
     };
 
     window.addEventListener('popstate', handleLocationChange);
@@ -273,7 +276,10 @@ export default function App() {
 
   const navigateTo = (path) => {
     window.history.pushState({}, '', path);
-    setCurrentPath(path);
+    setCurrentPath(window.location.pathname);
+    try {
+      localStorage.setItem('finmantra_last_route', path);
+    } catch (e) {}
   };
 
   // Route Dispatcher

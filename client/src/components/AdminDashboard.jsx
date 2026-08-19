@@ -122,11 +122,115 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   const [adminPasswordInput, setAdminPasswordInput] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
-  // Navigation Tabs: 'leads' | 'cards' | 'agents' | 'locations' | 'settings'
-  const [activeTab, setActiveTab] = useState('leads');
+  const VALID_ADMIN_TABS = ['leads', 'leads_dashboard', 'cards', 'agents', 'locations', 'meta', 'campaigns', 'settings', 'mis'];
+  
+  const getInitialTab = () => {
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      const urlTab = searchParams.get('tab');
+      if (urlTab && VALID_ADMIN_TABS.includes(urlTab)) {
+        return urlTab;
+      }
+      const savedTab = localStorage.getItem('finmantra_admin_tab');
+      if (savedTab && VALID_ADMIN_TABS.includes(savedTab)) {
+        return savedTab;
+      }
+    } catch (e) {}
+    return 'leads';
+  };
+
+  const getInitialSettingsSubTab = () => {
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      const urlSubTab = searchParams.get('subtab');
+      if (urlSubTab) return urlSubTab;
+      const saved = localStorage.getItem('finmantra_admin_settings_subtab');
+      if (saved) return saved;
+    } catch (e) {}
+    return 'general';
+  };
+
+  // Navigation Tabs: 'leads' | 'leads_dashboard' | 'cards' | 'agents' | 'locations' | 'meta' | 'campaigns' | 'settings'
+  const [activeTab, setActiveTabState] = useState(getInitialTab);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
-  const [activeSettingsSubTab, setActiveSettingsSubTab] = useState('general');
+  const [activeSettingsSubTab, setActiveSettingsSubTabState] = useState(getInitialSettingsSubTab);
   const [showSettingsFlyout, setShowSettingsFlyout] = useState(false);
+  const [wsTimestamp, setWsTimestamp] = useState(0);
+
+  // Tab changer with browser history pushing
+  const setActiveTab = (newTab, pushHistory = true) => {
+    setActiveTabState(newTab);
+    try {
+      localStorage.setItem('finmantra_admin_tab', newTab);
+      const params = new URLSearchParams(window.location.search);
+      params.set('tab', newTab);
+      if (newTab !== 'settings') {
+        params.delete('subtab');
+      }
+      if (newTab !== 'campaigns') {
+        params.delete('campaign_tab');
+      }
+      const newUrl = `${window.location.pathname}?${params.toString()}`;
+      if (pushHistory) {
+        window.history.pushState({ tab: newTab }, '', newUrl);
+      }
+      localStorage.setItem('finmantra_last_route', newUrl);
+    } catch (e) {}
+  };
+
+  const setActiveSettingsSubTab = (newSubTab, pushHistory = true) => {
+    setActiveSettingsSubTabState(newSubTab);
+    try {
+      localStorage.setItem('finmantra_admin_settings_subtab', newSubTab);
+      const params = new URLSearchParams(window.location.search);
+      params.set('tab', 'settings');
+      params.set('subtab', newSubTab);
+      const newUrl = `${window.location.pathname}?${params.toString()}`;
+      if (pushHistory) {
+        window.history.pushState({ tab: 'settings', subtab: newSubTab }, '', newUrl);
+      }
+      localStorage.setItem('finmantra_last_route', newUrl);
+    } catch (e) {}
+  };
+
+  // Browser back / forward button listener (popstate)
+  useEffect(() => {
+    const handlePopState = () => {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const urlTab = params.get('tab') || 'leads';
+        const urlSubTab = params.get('subtab') || 'general';
+        
+        if (VALID_ADMIN_TABS.includes(urlTab)) {
+          setActiveTabState(urlTab);
+          localStorage.setItem('finmantra_admin_tab', urlTab);
+        }
+        if (urlTab === 'settings' && urlSubTab) {
+          setActiveSettingsSubTabState(urlSubTab);
+          localStorage.setItem('finmantra_admin_settings_subtab', urlSubTab);
+        }
+      } catch (e) {}
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // Ensure URL reflects active tab on initial mount if query param not present
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (!params.get('tab')) {
+        params.set('tab', activeTab);
+        if (activeTab === 'settings' && activeSettingsSubTab) {
+          params.set('subtab', activeSettingsSubTab);
+        }
+        const newUrl = `${window.location.pathname}?${params.toString()}`;
+        window.history.replaceState({ tab: activeTab }, '', newUrl);
+        localStorage.setItem('finmantra_last_route', newUrl);
+      }
+    } catch (e) {}
+  }, []);
 
   // Master Data States
   const [leads, setLeads] = useState([]);
@@ -743,6 +847,39 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
     }
   }, [token]);
 
+  // Helper fetchers for real-time WebSocket updates
+  const fetchCardsData = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/admin/cards`, { headers: { Authorization: `Bearer ${token}` } });
+      const data = await res.json();
+      if (Array.isArray(data)) setCards(data);
+    } catch (e) {}
+  }, [API_URL, token]);
+
+  const fetchAgentsData = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/agents`, { headers: { Authorization: `Bearer ${token}` } });
+      const data = await res.json();
+      if (Array.isArray(data)) setAgents(data);
+    } catch (e) {}
+  }, [API_URL, token]);
+
+  const fetchLocationsData = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/locations`);
+      const data = await res.json();
+      if (Array.isArray(data)) setLocations(data);
+    } catch (e) {}
+  }, [API_URL]);
+
+  const fetchSettingsData = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/settings`);
+      const data = await res.json();
+      if (data && typeof data === 'object') setSettings(data);
+    } catch (e) {}
+  }, [API_URL]);
+
   // Real-time synchronization via WebSocket (only after verified auth)
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -777,7 +914,17 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
             } else if (message.type === 'LEAD_UPDATED' || message.type === 'LEADS_UPDATED' || message.type === 'MIS_UPDATED') {
               fetchLeads(currentPage, leadsPerPage);
               if (activeTab === 'leads_dashboard' || activeTab === 'mis') fetchMISStats();
-            } else if (message.type === 'NOTIFICATION_ADDED' || message.type === 'NOTIFICATION_UPDATED') {
+            } else if (message.type === 'CARDS_UPDATED') {
+              fetchCardsData();
+            } else if (message.type === 'AGENTS_UPDATED') {
+              fetchAgentsData();
+            } else if (message.type === 'LOCATIONS_UPDATED') {
+              fetchLocationsData();
+            } else if (message.type === 'SETTINGS_UPDATED') {
+              fetchSettingsData();
+            } else if (message.type === 'BROADCAST_UPDATED' || message.type === 'CAMPAIGNS_UPDATED' || message.type === 'MASTER_DATA_UPDATED') {
+              setWsTimestamp(Date.now());
+            } else if (message.type === 'NOTIFICATION_ADDED' || message.type === 'NOTIFICATION_UPDATED' || message.type === 'NOTIFICATION_CREATED') {
               fetchNotifications();
             } else if (message.type === 'WA_STATUS_UPDATE') {
               setBaileysStatus(message.data);
@@ -9110,6 +9257,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                 API_URL={API_URL}
                 token={token}
                 showToast={showToast}
+                wsTimestamp={wsTimestamp}
               />
             </div>
           )}

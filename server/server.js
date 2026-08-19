@@ -6797,6 +6797,9 @@ async function checkAndRunScheduledBroadcasts() {
         await db.runQuery('UPDATE campaign_broadcasts SET delivered_count = $2 WHERE id = $1', [b.id, deliveredCount]);
       } catch (e) {}
       console.log(`[Campaign Scheduler] Completed broadcast: "${b.name}". Sent: ${sentCount}, Failed: ${failedCount}`);
+      broadcast({ type: 'BROADCAST_UPDATED' });
+      broadcast({ type: 'MASTER_DATA_UPDATED' });
+      broadcast({ type: 'CAMPAIGNS_UPDATED' });
 
       // Create system notification
       try {
@@ -8102,6 +8105,7 @@ app.get('/api/campaigns/master/leads/export', authenticateToken, async (req, res
 app.delete('/api/campaigns/master/leads/:leadId', authenticateToken, async (req, res) => {
   try {
     const deleted = await db.deleteMasterLead(req.params.leadId);
+    broadcast({ type: 'MASTER_DATA_UPDATED' });
     res.json({ success: true, lead: deleted });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -8116,6 +8120,7 @@ app.post('/api/campaigns/master/leads/delete-bulk', authenticateToken, async (re
       return res.status(400).json({ success: false, error: 'No contact IDs selected for deletion.' });
     }
     const count = await db.deleteMasterLeadsBulk(leadIds);
+    broadcast({ type: 'MASTER_DATA_UPDATED' });
     res.json({ success: true, deletedCount: count });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -8256,6 +8261,10 @@ app.post('/api/campaigns/broadcasts/direct', authenticateToken, upload.single('f
       checkAndRunScheduledBroadcasts().catch(err => console.error('[Direct broadcast immediate dispatch error]', err));
     }
 
+    broadcast({ type: 'BROADCAST_UPDATED' });
+    broadcast({ type: 'MASTER_DATA_UPDATED' });
+    broadcast({ type: 'CAMPAIGNS_UPDATED' });
+
     res.json({
       success: true,
       broadcast: { ...newBroadcast, meta_phone_number_id: metaPhoneNumberId, meta_phone_number: metaPhoneNumber, sender_email: senderEmail },
@@ -8296,6 +8305,7 @@ app.post('/api/campaigns', authenticateToken, async (req, res) => {
 
     const id = 'camp_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
     const newCamp = await db.createCampaign(id, name, description);
+    broadcast({ type: 'CAMPAIGNS_UPDATED' });
     res.json({ success: true, campaign: newCamp });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -8306,6 +8316,7 @@ app.post('/api/campaigns', authenticateToken, async (req, res) => {
 app.delete('/api/campaigns/:id', authenticateToken, async (req, res) => {
   try {
     const deleted = await db.deleteCampaign(req.params.id);
+    broadcast({ type: 'CAMPAIGNS_UPDATED' });
     res.json({ success: true, campaign: deleted });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -8363,6 +8374,8 @@ app.post('/api/campaigns/:id/broadcasts/:broadcastId/trigger', authenticateToken
     );
 
     checkAndRunScheduledBroadcasts().catch(err => console.error('[Manual trigger background run error]', err));
+
+    broadcast({ type: 'BROADCAST_UPDATED' });
 
     res.json({ success: true, message: 'Broadcast triggered successfully! Processing started in the background.' });
   } catch (err) {
@@ -8495,6 +8508,7 @@ app.post('/api/campaigns/master-leads/:id/toggle-optin', authenticateToken, asyn
     if (channel === 'email') payload.email_optin = Boolean(optin);
 
     const updated = await db.updateMasterLeadOptin(id, payload);
+    broadcast({ type: 'MASTER_DATA_UPDATED' });
     res.json({ success: true, lead: updated });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -8695,6 +8709,7 @@ app.put(['/api/campaigns/:id/broadcasts/:broadcastId', '/api/campaigns/broadcast
       smtpAccountId: smtpAccountId || smtp_account_id
     });
     
+    broadcast({ type: 'BROADCAST_UPDATED' });
     res.json({ success: true, broadcast: updated });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -8705,6 +8720,7 @@ app.put(['/api/campaigns/:id/broadcasts/:broadcastId', '/api/campaigns/broadcast
 app.delete(['/api/campaigns/:id/broadcasts/:broadcastId', '/api/campaigns/broadcasts/:broadcastId'], authenticateToken, async (req, res) => {
   try {
     const deleted = await db.deleteCampaignBroadcast(req.params.broadcastId);
+    broadcast({ type: 'BROADCAST_UPDATED' });
     res.json({ success: true, broadcast: deleted });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
