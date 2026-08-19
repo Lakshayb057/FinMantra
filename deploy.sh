@@ -18,15 +18,21 @@ sudo npm install pm2 -g
 echo "[3/9] Installing Nginx..."
 sudo apt install nginx -y
 
-# Step 4: Clone project
-echo "[4/9] Cloning FinMantra..."
+# Step 4: Clone or Update FinMantra
+echo "[4/9] Updating FinMantra from main branch..."
 cd /home/ubuntu
 if [ -d "finmantra" ]; then
-    echo "Directory exists, pulling latest..."
-    cd finmantra && git pull
+    echo "Directory exists. Resetting and pulling latest from main branch..."
+    cd finmantra
+    git reset --hard HEAD
+    git clean -fd
+    git fetch origin
+    git checkout main
+    git pull origin main
 else
     git clone https://github.com/Lakshayb057/FinMantra.git finmantra
     cd finmantra
+    git checkout main
 fi
 
 # Step 5: Install backend dependencies
