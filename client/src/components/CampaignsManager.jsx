@@ -18,6 +18,13 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
       if (saved && ['communication_dashboard', 'master_data', 'broadcast', 'templates', 'settings', 'guide'].includes(saved)) {
         return saved;
       }
+      const lastRoute = localStorage.getItem('finmantra_last_route');
+      if (lastRoute && lastRoute.includes('campaign_tab=')) {
+        const queryPart = lastRoute.split('?')[1] || '';
+        const p = new URLSearchParams(queryPart);
+        const ct = p.get('campaign_tab');
+        if (ct && ['communication_dashboard', 'master_data', 'broadcast', 'templates', 'settings', 'guide'].includes(ct)) return ct;
+      }
     } catch (e) {}
     return 'communication_dashboard';
   };

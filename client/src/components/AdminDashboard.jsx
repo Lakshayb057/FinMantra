@@ -126,14 +126,29 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   
   const getInitialTab = () => {
     try {
+      // 1. Search Query param (?tab=cards)
       const searchParams = new URLSearchParams(window.location.search);
       const urlTab = searchParams.get('tab');
       if (urlTab && VALID_ADMIN_TABS.includes(urlTab)) {
         return urlTab;
       }
+      // 2. URL Hash (#cards)
+      const hash = window.location.hash ? window.location.hash.replace('#', '').trim() : '';
+      if (hash && VALID_ADMIN_TABS.includes(hash)) {
+        return hash;
+      }
+      // 3. LocalStorage finmantra_admin_tab
       const savedTab = localStorage.getItem('finmantra_admin_tab');
       if (savedTab && VALID_ADMIN_TABS.includes(savedTab)) {
         return savedTab;
+      }
+      // 4. LocalStorage finmantra_last_route (?tab=...)
+      const lastRoute = localStorage.getItem('finmantra_last_route');
+      if (lastRoute && lastRoute.includes('tab=')) {
+        const queryPart = lastRoute.split('?')[1] || '';
+        const p = new URLSearchParams(queryPart);
+        const t = p.get('tab');
+        if (t && VALID_ADMIN_TABS.includes(t)) return t;
       }
     } catch (e) {}
     return 'leads';
@@ -146,6 +161,13 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       if (urlSubTab) return urlSubTab;
       const saved = localStorage.getItem('finmantra_admin_settings_subtab');
       if (saved) return saved;
+      const lastRoute = localStorage.getItem('finmantra_last_route');
+      if (lastRoute && lastRoute.includes('subtab=')) {
+        const queryPart = lastRoute.split('?')[1] || '';
+        const p = new URLSearchParams(queryPart);
+        const st = p.get('subtab');
+        if (st) return st;
+      }
     } catch (e) {}
     return 'general';
   };
