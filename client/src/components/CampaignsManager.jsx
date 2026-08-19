@@ -980,18 +980,18 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
 
   // Open Create New Broadcast Modal with auto-synced DB defaults
   const handleOpenCreateBroadcast = (initialChannel = 'whatsapp', extraState = {}) => {
-    const defaultAcc = smtpAccounts.find(a => a.is_default) || smtpAccounts[0];
-    const defaultPhone = phoneNumbers.find(p => p.is_default) || phoneNumbers[0];
-    const defaultFromEmail = defaultAcc ? defaultAcc.from_email : (smtpSettings.fromEmail || '');
+    const defaultAcc = (smtpAccounts && smtpAccounts.find(a => a.is_default)) || (smtpAccounts && smtpAccounts[0]) || null;
+    const defaultPhone = (metaPhoneNumbers && metaPhoneNumbers.find(p => p.is_default)) || (metaPhoneNumbers && metaPhoneNumbers[0]) || null;
+    const defaultFromEmail = defaultAcc?.from_email || smtpSettings?.fromEmail || '';
 
     setEditingBroadcastId(null);
     setBroadcastForm({
       name: '',
       channel: initialChannel,
-      meta_phone_number_id: defaultPhone ? defaultPhone.id : '',
-      meta_phone_number: defaultPhone ? defaultPhone.display_phone_number : '',
+      meta_phone_number_id: defaultPhone?.id || '',
+      meta_phone_number: defaultPhone?.display_phone_number || '',
       sender_email: defaultFromEmail,
-      smtp_account_id: defaultAcc ? defaultAcc.id : '',
+      smtp_account_id: defaultAcc?.id || '',
       whatsapp_template: '',
       whatsapp_message: '',
       email_subject: '',
