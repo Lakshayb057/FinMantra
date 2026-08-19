@@ -275,8 +275,6 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
   const [filterCampaign, setFilterCampaign] = useState('');
   const [filterTerm, setFilterTerm] = useState('');
   const [filterInfo, setFilterInfo] = useState('');
-  const [filterCompanyCategory, setFilterCompanyCategory] = useState('');
-  const [filterLtfEligible, setFilterLtfEligible] = useState('');
   const [utmOptions, setUtmOptions] = useState({ sources: [], utm_sources: [], campaigns: [], terms: [], infos: [] });
 
   // Pagination
@@ -1057,9 +1055,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
         endDate: filterEndDate,
         campaign: filterCampaign,
         term: filterTerm,
-        info: filterInfo,
-        companyCategory: filterCompanyCategory,
-        ltfEligible: filterLtfEligible
+        info: filterInfo
       });
       const res = await fetch(`${API_URL}/leads?${queryParams.toString()}`, { headers });
       if (res.ok) {
@@ -1571,7 +1567,7 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
       fetchLeads(currentPage, leadsPerPage);
     }, searchTerm ? 400 : 0); // Debounce search, instant for other filters
     return () => clearTimeout(timer);
-  }, [currentPage, leadsPerPage, searchTerm, filterCard, filterSource, filterUtmSource, filterStartDate, filterEndDate, filterCampaign, filterTerm, filterInfo, filterCompanyCategory, filterLtfEligible, isAuthenticated, token]);
+  }, [currentPage, leadsPerPage, searchTerm, filterCard, filterSource, filterUtmSource, filterStartDate, filterEndDate, filterCampaign, filterTerm, filterInfo, isAuthenticated, token]);
 
   const handleSyncAllData = async () => {
     if (!token) return;
@@ -1796,8 +1792,6 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
     if (filterCampaign) queryParams.push(`campaign=${encodeURIComponent(filterCampaign)}`);
     if (filterTerm) queryParams.push(`term=${encodeURIComponent(filterTerm)}`);
     if (filterInfo) queryParams.push(`info=${encodeURIComponent(filterInfo)}`);
-    if (filterCompanyCategory) queryParams.push(`companyCategory=${encodeURIComponent(filterCompanyCategory)}`);
-    if (filterLtfEligible) queryParams.push(`ltfEligible=${encodeURIComponent(filterLtfEligible)}`);
     const queryString = queryParams.length > 0 ? `?${queryParams.join('&')}` : '';
 
     // Fetch filtered leads, create Blob, and trigger browser download:
@@ -4512,22 +4506,11 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                     <option value="">UTM Source</option>
                     {(availableUtmSources || []).map((u, i) => <option key={i} value={u}>{u}</option>)}
                   </select>
-                  <select className="form-select" value={filterCompanyCategory} onChange={(e) => setFilterCompanyCategory(e.target.value)} style={{ flex: '1 1 140px', minWidth: '125px', height: '36px', fontSize: '0.8rem', textOverflow: 'ellipsis' }}>
-                    <option value="">Company Tier</option>
-                    <option value="S">Category S</option>
-                    <option value="A">Category A</option>
-                    <option value="B">Category B</option>
-                    <option value="C">Category C</option>
-                  </select>
-                  <select className="form-select" value={filterLtfEligible} onChange={(e) => setFilterLtfEligible(e.target.value)} style={{ flex: '1 1 140px', minWidth: '125px', height: '36px', fontSize: '0.8rem', textOverflow: 'ellipsis' }}>
-                    <option value="">LTF Status</option>
-                    <option value="true">LTF Eligible Only</option>
-                  </select>
                   <button 
-                    onClick={() => { setSearchTerm(''); setFilterCard(''); setFilterSource(''); setFilterUtmSource(''); setFilterStartDate(''); setFilterEndDate(''); setFilterCampaign(''); setFilterTerm(''); setFilterInfo(''); setFilterCompanyCategory(''); setFilterLtfEligible(''); }}
+                    onClick={() => { setSearchTerm(''); setFilterCard(''); setFilterSource(''); setFilterUtmSource(''); setFilterStartDate(''); setFilterEndDate(''); setFilterCampaign(''); setFilterTerm(''); setFilterInfo(''); }}
                     className="btn-secondary"
-                    style={{ height: '36px', fontSize: '0.75rem', whiteSpace: 'nowrap', padding: '0 0.85rem', opacity: (searchTerm || filterCard || filterSource || filterUtmSource || filterStartDate || filterEndDate || filterCampaign || filterTerm || filterInfo || filterCompanyCategory || filterLtfEligible) ? 1 : 0.5 }}
-                    disabled={!(searchTerm || filterCard || filterSource || filterUtmSource || filterStartDate || filterEndDate || filterCampaign || filterTerm || filterInfo || filterCompanyCategory || filterLtfEligible)}
+                    style={{ height: '36px', fontSize: '0.75rem', whiteSpace: 'nowrap', padding: '0 0.85rem', opacity: (searchTerm || filterCard || filterSource || filterUtmSource || filterStartDate || filterEndDate || filterCampaign || filterTerm || filterInfo) ? 1 : 0.5 }}
+                    disabled={!(searchTerm || filterCard || filterSource || filterUtmSource || filterStartDate || filterEndDate || filterCampaign || filterTerm || filterInfo)}
                   >✕ Clear Filters</button>
                 </div>
 
