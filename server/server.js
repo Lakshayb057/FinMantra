@@ -9024,7 +9024,7 @@ app.get('/api/contact-center/details', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Contact profile not found in master records.' });
     }
     
-    let broadcast = null;
+    let bcRecord = null;
     let effectiveBcId = broadcastId;
 
     // If bcId was not explicitly passed, lookup the exact broadcast that messaged this contact
@@ -9047,10 +9047,10 @@ app.get('/api/contact-center/details', async (req, res) => {
     }
 
     if (effectiveBcId) {
-      broadcast = await db.getCampaignBroadcastById(effectiveBcId);
+      bcRecord = await db.getCampaignBroadcastById(effectiveBcId);
       // Record click & CTR metrics for this exact broadcast
       await db.runQuery('UPDATE campaign_broadcasts SET clicked_count = COALESCE(clicked_count, 0) + 1 WHERE id = $1', [effectiveBcId]).catch(() => {});
-      const clickChannel = channel === 'email' || broadcast?.channel === 'email' ? 'email' : 'whatsapp';
+      const clickChannel = channel === 'email' || bcRecord?.channel === 'email' ? 'email' : 'whatsapp';
       await db.incrementMasterLeadMetric(lead.id, clickChannel, 'clicked').catch(() => {});
       broadcast({ type: 'BROADCAST_UPDATED' });
     }
@@ -9067,7 +9067,7 @@ app.get('/api/contact-center/details', async (req, res) => {
         whatsapp_optin: lead.whatsapp_optin !== false,
         email_optin: lead.email_optin !== false
       },
-      broadcast: broadcast ? { id: broadcast.id, name: broadcast.name, channel: broadcast.channel } : null
+      broadcast: bcRecord ? { id: bcRecord.id, name: bcRecord.name, channel: bcRecord.channel } : null
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
