@@ -74,6 +74,14 @@ app.use(cors());
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
+// Serve static uploads directory for campaign images, videos, and documents
+const uploadsPath = path.join(__dirname, 'public', 'uploads');
+if (!fs.existsSync(uploadsPath)) {
+  try { fs.mkdirSync(uploadsPath, { recursive: true }); } catch (e) {}
+}
+app.use('/uploads', express.static(uploadsPath));
+app.use('/api/uploads', express.static(uploadsPath));
+
 class MemoryRateLimiter {
   constructor(windowMs, maxRequests) {
     this.windowMs = windowMs;
@@ -7663,6 +7671,74 @@ const registerMetaTemplate = async ({ apiKey, wabaId, phoneId, name, category, l
 };
 
 // --- CAMPAIGN REUSABLE TEMPLATES ROUTES ---
+
+// Direct Media Upload for Template Headers (Images, Videos, Documents)
+app.post('/api/campaigns/upload-media', authenticateToken, upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: 'No media file provided.' });
+    }
+
+    const uploadsDir = path.join(__dirname, 'public', 'uploads');
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+
+    const clientPublicUploads = path.join(__dirname, '..', 'client', 'public', 'uploads');
+    const clientDistUploads = path.join(__dirname, '..', 'client', 'dist', 'uploads');
+    [clientPublicUploads, clientDistUploads].forEach(dir => {
+      try {
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      } catch (e) {}
+    });
+
+    const fileExt = path.extname(req.file.originalname) || '.jpg';
+    const cleanOriginalName = path.basename(req.file.originalname, fileExt).replace(/[^a-zA-Z0-9_-]/g, '_');
+    const filename = `header_${Date.now()}_${cleanOriginalName}${fileExt}`;
+    const filePath = path.join(uploadsDir, filename);
+
+    fs.writeFileSync(filePath, req.file.buffer);
+
+    [clientPublicUploads, clientDistUploads].forEach(dir => {
+      try {
+        fs.writeFileSync(path.join(dir, filename), req.file.buffer);
+      } catch (e) {}
+    });
+
+    try {
+      const prodWwwUploads = '/var/www/finmantra/uploads';
+      if (fs.existsSync('/var/www/finmantra')) {
+        if (!fs.existsSync(prodWwwUploads)) fs.mkdirSync(prodWwwUploads, { recursive: true });
+        fs.writeFileSync(path.join(prodWwwUploads, filename), req.file.buffer);
+      }
+    } catch (e) {}
+
+    const host = req.get('host') || 'localhost:5000';
+    const protocol = req.protocol === 'https' || req.get('x-forwarded-proto') === 'https' ? 'https' : 'http';
+    const settings = await db.getSettings().catch(() => ({}));
+    const customSiteUrl = process.env.PUBLIC_SITE_URL || settings.public_site_url;
+
+    let publicUrl = '';
+    if (customSiteUrl) {
+      publicUrl = `${customSiteUrl.replace(/\/+$/, '')}/uploads/${filename}`;
+    } else if (host.includes('thefinmantra.com') || host.includes('finmantra.org')) {
+      publicUrl = `https://${host}/uploads/${filename}`;
+    } else {
+      publicUrl = `${protocol}://${host}/uploads/${filename}`;
+    }
+
+    res.json({
+      success: true,
+      url: publicUrl,
+      filename: req.file.originalname,
+      size: req.file.size,
+      mimetype: req.file.mimetype
+    });
+  } catch (err) {
+    console.error('[Template Media Upload Error]:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 // Sync and fetch template approval status from Meta
 app.get('/api/campaigns/templates/meta-sync', authenticateToken, async (req, res) => {

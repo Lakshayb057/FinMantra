@@ -115,6 +115,9 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
     }
   });
   const [isCreatingTemplate, setIsCreatingTemplate] = useState(false);
+  const [isUploadingTemplateMedia, setIsUploadingTemplateMedia] = useState(false);
+  const [templateMediaDragActive, setTemplateMediaDragActive] = useState(false);
+  const [showManualMediaUrl, setShowManualMediaUrl] = useState(false);
 
   // Master Data Center state
   const [masterContacts, setMasterContacts] = useState([]);
@@ -678,6 +681,42 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
       buttons: parsedBtns
     });
     setShowCreateTemplateModal(true);
+  };
+
+  const handleUploadTemplateMedia = async (file) => {
+    if (!file) return;
+
+    if (file.size > 25 * 1024 * 1024) {
+      showToast('File size exceeds 25MB limit.', 'error');
+      return;
+    }
+
+    setIsUploadingTemplateMedia(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await fetch(`${API_URL}/campaigns/upload-media`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success && data.url) {
+        setNewTemplateForm(p => ({ ...p, mediaUrl: data.url }));
+        showToast('Header media uploaded and linked successfully!', 'success');
+      } else {
+        showToast(data.error || 'Failed to upload media file.', 'error');
+      }
+    } catch (err) {
+      showToast('Network error uploading media file.', 'error');
+    } finally {
+      setIsUploadingTemplateMedia(false);
+      setTemplateMediaDragActive(false);
+    }
   };
 
   const handleTestSpecificSmtp = async (account) => {
@@ -4163,14 +4202,163 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
                     )}
 
                     {['IMAGE', 'VIDEO', 'DOCUMENT'].includes(newTemplateForm.headerFormat) && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                        <input
-                          type="text"
-                          placeholder={`Sample ${newTemplateForm.headerFormat.toLowerCase()} URL`}
-                          value={newTemplateForm.mediaUrl}
-                          onChange={(e) => setNewTemplateForm({ ...newTemplateForm, mediaUrl: e.target.value })}
-                          style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.84rem', boxSizing: 'border-box' }}
-                        />
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                        {/* Drag & Drop File Upload Box */}
+                        <div
+                          onDragOver={(e) => { e.preventDefault(); setTemplateMediaDragActive(true); }}
+                          onDragLeave={() => setTemplateMediaDragActive(false)}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            setTemplateMediaDragActive(false);
+                            if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                              handleUploadTemplateMedia(e.dataTransfer.files[0]);
+                            }
+                          }}
+                          onClick={() => {
+                            const fileInput = document.getElementById('templateHeaderFileInput');
+                            if (fileInput) fileInput.click();
+                          }}
+                          style={{
+                            border: templateMediaDragActive ? '2px dashed var(--gold-deep)' : '2px dashed var(--line)',
+                            background: templateMediaDragActive ? 'rgba(224, 168, 46, 0.12)' : 'var(--paper-2)',
+                            borderRadius: '10px',
+                            padding: '1.25rem 1rem',
+                            textAlign: 'center',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '0.4rem'
+                          }}
+                        >
+                          <input
+                            id="templateHeaderFileInput"
+                            type="file"
+                            accept={newTemplateForm.headerFormat === 'IMAGE' ? 'image/jpeg,image/png,image/jpg,image/webp' : newTemplateForm.headerFormat === 'VIDEO' ? 'video/mp4,video/quicktime' : '.pdf,.doc,.docx'}
+                            onChange={(e) => {
+                              if (e.target.files && e.target.files[0]) {
+                                handleUploadTemplateMedia(e.target.files[0]);
+                              }
+                            }}
+                            style={{ display: 'none' }}
+                          />
+
+                          {isUploadingTemplateMedia ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', padding: '0.5rem' }}>
+                              <RefreshCw size={24} className="spin-slow" style={{ color: 'var(--gold-deep)' }} />
+                              <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--ink)' }}>Uploading media & linking with Meta...</div>
+                            </div>
+                          ) : (
+                            <>
+                              <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'rgba(224, 168, 46, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--gold-deep)' }}>
+                                <Upload size={20} />
+                              </div>
+                              <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--ink)' }}>
+                                Drag &amp; Drop {newTemplateForm.headerFormat.toLowerCase()} here, or <span style={{ color: 'var(--gold-deep)', textDecoration: 'underline' }}>Browse File</span>
+                              </div>
+                              <div style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>
+                                Supports {newTemplateForm.headerFormat === 'IMAGE' ? 'JPG, PNG, WebP (Max 25MB)' : newTemplateForm.headerFormat === 'VIDEO' ? 'MP4 (Max 25MB)' : 'PDF (Max 25MB)'}
+                              </div>
+                            </>
+                          )}
+                        </div>
+
+                        {/* Uploaded Media Preview & Status */}
+                        {newTemplateForm.mediaUrl && (
+                          <div style={{
+                            background: 'var(--paper)',
+                            border: '1px solid var(--line)',
+                            borderRadius: '8px',
+                            padding: '0.65rem 0.85rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: '0.75rem'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', minWidth: 0 }}>
+                              {newTemplateForm.headerFormat === 'IMAGE' ? (
+                                <img
+                                  src={newTemplateForm.mediaUrl}
+                                  alt="Thumbnail"
+                                  style={{ width: '36px', height: '36px', borderRadius: '6px', objectFit: 'cover', border: '1px solid var(--line)' }}
+                                  onError={(e) => { e.target.style.display = 'none'; }}
+                                />
+                              ) : (
+                                <div style={{ width: '36px', height: '36px', borderRadius: '6px', background: 'rgba(224, 168, 46, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--gold-deep)' }}>
+                                  <FileText size={18} />
+                                </div>
+                              )}
+                              <div style={{ minWidth: 0 }}>
+                                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#16a34a', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                  <CheckCircle2 size={13} /> Ready &amp; Connected
+                                </div>
+                                <div style={{ fontSize: '0.7rem', color: 'var(--muted)', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '220px' }}>
+                                  {newTemplateForm.mediaUrl}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '0.4rem', flexShrink: 0 }}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const fileInput = document.getElementById('templateHeaderFileInput');
+                                  if (fileInput) fileInput.click();
+                                }}
+                                style={{
+                                  padding: '0.3rem 0.6rem',
+                                  borderRadius: '6px',
+                                  border: '1px solid var(--line)',
+                                  background: 'var(--paper-2)',
+                                  color: 'var(--ink)',
+                                  fontSize: '0.74rem',
+                                  fontWeight: 600,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                Change
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setNewTemplateForm(p => ({ ...p, mediaUrl: '' }))}
+                                style={{
+                                  padding: '0.3rem 0.5rem',
+                                  borderRadius: '6px',
+                                  border: '1px solid rgba(239,68,68,0.3)',
+                                  background: 'rgba(239,68,68,0.08)',
+                                  color: '#ef4444',
+                                  fontSize: '0.74rem',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Optional Manual URL Entry Toggle */}
+                        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                          <button
+                            type="button"
+                            onClick={() => setShowManualMediaUrl(!showManualMediaUrl)}
+                            style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: '0.72rem', cursor: 'pointer', textDecoration: 'underline' }}
+                          >
+                            {showManualMediaUrl ? 'Hide manual URL input' : 'Or enter public URL manually'}
+                          </button>
+                        </div>
+
+                        {showManualMediaUrl && (
+                          <input
+                            type="text"
+                            placeholder={`https://thefinmantra.com/.../${newTemplateForm.headerFormat.toLowerCase()}`}
+                            value={newTemplateForm.mediaUrl}
+                            onChange={(e) => setNewTemplateForm({ ...newTemplateForm, mediaUrl: e.target.value })}
+                            style={{ width: '100%', padding: '0.45rem 0.75rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper-2)', color: 'var(--ink)', fontSize: '0.8rem', boxSizing: 'border-box' }}
+                          />
+                        )}
                       </div>
                     )}
                   </div>
@@ -4531,6 +4719,34 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
                         width: '100%',
                         boxSizing: 'border-box'
                       }}>
+                        {newTemplateForm.headerFormat === 'IMAGE' && newTemplateForm.mediaUrl && (
+                          <div style={{ width: '100%', maxHeight: '180px', overflow: 'hidden', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <img
+                              src={newTemplateForm.mediaUrl}
+                              alt="Header Preview"
+                              style={{ width: '100%', maxHeight: '180px', objectFit: 'cover', display: 'block' }}
+                              onError={(e) => { e.target.style.display = 'none'; }}
+                            />
+                          </div>
+                        )}
+
+                        {newTemplateForm.headerFormat === 'VIDEO' && (
+                          <div style={{ width: '100%', height: '130px', background: '#111b21', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#8696a0', gap: '0.4rem', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                            <Play size={30} style={{ color: '#25D366' }} />
+                            <span style={{ fontSize: '0.72rem' }}>Video Header Attached</span>
+                          </div>
+                        )}
+
+                        {newTemplateForm.headerFormat === 'DOCUMENT' && (
+                          <div style={{ padding: '0.75rem', background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', gap: '0.6rem', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                            <FileText size={26} style={{ color: '#ef4444' }} />
+                            <div>
+                              <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#e9edef' }}>Document Header.pdf</div>
+                              <div style={{ fontSize: '0.66rem', color: '#8696a0' }}>PDF Document</div>
+                            </div>
+                          </div>
+                        )}
+
                         {newTemplateForm.headerFormat === 'TEXT' && newTemplateForm.headerText && (
                           <div style={{ padding: '0.65rem 0.75rem 0.25rem 0.75rem', fontWeight: 800, fontSize: '0.92rem', color: '#e9edef' }}>
                             {newTemplateForm.headerText.replace(/\{\{1\}\}/g, newTemplateForm.headerSample || '{{1}}')}
