@@ -9052,7 +9052,7 @@ app.get('/api/contact-center/details', async (req, res) => {
       await db.runQuery('UPDATE campaign_broadcasts SET clicked_count = COALESCE(clicked_count, 0) + 1 WHERE id = $1', [effectiveBcId]).catch(() => {});
       const clickChannel = channel === 'email' || broadcast?.channel === 'email' ? 'email' : 'whatsapp';
       await db.incrementMasterLeadMetric(lead.id, clickChannel, 'clicked').catch(() => {});
-      broadcast_ws({ type: 'BROADCAST_UPDATED' });
+      broadcast({ type: 'BROADCAST_UPDATED' });
     }
 
     res.json({
@@ -9109,8 +9109,8 @@ app.post(['/api/contact-center/optout', '/api/c/unsubscribe'], async (req, res) 
       await db.runQuery('UPDATE campaign_broadcasts SET clicked_count = COALESCE(clicked_count, 0) + 1 WHERE id = $1', [broadcastId]).catch(() => {});
     }
 
-    broadcast_ws({ type: 'MASTER_DATA_UPDATED' });
-    broadcast_ws({ type: 'BROADCAST_UPDATED' });
+    broadcast({ type: 'MASTER_DATA_UPDATED' });
+    broadcast({ type: 'BROADCAST_UPDATED' });
 
     res.json({
       success: true,
@@ -9187,7 +9187,7 @@ app.get(['/api/c/t/:broadcastId/:masterLeadId', '/api/c/t'], async (req, res) =>
       await db.runQuery('UPDATE campaign_broadcasts SET clicked_count = COALESCE(clicked_count, 0) + 1 WHERE id = $1', [bcId]).catch(() => {});
     }
 
-    broadcast_ws({ type: 'BROADCAST_UPDATED' });
+    broadcast({ type: 'BROADCAST_UPDATED' });
     res.redirect(targetUrl);
   } catch (e) {
     res.redirect('https://thefinmantra.com');
