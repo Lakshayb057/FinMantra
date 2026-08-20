@@ -533,7 +533,7 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
     }
 
     const bodyVarMatches = [...(templateDbObj.body || '').matchAll(/\{\{(\d+)\}\}/g)];
-    const expectedVarCount = bodyVarMatches.length > 0 ? Math.max(...bodyVarMatches.map(m => parseInt(m[1], 10))) : cleanParams.length;
+    const expectedVarCount = bodyVarMatches.length > 0 ? Math.max(...bodyVarMatches.map(m => parseInt(m[1], 10))) : 0;
     if (expectedVarCount > 0) {
       exactDbComponents.push({
         type: 'body',
@@ -541,21 +541,35 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
       });
     }
 
-    if (dbButtons && dbButtons.buttonType === 'CTA') {
-      if (dbButtons.ctaUrlValue && dbButtons.ctaUrlValue.includes('{{1}}')) {
-        exactDbComponents.push({
-          type: 'button',
-          sub_type: 'url',
-          index: '0',
-          parameters: [{ type: 'text', text: safeButtonParam }]
-        });
-      }
-      if (dbButtons.ctaUrl2Value && dbButtons.ctaUrl2Value.includes('{{1}}')) {
-        exactDbComponents.push({
-          type: 'button',
-          sub_type: 'url',
-          index: '1',
-          parameters: [{ type: 'text', text: safeButtonParam }]
+    // Support both FinMantra button format and Meta raw button format
+    if (dbButtons) {
+      if (dbButtons.buttonType === 'CTA') {
+        if (dbButtons.ctaUrlValue && (dbButtons.ctaUrlValue.includes('{{1}}') || dbButtons.ctaUrlValue.includes('{{2}}'))) {
+          exactDbComponents.push({
+            type: 'button',
+            sub_type: 'url',
+            index: '0',
+            parameters: [{ type: 'text', text: safeButtonParam }]
+          });
+        }
+        if (dbButtons.ctaUrl2Value && (dbButtons.ctaUrl2Value.includes('{{1}}') || dbButtons.ctaUrl2Value.includes('{{2}}'))) {
+          exactDbComponents.push({
+            type: 'button',
+            sub_type: 'url',
+            index: '1',
+            parameters: [{ type: 'text', text: safeButtonParam }]
+          });
+        }
+      } else if (Array.isArray(dbButtons.buttons)) {
+        dbButtons.buttons.forEach((b, bIdx) => {
+          if (b.type === 'URL' && b.url && (b.url.includes('{{1}}') || b.url.includes('{{2}}'))) {
+            exactDbComponents.push({
+              type: 'button',
+              sub_type: 'url',
+              index: String(bIdx),
+              parameters: [{ type: 'text', text: safeButtonParam }]
+            });
+          }
         });
       }
     }
@@ -593,6 +607,27 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
     ]);
   } else {
     // Standard / Referral / Multi-parameter templates
+    // Universal image header + button strategies (crucial for templates with 0 body params like scapia_credit_card_v2)
+    componentStrategies.push([
+      createHeaderComp(defaultHeaderImg),
+      { type: 'button', sub_type: 'url', index: '1', parameters: [{ type: 'text', text: safeButtonParam }] }
+    ]);
+    componentStrategies.push([
+      createHeaderComp(defaultHeaderImg),
+      { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: safeButtonParam }] }
+    ]);
+    componentStrategies.push([
+      createHeaderComp(defaultHeaderImg),
+      { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: safeButtonParam }] },
+      { type: 'button', sub_type: 'url', index: '1', parameters: [{ type: 'text', text: safeButtonParam }] }
+    ]);
+    componentStrategies.push([
+      { type: 'button', sub_type: 'url', index: '1', parameters: [{ type: 'text', text: safeButtonParam }] }
+    ]);
+    componentStrategies.push([
+      { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: safeButtonParam }] }
+    ]);
+
     const urlParamIdx = cleanParams.findIndex(p => typeof p === 'string' && (p.startsWith('http://') || p.startsWith('https://')));
 
     if (urlParamIdx !== -1) {
@@ -7080,12 +7115,27 @@ async function checkAndRunScheduledBroadcasts() {
                   let ctaBaseUrl = '';
                   if (templateObj.buttons) {
                     try {
-                      const btnObj = JSON.parse(templateObj.buttons);
-                      if (btnObj.buttonType === 'CTA' && btnObj.ctaUrlValue && (btnObj.ctaUrlValue.includes('{{1}}') || btnObj.ctaUrlValue.includes('{{2}}'))) {
-                        hasDynamicButton = true;
-                        ctaBaseUrl = btnObj.ctaUrlValue
-                          .replace('{{1}}', lead.name || 'user')
-                          .replace('{{2}}', lead.contact || '');
+                      const btnObj = typeof templateObj.buttons === 'string' ? JSON.parse(templateObj.buttons) : templateObj.buttons;
+                      if (btnObj.buttonType === 'CTA') {
+                        if (btnObj.ctaUrlValue && (btnObj.ctaUrlValue.includes('{{1}}') || btnObj.ctaUrlValue.includes('{{2}}'))) {
+                          hasDynamicButton = true;
+                          ctaBaseUrl = btnObj.ctaUrlValue
+                            .replace('{{1}}', lead.contact || lead.name || 'user')
+                            .replace('{{2}}', lead.contact || '');
+                        } else if (btnObj.ctaUrl2Value && (btnObj.ctaUrl2Value.includes('{{1}}') || btnObj.ctaUrl2Value.includes('{{2}}'))) {
+                          hasDynamicButton = true;
+                          ctaBaseUrl = btnObj.ctaUrl2Value
+                            .replace('{{1}}', lead.contact || lead.name || 'user')
+                            .replace('{{2}}', lead.contact || '');
+                        }
+                      } else if (Array.isArray(btnObj.buttons)) {
+                        const dynamicBtn = btnObj.buttons.find(b => b.type === 'URL' && b.url && (b.url.includes('{{1}}') || b.url.includes('{{2}}')));
+                        if (dynamicBtn) {
+                          hasDynamicButton = true;
+                          ctaBaseUrl = dynamicBtn.url
+                            .replace('{{1}}', lead.contact || lead.name || 'user')
+                            .replace('{{2}}', lead.contact || '');
+                        }
                       }
                     } catch (e) {}
                   }
@@ -8146,6 +8196,10 @@ app.post('/api/campaigns/templates/sync-from-meta', authenticateToken, async (re
       const bodyComp = (mt.components || []).find(c => c.type === 'BODY');
       const bodyText = bodyComp?.text || `Template: ${mt.name}`;
       const buttonsComp = (mt.components || []).find(c => c.type === 'BUTTONS');
+      const headerComp = (mt.components || []).find(c => c.type === 'HEADER');
+      const headerFormat = headerComp ? (headerComp.format || 'NONE') : 'NONE';
+      const headerText = headerComp?.text || null;
+      const mediaUrl = headerFormat === 'IMAGE' ? 'https://thefinmantra.com/scapia_banner.jpg' : null;
 
       // Check if exists
       const existing = await db.runQuery('SELECT id FROM campaign_templates WHERE meta_template_name = $1 OR name = $1 LIMIT 1', [mt.name]);
@@ -8153,8 +8207,8 @@ app.post('/api/campaigns/templates/sync-from-meta', authenticateToken, async (re
 
       await db.runQuery(`
         INSERT INTO campaign_templates 
-        (id, name, type, body, meta_template_name, language, category, status, buttons, waba_id)
-        VALUES ($1, $2, 'whatsapp', $3, $4, $5, $6, $7, $8, $9)
+        (id, name, type, body, meta_template_name, language, category, status, buttons, waba_id, header_format, header_text, media_url)
+        VALUES ($1, $2, 'whatsapp', $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         ON CONFLICT (id) DO UPDATE 
         SET body = EXCLUDED.body, 
             meta_template_name = EXCLUDED.meta_template_name,
@@ -8162,7 +8216,10 @@ app.post('/api/campaigns/templates/sync-from-meta', authenticateToken, async (re
             category = EXCLUDED.category,
             status = EXCLUDED.status,
             buttons = EXCLUDED.buttons,
-            waba_id = EXCLUDED.waba_id
+            waba_id = EXCLUDED.waba_id,
+            header_format = EXCLUDED.header_format,
+            header_text = EXCLUDED.header_text,
+            media_url = COALESCE(campaign_templates.media_url, EXCLUDED.media_url)
       `, [
         templateId,
         mt.name,
@@ -8172,7 +8229,10 @@ app.post('/api/campaigns/templates/sync-from-meta', authenticateToken, async (re
         mt.category || 'MARKETING',
         mt.status || 'APPROVED',
         buttonsComp ? JSON.stringify(buttonsComp) : null,
-        wabaId
+        wabaId,
+        headerFormat,
+        headerText,
+        mediaUrl
       ]);
       syncedCount++;
     }
