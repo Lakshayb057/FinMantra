@@ -7209,13 +7209,14 @@ async function checkAndRunScheduledBroadcasts() {
 
 // Helper to fetch the App ID connected to the developer token
 const fetchAppId = async (apiKey, apiVersion = 'v25.0') => {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
+    const defaultAppId = process.env.META_APP_ID || '1510978103853380';
+
     const options = {
       hostname: 'graph.facebook.com',
       port: 443,
-      path: `/${apiVersion}/app`,
-      method: 'GET',
-      headers: { 'Authorization': `Bearer ${apiKey}` }
+      path: `/${apiVersion}/debug_token?input_token=${encodeURIComponent(apiKey)}&access_token=${encodeURIComponent(apiKey)}`,
+      method: 'GET'
     };
     const req = https.request(options, (res) => {
       let body = '';
@@ -7224,13 +7225,16 @@ const fetchAppId = async (apiKey, apiVersion = 'v25.0') => {
         if (res.statusCode >= 200 && res.statusCode < 300) {
           try {
             const parsed = JSON.parse(body);
-            if (parsed.id) { resolve(parsed.id); } else { resolve(null); }
-          } catch (e) { resolve(null); }
-        } else { resolve(null); }
+            if (parsed.data && parsed.data.app_id) {
+              return resolve(parsed.data.app_id);
+            }
+          } catch (e) {}
+        }
+        resolve(defaultAppId);
       });
     });
     req.setTimeout(5000);
-    req.on('error', () => resolve(null));
+    req.on('error', () => resolve(defaultAppId));
     req.end();
   });
 };
@@ -7239,49 +7243,100 @@ const fetchAppId = async (apiKey, apiVersion = 'v25.0') => {
 const getResumableUploadHandle = async (apiKey, appId, mediaUrl, apiVersion = 'v25.0') => {
   return new Promise(async (resolve, reject) => {
     try {
-      let buffer;
-      let contentType = 'image/png';
-      let filename = 'file.png';
+      let buffer = null;
+      let contentType = 'image/jpeg';
+      let filename = 'header_image.jpg';
 
+      if (!mediaUrl) {
+        return reject(new Error('Media URL is empty.'));
+      }
+
+      // 1. Check if mediaUrl is a Data URI
       if (mediaUrl.startsWith('data:')) {
         const matches = mediaUrl.match(/^data:([A-Za-z0-9-+\/]+);base64,(.+)$/);
         if (matches) {
           contentType = matches[1];
           buffer = Buffer.from(matches[2], 'base64');
-          const ext = contentType.split('/')[1] || 'png';
+          const ext = contentType.split('/')[1] || 'jpg';
           filename = `media_${Date.now()}.${ext}`;
         } else {
           buffer = Buffer.from(mediaUrl.split(',')[1] || mediaUrl, 'base64');
         }
       } else {
-        const https = require('https');
-        const http = require('http');
-        const client = mediaUrl.startsWith('https:') ? https : http;
-        
-        buffer = await new Promise((dlResolve, dlReject) => {
-          client.get(mediaUrl, (res) => {
-            if (res.statusCode < 200 || res.statusCode >= 300) {
-              return dlReject(new Error(`Failed to download media file (status ${res.statusCode})`));
-            }
-            contentType = res.headers['content-type'] || 'image/png';
+        // 2. Check if file exists locally on disk (fastest & 100% reliable)
+        let localCandidatePaths = [];
+        try {
+          const urlObj = new URL(mediaUrl, 'http://localhost');
+          const pathname = urlObj.pathname;
+          const baseName = path.basename(pathname);
+          filename = baseName || 'header_media.jpg';
+
+          localCandidatePaths.push(
+            path.join(__dirname, 'public', 'uploads', baseName),
+            path.join(__dirname, '..', 'client', 'public', 'uploads', baseName),
+            path.join(__dirname, '..', 'client', 'dist', 'uploads', baseName),
+            path.join(__dirname, '..', 'client', 'public', baseName),
+            path.join(__dirname, '..', 'client', 'dist', baseName),
+            path.join('/var/www/finmantra', pathname),
+            path.join('/var/www/finmantra-uat', pathname)
+          );
+        } catch (e) {}
+
+        for (const cand of localCandidatePaths) {
+          if (fs.existsSync(cand)) {
             try {
-              const u = new URL(mediaUrl);
-              filename = u.pathname.split('/').pop() || 'file.png';
+              buffer = fs.readFileSync(cand);
+              break;
             } catch (e) {}
-            const chunks = [];
-            res.on('data', chunk => chunks.push(chunk));
-            res.on('end', () => dlResolve(Buffer.concat(chunks)));
-          }).on('error', dlReject);
-        });
+          }
+        }
+
+        // 3. Fallback: Download via HTTP/HTTPS if not found locally
+        if (!buffer && (mediaUrl.startsWith('http://') || mediaUrl.startsWith('https://'))) {
+          const client = mediaUrl.startsWith('https:') ? https : http;
+          buffer = await new Promise((dlResolve, dlReject) => {
+            client.get(mediaUrl, (res) => {
+              if (res.statusCode < 200 || res.statusCode >= 300) {
+                return dlReject(new Error(`Failed to download media file (status ${res.statusCode})`));
+              }
+              const fetchedType = res.headers['content-type'];
+              if (fetchedType && !fetchedType.includes('text/') && !fetchedType.includes('html')) {
+                contentType = fetchedType.split(';')[0].trim();
+              }
+              const chunks = [];
+              res.on('data', chunk => chunks.push(chunk));
+              res.on('end', () => dlResolve(Buffer.concat(chunks)));
+            }).on('error', dlReject);
+          });
+        }
+
+        // Determine exact Content-Type from filename extension
+        const lowerName = filename.toLowerCase();
+        if (lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) {
+          contentType = 'image/jpeg';
+        } else if (lowerName.endsWith('.png')) {
+          contentType = 'image/png';
+        } else if (lowerName.endsWith('.webp')) {
+          contentType = 'image/webp';
+        } else if (lowerName.endsWith('.mp4')) {
+          contentType = 'video/mp4';
+        } else if (lowerName.endsWith('.pdf')) {
+          contentType = 'application/pdf';
+        }
+      }
+
+      if (!buffer || buffer.length === 0) {
+        return reject(new Error('Media file could not be read or is empty.'));
       }
 
       const fileLength = buffer.length;
+      const targetAppId = appId || '1510978103853380';
 
-      // Initialize upload session
+      // Step A: Initialize upload session with Meta
       const sessionOptions = {
         hostname: 'graph.facebook.com',
         port: 443,
-        path: `/${apiVersion}/${appId}/uploads?file_name=${encodeURIComponent(filename)}&file_length=${fileLength}&file_type=${encodeURIComponent(contentType)}`,
+        path: `/${apiVersion}/${targetAppId}/uploads?file_name=${encodeURIComponent(filename)}&file_length=${fileLength}&file_type=${encodeURIComponent(contentType)}`,
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${apiKey}`,
@@ -7289,75 +7344,77 @@ const getResumableUploadHandle = async (apiKey, appId, mediaUrl, apiVersion = 'v
         }
       };
 
-          const sessionId = await new Promise((resResolve, resReject) => {
-            const sessionReq = https.request(sessionOptions, (sessionRes) => {
-              let sessionBody = '';
-              sessionRes.on('data', chunk => sessionBody += chunk);
-              sessionRes.on('end', () => {
-                if (sessionRes.statusCode >= 200 && sessionRes.statusCode < 300) {
-                  try {
-                    const parsed = JSON.parse(sessionBody);
-                    if (parsed.id) {
-                      resResolve(parsed.id);
-                    } else {
-                      resReject(new Error('Upload session response missing id.'));
-                    }
-                  } catch (e) {
-                    resReject(new Error('Failed to parse upload session response.'));
-                  }
+      const sessionId = await new Promise((resResolve, resReject) => {
+        const sessionReq = https.request(sessionOptions, (sessionRes) => {
+          let sessionBody = '';
+          sessionRes.on('data', chunk => sessionBody += chunk);
+          sessionRes.on('end', () => {
+            if (sessionRes.statusCode >= 200 && sessionRes.statusCode < 300) {
+              try {
+                const parsed = JSON.parse(sessionBody);
+                if (parsed.id) {
+                  resResolve(parsed.id);
                 } else {
-                  resReject(new Error(`Upload session returned status ${sessionRes.statusCode}: ${sessionBody}`));
+                  resReject(new Error('Upload session response missing id.'));
                 }
-              });
-            });
-            sessionReq.setTimeout(8000);
-            sessionReq.on('error', err => resReject(err));
-            sessionReq.end();
-          });
-
-          // Upload raw binary data
-          const uploadOptions = {
-            hostname: 'graph.facebook.com',
-            port: 443,
-            path: `/${apiVersion}/${sessionId}`,
-            method: 'POST',
-            headers: {
-              'Authorization': `OAuth ${apiKey}`,
-              'file_offset': '0',
-              'Content-Type': contentType,
-              'Content-Length': fileLength
+              } catch (e) {
+                resReject(new Error('Failed to parse upload session response.'));
+              }
+            } else {
+              resReject(new Error(`Upload session returned status ${sessionRes.statusCode}: ${sessionBody}`));
             }
-          };
-
-          const fileHandle = await new Promise((uploadResolve, uploadReject) => {
-            const uploadReq = https.request(uploadOptions, (uploadRes) => {
-              let uploadBody = '';
-              uploadRes.on('data', chunk => uploadBody += chunk);
-              uploadRes.on('end', () => {
-                if (uploadRes.statusCode >= 200 && uploadRes.statusCode < 300) {
-                  try {
-                    const parsed = JSON.parse(uploadBody);
-                    if (parsed.h) {
-                      uploadResolve(parsed.h);
-                    } else {
-                      uploadReject(new Error('Meta upload response missing handle h.'));
-                    }
-                  } catch (e) {
-                    uploadReject(new Error('Failed to parse Meta upload response.'));
-                  }
-                } else {
-                  uploadReject(new Error(`Meta upload returned status ${uploadRes.statusCode}: ${uploadBody}`));
-                }
-              });
-            });
-            uploadReq.setTimeout(15000);
-            uploadReq.on('error', err => uploadReject(err));
-            uploadReq.write(buffer);
-            uploadReq.end();
           });
+        });
+        sessionReq.setTimeout(10000);
+        sessionReq.on('error', err => resReject(err));
+        sessionReq.end();
+      });
 
+      // Step B: Upload raw binary data to Meta
+      const uploadOptions = {
+        hostname: 'graph.facebook.com',
+        port: 443,
+        path: `/${apiVersion}/${sessionId}`,
+        method: 'POST',
+        headers: {
+          'Authorization': `OAuth ${apiKey}`,
+          'file_offset': '0',
+          'Content-Type': contentType,
+          'Content-Length': fileLength
+        }
+      };
+
+      const fileHandle = await new Promise((uploadResolve, uploadReject) => {
+        const uploadReq = https.request(uploadOptions, (uploadRes) => {
+          let uploadBody = '';
+          uploadRes.on('data', chunk => uploadBody += chunk);
+          uploadRes.on('end', () => {
+            if (uploadRes.statusCode >= 200 && uploadRes.statusCode < 300) {
+              try {
+                const parsed = JSON.parse(uploadBody);
+                if (parsed.h) {
+                  uploadResolve(parsed.h);
+                } else {
+                  uploadReject(new Error('Meta upload response missing handle h.'));
+                }
+              } catch (e) {
+                uploadReject(new Error('Failed to parse Meta upload response.'));
+              }
+            } else {
+              uploadReject(new Error(`Meta upload returned status ${uploadRes.statusCode}: ${uploadBody}`));
+            }
+          });
+        });
+        uploadReq.setTimeout(20000);
+        uploadReq.on('error', err => uploadReject(err));
+        uploadReq.write(buffer);
+        uploadReq.end();
+      });
+
+      console.log(`[Meta Resumable Upload Success] Generated media handle for ${filename} (${fileLength} bytes): ${fileHandle.substring(0, 30)}...`);
       resolve(fileHandle);
     } catch (err) {
+      console.error('[Meta Resumable Upload Error]:', err.message);
       reject(err);
     }
   });
@@ -7396,17 +7453,20 @@ const registerMetaTemplate = async ({ apiKey, wabaId, phoneId, name, category, l
           };
         }
       } else if (['IMAGE', 'VIDEO', 'DOCUMENT'].includes(formatUpper)) {
-        const sampleUrl = mediaUrl && mediaUrl.trim() ? mediaUrl.trim() : 'https://uat.thefinmantra.com/logo.png';
-        let finalHandle = "4:c2FtcGxlX2hhbmRsZQ=="; // Fallback handle
+        const sampleUrl = mediaUrl && mediaUrl.trim() ? mediaUrl.trim() : 'https://thefinmantra.com/scapia_banner.jpg';
+        let finalHandle = null;
         try {
           const appId = await fetchAppId(apiKey, apiVersion);
-          if (appId) {
-            finalHandle = await getResumableUploadHandle(apiKey, appId, sampleUrl, apiVersion);
-          }
+          finalHandle = await getResumableUploadHandle(apiKey, appId || '1510978103853380', sampleUrl, apiVersion);
         } catch (uploadErr) {
-          console.warn('[Resumable upload failed, falling back to dummy handle]', uploadErr.message);
+          console.error('[Meta Resumable Upload Failed]:', uploadErr.message);
+          return reject(new Error(`Failed to upload media header to Meta: ${uploadErr.message}. Please verify the image file format (JPG, PNG) and try again.`));
         }
         
+        if (!finalHandle) {
+          return reject(new Error('Meta did not return a valid media handle. Please check your image format and try again.'));
+        }
+
         headerComp.example = {
           header_handle: [finalHandle]
         };
