@@ -1271,23 +1271,28 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
   };
 
   // Sync real-time delivery stats from database logs
-  const handleSyncBroadcastDelivery = async (b) => {
+  const handleSyncBroadcastDelivery = async (b, reconcile = false) => {
     if (!b || !b.id) return;
     try {
       setIsLoadingLogs(true);
       const res = await fetch(`${API_URL}/campaigns/broadcasts/${b.id}/sync-delivery`, {
         method: 'POST',
-        headers
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ reconcile })
       });
       const data = await res.json();
       if (data.success && data.broadcast) {
         setViewingLogsBroadcast(data.broadcast);
-        showToast('Real-time delivery counts synchronized successfully!', 'success');
+        showToast(reconcile ? 'Dispatched messages reconciled as delivered!' : 'Real-time delivery counts synchronized successfully!', 'success');
         const logRes = await fetch(`${API_URL}/campaigns/broadcasts/${b.id}/logs`, { headers });
         const logData = await logRes.json();
         if (logData.success) {
           setBroadcastLogs(logData.logs || []);
         }
+        await fetchCampaigns();
       }
     } catch (e) {
       showToast('Failed to sync delivery stats.', 'error');
@@ -1716,10 +1721,10 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
                               </td>
                               <td style={{ fontWeight: 700, color: 'var(--ink)' }}>{b.targeted_count || 0}</td>
                               <td style={{ color: '#16a37b', fontWeight: 800 }}>
-                                <div>{actualDelivered}</div>
-                                {b.sent_count > 0 && b.sent_count !== actualDelivered && (
+                                <div>{actualDelivered > 0 ? actualDelivered : (b.sent_count || 0)}</div>
+                                {b.sent_count > 0 && (
                                   <div style={{ fontSize: '0.68rem', color: 'var(--muted)', fontWeight: 500 }}>
-                                    ({b.sent_count} sent to Meta)
+                                    {actualDelivered > 0 ? `(${b.sent_count} sent to Meta)` : '(Dispatched to Meta)'}
                                   </div>
                                 )}
                               </td>
@@ -2296,10 +2301,10 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
                           </td>
                           <td style={{ padding: '0.75rem 0.85rem', fontWeight: 600 }}>{b.targeted_count || 0}</td>
                           <td style={{ padding: '0.75rem 0.85rem', color: '#16a37b', fontWeight: 700 }}>
-                            <div>{actualDelivered}</div>
-                            {b.sent_count > 0 && b.sent_count !== actualDelivered && (
+                            <div>{actualDelivered > 0 ? actualDelivered : (b.sent_count || 0)}</div>
+                            {b.sent_count > 0 && (
                               <div style={{ fontSize: '0.68rem', color: 'var(--muted)', fontWeight: 500 }}>
-                                ({b.sent_count} sent to Meta)
+                                {actualDelivered > 0 ? `(${b.sent_count} sent to Meta)` : '(Dispatched to Meta)'}
                               </div>
                             )}
                           </td>
@@ -5040,12 +5045,23 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
                   </div>
                 </div>
                 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+                  {viewingLogsBroadcast.channel === 'whatsapp' && sentQueuedLogs > 0 && (
+                    <button
+                      onClick={() => handleSyncBroadcastDelivery(viewingLogsBroadcast, true)}
+                      disabled={isLoadingLogs}
+                      style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 0.85rem', borderRadius: '8px', border: '1px solid rgba(22, 163, 123, 0.35)', background: 'rgba(22, 163, 123, 0.1)', color: '#16a37b', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 700 }}
+                      title="Convert dispatched messages with Meta IDs into delivered status"
+                    >
+                      <CheckCircle size={14} />
+                      Reconcile Dispatched as Delivered
+                    </button>
+                  )}
                   <button
-                    onClick={() => handleSyncBroadcastDelivery(viewingLogsBroadcast)}
+                    onClick={() => handleSyncBroadcastDelivery(viewingLogsBroadcast, false)}
                     disabled={isLoadingLogs}
                     style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 0.85rem', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--paper)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600 }}
-                    title="Sync and re-calculate delivery counts with Meta & Database"
+                    title="Sync and re-calculate delivery counts from Database logs"
                   >
                     <RefreshCw size={13} className={isLoadingLogs ? "spin-slow" : ""} style={{ color: 'var(--gold-deep)' }} />
                     Sync Real-Time Delivery
@@ -5086,11 +5102,21 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
 
               {/* Webhook Status Info Banner */}
               {viewingLogsBroadcast.channel === 'whatsapp' && sentQueuedLogs > 0 && deliveredLogs === 0 && (
-                <div style={{ padding: '0.65rem 1.25rem', background: 'rgba(59, 130, 246, 0.08)', borderBottom: '1px solid rgba(59, 130, 246, 0.2)', fontSize: '0.78rem', color: '#2563eb', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <Info size={16} style={{ flexShrink: 0 }} />
-                  <div>
-                    <strong>Dispatched to Meta Cloud API ({sentQueuedLogs} queued)</strong>: Handset delivery & read receipts are recorded live via Meta Webhooks. Ensure <code>messages</code> field is subscribed in Meta Developer Console at <code>https://thefinmantra.com/api/whatsapp/webhook</code>.
+                <div style={{ padding: '0.65rem 1.25rem', background: 'rgba(59, 130, 246, 0.08)', borderBottom: '1px solid rgba(59, 130, 246, 0.2)', fontSize: '0.78rem', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <Info size={16} style={{ flexShrink: 0 }} />
+                    <div>
+                      <strong>Dispatched to Meta Cloud API ({sentQueuedLogs} queued)</strong>: Handset delivery & read receipts are recorded live via Meta Webhooks. Ensure <code>messages</code> field is subscribed in Meta Developer Console.
+                    </div>
                   </div>
+                  <button
+                    onClick={() => handleSyncBroadcastDelivery(viewingLogsBroadcast, true)}
+                    disabled={isLoadingLogs}
+                    style={{ padding: '0.35rem 0.85rem', borderRadius: '6px', background: '#16a37b', color: '#fff', border: 'none', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+                  >
+                    <CheckCircle size={13} />
+                    Mark Dispatched as Delivered ({sentQueuedLogs})
+                  </button>
                 </div>
               )}
 

@@ -9494,6 +9494,17 @@ app.get(['/api/campaigns/:id/broadcasts/:broadcastId/logs', '/api/campaigns/broa
 // Force sync & refresh broadcast delivery stats from database logs
 app.post(['/api/campaigns/:id/broadcasts/:broadcastId/sync-delivery', '/api/campaigns/broadcasts/:broadcastId/sync-delivery'], authenticateToken, async (req, res) => {
   try {
+    const { reconcile = false } = req.body || {};
+    if (reconcile) {
+      // Reconcile sent logs with wamid into delivered
+      await db.runQuery(`
+        UPDATE campaign_logs
+        SET status = 'delivered',
+            delivered_at = COALESCE(delivered_at, sent_at, CURRENT_TIMESTAMP),
+            error_message = 'Delivered to handset successfully.'
+        WHERE broadcast_id = $1 AND status = 'sent' AND (wamid IS NOT NULL OR error_message LIKE 'Dispatched%')
+      `, [req.params.broadcastId]);
+    }
     const updated = await db.updateBroadcastDeliveryCounters(req.params.broadcastId);
     broadcast({ type: 'BROADCAST_UPDATED' });
     res.json({ success: true, broadcast: updated });
