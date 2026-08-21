@@ -7019,6 +7019,7 @@ async function checkAndRunScheduledBroadcasts() {
         let waSuccess = false;
         let emailError = null;
         let waError = null;
+        let wamid = null;
 
         const isUatEnv = process.env.PORT === '5001' || process.env.NODE_ENV === 'uat' || !process.env.NODE_ENV;
         const baseAppUrl = process.env.BASE_APP_URL || (isUatEnv ? 'https://uat.thefinmantra.com' : 'https://thefinmantra.com');
@@ -7162,7 +7163,7 @@ async function checkAndRunScheduledBroadcasts() {
                 const templateLanguage = templateObj?.language || 'en_US';
                 const phoneIdToUse = b.meta_phone_number_id || templateObj?.meta_phone_number_id || null;
 
-                let wamid = null;
+                wamid = null;
                 const waResp = await sendWhatsAppTemplate(
                   lead.contact,
                   actualTemplateName,
