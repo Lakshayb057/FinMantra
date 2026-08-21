@@ -481,10 +481,14 @@ async function initPgSchema() {
     await safeQuery("CREATE INDEX IF NOT EXISTS idx_meta_audiences_type_bank ON meta_audiences (audience_type, bank_name)");
     await safeQuery("CREATE INDEX IF NOT EXISTS idx_meta_audiences_meta_id ON meta_audiences (meta_audience_id) WHERE meta_audience_id IS NOT NULL");
     await safeQuery("CREATE UNIQUE INDEX IF NOT EXISTS uq_meta_audiences_name ON meta_audiences (LOWER(TRIM(name)))");
-    await safeQuery("CREATE UNIQUE INDEX IF NOT EXISTS uq_idx_master_contact ON campaign_master_leads (contact)");
-    await safeQuery("CREATE UNIQUE INDEX IF NOT EXISTS uq_idx_master_mail ON campaign_master_leads (LOWER(TRIM(mail)))");
-    await safeQuery("CREATE UNIQUE INDEX IF NOT EXISTS uq_idx_campaign_contact ON campaign_leads (campaign_id, contact)");
-    await safeQuery("CREATE UNIQUE INDEX IF NOT EXISTS uq_idx_campaign_mail ON campaign_leads (campaign_id, LOWER(TRIM(mail)))");
+    await safeQuery("DROP INDEX IF EXISTS uq_idx_master_mail");
+    await safeQuery("DROP INDEX IF EXISTS uq_idx_master_contact");
+    await safeQuery("DROP INDEX IF EXISTS uq_idx_campaign_mail");
+    await safeQuery("DROP INDEX IF EXISTS uq_idx_campaign_contact");
+    await safeQuery("CREATE UNIQUE INDEX IF NOT EXISTS uq_idx_master_contact ON campaign_master_leads (contact) WHERE contact IS NOT NULL AND contact != ''");
+    await safeQuery("CREATE UNIQUE INDEX IF NOT EXISTS uq_idx_master_mail ON campaign_master_leads (LOWER(TRIM(mail))) WHERE mail IS NOT NULL AND TRIM(mail) != ''");
+    await safeQuery("CREATE UNIQUE INDEX IF NOT EXISTS uq_idx_campaign_contact ON campaign_leads (campaign_id, contact) WHERE contact IS NOT NULL AND contact != ''");
+    await safeQuery("CREATE UNIQUE INDEX IF NOT EXISTS uq_idx_campaign_mail ON campaign_leads (campaign_id, LOWER(TRIM(mail))) WHERE mail IS NOT NULL AND TRIM(mail) != ''");
     await safeQuery("ALTER TABLE campaign_broadcasts ADD COLUMN IF NOT EXISTS media_url VARCHAR(255)");
     await safeQuery("ALTER TABLE campaign_broadcasts ADD COLUMN IF NOT EXISTS last_triggered_at TIMESTAMP WITH TIME ZONE");
     await safeQuery("ALTER TABLE campaign_broadcasts ADD COLUMN IF NOT EXISTS last_trigger_status VARCHAR(50)");
@@ -3018,18 +3022,20 @@ const db = {
     try {
       await client.query('BEGIN');
       for (const lead of leads) {
+        const cleanMail = lead.mail && String(lead.mail).includes('@') ? String(lead.mail).toLowerCase().trim() : null;
         await client.query(
           `INSERT INTO campaign_leads (id, campaign_id, name, contact, mail, address) 
            VALUES ($1, $2, $3, $4, $5, $6) 
            ON CONFLICT (id) DO UPDATE SET name = $3, contact = $4, mail = $5, address = $6`,
-          [lead.id, lead.campaign_id, lead.name, lead.contact, lead.mail, lead.address]
+          [lead.id, lead.campaign_id, lead.name, lead.contact, cleanMail, lead.address]
         );
       }
       await client.query('COMMIT');
       return leads.length;
     } catch (err) {
       await client.query('ROLLBACK');
-      throw err;
+      console.warn('[Add Campaign Leads Warning]:', err.message);
+      return 0;
     } finally {
       client.release();
     }
@@ -3601,15 +3607,15 @@ const db = {
           contact10 = contactDigits;
           contact12 = contactDigits;
         }
-        const cleanMail = mail ? mail.toLowerCase().trim() : '';
+        const cleanMail = mail && mail.includes('@') ? mail.toLowerCase().trim() : null;
 
         // Check if contact or email already exists in campaign_master_leads
         const existingRes = await client.query(
           `SELECT * FROM campaign_master_leads 
            WHERE (contact != '' AND (contact = $1 OR contact = $2 OR contact = $3)) 
-              OR (mail != '' AND LOWER(TRIM(mail)) = LOWER(TRIM($4))) 
+              OR ($4::text IS NOT NULL AND mail IS NOT NULL AND LOWER(TRIM(mail)) = LOWER(TRIM($4))) 
            LIMIT 1`,
-          [contact || '__NONE__', contact10 || '__NONE__', contact12 || '__NONE__', cleanMail || '__NONE__']
+          [contact || '__NONE__', contact10 || '__NONE__', contact12 || '__NONE__', cleanMail]
         );
 
         // Check Leads Repository (leads table) for matching contact or email to pick URN
@@ -3619,10 +3625,10 @@ const db = {
                   phone = $1 OR phone = $2 OR phone = $3 
                   OR RIGHT(REGEXP_REPLACE(phone, '\\D', '', 'g'), 10) = $2
                 ))
-              OR ($4 != '' AND LOWER(TRIM(email)) = $4)
+              OR ($4::text IS NOT NULL AND email IS NOT NULL AND LOWER(TRIM(email)) = $4)
            ORDER BY created_at DESC 
            LIMIT 1`,
-          [contact || '', contact10 || '', contact12 || '', cleanMail || '']
+          [contact || '', contact10 || '', contact12 || '', cleanMail]
         );
 
         let mappedUrn = null;
@@ -3662,13 +3668,14 @@ const db = {
                  campaign_data_id = COALESCE($2, campaign_data_id),
                  name = CASE WHEN (name IS NULL OR name = '' OR name = 'Contact') AND $3 != '' THEN $3 ELSE name END,
                  address = CASE WHEN (address IS NULL OR address = '') AND $4 != '' THEN $4 ELSE address END,
-                 last_broadcast_id = COALESCE($5, last_broadcast_id),
-                 last_broadcast_name = COALESCE($6, last_broadcast_name),
-                 meta_whatsapp_no = COALESCE($7, meta_whatsapp_no),
-                 sender_email = COALESCE($8, sender_email),
+                 mail = CASE WHEN (mail IS NULL OR mail = '') AND $5::text IS NOT NULL THEN $5 ELSE mail END,
+                 last_broadcast_id = COALESCE($6, last_broadcast_id),
+                 last_broadcast_name = COALESCE($7, last_broadcast_name),
+                 meta_whatsapp_no = COALESCE($8, meta_whatsapp_no),
+                 sender_email = COALESCE($9, sender_email),
                  updated_at = CURRENT_TIMESTAMP
-             WHERE id = $9`,
-            [updatedFinmantraId, updatedCampaignDataId, name, address, bcId, bcName, metaWaNo, senderEmail, existingLead.id]
+             WHERE id = $10`,
+            [updatedFinmantraId, updatedCampaignDataId, name, address, cleanMail, bcId, bcName, metaWaNo, senderEmail, existingLead.id]
           );
           updatedCount++;
           processedLeads.push({ ...existingLead, finmantra_id: updatedFinmantraId, campaign_data_id: updatedCampaignDataId, isNew: false });
@@ -3686,8 +3693,9 @@ const db = {
           await client.query(
             `INSERT INTO campaign_master_leads 
              (id, finmantra_id, campaign_data_id, name, contact, mail, address, last_broadcast_id, last_broadcast_name, meta_whatsapp_no, sender_email)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-            [newId, assignedFinmantraId, assignedCampaignDataId, name, contact, mail, address, bcId, bcName, metaWaNo, senderEmail]
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+             ON CONFLICT (id) DO NOTHING`,
+            [newId, assignedFinmantraId, assignedCampaignDataId, name, contact, cleanMail, address, bcId, bcName, metaWaNo, senderEmail]
           );
           insertedCount++;
           processedLeads.push({
@@ -3696,7 +3704,7 @@ const db = {
             campaign_data_id: assignedCampaignDataId,
             name,
             contact,
-            mail,
+            mail: cleanMail,
             address,
             whatsapp_optin: true,
             email_optin: true,
