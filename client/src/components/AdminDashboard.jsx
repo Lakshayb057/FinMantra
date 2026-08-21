@@ -7220,11 +7220,24 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                                         {phone.display_phone_number}
                                       </span>
                                       <span style={{ fontSize: '0.75rem', color: '#fff', background: 'rgba(255,255,255,0.08)', padding: '0.1rem 0.5rem', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)' }}>
-                                        {phone.verified_name}
+                                        {phone.verified_name || 'FinMantra'}
                                       </span>
-                                      {phone.code_verification_status && (
-                                        <span style={{ fontSize: '0.7rem', color: '#60a5fa', background: 'rgba(96, 165, 250, 0.1)', padding: '0.05rem 0.35rem', borderRadius: '4px', textTransform: 'uppercase' }}>
-                                          {phone.code_verification_status}
+                                      {phone.status && (
+                                        <span style={{ 
+                                          fontSize: '0.7rem', 
+                                          fontWeight: 700,
+                                          color: phone.status === 'CONNECTED' ? '#22c55e' : '#eab308', 
+                                          background: phone.status === 'CONNECTED' ? 'rgba(34, 197, 94, 0.12)' : 'rgba(234, 179, 8, 0.12)', 
+                                          padding: '0.05rem 0.4rem', 
+                                          borderRadius: '4px', 
+                                          textTransform: 'uppercase' 
+                                        }}>
+                                          {phone.status === 'CONNECTED' ? 'ONLINE (CONNECTED)' : phone.status}
+                                        </span>
+                                      )}
+                                      {phone.messaging_limit_tier && (
+                                        <span style={{ fontSize: '0.7rem', color: 'var(--muted)', background: 'rgba(255,255,255,0.04)', padding: '0.05rem 0.35rem', borderRadius: '4px' }}>
+                                          Tier: {phone.messaging_limit_tier.replace('TIER_', '')}
                                         </span>
                                       )}
                                     </div>
@@ -7235,16 +7248,20 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                                     </div>
                                   </div>
                                   
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                                    <div style={{ 
-                                      display: 'inline-flex', 
-                                      alignItems: 'center', 
-                                      gap: '0.35rem',
-                                      padding: '0.25rem 0.6rem',
-                                      borderRadius: '20px',
-                                      backgroundColor: qualityBg,
-                                      border: `1px solid ${qualityColor}33`
-                                    }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                    <div 
+                                      title={qr === 'red' || qr === 'low' ? "Meta Quality Rating is RED because recent recipients blocked or reported the message as spam. It will improve back to Green as high-engagement messages are sent." : `Meta Quality Rating: ${phone.quality_rating}`}
+                                      style={{ 
+                                        display: 'inline-flex', 
+                                        alignItems: 'center', 
+                                        gap: '0.35rem',
+                                        padding: '0.25rem 0.6rem',
+                                        borderRadius: '20px',
+                                        backgroundColor: qualityBg,
+                                        border: `1px solid ${qualityColor}33`,
+                                        cursor: 'help'
+                                      }}
+                                    >
                                       <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', backgroundColor: qualityColor }}></span>
                                       <span style={{ fontSize: '0.72rem', fontWeight: 600, color: qualityColor, textTransform: 'uppercase', letterSpacing: '0.02em' }}>
                                         Quality: {phone.quality_rating || 'Unknown'}

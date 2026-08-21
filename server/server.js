@@ -5104,7 +5104,7 @@ app.get('/api/whatsapp/meta-phone-numbers', authenticateToken, requireAdmin, asy
 
     const fetchPhoneNumbersForWaba = async (wabaIdVal, wabaNameVal) => {
       try {
-        const path = `/${apiVersion}/${wabaIdVal}/phone_numbers?fields=display_phone_number,quality_rating,verified_name,code_verification_status,id`;
+        const path = `/${apiVersion}/${wabaIdVal}/phone_numbers?fields=display_phone_number,quality_rating,verified_name,code_verification_status,id,status,messaging_limit_tier`;
         const result = await getMetaGraph(path, apiKey);
         if (result && Array.isArray(result.data)) {
           return result.data.map(phone => ({
@@ -5113,6 +5113,8 @@ app.get('/api/whatsapp/meta-phone-numbers', authenticateToken, requireAdmin, asy
             quality_rating: phone.quality_rating,
             verified_name: phone.verified_name,
             code_verification_status: phone.code_verification_status,
+            status: phone.status || 'CONNECTED',
+            messaging_limit_tier: phone.messaging_limit_tier || 'TIER_1K',
             waba_id: wabaIdVal,
             waba_name: wabaNameVal || `WABA (${wabaIdVal})`
           }));
