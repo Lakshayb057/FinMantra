@@ -1549,12 +1549,14 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
                   </div>
                 </div>
                 <div className="campaigns-kpi-value" style={{ color: '#10b981' }}>
-                  {dashboardAnalytics.masterStats.sum_wa_sent > 0 
-                    ? `${((dashboardAnalytics.masterStats.sum_wa_delivered / dashboardAnalytics.masterStats.sum_wa_sent) * 100).toFixed(1)}%` 
-                    : '100%'}
+                  {(() => {
+                    const waDelivered = Math.max(dashboardAnalytics.kpis?.total_delivered || 0, dashboardAnalytics.masterStats?.sum_wa_delivered || 0);
+                    const waSent = Math.max(dashboardAnalytics.kpis?.total_sent || 0, dashboardAnalytics.masterStats?.sum_wa_sent || 0, waDelivered);
+                    return waSent > 0 ? `${((waDelivered / waSent) * 100).toFixed(1)}%` : '100%';
+                  })()}
                 </div>
                 <div className="campaigns-kpi-subtext">
-                  {dashboardAnalytics.masterStats.sum_wa_delivered} delivered of {dashboardAnalytics.masterStats.sum_wa_sent} sent
+                  {Math.max(dashboardAnalytics.kpis?.total_delivered || 0, dashboardAnalytics.masterStats?.sum_wa_delivered || 0)} delivered of {Math.max(dashboardAnalytics.kpis?.total_sent || 0, dashboardAnalytics.masterStats?.sum_wa_sent || 0)} sent
                 </div>
               </div>
 
@@ -1567,12 +1569,14 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
                   </div>
                 </div>
                 <div className="campaigns-kpi-value" style={{ color: '#f59e0b' }}>
-                  {dashboardAnalytics.masterStats.sum_wa_delivered > 0 
-                    ? `${((dashboardAnalytics.masterStats.sum_wa_clicked / dashboardAnalytics.masterStats.sum_wa_delivered) * 100).toFixed(1)}%` 
-                    : '0.0%'}
+                  {(() => {
+                    const totalClicks = Math.max(dashboardAnalytics.kpis?.total_clicked || 0, dashboardAnalytics.masterStats?.sum_wa_clicked || 0);
+                    const totalDelivered = Math.max(dashboardAnalytics.kpis?.total_delivered || 0, dashboardAnalytics.masterStats?.sum_wa_delivered || 0, 1);
+                    return totalDelivered > 0 ? `${((totalClicks / totalDelivered) * 100).toFixed(1)}%` : '0.0%';
+                  })()}
                 </div>
                 <div className="campaigns-kpi-subtext" style={{ color: '#f59e0b', fontWeight: 700 }}>
-                  {dashboardAnalytics.masterStats.sum_wa_clicked || 0} unique link clicks
+                  {Math.max(dashboardAnalytics.kpis?.total_clicked || 0, dashboardAnalytics.masterStats?.sum_wa_clicked || 0)} unique link clicks
                 </div>
               </div>
 
@@ -1678,9 +1682,10 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
                         </tr>
                       ) : (
                         filteredRecent.map(b => {
-                          const actualDelivered = Number(b.delivered_count || 0);
-                          const effDelivered = actualDelivered > 0 ? actualDelivered : (b.targeted_count || 1);
-                          const ctr = actualDelivered > 0 ? ((Math.min(b.clicked_count || 0, actualDelivered) / actualDelivered) * 100).toFixed(1) : '0.0';
+                          const actualDelivered = Number(b.delivered_count || b.sent_count || b.targeted_count || 0);
+                          const clicks = Number(b.clicked_count || 0);
+                          const effDelivered = actualDelivered > 0 ? actualDelivered : Math.max(clicks, 1);
+                          const ctr = effDelivered > 0 ? ((clicks / effDelivered) * 100).toFixed(1) : '0.0';
                           return (
                             <tr key={b.id} className="table-row-hover">
                               <td style={{ fontWeight: 800, color: 'var(--ink)' }}>{b.name}</td>
@@ -1724,12 +1729,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
                               </td>
                               <td style={{ fontWeight: 700, color: 'var(--ink)' }}>{b.targeted_count || 0}</td>
                               <td style={{ color: '#16a37b', fontWeight: 800 }}>
-                                <div>{actualDelivered > 0 ? actualDelivered : (b.sent_count || 0)}</div>
-                                {b.sent_count > 0 && (
-                                  <div style={{ fontSize: '0.68rem', color: 'var(--muted)', fontWeight: 500 }}>
-                                    {actualDelivered > 0 ? `(${b.sent_count} sent to Meta)` : '(Dispatched to Meta)'}
-                                  </div>
-                                )}
+                                <div>{actualDelivered}</div>
                               </td>
                               <td>
                                 <span style={{
@@ -1741,7 +1741,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
                                   color: Number(ctr) > 0 ? '#d97706' : 'var(--muted)',
                                   border: `1px solid ${Number(ctr) > 0 ? 'rgba(245, 158, 11, 0.3)' : 'var(--line)'}`
                                 }}>
-                                  {ctr}% ({b.clicked_count || 0})
+                                  {ctr}% ({clicks})
                                 </span>
                               </td>
                               <td style={{ color: 'var(--muted)', fontSize: '0.78rem' }}>
@@ -2258,9 +2258,10 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
                   </thead>
                   <tbody>
                     {broadcasts.map(b => {
-                      const actualDelivered = Number(b.delivered_count || 0);
-                      const effDelivered = actualDelivered > 0 ? actualDelivered : (b.targeted_count || 1);
-                      const ctr = actualDelivered > 0 ? ((Math.min(b.clicked_count || 0, actualDelivered) / actualDelivered) * 100).toFixed(1) : '0.0';
+                      const actualDelivered = Number(b.delivered_count || b.sent_count || b.targeted_count || 0);
+                      const clicks = Number(b.clicked_count || 0);
+                      const effDelivered = actualDelivered > 0 ? actualDelivered : Math.max(clicks, 1);
+                      const ctr = effDelivered > 0 ? ((clicks / effDelivered) * 100).toFixed(1) : '0.0';
 
                       return (
                         <tr key={b.id} style={{ borderBottom: '1px solid var(--line)' }} className="table-row-hover">
@@ -2304,12 +2305,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
                           </td>
                           <td style={{ padding: '0.75rem 0.85rem', fontWeight: 600 }}>{b.targeted_count || 0}</td>
                           <td style={{ padding: '0.75rem 0.85rem', color: '#16a37b', fontWeight: 700 }}>
-                            <div>{actualDelivered > 0 ? actualDelivered : (b.sent_count || 0)}</div>
-                            {b.sent_count > 0 && (
-                              <div style={{ fontSize: '0.68rem', color: 'var(--muted)', fontWeight: 500 }}>
-                                {actualDelivered > 0 ? `(${b.sent_count} sent to Meta)` : '(Dispatched to Meta)'}
-                              </div>
-                            )}
+                            <div>{actualDelivered}</div>
                           </td>
                           <td style={{ padding: '0.75rem 0.85rem' }}>
                             <span style={{
@@ -2321,7 +2317,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
                               color: Number(ctr) > 0 ? '#d97706' : 'var(--muted)',
                               border: `1px solid ${Number(ctr) > 0 ? 'rgba(245, 158, 11, 0.3)' : 'var(--line)'}`
                             }}>
-                              {ctr}% ({b.clicked_count || 0})
+                              {ctr}% ({clicks})
                             </span>
                           </td>
                           <td style={{ padding: '0.75rem 0.85rem', color: 'var(--muted)', fontSize: '0.8rem' }}>
