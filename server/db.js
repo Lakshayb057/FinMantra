@@ -515,6 +515,12 @@ async function initPgSchema() {
     await safeQuery("ALTER TABLE campaign_logs DROP CONSTRAINT IF EXISTS campaign_logs_campaign_lead_id_fkey");
     await safeQuery("ALTER TABLE campaign_logs ADD COLUMN IF NOT EXISTS recipient_phone VARCHAR(50)");
     await safeQuery("ALTER TABLE campaign_logs ADD COLUMN IF NOT EXISTS recipient_email VARCHAR(255)");
+    await safeQuery("ALTER TABLE campaign_logs ADD COLUMN IF NOT EXISTS wamid VARCHAR(150)");
+    await safeQuery("ALTER TABLE campaign_logs ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMP WITH TIME ZONE");
+    await safeQuery("ALTER TABLE campaign_logs ADD COLUMN IF NOT EXISTS read_at TIMESTAMP WITH TIME ZONE");
+    await safeQuery("ALTER TABLE campaign_logs ADD COLUMN IF NOT EXISTS error_code VARCHAR(50)");
+    await safeQuery("CREATE INDEX IF NOT EXISTS idx_campaign_logs_wamid ON campaign_logs (wamid)");
+    await safeQuery("CREATE INDEX IF NOT EXISTS idx_campaign_logs_bc_status ON campaign_logs (broadcast_id, status)");
     await safeQuery("CREATE INDEX IF NOT EXISTS idx_campaign_logs_bc_phone ON campaign_logs (broadcast_id, recipient_phone)");
     await safeQuery("CREATE INDEX IF NOT EXISTS idx_campaign_logs_phone ON campaign_logs (recipient_phone)");
     await safeQuery("CREATE INDEX IF NOT EXISTS idx_campaign_logs_email ON campaign_logs (recipient_email)");
@@ -3271,23 +3277,25 @@ const db = {
     return res.rows;
   },
 
-  async logCampaignBroadcastDelivery(id, broadcastId, campaignLeadId, channel, status, errorMessage, recipientPhone = '', recipientEmail = '') {
+  async logCampaignBroadcastDelivery(id, broadcastId, campaignLeadId, channel, status, errorMessage, recipientPhone = '', recipientEmail = '', wamid = null, errorCode = null) {
     try {
       const res = await pool.query(
-        `INSERT INTO campaign_logs (id, broadcast_id, campaign_lead_id, channel, status, error_message, recipient_phone, recipient_email) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) 
+        `INSERT INTO campaign_logs (id, broadcast_id, campaign_lead_id, channel, status, error_message, recipient_phone, recipient_email, wamid, error_code, delivered_at, read_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 
+                 CASE WHEN $5 IN ('delivered', 'read') THEN CURRENT_TIMESTAMP ELSE NULL END,
+                 CASE WHEN $5 = 'read' THEN CURRENT_TIMESTAMP ELSE NULL END) 
          RETURNING *`,
-        [id, broadcastId, campaignLeadId, channel, status, errorMessage, recipientPhone, recipientEmail]
+        [id, broadcastId, campaignLeadId, channel, status, errorMessage, recipientPhone, recipientEmail, wamid, errorCode]
       );
       return res.rows[0];
     } catch (err) {
       console.error('[logCampaignBroadcastDelivery] Warning on insert:', err.message);
       try {
         const fallback = await pool.query(
-          `INSERT INTO campaign_logs (id, broadcast_id, channel, status, error_message, recipient_phone, recipient_email) 
-           VALUES ($1, $2, $3, $4, $5, $6, $7) 
+          `INSERT INTO campaign_logs (id, broadcast_id, channel, status, error_message, recipient_phone, recipient_email, wamid, error_code) 
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) 
            RETURNING *`,
-          [id, broadcastId, channel, status, (errorMessage || '') + (campaignLeadId ? ` (Lead: ${campaignLeadId})` : ''), recipientPhone, recipientEmail]
+          [id, broadcastId, channel, status, (errorMessage || '') + (campaignLeadId ? ` (Lead: ${campaignLeadId})` : ''), recipientPhone, recipientEmail, wamid, errorCode]
         );
         return fallback.rows[0];
       } catch (e) {
@@ -3296,15 +3304,47 @@ const db = {
     }
   },
 
+  async updateBroadcastDeliveryCounters(broadcastId) {
+    if (!broadcastId) return null;
+    try {
+      const res = await pool.query(`
+        UPDATE campaign_broadcasts b
+        SET 
+          sent_count = (
+            SELECT COUNT(*) FROM campaign_logs 
+            WHERE broadcast_id = b.id AND status IN ('sent', 'delivered', 'read')
+          ),
+          delivered_count = (
+            SELECT COUNT(*) FROM campaign_logs 
+            WHERE broadcast_id = b.id AND status IN ('delivered', 'read')
+          ),
+          read_count = (
+            SELECT COUNT(*) FROM campaign_logs 
+            WHERE broadcast_id = b.id AND status = 'read'
+          ),
+          failed_count = (
+            SELECT COUNT(*) FROM campaign_logs 
+            WHERE broadcast_id = b.id AND status = 'failed'
+          )
+        WHERE b.id = $1
+        RETURNING *
+      `, [broadcastId]);
+      return res.rows[0] || null;
+    } catch (err) {
+      console.error('[updateBroadcastDeliveryCounters Error]:', err.message);
+      return null;
+    }
+  },
+
   async getCampaignLogs(broadcastId) {
     const res = await pool.query(`
       SELECT l.*, 
              COALESCE(ml.name, cl.name, 'Recipient') as lead_name,
-             COALESCE(ml.contact, cl.contact, '') as lead_contact,
-             COALESCE(ml.mail, cl.mail, '') as lead_mail,
+             COALESCE(ml.contact, cl.contact, l.recipient_phone, '') as lead_contact,
+             COALESCE(ml.mail, cl.mail, l.recipient_email, '') as lead_mail,
              COALESCE(ml.finmantra_id, '') as lead_finmantra_id
       FROM campaign_logs l
-      LEFT JOIN campaign_master_leads ml ON ml.id = l.campaign_lead_id
+      LEFT JOIN campaign_master_leads ml ON (ml.id = l.campaign_lead_id OR (l.recipient_phone != '' AND ml.contact = l.recipient_phone))
       LEFT JOIN campaign_leads cl ON cl.id = l.campaign_lead_id
       WHERE l.broadcast_id = $1 
       ORDER BY l.sent_at DESC

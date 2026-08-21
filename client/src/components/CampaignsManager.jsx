@@ -167,6 +167,8 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
   const [viewingLogsBroadcast, setViewingLogsBroadcast] = useState(null);
   const [broadcastLogs, setBroadcastLogs] = useState([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
+  const [logFilterStatus, setLogFilterStatus] = useState('all');
+  const [logSearchQuery, setLogSearchQuery] = useState('');
   const [isSyncingMetaTemplates, setIsSyncingMetaTemplates] = useState(false);
 
   // Multi-SMTP Accounts state
@@ -1213,6 +1215,8 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
   // View detailed broadcast delivery logs
   const handleOpenBroadcastLogs = async (b) => {
     setViewingLogsBroadcast(b);
+    setLogFilterStatus('all');
+    setLogSearchQuery('');
     setIsLoadingLogs(true);
     setBroadcastLogs([]);
     try {
@@ -1225,6 +1229,32 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
       }
     } catch (err) {
       showToast('Network error fetching logs.', 'error');
+    } finally {
+      setIsLoadingLogs(false);
+    }
+  };
+
+  // Sync real-time delivery stats from database logs
+  const handleSyncBroadcastDelivery = async (b) => {
+    if (!b || !b.id) return;
+    try {
+      setIsLoadingLogs(true);
+      const res = await fetch(`${API_URL}/campaigns/broadcasts/${b.id}/sync-delivery`, {
+        method: 'POST',
+        headers
+      });
+      const data = await res.json();
+      if (data.success && data.broadcast) {
+        setViewingLogsBroadcast(data.broadcast);
+        showToast('Real-time delivery counts synchronized successfully!', 'success');
+        const logRes = await fetch(`${API_URL}/campaigns/broadcasts/${b.id}/logs`, { headers });
+        const logData = await logRes.json();
+        if (logData.success) {
+          setBroadcastLogs(logData.logs || []);
+        }
+      }
+    } catch (e) {
+      showToast('Failed to sync delivery stats.', 'error');
     } finally {
       setIsLoadingLogs(false);
     }
@@ -4884,97 +4914,332 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
       {/* ========================================================================= */}
       {/* MODAL 3: VIEW BROADCAST DELIVERY LOGS */}
       {/* ========================================================================= */}
-      {viewingLogsBroadcast && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '1rem' }}>
-          <div style={{ background: 'var(--paper)', border: '1px solid var(--line)', borderRadius: '16px', maxWidth: '820px', width: '100%', maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 50px rgba(0,0,0,0.3)', overflow: 'hidden' }}>
-            <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-              <div>
-                <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800 }}>
-                  Delivery Logs: {viewingLogsBroadcast.name}
-                </h3>
-                <div style={{ fontSize: '0.78rem', color: 'var(--muted)', marginTop: '0.2rem' }}>
-                  Channel: <strong style={{ textTransform: 'capitalize' }}>{viewingLogsBroadcast.channel}</strong> • Targeted: <strong>{viewingLogsBroadcast.targeted_count || 0}</strong> • Delivered: <strong style={{ color: '#16a37b' }}>{viewingLogsBroadcast.delivered_count || 0}</strong> • Failed: <strong style={{ color: '#ef4444' }}>{viewingLogsBroadcast.failed_count || 0}</strong>
+      {/* MODAL 3: VIEW BROADCAST DELIVERY LOGS & HANDSET ANALYTICS */}
+      {/* ========================================================================= */}
+      {viewingLogsBroadcast && (() => {
+        const totalLogs = broadcastLogs.length;
+        const deliveredLogs = broadcastLogs.filter(l => l.status === 'delivered' || l.status === 'read').length;
+        const readLogs = broadcastLogs.filter(l => l.status === 'read').length;
+        const sentQueuedLogs = broadcastLogs.filter(l => l.status === 'sent').length;
+        const failedLogs = broadcastLogs.filter(l => l.status === 'failed').length;
+
+        const filteredLogs = broadcastLogs.filter(log => {
+          // Status filter
+          if (logFilterStatus === 'delivered' && !(log.status === 'delivered' || log.status === 'read')) return false;
+          if (logFilterStatus === 'read' && log.status !== 'read') return false;
+          if (logFilterStatus === 'sent' && log.status !== 'sent') return false;
+          if (logFilterStatus === 'failed' && log.status !== 'failed') return false;
+
+          // Search filter
+          if (logSearchQuery.trim()) {
+            const q = logSearchQuery.toLowerCase().trim();
+            const name = (log.lead_name || '').toLowerCase();
+            const contact = (log.lead_contact || '').toLowerCase();
+            const mail = (log.lead_mail || '').toLowerCase();
+            const err = (log.error_message || '').toLowerCase();
+            const errCode = (log.error_code || '').toLowerCase();
+            const wamid = (log.wamid || '').toLowerCase();
+            return name.includes(q) || contact.includes(q) || mail.includes(q) || err.includes(q) || errCode.includes(q) || wamid.includes(q);
+          }
+          return true;
+        });
+
+        const targetCount = viewingLogsBroadcast.targeted_count || totalLogs || 1;
+        const deliveryRate = Math.round((deliveredLogs / targetCount) * 100);
+        const readRate = Math.round((readLogs / targetCount) * 100);
+
+        return (
+          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '1rem' }}>
+            <div style={{ background: 'var(--paper)', border: '1px solid var(--line)', borderRadius: '16px', maxWidth: '960px', width: '100%', maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 50px rgba(0,0,0,0.3)', overflow: 'hidden' }}>
+              
+              {/* Modal Header */}
+              <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, background: 'var(--paper-2)' }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                    <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800 }}>
+                      Delivery Logs & Handset Analytics
+                    </h3>
+                    <span style={{ padding: '0.2rem 0.6rem', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 700, textTransform: 'capitalize', background: viewingLogsBroadcast.channel === 'whatsapp' ? 'rgba(37, 211, 102, 0.15)' : 'rgba(59, 130, 246, 0.15)', color: viewingLogsBroadcast.channel === 'whatsapp' ? '#16a37b' : '#3b82f6' }}>
+                      {viewingLogsBroadcast.channel}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '0.82rem', color: 'var(--muted)', marginTop: '0.25rem' }}>
+                    Campaign: <strong>{viewingLogsBroadcast.name}</strong> • Scheduled / Sent: {viewingLogsBroadcast.scheduled_at ? new Date(viewingLogsBroadcast.scheduled_at).toLocaleString() : 'Immediate'}
+                  </div>
+                </div>
+                
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                  <button
+                    onClick={() => handleSyncBroadcastDelivery(viewingLogsBroadcast)}
+                    disabled={isLoadingLogs}
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 0.85rem', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--paper)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600 }}
+                    title="Sync and re-calculate delivery counts with Meta & Database"
+                  >
+                    <RefreshCw size={13} className={isLoadingLogs ? "spin-slow" : ""} style={{ color: 'var(--gold-deep)' }} />
+                    Sync Real-Time Delivery
+                  </button>
+                  <button onClick={() => setViewingLogsBroadcast(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: '0.25rem' }}>
+                    <X size={20} />
+                  </button>
                 </div>
               </div>
-              <button onClick={() => setViewingLogsBroadcast(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}>
-                <X size={20} />
-              </button>
-            </div>
 
-            <div style={{ padding: '1.25rem', overflowY: 'auto', flex: 1 }}>
-              {isLoadingLogs ? (
-                <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--muted)' }}>
-                  <RefreshCw size={24} className="spin-slow" style={{ color: 'var(--gold-deep)', marginBottom: '0.5rem' }} />
-                  <div>Fetching delivery logs...</div>
+              {/* KPI Summary Cards */}
+              <div style={{ padding: '1rem 1.5rem', background: 'var(--paper)', borderBottom: '1px solid var(--line)', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.75rem', flexShrink: 0 }}>
+                <div style={{ padding: '0.75rem 1rem', borderRadius: '10px', background: 'var(--paper-2)', border: '1px solid var(--line)' }}>
+                  <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 700 }}>Targeted</div>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 800, marginTop: '0.2rem' }}>{viewingLogsBroadcast.targeted_count || totalLogs}</div>
                 </div>
-              ) : broadcastLogs.length === 0 ? (
-                <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--muted)' }}>
-                  <Info size={32} style={{ color: 'var(--line)', marginBottom: '0.5rem' }} />
-                  <div style={{ fontWeight: 600 }}>No delivery log records found for this broadcast yet.</div>
-                  <div style={{ fontSize: '0.8rem', marginTop: '0.25rem' }}>Logs are recorded in real-time as each recipient contact is contacted.</div>
+                <div style={{ padding: '0.75rem 1rem', borderRadius: '10px', background: 'rgba(22, 163, 123, 0.08)', border: '1px solid rgba(22, 163, 123, 0.25)' }}>
+                  <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: '#16a37b', fontWeight: 700 }}>Delivered</div>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#16a37b', marginTop: '0.2rem' }}>
+                    {deliveredLogs} <span style={{ fontSize: '0.75rem', fontWeight: 600, opacity: 0.85 }}>({deliveryRate}%)</span>
+                  </div>
                 </div>
-              ) : (
-                <div className="campaigns-table-wrapper">
-                  <table className="campaigns-table">
-                    <thead>
-                      <tr style={{ borderBottom: '1px solid var(--line)', color: 'var(--muted)', fontSize: '0.75rem', textTransform: 'uppercase' }}>
-                        <th style={{ padding: '0.5rem 0.75rem' }}>Recipient</th>
-                        <th style={{ padding: '0.5rem 0.75rem' }}>Channel</th>
-                        <th style={{ padding: '0.5rem 0.75rem' }}>Status</th>
-                        <th style={{ padding: '0.5rem 0.75rem' }}>Details / Error Reason</th>
-                        <th style={{ padding: '0.5rem 0.75rem' }}>Timestamp</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {broadcastLogs.map(log => (
-                        <tr key={log.id} style={{ borderBottom: '1px solid var(--line)' }} className="table-row-hover">
-                          <td style={{ padding: '0.6rem 0.75rem' }}>
-                            <div style={{ fontWeight: 700, fontSize: '0.84rem' }}>{log.lead_name || 'Recipient'}</div>
-                            <div style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>
-                              {log.lead_contact || ''} {log.lead_mail ? `• ${log.lead_mail}` : ''}
-                            </div>
-                          </td>
-                          <td style={{ padding: '0.6rem 0.75rem', textTransform: 'capitalize', fontSize: '0.8rem' }}>
-                            {log.channel}
-                          </td>
-                          <td style={{ padding: '0.6rem 0.75rem' }}>
-                            <span style={{
-                              padding: '0.15rem 0.5rem',
-                              borderRadius: '999px',
-                              fontSize: '0.72rem',
-                              fontWeight: 700,
-                              background: log.status === 'sent' || log.status === 'delivered' ? 'rgba(22, 163, 123, 0.12)' : 'rgba(239, 68, 68, 0.12)',
-                              color: log.status === 'sent' || log.status === 'delivered' ? '#16a37b' : '#ef4444'
-                            }}>
-                              {log.status === 'sent' || log.status === 'delivered' ? 'Delivered' : 'Failed'}
-                            </span>
-                          </td>
-                          <td style={{ padding: '0.6rem 0.75rem', fontSize: '0.78rem', color: log.error_message ? '#ef4444' : '#16a37b', maxWidth: '300px', wordBreak: 'break-word' }}>
-                            {log.error_message || 'Sent & delivered successfully.'}
-                          </td>
-                          <td style={{ padding: '0.6rem 0.75rem', fontSize: '0.75rem', color: 'var(--muted)', whiteSpace: 'nowrap' }}>
-                            {log.sent_at ? new Date(log.sent_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'}
-                          </td>
+                <div style={{ padding: '0.75rem 1rem', borderRadius: '10px', background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.25)' }}>
+                  <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: '#3b82f6', fontWeight: 700 }}>Read</div>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#3b82f6', marginTop: '0.2rem' }}>
+                    {readLogs} <span style={{ fontSize: '0.75rem', fontWeight: 600, opacity: 0.85 }}>({readRate}%)</span>
+                  </div>
+                </div>
+                <div style={{ padding: '0.75rem 1rem', borderRadius: '10px', background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.25)' }}>
+                  <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: '#d97706', fontWeight: 700 }}>Queued / Sent</div>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#d97706', marginTop: '0.2rem' }}>{sentQueuedLogs}</div>
+                </div>
+                <div style={{ padding: '0.75rem 1rem', borderRadius: '10px', background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.25)' }}>
+                  <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: '#ef4444', fontWeight: 700 }}>Failed</div>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#ef4444', marginTop: '0.2rem' }}>{failedLogs}</div>
+                </div>
+              </div>
+
+              {/* Filter Tabs & Search Controls */}
+              <div style={{ padding: '0.75rem 1.5rem', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', flexShrink: 0, background: 'var(--paper)' }}>
+                <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => setLogFilterStatus('all')}
+                    style={{
+                      padding: '0.3rem 0.75rem',
+                      borderRadius: '999px',
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      border: '1px solid var(--line)',
+                      cursor: 'pointer',
+                      background: logFilterStatus === 'all' ? 'var(--gold-deep)' : 'var(--paper-2)',
+                      color: logFilterStatus === 'all' ? '#fff' : 'var(--ink)'
+                    }}
+                  >
+                    All ({totalLogs})
+                  </button>
+                  <button
+                    onClick={() => setLogFilterStatus('delivered')}
+                    style={{
+                      padding: '0.3rem 0.75rem',
+                      borderRadius: '999px',
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      border: '1px solid rgba(22, 163, 123, 0.3)',
+                      cursor: 'pointer',
+                      background: logFilterStatus === 'delivered' ? '#16a37b' : 'rgba(22, 163, 123, 0.08)',
+                      color: logFilterStatus === 'delivered' ? '#fff' : '#16a37b'
+                    }}
+                  >
+                    Delivered ({deliveredLogs})
+                  </button>
+                  <button
+                    onClick={() => setLogFilterStatus('read')}
+                    style={{
+                      padding: '0.3rem 0.75rem',
+                      borderRadius: '999px',
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      border: '1px solid rgba(59, 130, 246, 0.3)',
+                      cursor: 'pointer',
+                      background: logFilterStatus === 'read' ? '#3b82f6' : 'rgba(59, 130, 246, 0.08)',
+                      color: logFilterStatus === 'read' ? '#fff' : '#3b82f6'
+                    }}
+                  >
+                    Read ({readLogs})
+                  </button>
+                  <button
+                    onClick={() => setLogFilterStatus('sent')}
+                    style={{
+                      padding: '0.3rem 0.75rem',
+                      borderRadius: '999px',
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      border: '1px solid rgba(245, 158, 11, 0.3)',
+                      cursor: 'pointer',
+                      background: logFilterStatus === 'sent' ? '#d97706' : 'rgba(245, 158, 11, 0.08)',
+                      color: logFilterStatus === 'sent' ? '#fff' : '#d97706'
+                    }}
+                  >
+                    Queued / Sent ({sentQueuedLogs})
+                  </button>
+                  <button
+                    onClick={() => setLogFilterStatus('failed')}
+                    style={{
+                      padding: '0.3rem 0.75rem',
+                      borderRadius: '999px',
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      border: '1px solid rgba(239, 68, 68, 0.3)',
+                      cursor: 'pointer',
+                      background: logFilterStatus === 'failed' ? '#ef4444' : 'rgba(239, 68, 68, 0.08)',
+                      color: logFilterStatus === 'failed' ? '#fff' : '#ef4444'
+                    }}
+                  >
+                    Failed ({failedLogs})
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: '1', minWidth: '220px', maxWidth: '320px' }}>
+                  <input
+                    type="text"
+                    placeholder="Search by name, phone, or reason..."
+                    value={logSearchQuery}
+                    onChange={(e) => setLogSearchQuery(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '0.35rem 0.75rem',
+                      borderRadius: '8px',
+                      border: '1px solid var(--line)',
+                      background: 'var(--paper-2)',
+                      fontSize: '0.8rem',
+                      outline: 'none'
+                    }}
+                  />
+                  {logSearchQuery && (
+                    <button
+                      onClick={() => setLogSearchQuery('')}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: '0.75rem' }}
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Logs Content Area */}
+              <div style={{ padding: '0', overflowY: 'auto', flex: 1 }}>
+                {isLoadingLogs ? (
+                  <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--muted)' }}>
+                    <RefreshCw size={24} className="spin-slow" style={{ color: 'var(--gold-deep)', marginBottom: '0.5rem' }} />
+                    <div>Fetching delivery logs & handset telemetry...</div>
+                  </div>
+                ) : filteredLogs.length === 0 ? (
+                  <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--muted)' }}>
+                    <Info size={32} style={{ color: 'var(--line)', marginBottom: '0.5rem' }} />
+                    <div style={{ fontWeight: 600 }}>No matching delivery log records found.</div>
+                    <div style={{ fontSize: '0.8rem', marginTop: '0.25rem' }}>
+                      {logFilterStatus !== 'all' || logSearchQuery ? 'Try clearing your filters or search query.' : 'Logs are recorded in real-time as each recipient contact is contacted.'}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="campaigns-table-wrapper" style={{ margin: 0, borderRadius: 0, border: 'none' }}>
+                    <table className="campaigns-table">
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid var(--line)', color: 'var(--muted)', fontSize: '0.72rem', textTransform: 'uppercase', background: 'var(--paper-2)' }}>
+                          <th style={{ padding: '0.65rem 1rem' }}>Recipient</th>
+                          <th style={{ padding: '0.65rem 1rem' }}>Channel</th>
+                          <th style={{ padding: '0.65rem 1rem' }}>Status</th>
+                          <th style={{ padding: '0.65rem 1rem' }}>Delivery Status / Error Reason</th>
+                          <th style={{ padding: '0.65rem 1rem' }}>Timestamp</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
+                      </thead>
+                      <tbody>
+                        {filteredLogs.map(log => (
+                          <tr key={log.id} style={{ borderBottom: '1px solid var(--line)' }} className="table-row-hover">
+                            <td style={{ padding: '0.65rem 1rem' }}>
+                              <div style={{ fontWeight: 700, fontSize: '0.84rem' }}>{log.lead_name || 'Recipient'}</div>
+                              <div style={{ fontSize: '0.75rem', color: 'var(--muted)', marginTop: '0.1rem' }}>
+                                {log.lead_contact || log.recipient_phone || '—'} {log.lead_mail ? `• ${log.lead_mail}` : ''}
+                              </div>
+                            </td>
+                            <td style={{ padding: '0.65rem 1rem', textTransform: 'capitalize', fontSize: '0.8rem', fontWeight: 600 }}>
+                              {log.channel}
+                            </td>
+                            <td style={{ padding: '0.65rem 1rem' }}>
+                              <span style={{
+                                padding: '0.2rem 0.6rem',
+                                borderRadius: '999px',
+                                fontSize: '0.72rem',
+                                fontWeight: 700,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.25rem',
+                                background: log.status === 'read' 
+                                  ? 'rgba(59, 130, 246, 0.15)' 
+                                  : log.status === 'delivered' 
+                                    ? 'rgba(22, 163, 123, 0.15)' 
+                                    : log.status === 'sent' 
+                                      ? 'rgba(245, 158, 11, 0.15)' 
+                                      : 'rgba(239, 68, 68, 0.15)',
+                                color: log.status === 'read' 
+                                  ? '#3b82f6' 
+                                  : log.status === 'delivered' 
+                                    ? '#16a37b' 
+                                    : log.status === 'sent' 
+                                      ? '#d97706' 
+                                      : '#ef4444'
+                              }}>
+                                {log.status === 'read' ? 'Read' : log.status === 'delivered' ? 'Delivered' : log.status === 'sent' ? 'Queued / Sent' : 'Failed'}
+                              </span>
+                            </td>
+                            <td style={{ padding: '0.65rem 1rem', fontSize: '0.78rem', maxWidth: '360px', wordBreak: 'break-word' }}>
+                              {log.status === 'failed' ? (
+                                <div style={{ color: '#ef4444', fontWeight: 600 }}>
+                                  {log.error_message || 'Delivery failed on handset.'}
+                                </div>
+                              ) : log.status === 'read' ? (
+                                <div style={{ color: '#3b82f6', fontWeight: 600 }}>
+                                  Message read by recipient.
+                                </div>
+                              ) : log.status === 'delivered' ? (
+                                <div style={{ color: '#16a37b', fontWeight: 600 }}>
+                                  Delivered to handset successfully.
+                                </div>
+                              ) : (
+                                <div style={{ color: '#d97706', fontWeight: 500 }}>
+                                  {log.error_message || 'Dispatched to Meta. Awaiting handset confirmation.'}
+                                </div>
+                              )}
+                              {log.wamid && (
+                                <div style={{ fontSize: '0.68rem', color: 'var(--muted)', marginTop: '0.15rem', fontFamily: 'monospace' }}>
+                                  ID: {log.wamid.length > 28 ? log.wamid.substring(0, 28) + '...' : log.wamid}
+                                </div>
+                              )}
+                            </td>
+                            <td style={{ padding: '0.65rem 1rem', fontSize: '0.75rem', color: 'var(--muted)', whiteSpace: 'nowrap' }}>
+                              {log.sent_at ? new Date(log.sent_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'}
+                              <div style={{ fontSize: '0.68rem', color: 'var(--muted)' }}>
+                                {log.sent_at ? new Date(log.sent_at).toLocaleDateString() : ''}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
 
-            <div style={{ padding: '0.85rem 1.5rem', borderTop: '1px solid var(--line)', display: 'flex', justifyContent: 'flex-end', background: 'var(--paper-2)' }}>
-              <button
-                type="button"
-                onClick={() => setViewingLogsBroadcast(null)}
-                style={{ padding: '0.45rem 1.1rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper)', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }}
-              >
-                Close
-              </button>
+              {/* Modal Footer */}
+              <div style={{ padding: '0.85rem 1.5rem', borderTop: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--paper-2)' }}>
+                <div style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>
+                  Showing <strong>{filteredLogs.length}</strong> of <strong>{totalLogs}</strong> logs
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setViewingLogsBroadcast(null)}
+                  style={{ padding: '0.45rem 1.1rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper)', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }}
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ========================================================================= */}
       {/* MODAL 4: ADD / EDIT EMAIL GATEWAY ACCOUNT (AWS SES & SMTP) */}

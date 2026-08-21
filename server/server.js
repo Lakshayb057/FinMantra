@@ -7162,7 +7162,8 @@ async function checkAndRunScheduledBroadcasts() {
                 const templateLanguage = templateObj?.language || 'en_US';
                 const phoneIdToUse = b.meta_phone_number_id || templateObj?.meta_phone_number_id || null;
 
-                await sendWhatsAppTemplate(
+                let wamid = null;
+                const waResp = await sendWhatsAppTemplate(
                   lead.contact,
                   actualTemplateName,
                   params,
@@ -7175,6 +7176,9 @@ async function checkAndRunScheduledBroadcasts() {
                   b.id,
                   lead.finmantra_id || lead.id
                 );
+                if (waResp && waResp.messages && waResp.messages[0] && waResp.messages[0].id) {
+                  wamid = waResp.messages[0].id;
+                }
               } else {
                 const gateway = settings.whatsapp_gateway || 'baileys';
                 if (gateway === 'baileys') {
@@ -7191,8 +7195,6 @@ async function checkAndRunScheduledBroadcasts() {
 
               waSuccess = true;
               await db.incrementMasterLeadMetric(lead.id, 'whatsapp', 'sent');
-              await db.incrementMasterLeadMetric(lead.id, 'whatsapp', 'delivered');
-              deliveredCount++;
             } catch (err) {
               waSuccess = false;
               waError = err.message || JSON.stringify(err);
@@ -7206,9 +7208,11 @@ async function checkAndRunScheduledBroadcasts() {
             lead.id,
             'whatsapp',
             waSuccess ? 'sent' : 'failed',
-            waError,
+            waSuccess ? (wamid ? `Dispatched to Meta Cloud API (ID: ${wamid})` : 'Dispatched to Meta Cloud API') : waError,
             lead.contact || '',
-            lead.mail || ''
+            lead.mail || '',
+            wamid,
+            waSuccess ? null : 'DISPATCH_ERROR'
           ).catch(err => console.error('[WhatsApp Log Warn]:', err.message));
         }
 
@@ -7231,9 +7235,7 @@ async function checkAndRunScheduledBroadcasts() {
 
       const finalStatus = (sentCount === 0 && leads.length > 0) ? 'failed' : 'sent';
       await db.updateCampaignBroadcastStatus(b.id, finalStatus, sentCount, failedCount);
-      try {
-        await db.runQuery('UPDATE campaign_broadcasts SET delivered_count = $2 WHERE id = $1', [b.id, deliveredCount]);
-      } catch (e) {}
+      await db.updateBroadcastDeliveryCounters(b.id);
       console.log(`[Campaign Scheduler] Completed broadcast: "${b.name}". Sent: ${sentCount}, Failed: ${failedCount}`);
       broadcast({ type: 'BROADCAST_UPDATED' });
       broadcast({ type: 'MASTER_DATA_UPDATED' });
@@ -9281,28 +9283,77 @@ app.post(['/api/whatsapp/webhook', '/webhook'], async (req, res) => {
         // 1. Delivery & Read Status Updates from Meta
         if (val.statuses && Array.isArray(val.statuses)) {
           for (const st of val.statuses) {
+            const wamid = st.id;
             const recipientPhone = st.recipient_id;
-            const statusType = st.status; // 'sent' | 'delivered' | 'read' | 'failed'
+            const metaStatus = st.status; // 'sent' | 'delivered' | 'read' | 'failed'
+
+            let errorMsg = null;
+            let errorCode = null;
+            if (metaStatus === 'failed' && Array.isArray(st.errors) && st.errors.length > 0) {
+              const errItem = st.errors[0];
+              errorCode = String(errItem.code || '');
+              const errTitle = errItem.title || 'Delivery Failed';
+              const errDetails = errItem.error_data?.details || errItem.message || '';
+
+              let reasonExplanation = '';
+              if (errorCode === '131026') {
+                reasonExplanation = 'Phone number is not registered on WhatsApp or inactive.';
+              } else if (errorCode === '131047') {
+                reasonExplanation = 'Re-engagement window expired. User needs to initiate contact first.';
+              } else if (errorCode === '131051') {
+                reasonExplanation = 'Unsupported phone number type or region.';
+              } else if (errorCode === '131042') {
+                reasonExplanation = 'Payment issue or Meta account credit limit reached.';
+              } else if (errorCode === '130429') {
+                reasonExplanation = 'Rate limit hit on Meta Cloud API.';
+              } else if (errorCode === '131049') {
+                reasonExplanation = 'Meta spam protection: User opted out or blocked business.';
+              } else if (errorCode === '131052') {
+                reasonExplanation = 'Media download failed or expired URL.';
+              } else {
+                reasonExplanation = errDetails || errTitle;
+              }
+              errorMsg = `Meta Error [Code ${errorCode}]: ${reasonExplanation}`;
+            }
+
+            const cleanPhone10 = recipientPhone ? recipientPhone.replace(/\D/g, '').slice(-10) : '';
+            const cleanPhone12 = cleanPhone10 ? '91' + cleanPhone10 : '';
+
+            // Update matching log in campaign_logs
+            const logUpdateRes = await db.runQuery(`
+              UPDATE campaign_logs
+              SET status = $1,
+                  error_message = COALESCE($2, CASE 
+                    WHEN $1 = 'delivered' THEN 'Delivered to handset successfully.' 
+                    WHEN $1 = 'read' THEN 'Message read by recipient.' 
+                    ELSE error_message 
+                  END),
+                  error_code = COALESCE($3, error_code),
+                  delivered_at = CASE WHEN $1 IN ('delivered', 'read') THEN COALESCE(delivered_at, CURRENT_TIMESTAMP) ELSE delivered_at END,
+                  read_at = CASE WHEN $1 = 'read' THEN COALESCE(read_at, CURRENT_TIMESTAMP) ELSE read_at END
+              WHERE (wamid = $4 OR (wamid IS NULL AND (recipient_phone = $5 OR recipient_phone = $6 OR recipient_phone = $7)))
+              RETURNING broadcast_id, campaign_lead_id
+            `, [metaStatus, errorMsg, errorCode, wamid, recipientPhone, cleanPhone10, cleanPhone12]);
 
             const lead = await db.getMasterLeadById(recipientPhone);
+            const affectedBcId = logUpdateRes.rows[0]?.broadcast_id || lead?.last_broadcast_id;
+
+            if (affectedBcId) {
+              await db.updateBroadcastDeliveryCounters(affectedBcId);
+            }
+
             if (lead) {
-              if (statusType === 'delivered') {
+              if (metaStatus === 'delivered') {
                 await db.incrementMasterLeadMetric(lead.id, 'whatsapp', 'delivered').catch(() => {});
-                if (lead.last_broadcast_id) {
-                  await db.runQuery('UPDATE campaign_broadcasts SET delivered_count = COALESCE(delivered_count, 0) + 1 WHERE id = $1', [lead.last_broadcast_id]).catch(() => {});
-                }
-              } else if (statusType === 'read') {
+              } else if (metaStatus === 'read') {
                 await db.incrementMasterLeadMetric(lead.id, 'whatsapp', 'read').catch(() => {});
-                if (lead.last_broadcast_id) {
-                  await db.runQuery('UPDATE campaign_broadcasts SET read_count = COALESCE(read_count, 0) + 1 WHERE id = $1', [lead.last_broadcast_id]).catch(() => {});
-                }
-              } else if (statusType === 'failed') {
-                if (lead.last_broadcast_id) {
-                  await db.runQuery('UPDATE campaign_broadcasts SET failed_count = COALESCE(failed_count, 0) + 1 WHERE id = $1', [lead.last_broadcast_id]).catch(() => {});
-                }
               }
             }
           }
+
+          broadcast({ type: 'BROADCAST_UPDATED' });
+          broadcast({ type: 'MASTER_DATA_UPDATED' });
+          broadcast({ type: 'CAMPAIGNS_UPDATED' });
         }
 
         // 2. Inbound Interactive Button Click or Message Replies
@@ -9413,6 +9464,17 @@ app.get(['/api/campaigns/:id/broadcasts/:broadcastId/logs', '/api/campaigns/broa
   try {
     const list = await db.getCampaignLogs(req.params.broadcastId);
     res.json({ success: true, logs: list });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Force sync & refresh broadcast delivery stats from database logs
+app.post(['/api/campaigns/:id/broadcasts/:broadcastId/sync-delivery', '/api/campaigns/broadcasts/:broadcastId/sync-delivery'], authenticateToken, async (req, res) => {
+  try {
+    const updated = await db.updateBroadcastDeliveryCounters(req.params.broadcastId);
+    broadcast({ type: 'BROADCAST_UPDATED' });
+    res.json({ success: true, broadcast: updated });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
