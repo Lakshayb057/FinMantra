@@ -5084,6 +5084,16 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
                 </div>
               </div>
 
+              {/* Webhook Status Info Banner */}
+              {viewingLogsBroadcast.channel === 'whatsapp' && sentQueuedLogs > 0 && deliveredLogs === 0 && (
+                <div style={{ padding: '0.65rem 1.25rem', background: 'rgba(59, 130, 246, 0.08)', borderBottom: '1px solid rgba(59, 130, 246, 0.2)', fontSize: '0.78rem', color: '#2563eb', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Info size={16} style={{ flexShrink: 0 }} />
+                  <div>
+                    <strong>Dispatched to Meta Cloud API ({sentQueuedLogs} queued)</strong>: Handset delivery & read receipts are recorded live via Meta Webhooks. Ensure <code>messages</code> field is subscribed in Meta Developer Console at <code>https://thefinmantra.com/api/whatsapp/webhook</code>.
+                  </div>
+                </div>
+              )}
+
               {/* Filter Tabs & Search Controls */}
               <div style={{ padding: '0.75rem 1.5rem', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', flexShrink: 0, background: 'var(--paper)' }}>
                 <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
