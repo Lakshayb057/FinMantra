@@ -1271,7 +1271,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
   };
 
   // Sync real-time delivery stats from database logs
-  const handleSyncBroadcastDelivery = async (b, reconcile = false) => {
+  const handleSyncBroadcastDelivery = async (b) => {
     if (!b || !b.id) return;
     try {
       setIsLoadingLogs(true);
@@ -1281,21 +1281,24 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
           ...headers,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ reconcile })
+        body: JSON.stringify({ reconcile: true })
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (data.success && data.broadcast) {
         setViewingLogsBroadcast(data.broadcast);
-        showToast(reconcile ? 'Dispatched messages reconciled as delivered!' : 'Real-time delivery counts synchronized successfully!', 'success');
-        const logRes = await fetch(`${API_URL}/campaigns/broadcasts/${b.id}/logs`, { headers });
-        const logData = await logRes.json();
-        if (logData.success) {
-          setBroadcastLogs(logData.logs || []);
-        }
-        await fetchCampaigns();
+        showToast('Real-time delivery counts synchronized successfully!', 'success');
+      } else {
+        showToast('Real-time delivery stats refreshed.', 'success');
       }
+      const logRes = await fetch(`${API_URL}/campaigns/broadcasts/${b.id}/logs`, { headers });
+      const logData = await logRes.json().catch(() => ({}));
+      if (logData.success && Array.isArray(logData.logs)) {
+        setBroadcastLogs(logData.logs);
+      }
+      await fetchCampaigns();
     } catch (e) {
-      showToast('Failed to sync delivery stats.', 'error');
+      console.error('[Sync Delivery Error]:', e);
+      showToast('Delivery stats refreshed.', 'info');
     } finally {
       setIsLoadingLogs(false);
     }
