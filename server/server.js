@@ -9334,7 +9334,9 @@ app.post(['/api/whatsapp/webhook', '/webhook'], async (req, res) => {
             const cleanPhone10 = recipientPhone ? recipientPhone.replace(/\D/g, '').slice(-10) : '';
             const cleanPhone12 = cleanPhone10 ? '91' + cleanPhone10 : '';
 
-            // Update matching log in campaign_logs
+            console.log(`[Meta Webhook Status] Phone: ${recipientPhone} | Status: "${metaStatus}" | WAMID: ${wamid}${errorMsg ? ' | Error: ' + errorMsg : ''}`);
+
+            // Update matching log in campaign_logs by wamid or phone
             const logUpdateRes = await db.runQuery(`
               UPDATE campaign_logs
               SET status = $1,
@@ -9346,15 +9348,20 @@ app.post(['/api/whatsapp/webhook', '/webhook'], async (req, res) => {
                   error_code = COALESCE($3, error_code),
                   delivered_at = CASE WHEN $1 IN ('delivered', 'read') THEN COALESCE(delivered_at, CURRENT_TIMESTAMP) ELSE delivered_at END,
                   read_at = CASE WHEN $1 = 'read' THEN COALESCE(read_at, CURRENT_TIMESTAMP) ELSE read_at END
-              WHERE (wamid = $4 OR (wamid IS NULL AND (recipient_phone = $5 OR recipient_phone = $6 OR recipient_phone = $7)))
+              WHERE wamid = $4 
+                 OR (recipient_phone IN ($5, $6, $7) AND sent_at >= CURRENT_TIMESTAMP - INTERVAL '48 hours')
               RETURNING broadcast_id, campaign_lead_id
             `, [metaStatus, errorMsg, errorCode, wamid, recipientPhone, cleanPhone10, cleanPhone12]);
 
             const lead = await db.getMasterLeadById(recipientPhone);
-            const affectedBcId = logUpdateRes.rows[0]?.broadcast_id || lead?.last_broadcast_id;
+            const affectedBcIds = new Set();
+            for (const r of (logUpdateRes.rows || [])) {
+              if (r.broadcast_id) affectedBcIds.add(r.broadcast_id);
+            }
+            if (lead?.last_broadcast_id) affectedBcIds.add(lead.last_broadcast_id);
 
-            if (affectedBcId) {
-              await db.updateBroadcastDeliveryCounters(affectedBcId);
+            for (const bcId of affectedBcIds) {
+              await db.updateBroadcastDeliveryCounters(bcId);
             }
 
             if (lead) {

@@ -1670,12 +1670,9 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
                         </tr>
                       ) : (
                         filteredRecent.map(b => {
-                          const displayDelivered = b.channel === 'both' 
-                            ? (b.targeted_count && b.targeted_count <= b.delivered_count ? b.targeted_count : Math.ceil((b.delivered_count || 0) / 2))
-                            : (b.delivered_count || b.sent_count || 0);
-                          
-                          const effDelivered = displayDelivered > 0 ? displayDelivered : (b.delivered_count || 1);
-                          const ctr = effDelivered > 0 ? ((Math.min(b.clicked_count || 0, effDelivered) / effDelivered) * 100).toFixed(1) : '0.0';
+                          const actualDelivered = Number(b.delivered_count || 0);
+                          const effDelivered = actualDelivered > 0 ? actualDelivered : (b.targeted_count || 1);
+                          const ctr = actualDelivered > 0 ? ((Math.min(b.clicked_count || 0, actualDelivered) / actualDelivered) * 100).toFixed(1) : '0.0';
                           return (
                             <tr key={b.id} className="table-row-hover">
                               <td style={{ fontWeight: 800, color: 'var(--ink)' }}>{b.name}</td>
@@ -1719,8 +1716,12 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
                               </td>
                               <td style={{ fontWeight: 700, color: 'var(--ink)' }}>{b.targeted_count || 0}</td>
                               <td style={{ color: '#16a37b', fontWeight: 800 }}>
-                                {displayDelivered}
-                                {b.channel === 'both' && <span style={{ fontSize: '0.7rem', color: 'var(--muted)', marginLeft: '0.3rem' }}>(WA+Email)</span>}
+                                <div>{actualDelivered}</div>
+                                {b.sent_count > 0 && b.sent_count !== actualDelivered && (
+                                  <div style={{ fontSize: '0.68rem', color: 'var(--muted)', fontWeight: 500 }}>
+                                    ({b.sent_count} sent to Meta)
+                                  </div>
+                                )}
                               </td>
                               <td>
                                 <span style={{
@@ -2249,11 +2250,9 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
                   </thead>
                   <tbody>
                     {broadcasts.map(b => {
-                      const displayDelivered = b.channel === 'both' 
-                        ? (b.targeted_count && b.targeted_count <= b.delivered_count ? b.targeted_count : Math.ceil((b.delivered_count || 0) / 2))
-                        : (b.delivered_count || b.sent_count || 0);
-                      const effDelivered = displayDelivered > 0 ? displayDelivered : (b.delivered_count || 1);
-                      const ctr = effDelivered > 0 ? ((Math.min(b.clicked_count || 0, effDelivered) / effDelivered) * 100).toFixed(1) : '0.0';
+                      const actualDelivered = Number(b.delivered_count || 0);
+                      const effDelivered = actualDelivered > 0 ? actualDelivered : (b.targeted_count || 1);
+                      const ctr = actualDelivered > 0 ? ((Math.min(b.clicked_count || 0, actualDelivered) / actualDelivered) * 100).toFixed(1) : '0.0';
 
                       return (
                         <tr key={b.id} style={{ borderBottom: '1px solid var(--line)' }} className="table-row-hover">
@@ -2297,7 +2296,12 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
                           </td>
                           <td style={{ padding: '0.75rem 0.85rem', fontWeight: 600 }}>{b.targeted_count || 0}</td>
                           <td style={{ padding: '0.75rem 0.85rem', color: '#16a37b', fontWeight: 700 }}>
-                            {displayDelivered}
+                            <div>{actualDelivered}</div>
+                            {b.sent_count > 0 && b.sent_count !== actualDelivered && (
+                              <div style={{ fontSize: '0.68rem', color: 'var(--muted)', fontWeight: 500 }}>
+                                ({b.sent_count} sent to Meta)
+                              </div>
+                            )}
                           </td>
                           <td style={{ padding: '0.75rem 0.85rem' }}>
                             <span style={{
