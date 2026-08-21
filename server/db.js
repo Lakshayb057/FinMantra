@@ -406,8 +406,8 @@ async function initPgSchema() {
         id VARCHAR(50) PRIMARY KEY,
         campaign_id VARCHAR(50) REFERENCES campaigns(id) ON DELETE CASCADE,
         name VARCHAR(255) NOT NULL,
-        contact VARCHAR(50) NOT NULL,
-        mail VARCHAR(255) NOT NULL,
+        contact VARCHAR(50),
+        mail VARCHAR(255),
         address TEXT,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       )
@@ -448,8 +448,8 @@ async function initPgSchema() {
       CREATE TABLE IF NOT EXISTS campaign_master_leads (
         id VARCHAR(50) PRIMARY KEY,
         name VARCHAR(255) NOT NULL,
-        contact VARCHAR(50) NOT NULL,
-        mail VARCHAR(255) NOT NULL,
+        contact VARCHAR(50),
+        mail VARCHAR(255),
         address TEXT,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       )
@@ -478,6 +478,10 @@ async function initPgSchema() {
       }
     };
 
+    await safeQuery("ALTER TABLE campaign_master_leads ALTER COLUMN mail DROP NOT NULL");
+    await safeQuery("ALTER TABLE campaign_master_leads ALTER COLUMN contact DROP NOT NULL");
+    await safeQuery("ALTER TABLE campaign_leads ALTER COLUMN mail DROP NOT NULL");
+    await safeQuery("ALTER TABLE campaign_leads ALTER COLUMN contact DROP NOT NULL");
     await safeQuery("CREATE INDEX IF NOT EXISTS idx_meta_audiences_type_bank ON meta_audiences (audience_type, bank_name)");
     await safeQuery("CREATE INDEX IF NOT EXISTS idx_meta_audiences_meta_id ON meta_audiences (meta_audience_id) WHERE meta_audience_id IS NOT NULL");
     await safeQuery("CREATE UNIQUE INDEX IF NOT EXISTS uq_meta_audiences_name ON meta_audiences (LOWER(TRIM(name)))");
