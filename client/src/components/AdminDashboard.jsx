@@ -926,36 +926,39 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
         socket.onmessage = (event) => {
           try {
             const message = JSON.parse(event.data);
-            
-            if (message.type === 'LEAD_ADDED') {
-              showToast(`🎉 New Lead Registered: ${message.data?.full_name || 'Customer'} (${message.data?.urn || 'Lead'})`, 'success');
-              fetchLeads(currentPage, leadsPerPage);
-              if (activeTab === 'leads_dashboard' || activeTab === 'mis') fetchMISStats();
-            } else if (message.type === 'LEAD_UPDATED' || message.type === 'LEADS_UPDATED' || message.type === 'MIS_UPDATED') {
-              fetchLeads(currentPage, leadsPerPage);
-              if (activeTab === 'leads_dashboard' || activeTab === 'mis') fetchMISStats();
-            } else if (message.type === 'CARDS_UPDATED') {
-              fetchCardsData();
-            } else if (message.type === 'AGENTS_UPDATED') {
-              fetchAgentsData();
-            } else if (message.type === 'LOCATIONS_UPDATED') {
-              fetchLocationsData();
-            } else if (message.type === 'SETTINGS_UPDATED') {
-              fetchSettingsData();
-            } else if (message.type === 'BROADCAST_UPDATED' || message.type === 'CAMPAIGNS_UPDATED' || message.type === 'MASTER_DATA_UPDATED') {
-              setWsTimestamp(Date.now());
-            } else if (message.type === 'NOTIFICATION_ADDED' || message.type === 'NOTIFICATION_UPDATED' || message.type === 'NOTIFICATION_CREATED') {
-              fetchNotifications();
-            } else if (message.type === 'WA_STATUS_UPDATE') {
-              setBaileysStatus(message.data);
-            } else if (message.type === 'META_AUDIENCES_UPDATED') {
-              if (activeTab === 'meta') fetchMetaAudiences();
-            } else if (message.type === 'META_AUDIENCE_SYNC_PROGRESS') {
-              if (message.audienceId && message.percent !== undefined) {
-                setSyncProgressMap(prev => ({ ...prev, [message.audienceId]: message.percent }));
-              }
-              if (activeTab === 'meta') fetchMetaAudiences();
-            }
+            setTimeout(() => {
+              try {
+                if (message.type === 'LEAD_ADDED') {
+                  showToast(`🎉 New Lead Registered: ${message.data?.full_name || 'Customer'} (${message.data?.urn || 'Lead'})`, 'success');
+                  fetchLeads(currentPage, leadsPerPage);
+                  if (activeTab === 'leads_dashboard' || activeTab === 'mis') fetchMISStats();
+                } else if (message.type === 'LEAD_UPDATED' || message.type === 'LEADS_UPDATED' || message.type === 'MIS_UPDATED') {
+                  fetchLeads(currentPage, leadsPerPage);
+                  if (activeTab === 'leads_dashboard' || activeTab === 'mis') fetchMISStats();
+                } else if (message.type === 'CARDS_UPDATED') {
+                  fetchCardsData();
+                } else if (message.type === 'AGENTS_UPDATED') {
+                  fetchAgentsData();
+                } else if (message.type === 'LOCATIONS_UPDATED') {
+                  fetchLocationsData();
+                } else if (message.type === 'SETTINGS_UPDATED') {
+                  fetchSettingsData();
+                } else if (message.type === 'BROADCAST_UPDATED' || message.type === 'CAMPAIGNS_UPDATED' || message.type === 'MASTER_DATA_UPDATED') {
+                  setWsTimestamp(Date.now());
+                } else if (message.type === 'NOTIFICATION_ADDED' || message.type === 'NOTIFICATION_UPDATED' || message.type === 'NOTIFICATION_CREATED') {
+                  fetchNotifications();
+                } else if (message.type === 'WA_STATUS_UPDATE') {
+                  setBaileysStatus(message.data);
+                } else if (message.type === 'META_AUDIENCES_UPDATED') {
+                  if (activeTab === 'meta') fetchMetaAudiences();
+                } else if (message.type === 'META_AUDIENCE_SYNC_PROGRESS') {
+                  if (message.audienceId && message.percent !== undefined) {
+                    setSyncProgressMap(prev => ({ ...prev, [message.audienceId]: message.percent }));
+                  }
+                  if (activeTab === 'meta') fetchMetaAudiences();
+                }
+              } catch (e) {}
+            }, 0);
           } catch (err) {
             // silent
           }

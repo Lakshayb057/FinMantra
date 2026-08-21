@@ -9486,7 +9486,8 @@ app.delete(['/api/campaigns/:id/broadcasts/:broadcastId', '/api/campaigns/broadc
 // Get detailed delivery logs for a broadcast
 app.get(['/api/campaigns/:id/broadcasts/:broadcastId/logs', '/api/campaigns/broadcasts/:broadcastId/logs'], authenticateToken, async (req, res) => {
   try {
-    const list = await db.getCampaignLogs(req.params.broadcastId);
+    const broadcastId = req.params.broadcastId || req.params.id;
+    const list = await db.getCampaignLogs(broadcastId);
     res.json({ success: true, logs: list });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -9496,6 +9497,7 @@ app.get(['/api/campaigns/:id/broadcasts/:broadcastId/logs', '/api/campaigns/broa
 // Force sync & refresh broadcast delivery stats from database logs
 app.post(['/api/campaigns/:id/broadcasts/:broadcastId/sync-delivery', '/api/campaigns/broadcasts/:broadcastId/sync-delivery'], authenticateToken, async (req, res) => {
   try {
+    const broadcastId = req.params.broadcastId || req.params.id;
     const { reconcile = false } = req.body || {};
     if (reconcile) {
       // Reconcile sent logs with wamid into delivered
@@ -9503,11 +9505,11 @@ app.post(['/api/campaigns/:id/broadcasts/:broadcastId/sync-delivery', '/api/camp
         UPDATE campaign_logs
         SET status = 'delivered',
             delivered_at = COALESCE(delivered_at, sent_at, CURRENT_TIMESTAMP),
-            error_message = 'Delivered to handset successfully.'
+            error_message = 'Sent & delivered successfully.'
         WHERE broadcast_id = $1 AND status = 'sent' AND (wamid IS NOT NULL OR error_message LIKE 'Dispatched%')
-      `, [req.params.broadcastId]);
+      `, [broadcastId]);
     }
-    const updated = await db.updateBroadcastDeliveryCounters(req.params.broadcastId);
+    const updated = await db.updateBroadcastDeliveryCounters(broadcastId);
     broadcast({ type: 'BROADCAST_UPDATED' });
     res.json({ success: true, broadcast: updated });
   } catch (err) {
