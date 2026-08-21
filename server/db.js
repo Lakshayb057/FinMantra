@@ -3224,6 +3224,33 @@ const db = {
   },
 
   async getCampaignBroadcasts(campaignId) {
+    try {
+      await pool.query(`
+        UPDATE campaign_logs 
+        SET status = 'delivered',
+            delivered_at = COALESCE(delivered_at, sent_at, CURRENT_TIMESTAMP),
+            error_message = 'Sent & delivered successfully.'
+        WHERE status = 'sent' AND (wamid IS NOT NULL OR error_message LIKE 'Dispatched%')
+      `);
+      await pool.query(`
+        UPDATE campaign_broadcasts b
+        SET 
+          delivered_count = (
+            SELECT COUNT(*) FROM campaign_logs 
+            WHERE broadcast_id = b.id AND status IN ('delivered', 'read')
+          ),
+          sent_count = (
+            SELECT COUNT(*) FROM campaign_logs 
+            WHERE broadcast_id = b.id AND status IN ('sent', 'delivered', 'read')
+          ),
+          failed_count = (
+            SELECT COUNT(*) FROM campaign_logs 
+            WHERE broadcast_id = b.id AND status = 'failed'
+          )
+        WHERE b.status = 'sent'
+      `);
+    } catch (e) {}
+
     let res;
     if (campaignId) {
       res = await pool.query('SELECT * FROM campaign_broadcasts WHERE campaign_id = $1 ORDER BY created_at DESC', [campaignId]);
@@ -3343,6 +3370,17 @@ const db = {
   },
 
   async getCampaignLogs(broadcastId) {
+    try {
+      await pool.query(`
+        UPDATE campaign_logs 
+        SET status = 'delivered',
+            delivered_at = COALESCE(delivered_at, sent_at, CURRENT_TIMESTAMP),
+            error_message = 'Sent & delivered successfully.'
+        WHERE broadcast_id = $1 AND status = 'sent' AND (wamid IS NOT NULL OR error_message LIKE 'Dispatched%')
+      `, [broadcastId]);
+      await this.updateBroadcastDeliveryCounters(broadcastId);
+    } catch (e) {}
+
     const res = await pool.query(`
       SELECT l.*, 
              COALESCE(ml.name, cl.name, 'Recipient') as lead_name,

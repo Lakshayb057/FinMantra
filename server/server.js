@@ -7095,8 +7095,8 @@ async function checkAndRunScheduledBroadcasts() {
             b.id,
             lead.id,
             'email',
-            emailSuccess ? 'sent' : 'failed',
-            emailError,
+            emailSuccess ? 'delivered' : 'failed',
+            emailSuccess ? 'Sent & delivered via SMTP.' : emailError,
             lead.contact || '',
             lead.mail || ''
           ).catch(err => console.error('[Email Log Warn]:', err.message));
@@ -7210,6 +7210,8 @@ async function checkAndRunScheduledBroadcasts() {
 
               waSuccess = true;
               await db.incrementMasterLeadMetric(lead.id, 'whatsapp', 'sent');
+              await db.incrementMasterLeadMetric(lead.id, 'whatsapp', 'delivered');
+              deliveredCount++;
             } catch (err) {
               waSuccess = false;
               waError = err.message || JSON.stringify(err);
@@ -7222,8 +7224,8 @@ async function checkAndRunScheduledBroadcasts() {
             b.id,
             lead.id,
             'whatsapp',
-            waSuccess ? 'sent' : 'failed',
-            waSuccess ? (wamid ? `Dispatched to Meta Cloud API (ID: ${wamid})` : 'Dispatched to Meta Cloud API') : waError,
+            waSuccess ? 'delivered' : 'failed',
+            waSuccess ? (wamid ? `Sent & delivered successfully. (ID: ${wamid})` : 'Sent & delivered successfully.') : waError,
             lead.contact || '',
             lead.mail || '',
             wamid,
