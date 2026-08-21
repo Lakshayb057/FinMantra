@@ -4991,8 +4991,6 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
       {/* ========================================================================= */}
       {/* MODAL 3: VIEW BROADCAST DELIVERY LOGS */}
       {/* ========================================================================= */}
-      {/* MODAL 3: VIEW BROADCAST DELIVERY LOGS & HANDSET ANALYTICS */}
-      {/* ========================================================================= */}
       {viewingLogsBroadcast && (() => {
         const totalLogs = broadcastLogs.length;
         const deliveredLogs = broadcastLogs.filter(l => l.status === 'delivered' || l.status === 'read').length;
@@ -5046,17 +5044,6 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
                 </div>
                 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
-                  {viewingLogsBroadcast.channel === 'whatsapp' && sentQueuedLogs > 0 && (
-                    <button
-                      onClick={() => handleSyncBroadcastDelivery(viewingLogsBroadcast, true)}
-                      disabled={isLoadingLogs}
-                      style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 0.85rem', borderRadius: '8px', border: '1px solid rgba(22, 163, 123, 0.35)', background: 'rgba(22, 163, 123, 0.1)', color: '#16a37b', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 700 }}
-                      title="Convert dispatched messages with Meta IDs into delivered status"
-                    >
-                      <CheckCircle size={14} />
-                      Reconcile Dispatched as Delivered
-                    </button>
-                  )}
                   <button
                     onClick={() => handleSyncBroadcastDelivery(viewingLogsBroadcast, false)}
                     disabled={isLoadingLogs}
@@ -5099,26 +5086,6 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
                   <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#ef4444', marginTop: '0.2rem' }}>{failedLogs}</div>
                 </div>
               </div>
-
-              {/* Webhook Status Info Banner */}
-              {viewingLogsBroadcast.channel === 'whatsapp' && sentQueuedLogs > 0 && deliveredLogs === 0 && (
-                <div style={{ padding: '0.65rem 1.25rem', background: 'rgba(59, 130, 246, 0.08)', borderBottom: '1px solid rgba(59, 130, 246, 0.2)', fontSize: '0.78rem', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <Info size={16} style={{ flexShrink: 0 }} />
-                    <div>
-                      <strong>Dispatched to Meta Cloud API ({sentQueuedLogs} queued)</strong>: Handset delivery & read receipts are recorded live via Meta Webhooks. Ensure <code>messages</code> field is subscribed in Meta Developer Console.
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => handleSyncBroadcastDelivery(viewingLogsBroadcast, true)}
-                    disabled={isLoadingLogs}
-                    style={{ padding: '0.35rem 0.85rem', borderRadius: '6px', background: '#16a37b', color: '#fff', border: 'none', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
-                  >
-                    <CheckCircle size={13} />
-                    Mark Dispatched as Delivered ({sentQueuedLogs})
-                  </button>
-                </div>
-              )}
 
               {/* Filter Tabs & Search Controls */}
               <div style={{ padding: '0.75rem 1.5rem', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', flexShrink: 0, background: 'var(--paper)' }}>
@@ -5277,20 +5244,16 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
                                 gap: '0.25rem',
                                 background: log.status === 'read' 
                                   ? 'rgba(59, 130, 246, 0.15)' 
-                                  : log.status === 'delivered' 
+                                  : (log.status === 'delivered' || log.status === 'sent') 
                                     ? 'rgba(22, 163, 123, 0.15)' 
-                                    : log.status === 'sent' 
-                                      ? 'rgba(245, 158, 11, 0.15)' 
-                                      : 'rgba(239, 68, 68, 0.15)',
+                                    : 'rgba(239, 68, 68, 0.15)',
                                 color: log.status === 'read' 
                                   ? '#3b82f6' 
-                                  : log.status === 'delivered' 
+                                  : (log.status === 'delivered' || log.status === 'sent') 
                                     ? '#16a37b' 
-                                    : log.status === 'sent' 
-                                      ? '#d97706' 
-                                      : '#ef4444'
+                                    : '#ef4444'
                               }}>
-                                {log.status === 'read' ? 'Read' : log.status === 'delivered' ? 'Delivered' : log.status === 'sent' ? 'Queued / Sent' : 'Failed'}
+                                {log.status === 'read' ? 'Read' : (log.status === 'delivered' || log.status === 'sent') ? 'Delivered' : 'Failed'}
                               </span>
                             </td>
                             <td style={{ padding: '0.65rem 1rem', fontSize: '0.78rem', maxWidth: '360px', wordBreak: 'break-word' }}>
@@ -5302,13 +5265,9 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
                                 <div style={{ color: '#3b82f6', fontWeight: 600 }}>
                                   Message read by recipient.
                                 </div>
-                              ) : log.status === 'delivered' ? (
-                                <div style={{ color: '#16a37b', fontWeight: 600 }}>
-                                  Delivered to handset successfully.
-                                </div>
                               ) : (
-                                <div style={{ color: '#d97706', fontWeight: 500 }}>
-                                  {log.error_message || 'Dispatched to Meta. Awaiting handset confirmation.'}
+                                <div style={{ color: '#16a37b', fontWeight: 600 }}>
+                                  Sent & delivered successfully.
                                 </div>
                               )}
                               {log.wamid && (
