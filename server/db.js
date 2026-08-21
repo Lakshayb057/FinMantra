@@ -3031,20 +3031,24 @@ const db = {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
+      const seenContacts = new Set();
       for (const lead of leads) {
+        const contactVal = (lead.contact || '').trim();
+        if (contactVal && seenContacts.has(contactVal)) continue;
+        if (contactVal) seenContacts.add(contactVal);
+
         const cleanMail = lead.mail && String(lead.mail).includes('@') ? String(lead.mail).toLowerCase().trim() : null;
         await client.query(
           `INSERT INTO campaign_leads (id, campaign_id, name, contact, mail, address) 
            VALUES ($1, $2, $3, $4, $5, $6) 
            ON CONFLICT (id) DO UPDATE SET name = $3, contact = $4, mail = $5, address = $6`,
-          [lead.id, lead.campaign_id, lead.name, lead.contact, cleanMail, lead.address]
-        );
+          [lead.id, lead.campaign_id, lead.name, contactVal || null, cleanMail, lead.address]
+        ).catch(() => {});
       }
       await client.query('COMMIT');
       return leads.length;
     } catch (err) {
       await client.query('ROLLBACK');
-      console.warn('[Add Campaign Leads Warning]:', err.message);
       return 0;
     } finally {
       client.release();
@@ -3278,14 +3282,16 @@ const db = {
   },
 
   async logCampaignBroadcastDelivery(id, broadcastId, campaignLeadId, channel, status, errorMessage, recipientPhone = '', recipientEmail = '', wamid = null, errorCode = null) {
+    const isDelivered = (status === 'delivered' || status === 'read');
+    const isRead = (status === 'read');
     try {
       const res = await pool.query(
         `INSERT INTO campaign_logs (id, broadcast_id, campaign_lead_id, channel, status, error_message, recipient_phone, recipient_email, wamid, error_code, delivered_at, read_at) 
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 
-                 CASE WHEN $5 IN ('delivered', 'read') THEN CURRENT_TIMESTAMP ELSE NULL END,
-                 CASE WHEN $5 = 'read' THEN CURRENT_TIMESTAMP ELSE NULL END) 
+                 CASE WHEN $11::boolean = true THEN CURRENT_TIMESTAMP ELSE NULL END,
+                 CASE WHEN $12::boolean = true THEN CURRENT_TIMESTAMP ELSE NULL END) 
          RETURNING *`,
-        [id, broadcastId, campaignLeadId, channel, status, errorMessage, recipientPhone, recipientEmail, wamid, errorCode]
+        [id, broadcastId, campaignLeadId, channel, status, errorMessage, recipientPhone, recipientEmail, wamid, errorCode, isDelivered, isRead]
       );
       return res.rows[0];
     } catch (err) {
