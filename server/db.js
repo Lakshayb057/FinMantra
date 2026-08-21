@@ -3459,14 +3459,22 @@ const db = {
       )`);
     }
 
-    if (optinWhatsapp !== '' && optinWhatsapp !== undefined && optinWhatsapp !== null) {
-      params.push(optinWhatsapp === 'true' || optinWhatsapp === true);
-      whereClauses.push(`whatsapp_optin = $${params.length}`);
+    if (optinWhatsapp !== '' && optinWhatsapp !== undefined && optinWhatsapp !== null && optinWhatsapp !== 'all') {
+      const isOptin = (optinWhatsapp === 'true' || optinWhatsapp === true);
+      if (isOptin) {
+        whereClauses.push(`COALESCE(whatsapp_optin, TRUE) = TRUE`);
+      } else {
+        whereClauses.push(`whatsapp_optin = FALSE`);
+      }
     }
 
-    if (optinEmail !== '' && optinEmail !== undefined && optinEmail !== null) {
-      params.push(optinEmail === 'true' || optinEmail === true);
-      whereClauses.push(`email_optin = $${params.length}`);
+    if (optinEmail !== '' && optinEmail !== undefined && optinEmail !== null && optinEmail !== 'all') {
+      const isOptin = (optinEmail === 'true' || optinEmail === true);
+      if (isOptin) {
+        whereClauses.push(`COALESCE(email_optin, TRUE) = TRUE`);
+      } else {
+        whereClauses.push(`email_optin = FALSE`);
+      }
     }
 
     const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';

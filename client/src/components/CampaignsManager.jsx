@@ -131,6 +131,8 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
   const [masterFilterDateTo, setMasterFilterDateTo] = useState('');
   const [masterFilterMetaWaNo, setMasterFilterMetaWaNo] = useState('');
   const [masterFilterSenderEmail, setMasterFilterSenderEmail] = useState('');
+  const [masterFilterOptinWhatsapp, setMasterFilterOptinWhatsapp] = useState('');
+  const [masterFilterOptinEmail, setMasterFilterOptinEmail] = useState('');
   const [masterFilterOptions, setMasterFilterOptions] = useState({ broadcastNames: [], metaWhatsappNos: [], senderEmails: [] });
   const [selectedMasterDeleteIds, setSelectedMasterDeleteIds] = useState(new Set());
 
@@ -271,7 +273,7 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
       fetchMasterFilterOptions();
       fetchMasterLeads();
     }
-  }, [activeSubTab, masterPage, masterSearch, masterFilterBroadcastName, masterFilterDateFrom, masterFilterDateTo, masterFilterMetaWaNo, masterFilterSenderEmail]);
+  }, [activeSubTab, masterPage, masterSearch, masterFilterBroadcastName, masterFilterDateFrom, masterFilterDateTo, masterFilterMetaWaNo, masterFilterSenderEmail, masterFilterOptinWhatsapp, masterFilterOptinEmail]);
 
   // Reload communication analytics when dashboard filters change
   useEffect(() => {
@@ -350,6 +352,12 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
       if (masterFilterDateTo) query.append('broadcast_date_to', masterFilterDateTo);
       if (masterFilterMetaWaNo) query.append('meta_whatsapp_no', masterFilterMetaWaNo);
       if (masterFilterSenderEmail) query.append('sender_email', masterFilterSenderEmail);
+      if (masterFilterOptinWhatsapp && masterFilterOptinWhatsapp !== 'all') {
+        query.append('optin_whatsapp', masterFilterOptinWhatsapp);
+      }
+      if (masterFilterOptinEmail && masterFilterOptinEmail !== 'all') {
+        query.append('optin_email', masterFilterOptinEmail);
+      }
       query.append('page', masterPage);
       query.append('limit', masterLimit);
 
@@ -845,18 +853,46 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
     }
   };
 
-  const handleExportMasterData = () => {
-    const query = new URLSearchParams();
-    if (masterSearch) query.append('search', masterSearch);
-    if (masterFilterBroadcastName) query.append('broadcast_name', masterFilterBroadcastName);
-    if (masterFilterDateFrom) query.append('broadcast_date_from', masterFilterDateFrom);
-    if (masterFilterDateTo) query.append('broadcast_date_to', masterFilterDateTo);
-    if (masterFilterMetaWaNo) query.append('meta_whatsapp_no', masterFilterMetaWaNo);
-    if (masterFilterSenderEmail) query.append('sender_email', masterFilterSenderEmail);
+  const handleExportMasterData = async () => {
+    try {
+      showToast('Generating filtered Master Data CSV with delivery analytics...', 'info');
+      const query = new URLSearchParams();
+      if (masterSearch) query.append('search', masterSearch);
+      if (masterFilterBroadcastName) query.append('broadcast_name', masterFilterBroadcastName);
+      if (masterFilterDateFrom) query.append('broadcast_date_from', masterFilterDateFrom);
+      if (masterFilterDateTo) query.append('broadcast_date_to', masterFilterDateTo);
+      if (masterFilterMetaWaNo) query.append('meta_whatsapp_no', masterFilterMetaWaNo);
+      if (masterFilterSenderEmail) query.append('sender_email', masterFilterSenderEmail);
+      if (masterFilterOptinWhatsapp && masterFilterOptinWhatsapp !== 'all') {
+        query.append('optin_whatsapp', masterFilterOptinWhatsapp);
+      }
+      if (masterFilterOptinEmail && masterFilterOptinEmail !== 'all') {
+        query.append('optin_email', masterFilterOptinEmail);
+      }
 
-    const exportUrl = `${API_URL}/campaigns/master/leads/export?${query.toString()}`;
-    window.open(exportUrl, '_blank');
-    showToast('Exporting master data with delivery rates & CTR...', 'info');
+      const res = await fetch(`${API_URL}/campaigns/master/leads/export?${query.toString()}`, {
+        headers
+      });
+
+      if (!res.ok) {
+        throw new Error(`Export request failed (HTTP ${res.status})`);
+      }
+
+      const blob = await res.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      const dateStr = new Date().toISOString().substring(0, 10);
+      a.download = `finmantra_master_leads_${dateStr}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(downloadUrl);
+      showToast('Master Data CSV exported successfully!', 'success');
+    } catch (err) {
+      console.error('[Export Master CSV Error]:', err);
+      showToast('Failed to export CSV: ' + err.message, 'error');
+    }
   };
 
   const handleToggleMasterLeadOptin = async (leadId, channel, currentStatus) => {
@@ -1888,6 +1924,36 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
               </div>
 
               <div>
+                <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: 'var(--muted)', marginBottom: '0.25rem' }}>
+                  WhatsApp Status
+                </label>
+                <select
+                  value={masterFilterOptinWhatsapp}
+                  onChange={(e) => { setMasterFilterOptinWhatsapp(e.target.value); setMasterPage(1); }}
+                  style={{ width: '100%', padding: '0.4rem 0.6rem', fontSize: '0.82rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
+                >
+                  <option value="">All (Opted-in & Out)</option>
+                  <option value="true">Opted-In (Active 🟢)</option>
+                  <option value="false">Opted-Out (Unsubscribed 🔴)</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: 'var(--muted)', marginBottom: '0.25rem' }}>
+                  Email Status
+                </label>
+                <select
+                  value={masterFilterOptinEmail}
+                  onChange={(e) => { setMasterFilterOptinEmail(e.target.value); setMasterPage(1); }}
+                  style={{ width: '100%', padding: '0.4rem 0.6rem', fontSize: '0.82rem', borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
+                >
+                  <option value="">All (Opted-in & Out)</option>
+                  <option value="true">Opted-In (Active 🟢)</option>
+                  <option value="false">Opted-Out (Unsubscribed 🔴)</option>
+                </select>
+              </div>
+
+              <div>
                 <button
                   onClick={() => {
                     setMasterFilterDateFrom('');
@@ -1895,6 +1961,8 @@ export default function CampaignsManager({ theme, API_URL, token, showToast, wsT
                     setMasterFilterBroadcastName('');
                     setMasterFilterMetaWaNo('');
                     setMasterFilterSenderEmail('');
+                    setMasterFilterOptinWhatsapp('');
+                    setMasterFilterOptinEmail('');
                     setMasterPage(1);
                   }}
                   style={{

@@ -1015,7 +1015,7 @@ async function sendWhatsAppTemplate(toPhone, templateName, parameters = [], isOt
 // Authentication Middleware
 function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
+  const token = (authHeader && authHeader.split(' ')[1]) || req.query.token;
   if (!token) return res.status(401).json({ error: 'Access token required' });
 
   jwt.verify(token, JWT_SECRET, async (err, user) => {
@@ -8672,9 +8672,9 @@ app.get('/api/campaigns/master/leads/export', authenticateToken, async (req, res
       ].map(val => `"${String(val).replace(/"/g, '""')}"`).join(','));
     }
 
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename=finmantra_master_data_${Date.now()}.csv`);
-    res.status(200).send(csvRows.join('\n'));
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="finmantra_master_data_${Date.now()}.csv"`);
+    res.status(200).send('\uFEFF' + csvRows.join('\r\n'));
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
