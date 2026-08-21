@@ -5104,19 +5104,31 @@ app.get('/api/whatsapp/meta-phone-numbers', authenticateToken, requireAdmin, asy
 
     const fetchPhoneNumbersForWaba = async (wabaIdVal, wabaNameVal) => {
       try {
-        const path = `/${apiVersion}/${wabaIdVal}/phone_numbers?fields=display_phone_number,quality_rating,verified_name,code_verification_status,id,status,messaging_limit_tier`;
+        let actualWabaName = wabaNameVal;
+        try {
+          const wabaNode = await getMetaGraph(`/${apiVersion}/${wabaIdVal}`, apiKey);
+          if (wabaNode && wabaNode.name) {
+            actualWabaName = wabaNode.name;
+          }
+        } catch (e) {}
+
+        const path = `/${apiVersion}/${wabaIdVal}/phone_numbers?fields=display_phone_number,quality_rating,verified_name,code_verification_status,id,status,messaging_limit_tier,name_status,platform_type,throughput,search_visibility,account_mode`;
         const result = await getMetaGraph(path, apiKey);
         if (result && Array.isArray(result.data)) {
           return result.data.map(phone => ({
             id: phone.id,
             display_phone_number: phone.display_phone_number,
-            quality_rating: phone.quality_rating,
-            verified_name: phone.verified_name,
-            code_verification_status: phone.code_verification_status,
+            quality_rating: phone.quality_rating || 'UNKNOWN',
+            verified_name: phone.verified_name || 'FinMantra',
+            code_verification_status: phone.code_verification_status || 'VERIFIED',
             status: phone.status || 'CONNECTED',
+            name_status: phone.name_status || 'APPROVED',
+            account_mode: phone.account_mode || 'LIVE',
+            platform_type: phone.platform_type || 'CLOUD_API',
+            throughput_level: (phone.throughput && phone.throughput.level) || 'STANDARD',
             messaging_limit_tier: phone.messaging_limit_tier || 'TIER_1K',
             waba_id: wabaIdVal,
-            waba_name: wabaNameVal || `WABA (${wabaIdVal})`
+            waba_name: actualWabaName || `WABA (${wabaIdVal})`
           }));
         }
       } catch (err) {

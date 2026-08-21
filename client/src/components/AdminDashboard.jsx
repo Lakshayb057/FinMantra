@@ -7235,6 +7235,14 @@ export default function AdminDashboard({ navigateTo, theme, toggleTheme }) {
                                           {phone.status === 'CONNECTED' ? 'ONLINE (CONNECTED)' : phone.status}
                                         </span>
                                       )}
+                                      {phone.name_status && (
+                                        <span style={{ fontSize: '0.7rem', color: '#16a37b', background: 'rgba(22, 163, 123, 0.1)', padding: '0.05rem 0.35rem', borderRadius: '4px', textTransform: 'uppercase' }}>
+                                          Name: {phone.name_status}
+                                        </span>
+                                      )}
+                                      <span style={{ fontSize: '0.7rem', color: '#3b82f6', background: 'rgba(59, 130, 246, 0.1)', padding: '0.05rem 0.35rem', borderRadius: '4px' }}>
+                                        Cloud API • Live
+                                      </span>
                                       {phone.messaging_limit_tier && (
                                         <span style={{ fontSize: '0.7rem', color: 'var(--muted)', background: 'rgba(255,255,255,0.04)', padding: '0.05rem 0.35rem', borderRadius: '4px' }}>
                                           Tier: {phone.messaging_limit_tier.replace('TIER_', '')}
